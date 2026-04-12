@@ -4,6 +4,9 @@ import { getYahooDailyPrice } from '@/lib/finance/yahoo-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
 import type { OHLCData } from '@/types';
 
+const REQUIRED_SEPA_BARS = 252;
+const TARGET_KIS_BARS = 260;
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
 }
@@ -20,27 +23,48 @@ function apiError(message: string, code: string, status = 500, details?: unknown
   );
 }
 
+function chooseLongerData(kisData: OHLCData[], yahooData: OHLCData[]) {
+  if (yahooData.length > kisData.length) return yahooData;
+  return kisData;
+}
+
 async function fetchPriceData(ticker: string, exchange: string): Promise<{
   data: OHLCData[];
   providerUsed: string;
   warnings: string[];
 }> {
   const warnings: string[] = [];
+  let kisData: OHLCData[] = [];
 
   try {
-    const data = await getOverseasDailyPrice(ticker, exchange);
-    if (data.length > 0) {
-      return { data, providerUsed: 'KIS', warnings };
+    kisData = await getOverseasDailyPrice(ticker, exchange, TARGET_KIS_BARS);
+    if (kisData.length >= REQUIRED_SEPA_BARS) {
+      return {
+        data: kisData,
+        providerUsed: `KIS (${kisData.length} daily bars)`,
+        warnings,
+      };
     }
-    warnings.push('KIS 응답에 가격 데이터가 없어 Yahoo Finance fallback을 사용했습니다.');
+
+    warnings.push(`KIS 일봉을 ${kisData.length}개 확보했습니다. SEPA 장기 판정에는 ${REQUIRED_SEPA_BARS}개 이상이 필요해 Yahoo fallback을 시도합니다.`);
   } catch (error: unknown) {
-    warnings.push(`KIS 조회 실패: ${getErrorMessage(error)}`);
+    warnings.push(`KIS 조회 실패: ${getErrorMessage(error)}. Yahoo fallback을 시도합니다.`);
   }
 
-  const data = await getYahooDailyPrice(ticker);
+  const yahooData = await getYahooDailyPrice(ticker);
+  const data = chooseLongerData(kisData, yahooData);
+  const providerUsed =
+    data === yahooData
+      ? `Yahoo Finance (${yahooData.length} daily bars)`
+      : `KIS partial (${kisData.length} daily bars)`;
+
+  if (data.length < REQUIRED_SEPA_BARS) {
+    warnings.push(`fallback 이후에도 일봉이 ${data.length}개뿐입니다. 일부 장기 지표는 Unknown으로 표시됩니다.`);
+  }
+
   return {
     data,
-    providerUsed: 'Yahoo Finance',
+    providerUsed,
     warnings,
   };
 }
@@ -66,7 +90,7 @@ export async function GET(request: Request) {
     const sepaEvidence = analyzeSepa(data);
     const riskPlan = calculatePyramidPlan(totalEquity, entryPrice, atr);
 
-    if (data.length < 252) {
+    if (data.length < REQUIRED_SEPA_BARS) {
       warnings.push('52주 고점과 장기 이동평균 판정에 필요한 가격 데이터가 부족할 수 있습니다.');
     }
     if (sepaEvidence.summary.unknown > 0) {
