@@ -1,0 +1,99 @@
+import { NextResponse } from 'next/server';
+import { getOverseasDailyPrice } from '@/lib/finance/kis-api';
+import { getYahooDailyPrice } from '@/lib/finance/yahoo-api';
+import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
+import type { OHLCData } from '@/types';
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '알 수 없는 오류';
+}
+
+function apiError(message: string, code: string, status = 500, details?: unknown) {
+  return NextResponse.json(
+    {
+      message,
+      code,
+      details,
+      recoverable: status < 500,
+    },
+    { status }
+  );
+}
+
+async function fetchPriceData(ticker: string, exchange: string): Promise<{
+  data: OHLCData[];
+  providerUsed: string;
+  warnings: string[];
+}> {
+  const warnings: string[] = [];
+
+  try {
+    const data = await getOverseasDailyPrice(ticker, exchange);
+    if (data.length > 0) {
+      return { data, providerUsed: 'KIS', warnings };
+    }
+    warnings.push('KIS 응답에 가격 데이터가 없어 Yahoo Finance fallback을 사용했습니다.');
+  } catch (error: unknown) {
+    warnings.push(`KIS 조회 실패: ${getErrorMessage(error)}`);
+  }
+
+  const data = await getYahooDailyPrice(ticker);
+  return {
+    data,
+    providerUsed: 'Yahoo Finance',
+    warnings,
+  };
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const ticker = searchParams.get('ticker')?.trim().toUpperCase();
+  const exchange = searchParams.get('exchange')?.trim().toUpperCase() || 'NAS';
+  const totalEquity = Number(searchParams.get('totalEquity') || 50_000);
+
+  if (!ticker) {
+    return apiError('티커를 입력해 주세요.', 'MISSING_TICKER', 400);
+  }
+
+  if (!Number.isFinite(totalEquity) || totalEquity <= 0) {
+    return apiError('총 자본은 0보다 큰 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
+  }
+
+  try {
+    const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
+    const atr = calculateATR(data);
+    const entryPrice = calculateEntryPrice(data);
+    const sepaEvidence = analyzeSepa(data);
+    const riskPlan = calculatePyramidPlan(totalEquity, entryPrice, atr);
+
+    if (data.length < 252) {
+      warnings.push('52주 고점과 장기 이동평균 판정에 필요한 가격 데이터가 부족할 수 있습니다.');
+    }
+    if (sepaEvidence.summary.unknown > 0) {
+      warnings.push('기본적 지표와 RS Rating은 현재 데이터 공급원에서 제공되지 않아 미확인으로 표시됩니다.');
+    }
+
+    return NextResponse.json({
+      ticker,
+      exchange,
+      providerUsed,
+      priceData: data,
+      sepaEvidence,
+      riskPlan,
+      dataQuality: {
+        bars: data.length,
+        hasEnoughForAtr: data.length >= 21,
+        hasEnoughForLongMa: data.length >= 221,
+        missingFundamentals: ['EPS growth', 'Revenue growth', 'ROE', 'Debt ratio', 'Institutional ownership', 'RS Rating'],
+      },
+      warnings,
+    });
+  } catch (error: unknown) {
+    console.error('Market Data API Error:', error);
+    return apiError(
+      getErrorMessage(error) || '시장 데이터를 불러오는 중 오류가 발생했습니다.',
+      'MARKET_DATA_FETCH_FAILED',
+      500
+    );
+  }
+}
