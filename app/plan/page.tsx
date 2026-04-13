@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import TickerInput from '@/components/plan/TickerInput';
 import SepaAnalysis from '@/components/plan/SepaAnalysis';
@@ -12,8 +12,20 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useMarketData } from '@/hooks/useMarketData';
 
+// useSearchParams는 Suspense 바운더리 내에서만 사용 가능 (Next.js 14+)
 export default function PlanPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center p-12 text-slate-400"><LoadingSpinner /> 페이지 로드 중...</div>}>
+      <PlanPageContent />
+    </Suspense>
+  );
+}
+
+function PlanPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialTicker = searchParams.get('ticker') || '';
+  const initialExchange = searchParams.get('exchange') || 'NAS';
   const { loading, error, analysis, fetchMarketData } = useMarketData();
   const [checklist, setChecklist] = useState<{
     chk_sepa: boolean;
@@ -88,7 +100,7 @@ export default function PlanPage() {
         </p>
       </div>
 
-      <TickerInput onAnalyze={handleAnalyze} loading={loading} />
+      <TickerInput onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={initialExchange} />
 
       {loading && (
         <div className="flex items-center justify-center gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-6 text-slate-300">

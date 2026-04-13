@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, BookOpen, History, LayoutDashboard, PlusCircle } from 'lucide-react';
+import { Activity, BookOpen, History, LayoutDashboard, PlusCircle, Star } from 'lucide-react';
 
 export default function Navbar() {
   return (
@@ -19,6 +19,10 @@ export default function Navbar() {
             <PlusCircle className="h-4 w-4 text-electric-blue" />
             <span className="hidden sm:inline">신규 계획</span>
           </Link>
+          <Link href="/watchlist" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+            <Star className="h-4 w-4 text-yellow-500" />
+            <span className="hidden sm:inline">관심 종목</span>
+          </Link>
           <Link href="/guide" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
             <BookOpen className="h-4 w-4 text-amber-500" />
             <span className="hidden sm:inline">알고리즘</span>
@@ -32,3 +36,4 @@ export default function Navbar() {
     </nav>
   );
 }
+

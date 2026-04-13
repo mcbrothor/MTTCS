@@ -165,3 +165,19 @@ export interface MarketAnalysisResponse {
   };
   warnings: string[];
 }
+
+// --- 관심 종목 (Watchlist) ---
+
+export type WatchlistPriority = 0 | 1 | 2; // 0=보통, 1=높음, 2=긴급
+
+export interface WatchlistItem {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  ticker: string;
+  exchange: string;
+  memo: string | null;
+  tags: string[];
+  priority: WatchlistPriority;
+}
+

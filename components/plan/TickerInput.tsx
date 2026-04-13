@@ -6,11 +6,13 @@ import Button from '@/components/ui/Button';
 interface TickerInputProps {
   onAnalyze: (ticker: string, exchange: string, totalEquity: number, riskPercent: number) => void;
   loading: boolean;
+  initialTicker?: string;
+  initialExchange?: string;
 }
 
-export default function TickerInput({ onAnalyze, loading }: TickerInputProps) {
-  const [ticker, setTicker] = useState('');
-  const [exchange, setExchange] = useState('NAS');
+export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS' }: TickerInputProps) {
+  const [ticker, setTicker] = useState(initialTicker);
+  const [exchange, setExchange] = useState(initialExchange);
   const [totalEquity, setTotalEquity] = useState(50_000);
   const [riskPercent, setRiskPercent] = useState(3);
 
