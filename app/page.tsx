@@ -60,7 +60,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DisciplineChart highDiscipline={highDiscipline} lowDiscipline={lowDiscipline} />
-        <TradeHistoryTable trades={trades} />
+        <TradeHistoryTable trades={trades} limit={10} title="최근 매매 기록" />
       </div>
     </div>
   );

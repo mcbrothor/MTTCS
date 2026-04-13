@@ -15,14 +15,19 @@ export function useMarketData() {
     analysis: null,
   });
 
-  const fetchMarketData = async (ticker: string, exchange: string, totalEquity: number) => {
+  const fetchMarketData = async (
+    ticker: string,
+    exchange: string,
+    totalEquity: number,
+    riskPercent: number
+  ) => {
     if (!ticker) return;
 
     setData((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
       const response = await axios.get('/api/market-data', {
-        params: { ticker, exchange, totalEquity },
+        params: { ticker, exchange, totalEquity, riskPercent },
       });
 
       setData({

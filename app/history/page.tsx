@@ -29,10 +29,10 @@ export default function HistoryPage() {
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">History</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">매매 히스토리</h1>
-        <p className="mt-3 text-sm text-slate-400">저장된 계획과 완료된 매매 결과를 확인합니다.</p>
+        <p className="mt-3 text-sm text-slate-400">저장된 계획과 완료된 매매의 전략 근거, 리스크, 결과를 확인합니다.</p>
       </div>
 
-      <TradeHistoryTable trades={trades} />
+      <TradeHistoryTable trades={trades} title="전체 매매 전략" />
     </div>
   );
 }

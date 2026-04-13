@@ -1,6 +1,7 @@
 alter table public.trades
   add column if not exists chk_sepa boolean,
   add column if not exists sepa_evidence jsonb,
+  add column if not exists risk_percent numeric default 0.03,
   add column if not exists total_shares integer,
   add column if not exists entry_targets jsonb,
   add column if not exists trailing_stops jsonb;

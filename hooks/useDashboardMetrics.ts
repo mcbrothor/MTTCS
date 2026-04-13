@@ -37,24 +37,24 @@ export function useDashboardMetrics() {
         const response = await axios.get('/api/trades');
         const trades: Trade[] = response.data.data || [];
 
-        const completed = trades.filter((t) => t.status === 'COMPLETED');
-        const planned = trades.filter((t) => t.status === 'PLANNED');
-        const winning = completed.filter((t) => (t.result_amount || 0) > 0);
-        const sepaKnown = trades.filter((t) => t.chk_sepa !== undefined || t.chk_market !== undefined);
-        const sepaPass = sepaKnown.filter((t) => (t.chk_sepa ?? t.chk_market) === true);
+        const completed = trades.filter((trade) => trade.status === 'COMPLETED');
+        const planned = trades.filter((trade) => trade.status === 'PLANNED');
+        const winning = completed.filter((trade) => (trade.result_amount || 0) > 0);
+        const sepaKnown = trades.filter((trade) => trade.chk_sepa !== undefined || trade.chk_market !== undefined);
+        const sepaPass = sepaKnown.filter((trade) => (trade.chk_sepa ?? trade.chk_market) === true);
 
-        const totalPnL = completed.reduce((sum, t) => sum + (t.result_amount || 0), 0);
+        const totalPnL = completed.reduce((sum, trade) => sum + (trade.result_amount || 0), 0);
         const avgDiscipline = completed.length
-          ? completed.reduce((sum, t) => sum + (t.final_discipline || 0), 0) / completed.length
+          ? completed.reduce((sum, trade) => sum + (trade.final_discipline || 0), 0) / completed.length
           : 0;
 
-        const highDisciplineTrades = completed.filter((t) => (t.final_discipline || 0) >= 80);
-        const lowDisciplineTrades = completed.filter((t) => (t.final_discipline || 0) < 80);
+        const highDisciplineTrades = completed.filter((trade) => (trade.final_discipline || 0) >= 80);
+        const lowDisciplineTrades = completed.filter((trade) => (trade.final_discipline || 0) < 80);
 
         const calcGroup = (group: Trade[]) => {
           const count = group.length;
-          const wins = group.filter((t) => (t.result_amount || 0) > 0).length;
-          const pnl = count ? group.reduce((sum, t) => sum + (t.result_amount || 0), 0) / count : 0;
+          const wins = group.filter((trade) => (trade.result_amount || 0) > 0).length;
+          const pnl = count ? group.reduce((sum, trade) => sum + (trade.result_amount || 0), 0) / count : 0;
           return {
             count,
             winRate: count ? (wins / count) * 100 : 0,
@@ -65,10 +65,10 @@ export function useDashboardMetrics() {
         let currentPnL = 0;
         const equityCurve = [...completed]
           .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
-          .map((t) => {
-            currentPnL += t.result_amount || 0;
+          .map((trade) => {
+            currentPnL += trade.result_amount || 0;
             return {
-              date: new Date(t.updated_at).toLocaleDateString('ko-KR'),
+              date: new Date(trade.updated_at).toLocaleDateString('ko-KR'),
               cumulativePnL: currentPnL,
             };
           });

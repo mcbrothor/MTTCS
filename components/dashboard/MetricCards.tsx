@@ -42,7 +42,7 @@ function Metric({
   valueClass?: string;
 }) {
   return (
-    <Card glow className={`text-center group border-t-4 ${border}`}>
+    <Card glow className={`group border-t-4 text-center ${border}`}>
       <div className="mb-2 flex justify-center transition-transform group-hover:scale-110">{icon}</div>
       <div className="mb-1 text-sm font-medium text-slate-400">{label}</div>
       <div className={`font-mono text-3xl font-bold ${valueClass}`}>{value}</div>

@@ -7,9 +7,9 @@ import {
   calculatePyramidPlan,
 } from '../lib/finance/calculations.ts';
 
-function makeUptrendBars(length = 260) {
+function makeUptrendBars(length = 260, slope = 0.5, start = 50) {
   return Array.from({ length }, (_, index) => {
-    const close = 50 + index * 0.5;
+    const close = start + index * slope;
     return {
       date: `2025-01-${String((index % 28) + 1).padStart(2, '0')}`,
       open: close - 0.5,
@@ -41,17 +41,24 @@ run('calculates 20 day breakout entry price', () => {
   assert.equal(calculateEntryPrice(data), 65.5);
 });
 
-run('calculates 1 percent risk position size', () => {
+run('calculates default 3 percent risk position size', () => {
   const result = calculatePositionSize(50_000, 100, 2);
-  assert.equal(result.maxRisk, 500);
+  assert.equal(result.maxRisk, 1500);
   assert.equal(result.stopLossPrice, 96);
   assert.equal(result.riskPerShare, 4);
+  assert.equal(result.shares, 375);
+});
+
+run('calculates explicit 1 percent risk position size', () => {
+  const result = calculatePositionSize(50_000, 100, 2, 0.01);
+  assert.equal(result.maxRisk, 500);
   assert.equal(result.shares, 125);
 });
 
-run('builds three leg pyramid plan', () => {
+run('builds three leg pyramid plan with 3 percent default risk', () => {
   const plan = calculatePyramidPlan(50_000, 100, 2);
-  assert.equal(plan.totalShares, 125);
+  assert.equal(plan.totalShares, 375);
+  assert.equal(plan.riskPercent, 0.03);
   assert.deepEqual(
     [plan.entryTargets.e1.price, plan.entryTargets.e2.price, plan.entryTargets.e3.price],
     [100, 101, 102]
@@ -59,9 +66,12 @@ run('builds three leg pyramid plan', () => {
   assert.equal(plan.trailingStops.initial, 96);
 });
 
-run('marks unavailable fundamental and RS fields as unknown', () => {
-  const evidence = analyzeSepa(makeUptrendBars());
-  assert.ok(evidence.summary.unknown >= 2);
-  assert.equal(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'unknown');
-  assert.equal(evidence.criteria.find((item) => item.id === 'fundamentals')?.status, 'unknown');
+run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
+  const evidence = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+  });
+
+  assert.ok(evidence.summary.info >= 1);
+  assert.notEqual(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'info');
+  assert.equal(evidence.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
 });

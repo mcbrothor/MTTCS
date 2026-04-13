@@ -10,15 +10,16 @@ const currency = (value: number) =>
 
 export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
   const legs = [riskPlan.entryTargets.e1, riskPlan.entryTargets.e2, riskPlan.entryTargets.e3];
+  const riskPct = (riskPlan.riskPercent * 100).toFixed(1).replace('.0', '');
 
   return (
     <Card>
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">3. 리스크/피라미딩</p>
-          <h2 className="mt-1 text-xl font-bold text-white">1% 리스크 기반 진입 계획</h2>
+          <h2 className="mt-1 text-xl font-bold text-white">{riskPct}% 허용 손실 기반 진입 계획</h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            총 자본의 1%만 위험에 노출하고, 0.5 ATR 간격으로 3회 분할 진입합니다.
+            입력한 허용 손실 비율로 최대 손실, 총 수량, 3분할 피라미딩 가격과 단계별 스탑을 계산합니다.
           </p>
         </div>
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-right">
@@ -27,7 +28,8 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <Metric label="허용 손실" value={`${riskPct}%`} />
         <Metric label="ATR 20일" value={riskPlan.atr.toFixed(2)} />
         <Metric label="돌파 진입가" value={currency(riskPlan.entryPrice)} />
         <Metric label="초기 손절가" value={currency(riskPlan.stopLossPrice)} danger />
@@ -68,10 +70,10 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
       <details className="mt-5 rounded-lg border border-slate-700 bg-slate-950/50 p-4">
         <summary className="cursor-pointer text-sm font-semibold text-slate-200">계산식 보기</summary>
         <div className="mt-3 space-y-2 text-sm leading-6 text-slate-400">
-          <p>최대 허용 손실 = 총 자본 x 1%</p>
+          <p>최대 허용 손실 = 총 자본 x 허용 손실 비율</p>
           <p>초기 손절가 = 20일 돌파 진입가 - 2 x ATR</p>
           <p>총 수량 = 최대 허용 손실 / 주당 위험금액</p>
-          <p>2차/3차 목표가는 각각 진입가 + 0.5 ATR, 진입가 + 1.0 ATR입니다.</p>
+          <p>2차와 3차 목표가는 각각 진입가 + 0.5 ATR, 진입가 + 1.0 ATR입니다.</p>
         </div>
       </details>
     </Card>

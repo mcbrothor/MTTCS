@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'MTTCS - Mantori Trend Trading Centaur System',
-  description: 'SEPA, ATR, 1% risk, and disciplined trend trading workflow.',
+  description: 'SEPA, ATR, adjustable risk, and disciplined trend trading workflow.',
 };
 
 export default function RootLayout({

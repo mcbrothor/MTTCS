@@ -1,6 +1,6 @@
 export type TradeStatus = 'PLANNED' | 'COMPLETED' | 'CANCELLED';
 export type Direction = 'LONG' | 'SHORT';
-export type AssessmentStatus = 'pass' | 'fail' | 'unknown';
+export type AssessmentStatus = 'pass' | 'fail' | 'info';
 
 export interface Trade {
   id: string;
@@ -22,6 +22,7 @@ export interface Trade {
   sepa_evidence: SepaEvidence | null;
   total_equity: number | null;
   planned_risk: number | null;
+  risk_percent: number | null;
   atr_value: number | null;
   entry_price: number | null;
   stoploss_price: number | null;
@@ -60,7 +61,7 @@ export interface SepaEvidence {
   summary: {
     passed: number;
     failed: number;
-    unknown: number;
+    info: number;
     total: number;
   };
   metrics: {
@@ -72,7 +73,17 @@ export interface SepaEvidence {
     distanceFromHigh52WeekPct: number | null;
     avgDollarVolume20: number | null;
     rsRating: number | null;
+    benchmarkReturn26Week: number | null;
+    stockReturn26Week: number | null;
   };
+}
+
+export interface FundamentalSnapshot {
+  epsGrowthPct: number | null;
+  revenueGrowthPct: number | null;
+  roePct: number | null;
+  debtToEquityPct: number | null;
+  source: string;
 }
 
 export interface EntryLeg {
@@ -113,6 +124,7 @@ export interface MarketAnalysisResponse {
   priceData: OHLCData[];
   sepaEvidence: SepaEvidence;
   riskPlan: RiskPlan;
+  fundamentals: FundamentalSnapshot | null;
   dataQuality: {
     bars: number;
     hasEnoughForAtr: boolean;

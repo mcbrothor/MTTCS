@@ -1,5 +1,19 @@
 import axios from 'axios';
-import type { OHLCData } from '@/types';
+import type { FundamentalSnapshot, OHLCData } from '@/types';
+
+function rawNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'object' && value && 'raw' in value) {
+    const raw = (value as { raw?: unknown }).raw;
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  }
+  return null;
+}
+
+function toPct(value: number | null) {
+  if (value === null) return null;
+  return Number((value * 100).toFixed(2));
+}
 
 export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
   const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
@@ -38,4 +52,37 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
       Number.isFinite(row.close) &&
       Number.isFinite(row.volume)
     );
+}
+
+export async function getYahooFundamentals(ticker: string): Promise<FundamentalSnapshot | null> {
+  try {
+    const response = await axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
+      params: {
+        modules: 'financialData,defaultKeyStatistics,earningsTrend',
+      },
+      headers: {
+        'user-agent': 'MTTCS/3.0',
+      },
+    });
+
+    const result = response.data?.quoteSummary?.result?.[0];
+    if (!result) return null;
+
+    const financialData = result.financialData || {};
+    const defaultKeyStatistics = result.defaultKeyStatistics || {};
+    const trend =
+      result.earningsTrend?.trend?.find((item: { period?: string }) => item.period === '+1q') ||
+      result.earningsTrend?.trend?.[0] ||
+      {};
+
+    return {
+      epsGrowthPct: toPct(rawNumber(defaultKeyStatistics.earningsQuarterlyGrowth) ?? rawNumber(trend.growth)),
+      revenueGrowthPct: toPct(rawNumber(financialData.revenueGrowth)),
+      roePct: toPct(rawNumber(financialData.returnOnEquity)),
+      debtToEquityPct: rawNumber(financialData.debtToEquity),
+      source: 'Yahoo Finance quoteSummary',
+    };
+  } catch {
+    return null;
+  }
 }

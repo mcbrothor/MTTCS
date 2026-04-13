@@ -25,11 +25,11 @@ export default function EquityCurve({ data }: EquityCurveProps) {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
               <XAxis dataKey="date" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} minTickGap={30} />
-              <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `$${val}`} />
+              <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '0.5rem' }}
                 itemStyle={{ color: '#3b82f6', fontWeight: 'bold' }}
-                formatter={(val) => [`$${Number(val ?? 0).toFixed(2)}`, '누적 손익']}
+                formatter={(value) => [`$${Number(value ?? 0).toFixed(2)}`, '누적 손익']}
               />
               <Area type="monotone" dataKey="cumulativePnL" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPnL)" />
             </AreaChart>
