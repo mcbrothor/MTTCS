@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 
 let cachedToken: string | null = null;
 let tokenExpiresAt: number = 0;
@@ -14,9 +15,9 @@ export async function getKisToken(): Promise<string> {
     return pendingTokenRequest;
   }
 
-  const KIS_APP_KEY = process.env.KIS_APP_KEY!;
-  const KIS_APP_SECRET = process.env.KIS_APP_SECRET!;
-  const KIS_BASE_URL = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
+  const KIS_APP_KEY = kisAppKey();
+  const KIS_APP_SECRET = kisAppSecret();
+  const KIS_BASE_URL = kisBaseUrl();
 
   pendingTokenRequest = (async () => {
     const response = await axios.post(`${KIS_BASE_URL}/oauth2/tokenP`, {

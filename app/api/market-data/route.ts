@@ -3,7 +3,9 @@ import { getOverseasDailyPrice } from '@/lib/finance/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-api';
 import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
-import type { FundamentalSnapshot, OHLCData } from '@/types';
+import { analyzeVcp } from '@/lib/finance/vcp-engine';
+import { cacheGet, cacheSet, cacheKey } from '@/lib/cache';
+import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
@@ -171,6 +173,13 @@ export async function GET(request: Request) {
   }
 
   try {
+    // I-3: 동일 티커 중복 호출 방지용 캐시
+    const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput);
+    const cached = cacheGet<MarketAnalysisResponse>(cacheId);
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
     const [benchmarkData, fundamentals] = await Promise.all([
       getYahooDailyPrice('SPY').catch(() => []),
@@ -180,7 +189,13 @@ export async function GET(request: Request) {
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data);
     const sepaEvidence = analyzeSepa(data, { benchmarkData, fundamentals });
-    const riskPlan = calculatePyramidPlan(totalEquity, entryPrice, atr, riskPercent);
+
+    // VCP 분석 — SEPA 필터 후 매수 타점 정밀 분석
+    const vcpAnalysis = analyzeVcp(data, entryPrice);
+
+    // VCP 피벗이 있으면 그쪽 기준으로 피라미딩 계획도 생성
+    const effectiveEntry = vcpAnalysis.recommendedEntry;
+    const riskPlan = calculatePyramidPlan(totalEquity, effectiveEntry, atr, riskPercent);
 
     if (data.length < REQUIRED_SEPA_BARS) {
       warnings.push('장기 이동평균과 52주 고점 계산에 필요한 가격 데이터가 부족할 수 있습니다.');
@@ -189,13 +204,14 @@ export async function GET(request: Request) {
       warnings.push('일부 보조 지표는 데이터 제공 상황에 따라 정보 항목으로 표시됩니다.');
     }
 
-    return NextResponse.json({
+    const response: MarketAnalysisResponse = {
       ticker,
       exchange,
       providerUsed,
       priceData: data,
       sepaEvidence,
       riskPlan,
+      vcpAnalysis,
       fundamentals,
       dataQuality: {
         bars: data.length,
@@ -204,7 +220,11 @@ export async function GET(request: Request) {
         missingFundamentals: missingFundamentalLabels(fundamentals),
       },
       warnings,
-    });
+    };
+
+    cacheSet(cacheId, response);
+
+    return NextResponse.json(response);
   } catch (error: unknown) {
     console.error('Market Data API Error:', error);
     return apiError(

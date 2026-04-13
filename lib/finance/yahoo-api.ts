@@ -32,8 +32,15 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
   const timestamps: number[] = result?.timestamp || [];
   const quote = result?.indicators?.quote?.[0];
 
+  // 응답 구조 방어 검증 (Yahoo 비공식 API 구조 변경 대비)
+  if (!response.data?.chart) {
+    throw new Error('Yahoo Finance 응답에 chart 필드가 없습니다. API 구조가 변경되었을 수 있습니다.');
+  }
   if (!result || !quote || timestamps.length === 0) {
     throw new Error('Yahoo Finance에서 가격 데이터를 찾을 수 없습니다.');
+  }
+  if (!Array.isArray(quote.close) || !Array.isArray(quote.open)) {
+    throw new Error('Yahoo Finance 가격 quote 구조가 예상과 다릅니다. API 변경을 확인하세요.');
   }
 
   return timestamps

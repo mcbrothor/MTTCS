@@ -117,6 +117,37 @@ export interface RiskPlan {
   trailingStops: TrailingStops;
 }
 
+// --- VCP (Volatility Contraction Pattern) 관련 타입 ---
+
+/** 개별 수축 단계를 나타냅니다. */
+export interface VcpContraction {
+  peakDate: string;
+  troughDate: string;
+  peakPrice: number;
+  troughPrice: number;
+  depthPct: number;       // 수축 깊이 (%)
+  avgVolume: number;       // 구간 평균 거래량
+}
+
+/** VCP 종합 분석 결과 */
+export interface VcpAnalysis {
+  score: number;            // 종합 점수 0~100
+  grade: 'strong' | 'forming' | 'weak' | 'none';
+  contractions: VcpContraction[];
+  contractionScore: number;
+  volumeDryUpScore: number;
+  bbSqueezeScore: number;
+  pocketPivotScore: number;
+  pivotPrice: number | null;         // VCP 피벗 가격
+  breakoutPrice: number;             // 20일 돌파가 (기존)
+  recommendedEntry: number;          // 최종 권장 진입가
+  pocketPivots: { date: string; close: number; volume: number }[];
+  bbWidth: number | null;
+  bbWidthPercentile: number | null;  // 6개월 내 백분위
+  baseLength: number;                // 베이스 기간 (일)
+  details: string[];                 // 판정 근거 텍스트
+}
+
 export interface MarketAnalysisResponse {
   ticker: string;
   exchange: string;
@@ -124,6 +155,7 @@ export interface MarketAnalysisResponse {
   priceData: OHLCData[];
   sepaEvidence: SepaEvidence;
   riskPlan: RiskPlan;
+  vcpAnalysis: VcpAnalysis;
   fundamentals: FundamentalSnapshot | null;
   dataQuality: {
     bars: number;

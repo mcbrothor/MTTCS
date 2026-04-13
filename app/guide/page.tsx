@@ -41,7 +41,13 @@ export default function GuidePage() {
         <h2 className="text-xl font-bold text-white">ATR과 허용 손실</h2>
         <div className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
           <p>ATR 20일 = 최근 20개 거래일의 True Range 평균입니다.</p>
-          <p>기본 최대 허용 손실 = 총 자본 x 3%입니다.</p>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <p className="font-medium text-amber-200">
+              💡 터틀 트레이딩 원본은 총 자본의 <strong>1%</strong> 룰을 사용합니다.
+              MTTCS에서는 사용자가 <strong>0.1%~10%</strong> 범위에서 자유롭게 설정할 수 있으며,
+              기본값은 <strong>3%</strong>입니다.
+            </p>
+          </div>
           <p>사용자는 신규 계획 화면에서 허용 손실 비율을 0.1%부터 10%까지 조정할 수 있습니다.</p>
           <p>초기 손절가 = 20일 돌파 진입가 - 2 x ATR입니다.</p>
           <p>총 수량 = 최대 허용 손실 / 주당 위험금액입니다.</p>

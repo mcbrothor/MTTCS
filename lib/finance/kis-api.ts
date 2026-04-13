@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { getKisToken } from './kis-auth';
+import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import type { OHLCData } from '@/types';
+
+/** 지정 ms만큼 대기합니다. KIS API 초당 20건 제한 대응용. */
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 interface KisDailyPriceRow {
   xymd?: string;
@@ -43,9 +49,9 @@ async function getOverseasDailyPricePage(
   baseDate = ''
 ): Promise<OHLCData[]> {
   const token = await getKisToken();
-  const KIS_APP_KEY = process.env.KIS_APP_KEY!;
-  const KIS_APP_SECRET = process.env.KIS_APP_SECRET!;
-  const KIS_BASE_URL = process.env.KIS_BASE_URL || 'https://openapi.koreainvestment.com:9443';
+  const KIS_APP_KEY = kisAppKey();
+  const KIS_APP_SECRET = kisAppSecret();
+  const KIS_BASE_URL = kisBaseUrl();
 
   const isVirtual = KIS_BASE_URL.includes('openapivts');
   const tr_id = isVirtual ? 'VHJFS76240000' : 'HHDFS76240000';
@@ -104,6 +110,9 @@ export async function getOverseasDailyPrice(
   let baseDate = '';
 
   for (let page = 0; page < maxPages; page += 1) {
+    // KIS API 초당 20건 제한 대응: 페이지 간 200ms 딜레이
+    if (page > 0) await sleep(200);
+
     const pageData = await getOverseasDailyPricePage(ticker, exchange, baseDate);
     if (pageData.length === 0) break;
 

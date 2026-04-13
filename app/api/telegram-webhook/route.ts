@@ -1,8 +1,10 @@
 import { Bot, webhookCallback } from 'grammy';
-import { supabase } from '@/lib/supabase/client';
+import { supabaseServer } from '@/lib/supabase/server';
+import { telegramWebhookSecret } from '@/lib/env';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const allowedChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS?.split(',').map((id) => id.trim()).filter(Boolean) || [];
+const webhookSecret = (() => { try { return telegramWebhookSecret(); } catch { return ''; } })();
 const bot = token ? new Bot(token) : null;
 
 function parseCommand(text: string, command: string) {
@@ -43,7 +45,7 @@ if (bot) {
   });
 
   bot.command('status', async (ctx) => {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('trades')
       .select('ticker, entry_price, total_shares, status')
       .eq('status', 'PLANNED')
@@ -87,7 +89,7 @@ if (bot) {
       return ctx.reply('규율점수는 0부터 100 사이의 정수여야 합니다.');
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('trades')
       .select('id')
       .eq('ticker', ticker)
@@ -100,7 +102,7 @@ if (bot) {
       return ctx.reply(`${ticker}의 진행 중인 계획을 찾을 수 없습니다.`);
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseServer
       .from('trades')
       .update({
         status: 'COMPLETED',
@@ -132,7 +134,7 @@ if (bot) {
     const ticker = parts[0].toUpperCase();
     const note = parts.slice(1).join(' / ');
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('trades')
       .select('id')
       .eq('ticker', ticker)
@@ -145,7 +147,7 @@ if (bot) {
       return ctx.reply(`${ticker}의 진행 중인 계획을 찾을 수 없습니다.`);
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseServer
       .from('trades')
       .update({
         status: 'CANCELLED',
@@ -162,6 +164,20 @@ if (bot) {
   });
 }
 
+// I-4: Webhook 보안 — secret token 헤더 검증
+async function validateWebhookRequest(req: Request): Promise<Response | null> {
+  if (!webhookSecret) return null; // secret 미설정이면 스킵
+  const headerSecret = req.headers.get('X-Telegram-Bot-Api-Secret-Token');
+  if (headerSecret !== webhookSecret) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+  return null;
+}
+
 export const POST = bot
-  ? webhookCallback(bot, 'std/http')
+  ? async (req: Request) => {
+      const unauthorized = await validateWebhookRequest(req);
+      if (unauthorized) return unauthorized;
+      return webhookCallback(bot, 'std/http')(req);
+    }
   : async () => new Response('Telegram bot is not configured', { status: 500 });

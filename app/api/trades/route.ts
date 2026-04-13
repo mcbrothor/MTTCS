@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase/client';
+import { supabaseServer } from '@/lib/supabase/server';
 import type { TradeStatus } from '@/types';
 
 const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'COMPLETED', 'CANCELLED'];
@@ -60,18 +60,36 @@ export async function POST(request: Request) {
       return apiError('v3.0 분석 근거와 피라미딩 계획이 필요합니다.', 'MISSING_V3_FIELDS');
     }
 
-    const { data, error } = await supabase
+    // C-4 수정: 허용 필드만 명시적으로 추출 (body spread로 인한 필드 주입 방지)
+    const record = {
+      ticker: String(body.ticker).toUpperCase(),
+      direction: body.direction || 'LONG',
+      status: 'PLANNED' as const,
+      chk_sepa: Boolean(body.chk_sepa),
+      chk_market: body.chk_market ?? body.chk_sepa,
+      chk_risk: Boolean(body.chk_risk),
+      chk_entry: Boolean(body.chk_entry),
+      chk_stoploss: Boolean(body.chk_stoploss),
+      chk_exit: Boolean(body.chk_exit),
+      chk_psychology: Boolean(body.chk_psychology),
+      sepa_evidence: body.sepa_evidence,
+      vcp_analysis: body.vcp_analysis ?? null,
+      total_equity: Number(body.total_equity) || null,
+      planned_risk: plannedRisk,
+      risk_percent: riskPercent,
+      atr_value: Number(body.atr_value) || null,
+      entry_price: Number(body.entry_price) || null,
+      stoploss_price: Number(body.stoploss_price) || null,
+      position_size: totalShares,
+      total_shares: totalShares,
+      entry_targets: body.entry_targets,
+      trailing_stops: body.trailing_stops,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabaseServer
       .from('trades')
-      .insert([
-        {
-          ...body,
-          ticker: String(body.ticker).toUpperCase(),
-          chk_market: body.chk_market ?? body.chk_sepa,
-          risk_percent: riskPercent,
-          status: 'PLANNED',
-          updated_at: new Date().toISOString(),
-        },
-      ])
+      .insert([record])
       .select()
       .single();
 
@@ -86,7 +104,7 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('trades')
       .select('*')
       .order('created_at', { ascending: false });
@@ -167,7 +185,7 @@ export async function PATCH(request: Request) {
     if (body.trailing_stops !== undefined) update.trailing_stops = body.trailing_stops;
     if (body.sepa_evidence !== undefined) update.sepa_evidence = body.sepa_evidence;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('trades')
       .update(update)
       .eq('id', id)
@@ -192,7 +210,7 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const { error } = await supabase.from('trades').delete().eq('id', id);
+    const { error } = await supabaseServer.from('trades').delete().eq('id', id);
     if (error) throw error;
 
     return NextResponse.json({ data: { id } });
