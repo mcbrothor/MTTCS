@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import type { Trade } from '@/types';
 
-export function useDashboardMetrics() {
+export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
   const [data, setData] = useState<{
     trades: Trade[];
     totalTrades: number;
@@ -35,7 +35,9 @@ export function useDashboardMetrics() {
     const fetchTrades = async () => {
       try {
         const response = await axios.get('/api/trades');
-        const trades: Trade[] = response.data.data || [];
+        const allTrades: Trade[] = response.data.data || [];
+        const isKorean = (ticker: string) => /^\d{6}$/.test(ticker);
+        const trades = allTrades.filter((t) => market === 'KR' ? isKorean(t.ticker) : !isKorean(t.ticker));
 
         const completed = trades.filter((trade) => trade.status === 'COMPLETED');
         const planned = trades.filter((trade) => trade.status === 'PLANNED');

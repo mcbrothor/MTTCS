@@ -8,16 +8,21 @@ interface MetricCardsProps {
   avgDiscipline: number;
   plannedCount: number;
   sepaPassRate: number;
+  market?: 'US' | 'KR';
 }
 
-export default function MetricCards({ winRate, totalPnL, avgDiscipline, plannedCount, sepaPassRate }: MetricCardsProps) {
+export default function MetricCards({ winRate, totalPnL, avgDiscipline, plannedCount, sepaPassRate, market = 'US' }: MetricCardsProps) {
+  const pnlStr = market === 'US' 
+    ? `${totalPnL >= 0 ? '+' : ''}$${totalPnL.toFixed(2)}` 
+    : `${totalPnL >= 0 ? '+' : ''}₩${Math.round(totalPnL).toLocaleString()}`;
+
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
       <Metric icon={<Target className="h-6 w-6 text-electric-blue" />} label="승률" value={`${winRate.toFixed(1)}%`} border="border-t-electric-blue" />
       <Metric
         icon={<DollarSign className="h-6 w-6 text-emerald-500" />}
         label="누적 손익"
-        value={`${totalPnL >= 0 ? '+' : ''}$${totalPnL.toFixed(2)}`}
+        value={pnlStr}
         border="border-t-emerald-500"
         valueClass={totalPnL >= 0 ? 'text-emerald-500' : 'text-coral-red'}
       />

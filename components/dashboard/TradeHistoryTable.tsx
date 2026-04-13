@@ -29,9 +29,13 @@ interface EditDraft {
 
 const statusOptions: TradeStatus[] = ['PLANNED', 'COMPLETED', 'CANCELLED'];
 
-const currency = (value: number | null | undefined) =>
+const isKorean = (ticker?: string) => ticker && /^\d{6}$/.test(ticker);
+
+const currency = (value: number | null | undefined, ticker?: string) =>
   typeof value === 'number' && Number.isFinite(value)
-    ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+    ? isKorean(ticker)
+      ? new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 }).format(Math.round(value))
+      : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
     : '-';
 
 const numberText = (value: number | null | undefined, suffix = '') =>
@@ -268,11 +272,11 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono">{riskPct}%</td>
-                      <td className="px-4 py-3 text-right font-mono">{currency(trade.planned_risk)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{currency(trade.planned_risk, trade.ticker)}</td>
                       <td className="px-4 py-3 text-right font-mono font-medium">
                         {trade.status === 'COMPLETED' ? (
                           <span className={(trade.result_amount || 0) >= 0 ? 'text-emerald-500' : 'text-coral-red'}>
-                            {(trade.result_amount || 0) >= 0 ? '+' : ''}{currency(trade.result_amount || 0)}
+                            {(trade.result_amount || 0) >= 0 ? '+' : ''}{currency(trade.result_amount || 0, trade.ticker)}
                           </span>
                         ) : (
                           <span className="text-slate-500">-</span>
@@ -374,11 +378,11 @@ function StrategyDetail({ trade }: { trade: Trade }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        <DetailMetric label="총 자본" value={currency(trade.total_equity)} />
+        <DetailMetric label="총 자본" value={currency(trade.total_equity, trade.ticker)} />
         <DetailMetric label="허용 손실" value={`${riskPct}%`} />
         <DetailMetric label="ATR" value={numberText(trade.atr_value)} />
-        <DetailMetric label="진입가" value={currency(trade.entry_price)} />
-        <DetailMetric label="초기 손절가" value={currency(trade.stoploss_price)} />
+        <DetailMetric label="진입가" value={currency(trade.entry_price, trade.ticker)} />
+        <DetailMetric label="초기 손절가" value={currency(trade.stoploss_price, trade.ticker)} />
       </div>
 
       {targets && stops && (
@@ -400,9 +404,9 @@ function StrategyDetail({ trade }: { trade: Trade }) {
                   return (
                     <tr key={leg.label} className="border-b border-slate-900">
                       <td className="py-2 font-medium text-white">{leg.label}</td>
-                      <td className="py-2 text-right font-mono">{currency(leg.price)}</td>
+                      <td className="py-2 text-right font-mono">{currency(leg.price, trade.ticker)}</td>
                       <td className="py-2 text-right font-mono">{leg.shares.toLocaleString()}주</td>
-                      <td className="py-2 text-right font-mono text-orange-300">{currency(stop)}</td>
+                      <td className="py-2 text-right font-mono text-orange-300">{currency(stop, trade.ticker)}</td>
                     </tr>
                   );
                 })}
