@@ -174,17 +174,26 @@ function calculateRsProxy(data: OHLCData[], benchmarkData?: OHLCData[]) {
   return { stockReturn, benchmarkReturn, rsScore };
 }
 
+/**
+ * 기본적 분석 필터 — 항상 info(참고 정보)로 처리
+ *
+ * 왜 info인가?
+ * - Minervini SEPA는 가격/거래량 기반 기술적 판정이 핵심입니다.
+ * - 기본적 분석(EPS, 매출, ROE, 부채)은 보조 참고 자료이며,
+ *   이것이 fail이라고 해서 기술적 진입 자체를 차단하는 것은 과도합니다.
+ * - 세부항목별 충족 여부는 UI에서 개별 표시하여 유저 판단을 돕습니다.
+ */
 function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
-  const infoCriterion = criterion(
-    'fundamentals',
-    'EPS/매출/ROE/부채 기본 필터',
-    'info',
-    '기본적 데이터 미제공',
-    'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
-    '가격과 거래량 기반 SEPA 판정과 분리해 참고 정보로 표시합니다.'
-  );
-
-  if (!fundamentals) return infoCriterion;
+  if (!fundamentals) {
+    return criterion(
+      'fundamentals',
+      'EPS/매출/ROE/부채 기본 필터',
+      'info',
+      '기본적 데이터 미제공',
+      'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
+      '가격과 거래량 기반 SEPA 판정과 분리해 참고 정보로 표시합니다.'
+    );
+  }
 
   const knownValues = [
     fundamentals.epsGrowthPct,
@@ -193,35 +202,58 @@ function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
     fundamentals.debtToEquityPct,
   ].filter((value) => value !== null);
 
-  if (knownValues.length === 0) return infoCriterion;
-
-  const actual = `EPS ${fundamentals.epsGrowthPct ?? '-'}%, 매출 ${fundamentals.revenueGrowthPct ?? '-'}%, ROE ${fundamentals.roePct ?? '-'}%, 부채 ${fundamentals.debtToEquityPct ?? '-'}%`;
-
-  if (knownValues.length < 4) {
+  if (knownValues.length === 0) {
     return criterion(
       'fundamentals',
       'EPS/매출/ROE/부채 기본 필터',
       'info',
-      actual,
+      '기본적 데이터 미제공',
       'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
-      `${fundamentals.source}에서 일부 기본적 지표만 확인되어 참고 정보로 표시합니다.`
+      '가격과 거래량 기반 SEPA 판정과 분리해 참고 정보로 표시합니다.'
     );
   }
 
-  const checks = [
-    fundamentals.epsGrowthPct !== null ? fundamentals.epsGrowthPct >= 20 : true,
-    fundamentals.revenueGrowthPct !== null ? fundamentals.revenueGrowthPct >= 15 : true,
-    fundamentals.roePct !== null ? fundamentals.roePct >= 17 : true,
-    fundamentals.debtToEquityPct !== null ? fundamentals.debtToEquityPct <= 40 : true,
-  ];
+  // 개별 항목 충족 여부를 이모지로 표시하여 가독성 향상
+  const items: string[] = [];
+  if (fundamentals.epsGrowthPct !== null) {
+    const ok = fundamentals.epsGrowthPct >= 20;
+    items.push(`EPS ${fundamentals.epsGrowthPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('EPS —');
+  }
+  if (fundamentals.revenueGrowthPct !== null) {
+    const ok = fundamentals.revenueGrowthPct >= 15;
+    items.push(`매출 ${fundamentals.revenueGrowthPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('매출 —');
+  }
+  if (fundamentals.roePct !== null) {
+    const ok = fundamentals.roePct >= 17;
+    items.push(`ROE ${fundamentals.roePct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('ROE —');
+  }
+  if (fundamentals.debtToEquityPct !== null) {
+    const ok = fundamentals.debtToEquityPct <= 40;
+    items.push(`부채 ${fundamentals.debtToEquityPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('부채 —');
+  }
 
+  const actual = items.join(', ');
+
+  const sourceNote = knownValues.length < 4
+    ? `${fundamentals.source}에서 일부 항목만 확인 — 참고용으로 표시합니다.`
+    : `${fundamentals.source}에서 확인한 기본적 지표입니다. 저장을 차단하지 않으며 투자 판단의 참고용입니다.`;
+
+  // 항상 info로 반환 → SEPA 판정(pass/fail)에 영향을 주지 않음
   return criterion(
     'fundamentals',
     'EPS/매출/ROE/부채 기본 필터',
-    passFail(checks.every(Boolean)),
+    'info',
     actual,
     'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
-    `${fundamentals.source}에서 확인한 기본적 지표를 보조 필터로 확인합니다.`
+    sourceNote
   );
 }
 

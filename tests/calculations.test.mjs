@@ -77,6 +77,7 @@ run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
 });
 
 run('evaluates fundamentals only when all required fields are present', () => {
+  // 일부 항목만 있는 경우 → info (참고 정보)
   const partial = analyzeSepa(makeUptrendBars(260, 0.6), {
     benchmarkData: makeUptrendBars(260, 0.2),
     fundamentals: {
@@ -89,6 +90,7 @@ run('evaluates fundamentals only when all required fields are present', () => {
   });
   assert.equal(partial.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
 
+  // 전체 항목이 있어도 info로 표시 (기본적 분석은 저장을 차단하지 않음)
   const complete = analyzeSepa(makeUptrendBars(260, 0.6), {
     benchmarkData: makeUptrendBars(260, 0.2),
     fundamentals: {
@@ -99,5 +101,8 @@ run('evaluates fundamentals only when all required fields are present', () => {
       source: 'test',
     },
   });
-  assert.equal(complete.criteria.find((item) => item.id === 'fundamentals')?.status, 'pass');
+  assert.equal(complete.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
+  // 개별 항목별 충족 여부가 actual에 이모지로 표시되는지 확인
+  const actual = complete.criteria.find((item) => item.id === 'fundamentals')?.actual ?? '';
+  assert.ok(actual.includes('✅'), '충족 항목에 ✅ 이모지가 표시되어야 합니다');
 });
