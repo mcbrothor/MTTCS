@@ -195,6 +195,19 @@ function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
 
   if (knownValues.length === 0) return infoCriterion;
 
+  const actual = `EPS ${fundamentals.epsGrowthPct ?? '-'}%, 매출 ${fundamentals.revenueGrowthPct ?? '-'}%, ROE ${fundamentals.roePct ?? '-'}%, 부채 ${fundamentals.debtToEquityPct ?? '-'}%`;
+
+  if (knownValues.length < 4) {
+    return criterion(
+      'fundamentals',
+      'EPS/매출/ROE/부채 기본 필터',
+      'info',
+      actual,
+      'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
+      `${fundamentals.source}에서 일부 기본적 지표만 확인되어 참고 정보로 표시합니다.`
+    );
+  }
+
   const checks = [
     fundamentals.epsGrowthPct !== null ? fundamentals.epsGrowthPct >= 20 : true,
     fundamentals.revenueGrowthPct !== null ? fundamentals.revenueGrowthPct >= 15 : true,
@@ -206,7 +219,7 @@ function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
     'fundamentals',
     'EPS/매출/ROE/부채 기본 필터',
     passFail(checks.every(Boolean)),
-    `EPS ${fundamentals.epsGrowthPct ?? '-'}%, 매출 ${fundamentals.revenueGrowthPct ?? '-'}%, ROE ${fundamentals.roePct ?? '-'}%, 부채 ${fundamentals.debtToEquityPct ?? '-'}%`,
+    actual,
     'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
     `${fundamentals.source}에서 확인한 기본적 지표를 보조 필터로 확인합니다.`
   );

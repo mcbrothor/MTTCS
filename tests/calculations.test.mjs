@@ -75,3 +75,29 @@ run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
   assert.notEqual(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'info');
   assert.equal(evidence.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
 });
+
+run('evaluates fundamentals only when all required fields are present', () => {
+  const partial = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+    fundamentals: {
+      epsGrowthPct: 25,
+      revenueGrowthPct: null,
+      roePct: 20,
+      debtToEquityPct: 30,
+      source: 'test',
+    },
+  });
+  assert.equal(partial.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
+
+  const complete = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+    fundamentals: {
+      epsGrowthPct: 25,
+      revenueGrowthPct: 18,
+      roePct: 20,
+      debtToEquityPct: 30,
+      source: 'test',
+    },
+  });
+  assert.equal(complete.criteria.find((item) => item.id === 'fundamentals')?.status, 'pass');
+});

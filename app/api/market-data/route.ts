@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getOverseasDailyPrice } from '@/lib/finance/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-api';
+import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
-import type { OHLCData } from '@/types';
+import type { FundamentalSnapshot, OHLCData } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
@@ -28,6 +29,71 @@ function apiError(message: string, code: string, status = 500, details?: unknown
 function chooseLongerData(kisData: OHLCData[], yahooData: OHLCData[]) {
   if (yahooData.length > kisData.length) return yahooData;
   return kisData;
+}
+
+function hasAnyFundamentalValue(fundamentals: FundamentalSnapshot | null) {
+  if (!fundamentals) return false;
+  return [
+    fundamentals.epsGrowthPct,
+    fundamentals.revenueGrowthPct,
+    fundamentals.roePct,
+    fundamentals.debtToEquityPct,
+  ].some((value) => value !== null);
+}
+
+function mergeFundamentals(
+  yahoo: FundamentalSnapshot | null,
+  sec: FundamentalSnapshot | null
+): FundamentalSnapshot | null {
+  if (!hasAnyFundamentalValue(yahoo) && !hasAnyFundamentalValue(sec)) return null;
+  if (!hasAnyFundamentalValue(yahoo)) return sec;
+  if (!hasAnyFundamentalValue(sec)) return yahoo;
+
+  return {
+    epsGrowthPct: yahoo?.epsGrowthPct ?? sec?.epsGrowthPct ?? null,
+    revenueGrowthPct: yahoo?.revenueGrowthPct ?? sec?.revenueGrowthPct ?? null,
+    roePct: yahoo?.roePct ?? sec?.roePct ?? null,
+    debtToEquityPct: yahoo?.debtToEquityPct ?? sec?.debtToEquityPct ?? null,
+    source: 'Yahoo Finance quoteSummary + SEC EDGAR companyfacts',
+  };
+}
+
+async function fetchFundamentals(ticker: string, warnings: string[]) {
+  const yahooFundamentals = await getYahooFundamentals(ticker);
+  const needsSecFallback = !yahooFundamentals || [
+    yahooFundamentals.epsGrowthPct,
+    yahooFundamentals.revenueGrowthPct,
+    yahooFundamentals.roePct,
+    yahooFundamentals.debtToEquityPct,
+  ].some((value) => value === null);
+
+  if (!needsSecFallback) return yahooFundamentals;
+
+  const secFundamentals = await getSecFundamentals(ticker);
+  const merged = mergeFundamentals(yahooFundamentals, secFundamentals);
+
+  if (!hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
+    warnings.push('Yahoo 기본적 데이터가 부족해 SEC EDGAR 공식 재무제표로 보완했습니다.');
+  } else if (hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
+    warnings.push('Yahoo 기본적 데이터의 빈 항목을 SEC EDGAR 공식 재무제표로 보완했습니다.');
+  } else if (!merged) {
+    warnings.push('Yahoo와 SEC EDGAR에서도 충분한 기본적 데이터를 확보하지 못해 정보 항목으로 표시합니다.');
+  }
+
+  return merged;
+}
+
+function missingFundamentalLabels(fundamentals: FundamentalSnapshot | null) {
+  if (!fundamentals) {
+    return ['EPS growth', 'Revenue growth', 'ROE', 'Debt ratio', 'Institutional ownership', 'Official RS Rating'];
+  }
+
+  const missing: string[] = ['Institutional ownership', 'Official RS Rating'];
+  if (fundamentals.epsGrowthPct === null) missing.push('EPS growth');
+  if (fundamentals.revenueGrowthPct === null) missing.push('Revenue growth');
+  if (fundamentals.roePct === null) missing.push('ROE');
+  if (fundamentals.debtToEquityPct === null) missing.push('Debt ratio');
+  return missing;
 }
 
 async function fetchPriceData(ticker: string, exchange: string): Promise<{
@@ -108,7 +174,7 @@ export async function GET(request: Request) {
     const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
     const [benchmarkData, fundamentals] = await Promise.all([
       getYahooDailyPrice('SPY').catch(() => []),
-      getYahooFundamentals(ticker),
+      fetchFundamentals(ticker, warnings),
     ]);
 
     const atr = calculateATR(data);
@@ -135,9 +201,7 @@ export async function GET(request: Request) {
         bars: data.length,
         hasEnoughForAtr: data.length >= 21,
         hasEnoughForLongMa: data.length >= 221,
-        missingFundamentals: fundamentals
-          ? []
-          : ['EPS growth', 'Revenue growth', 'ROE', 'Debt ratio', 'Institutional ownership', 'Official RS Rating'],
+        missingFundamentals: missingFundamentalLabels(fundamentals),
       },
       warnings,
     });
