@@ -1,6 +1,6 @@
 export type TradeStatus = 'PLANNED' | 'COMPLETED' | 'CANCELLED';
 export type Direction = 'LONG' | 'SHORT';
-export type AssessmentStatus = 'pass' | 'fail' | 'info';
+export type AssessmentStatus = 'pass' | 'fail' | 'info' | 'warning';
 
 export interface Trade {
   id: string;

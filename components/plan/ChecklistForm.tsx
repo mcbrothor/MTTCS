@@ -59,6 +59,7 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
   const isSepaBlocked = sepaStatus === 'fail';
+  const isSepaWarning = sepaStatus === 'warning';
 
   const handleAgree = () => {
     if (isSepaBlocked && STEPS[currentStep].id === 'sepa') return;
@@ -90,14 +91,20 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
         <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">4. Centaur 체크리스트</p>
         <h2 className="mt-1 text-xl font-bold text-white">기계적 실행을 위한 최종 확인</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          SEPA가 Fail이면 체크리스트 첫 단계와 저장 버튼을 잠급니다.
+          SEPA가 Fail(4개 이상 실패)이면 차단됩니다. 3개 이하 실패 시 경고와 함께 진행할 수 있습니다.
         </p>
       </div>
 
       {isSepaBlocked && (
         <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
           <Lock className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>SEPA 실패 조건이 있어 매매 계획을 저장할 수 없습니다. 실패한 조건을 먼저 해소하세요.</p>
+          <p>SEPA 실패 조건이 너무 많아(4개 이상) 계획을 저장할 수 없습니다.</p>
+        </div>
+      )}
+
+      {isSepaWarning && !isSepaBlocked && (
+        <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+          <p>일부 SEPA 조건이 미달(1~3개)되었으나, 사용자 재량으로 계획 수립을 계속할 수 있습니다.</p>
         </div>
       )}
 

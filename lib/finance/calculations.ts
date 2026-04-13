@@ -369,8 +369,15 @@ export function analyzeSepa(
     total: criteria.length,
   };
 
+  let finalStatus: 'pass' | 'fail' | 'warning' = 'pass';
+  if (summary.failed > 3) {
+    finalStatus = 'fail';
+  } else if (summary.failed > 0) {
+    finalStatus = 'warning';
+  }
+
   return {
-    status: summary.failed > 0 ? 'fail' : 'pass',
+    status: finalStatus,
     criteria,
     summary,
     metrics: {

@@ -104,27 +104,46 @@ export interface YahooQuote {
 export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
   if (!symbols || symbols.length === 0) return [];
 
-  try {
-    const response = await axios.get('https://query1.finance.yahoo.com/v7/finance/quote', {
-      params: {
-        symbols: symbols.join(','),
-      },
-      headers: {
-        'user-agent': 'MTTCS/3.0',
-      },
-    });
+  const promises = symbols.map(async (symbol) => {
+    try {
+      const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
+        params: {
+          range: '50d',
+          interval: '1d',
+        },
+        headers: {
+          'user-agent': 'Mozilla/5.0',
+        },
+      });
 
-    const result = response.data?.quoteResponse?.result || [];
-    
-    return result.map((item: any) => ({
-      symbol: item.symbol,
-      regularMarketPrice: item.regularMarketPrice || 0,
-      regularMarketChangePercent: item.regularMarketChangePercent || 0,
-      fiftyDayAverage: item.fiftyDayAverage || 0,
-    }));
-  } catch (error) {
-    console.error('Yahoo Finance Quotes API Error:', error);
-    return [];
-  }
+      const result = response.data?.chart?.result?.[0];
+      if (!result) return null;
+
+      const meta = result.meta;
+      const currentPrice = meta.regularMarketPrice || 0;
+      const prevClose = meta.chartPreviousClose || currentPrice;
+      const changePct = prevClose ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
+
+      const closes: number[] = result.indicators?.quote?.[0]?.close || [];
+      const validCloses = closes.filter((c: any) => typeof c === 'number' && c > 0);
+      const fiftyDayAverage = validCloses.length > 0
+        ? validCloses.reduce((a: number, b: number) => a + b, 0) / validCloses.length
+        : currentPrice;
+
+      return {
+        symbol: meta.symbol || symbol,
+        regularMarketPrice: currentPrice,
+        regularMarketChangePercent: changePct,
+        fiftyDayAverage,
+      } as YahooQuote;
+    } catch {
+      // Individual symbol failure
+      return null;
+    }
+  });
+
+  const results = await Promise.allSettled(promises);
+  return results
+    .filter((r): r is PromiseFulfilledResult<YahooQuote> => r.status === 'fulfilled' && r.value !== null)
+    .map((r) => r.value);
 }
-
