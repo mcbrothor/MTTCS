@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
+import axios from 'axios';
+import { Star } from 'lucide-react';
 import type { EntryTargets, SepaEvidence, Trade, TradeStatus, TrailingStops } from '@/types';
 
 interface TradeHistoryTableProps {
@@ -87,6 +89,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(trades);
@@ -175,6 +178,28 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     }
   };
 
+  const handleAddToWatchlist = async (ticker: string) => {
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      await axios.post('/api/watchlist', {
+        ticker,
+        exchange: 'NAS', // 기본값으로 전달
+        priority: 0,
+        memo: '히스토리에서 추가됨',
+        tags: ['History'],
+      });
+      setSuccessMsg(`${ticker}가 관심 종목에 추가되었습니다.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.message || '관심 종목 추가 실패');
+      } else {
+        setError('관심 종목 추가 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
   return (
     <Card className="overflow-hidden">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -185,8 +210,16 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100">
-          {error}
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-100 flex justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-300 hover:text-red-100">&times;</button>
+        </div>
+      )}
+      
+      {successMsg && (
+        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100 flex justify-between">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-300 hover:text-emerald-100">&times;</button>
         </div>
       )}
 
@@ -256,6 +289,14 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAddToWatchlist(trade.ticker)}
+                            title="관심 종목에 추가"
+                            className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 text-yellow-500 transition-colors hover:bg-yellow-500/20"
+                          >
+                            <Star className="h-4 w-4" />
+                          </button>
                           <ActionButton onClick={() => setExpandedId(isExpanded ? null : trade.id)}>
                             {isExpanded ? '접기' : '전략 보기'}
                           </ActionButton>

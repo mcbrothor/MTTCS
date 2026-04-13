@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, BookOpen, History, LayoutDashboard, PlusCircle, Star } from 'lucide-react';
+import { Activity, BookOpen, History, LayoutDashboard, PlusCircle, Star, BarChart3 } from 'lucide-react';
 
 export default function Navbar() {
   return (
@@ -30,6 +30,10 @@ export default function Navbar() {
           <Link href="/history" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
             <History className="h-4 w-4" />
             <span className="hidden sm:inline">히스토리</span>
+          </Link>
+          <Link href="/macro" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+            <BarChart3 className="h-4 w-4 text-purple-400" />
+            <span className="hidden sm:inline">매크로 분석</span>
           </Link>
         </div>
       </div>

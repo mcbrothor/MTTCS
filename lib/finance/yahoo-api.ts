@@ -93,3 +93,38 @@ export async function getYahooFundamentals(ticker: string): Promise<FundamentalS
     return null;
   }
 }
+
+export interface YahooQuote {
+  symbol: string;
+  regularMarketPrice: number;
+  regularMarketChangePercent: number;
+  fiftyDayAverage: number;
+}
+
+export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
+  if (!symbols || symbols.length === 0) return [];
+
+  try {
+    const response = await axios.get('https://query1.finance.yahoo.com/v7/finance/quote', {
+      params: {
+        symbols: symbols.join(','),
+      },
+      headers: {
+        'user-agent': 'MTTCS/3.0',
+      },
+    });
+
+    const result = response.data?.quoteResponse?.result || [];
+    
+    return result.map((item: any) => ({
+      symbol: item.symbol,
+      regularMarketPrice: item.regularMarketPrice || 0,
+      regularMarketChangePercent: item.regularMarketChangePercent || 0,
+      fiftyDayAverage: item.fiftyDayAverage || 0,
+    }));
+  } catch (error) {
+    console.error('Yahoo Finance Quotes API Error:', error);
+    return [];
+  }
+}
+
