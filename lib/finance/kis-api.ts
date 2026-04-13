@@ -135,3 +135,105 @@ export async function getOverseasDailyPrice(
 
   return sortAndDedupe(collected);
 }
+
+function getTodayString() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getOneYearAgoString() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function getDomesticDailyPricePage(
+  ticker: string,
+  startDate: string,
+  endDate: string
+): Promise<OHLCData[]> {
+  const token = await getKisToken();
+  const KIS_APP_KEY = kisAppKey();
+  const KIS_APP_SECRET = kisAppSecret();
+  const KIS_BASE_URL = kisBaseUrl();
+
+  const isVirtual = KIS_BASE_URL.includes('openapivts');
+  const tr_id = isVirtual ? 'FHKST03010100' : 'FHKST03010100';
+
+  const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${token}`,
+      appkey: KIS_APP_KEY,
+      appsecret: KIS_APP_SECRET,
+      tr_id,
+      custtype: 'P',
+    },
+    params: {
+      FID_COND_MRKT_DIV_CODE: 'J',
+      FID_INPUT_ISCD: ticker,
+      FID_INPUT_DATE_1: startDate,
+      FID_INPUT_DATE_2: endDate,
+      FID_PERIOD_DIV_CODE: 'D',
+      FID_ORG_ADJ_PRC: '0',
+    },
+  });
+
+  if (response.data.rt_cd !== '0') {
+    throw new Error(response.data.msg1 || 'KIS 국내주식 일봉 조회 오류');
+  }
+
+  const output2: any[] = response.data.output2 || [];
+  return output2
+    .filter((item) => item.stck_bsop_date)
+    .map((item) => ({
+      date: item.stck_bsop_date,
+      open: Number(item.stck_oprc),
+      high: Number(item.stck_hgpr),
+      low: Number(item.stck_lwpr),
+      close: Number(item.stck_clpr),
+      volume: Number(item.acml_vol),
+    }))
+    .filter((item) =>
+      Number.isFinite(item.open) &&
+      Number.isFinite(item.high) &&
+      Number.isFinite(item.low) &&
+      Number.isFinite(item.close) &&
+      Number.isFinite(item.volume)
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export async function getMarketDailyPrice(
+  ticker: string,
+  exchange: string,
+  targetBars: number = DEFAULT_TARGET_BARS
+): Promise<OHLCData[]> {
+  if (exchange === 'KOSPI' || exchange === 'KOSDAQ') {
+    // For domestic, inquire-daily-itemchartprice returns up to 100 days. 
+    // We fetch current page, and if we need more, we can fetch previous date ranges.
+    const collected: OHLCData[] = [];
+    let endDate = getTodayString();
+    
+    for (let page = 0; page < 3; page++) {
+      if (page > 0) await sleep(200);
+      
+      const pageData = await getDomesticDailyPricePage(ticker, getOneYearAgoString(), endDate);
+      if (pageData.length === 0) break;
+      
+      collected.push(...pageData);
+      const merged = sortAndDedupe(collected);
+      if (merged.length >= targetBars) {
+        return merged.slice(-targetBars);
+      }
+      
+      const oldest = merged[0]?.date;
+      if (!oldest) break;
+      
+      endDate = previousCalendarDate(oldest);
+    }
+    return sortAndDedupe(collected);
+  }
+  
+  return getOverseasDailyPrice(ticker, exchange, targetBars);
+}

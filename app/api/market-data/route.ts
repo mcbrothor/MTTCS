@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getOverseasDailyPrice } from '@/lib/finance/kis-api';
+import { getMarketDailyPrice } from '@/lib/finance/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-api';
 import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
@@ -60,8 +60,15 @@ function mergeFundamentals(
   };
 }
 
-async function fetchFundamentals(ticker: string, warnings: string[]) {
-  const yahooFundamentals = await getYahooFundamentals(ticker);
+function getYahooFormattedTicker(ticker: string, exchange: string) {
+  if (exchange === 'KOSPI') return `${ticker}.KS`;
+  if (exchange === 'KOSDAQ') return `${ticker}.KQ`;
+  return ticker;
+}
+
+async function fetchFundamentals(ticker: string, exchange: string, warnings: string[]) {
+  const yahooTicker = getYahooFormattedTicker(ticker, exchange);
+  const yahooFundamentals = await getYahooFundamentals(yahooTicker);
   const needsSecFallback = !yahooFundamentals || [
     yahooFundamentals.epsGrowthPct,
     yahooFundamentals.revenueGrowthPct,
@@ -107,7 +114,7 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
   let kisData: OHLCData[] = [];
 
   try {
-    kisData = await getOverseasDailyPrice(ticker, exchange, TARGET_KIS_BARS);
+    kisData = await getMarketDailyPrice(ticker, exchange, TARGET_KIS_BARS);
     if (kisData.length >= REQUIRED_SEPA_BARS) {
       return {
         data: kisData,
@@ -124,7 +131,8 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
   }
 
   try {
-    const yahooData = await getYahooDailyPrice(ticker);
+    const yahooTicker = getYahooFormattedTicker(ticker, exchange);
+    const yahooData = await getYahooDailyPrice(yahooTicker);
     const data = chooseLongerData(kisData, yahooData);
     const providerUsed =
       data === yahooData
@@ -183,7 +191,7 @@ export async function GET(request: Request) {
     const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
     const [benchmarkData, fundamentals] = await Promise.all([
       getYahooDailyPrice('SPY').catch(() => []),
-      fetchFundamentals(ticker, warnings),
+      fetchFundamentals(ticker, exchange, warnings),
     ]);
 
     const atr = calculateATR(data);

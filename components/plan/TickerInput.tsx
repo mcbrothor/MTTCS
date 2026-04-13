@@ -60,6 +60,8 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
             <option value="NAS">NASDAQ</option>
             <option value="NYS">NYSE</option>
             <option value="AMS">AMEX</option>
+            <option value="KOSPI">KOSPI</option>
+            <option value="KOSDAQ">KOSDAQ</option>
           </select>
         </label>
 

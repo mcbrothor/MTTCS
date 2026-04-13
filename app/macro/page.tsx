@@ -94,6 +94,48 @@ function RatioDisplay({
   );
 }
 
+
+
+function MarketOverview({ data }: { data: Record<string, MacroData> }) {
+  const spy = data['SPY'];
+  const hyg = data['HYG'];
+  const ief = data['IEF'];
+
+  if (!spy) return null;
+
+  const isSpyUp = spy.regularMarketPrice > spy.fiftyDayAverage;
+  const isHygIefUp = hyg && ief ? hyg.regularMarketChangePercent > ief.regularMarketChangePercent : false;
+
+  let statusText = '중립 혼조세 (Neutral)';
+  let statusColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+  let desc = '시장의 방향성이 뚜렷하지 않습니다. 자금이 안전 자산과 위험 자산 사이에서 줄다리기 중이며, 개별 종목의 실적 및 모멘텀에 집중해야 합니다. 브레이크아웃 신호에 신중하게 접근하고 리스크 한도를 보수적으로 유지하세요.';
+
+  if (isSpyUp && isHygIefUp) {
+    statusText = '리스크 온 🚀 (Risk-ON)';
+    statusColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+    desc = 'S&P 500이 50일선 위에 위치하며, 글로벌 유동성이 하이일드 채권 등 위험 자산으로 유입되고 있습니다. 강세장 패턴(VCP 등)의 돌파 성공 확률이 높으므로 긍정적인 추세 추종 전략을 전개하기 좋은 환경입니다.';
+  } else if (!isSpyUp && !isHygIefUp) {
+    statusText = '리스크 오프 ⚠️ (Risk-OFF)';
+    statusColor = 'text-red-400 bg-red-500/10 border-red-500/30';
+    desc = 'S&P 500이 추세를 이탈했으며, 하이일드에서 채권(안전 자산)으로 자금이 도피 중입니다. 시장의 투심이 얼어붙고 돌파 실패가 잦아지는 하락장 도입부일 수 있습니다. 신규 진입을 멈추고 현금 비중 확대와 손절 대응에 집중하세요.';
+  }
+
+  return (
+    <div className={`mb-8 p-5 rounded-xl border ${statusColor}`}>
+      <h3 className="flex items-center gap-2 text-lg font-bold">
+        현재 시장 종합 판정: <span>{statusText}</span>
+      </h3>
+      <p className="mt-2 text-sm leading-6 opacity-90 font-medium">
+        {desc}
+      </p>
+      <p className="mt-3 text-xs leading-5 opacity-70 border-t border-current pt-3 mx-[-2px]">
+        * 본 요약은 S&P 500의 50일 이평선(추세) 및 HYG/IEF(신용 채권 스프레드)를 결합하여 추산된 동적 매크로 견해입니다. 
+        아래의 핵심 지표 카드들의 화살표와 50MA 여부(위/아래)를 살펴보며 시장 자금의 세부 이동을 파악하십시오.
+      </p>
+    </div>
+  );
+}
+
 export default function MacroDashboardPage() {
   const [data, setData] = useState<Record<string, MacroData>>({});
   const [loading, setLoading] = useState(true);
@@ -132,14 +174,11 @@ export default function MacroDashboardPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
-      <div>
+    <div className="max-w-6xl mx-auto space-y-4 pb-12">
+      <div className="mb-4">
         <p className="text-sm font-semibold uppercase tracking-wide text-purple-400">Macro Insight</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">매크로 분석</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          시장 시스템 전반의 위험, 유동성, 스마트 머니의 이동 방향을 파악합니다. 지표에 표시된 등락률 차이와 50일 이동평균선 여부를 통해 
-          Risk-ON(위험 자산 선호) 장세인지 Risk-OFF(안전 자산 회피) 장세인지 진단할 수 있습니다.
-        </p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white mb-6">매크로 분석</h1>
+        <MarketOverview data={data} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
