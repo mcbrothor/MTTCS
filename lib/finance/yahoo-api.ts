@@ -44,20 +44,32 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
   }
 
   return timestamps
-    .map((timestamp, index) => ({
-      date: new Date(timestamp * 1000).toISOString().slice(0, 10),
-      open: Number(quote.open?.[index]),
-      high: Number(quote.high?.[index]),
-      low: Number(quote.low?.[index]),
-      close: Number(quote.close?.[index]),
-      volume: Number(quote.volume?.[index]),
-    }))
-    .filter((row) =>
+    .map((timestamp, index) => {
+      const o = quote.open?.[index];
+      const h = quote.high?.[index];
+      const l = quote.low?.[index];
+      const c = quote.close?.[index];
+      const v = quote.volume?.[index];
+      
+      if (o === null || h === null || l === null || c === null) return null;
+
+      return {
+        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+        open: Number(o),
+        high: Number(h),
+        low: Number(l),
+        close: Number(c),
+        volume: Number(v),
+      };
+    })
+    .filter((row): row is OHLCData =>
+      row !== null &&
       Number.isFinite(row.open) &&
       Number.isFinite(row.high) &&
       Number.isFinite(row.low) &&
       Number.isFinite(row.close) &&
-      Number.isFinite(row.volume)
+      Number.isFinite(row.volume) &&
+      row.close > 0
     );
 }
 

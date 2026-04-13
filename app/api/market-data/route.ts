@@ -189,8 +189,13 @@ export async function GET(request: Request) {
     }
 
     const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
+
+    let benchmarkTicker = 'SPY';
+    if (exchange === 'KOSPI') benchmarkTicker = '^KS11';
+    if (exchange === 'KOSDAQ') benchmarkTicker = '^KQ11';
+
     const [benchmarkData, fundamentals] = await Promise.all([
-      getYahooDailyPrice('SPY').catch(() => []),
+      getYahooDailyPrice(benchmarkTicker).catch(() => []),
       fetchFundamentals(ticker, exchange, warnings),
     ]);
 
