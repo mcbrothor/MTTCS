@@ -60,8 +60,8 @@ function ValueDisplay({ quote, fallbackTicker }: { quote?: MacroData; fallbackTi
           {isAbove50 ? '50MA ▲' : '50MA ▼'}
         </span>
       </div>
-      <p className={`text-[10px] text-center mt-1 leading-snug ${isUp ? 'text-red-300' : 'text-blue-300'}`}>
-        {isUp ? MACRO_INFO[fallbackTicker]?.descUp : MACRO_INFO[fallbackTicker]?.descDown}
+      <p className={`text-[10px] text-center mt-1 leading-snug break-keep ${isAbove50 ? 'text-red-300' : 'text-blue-300'}`}>
+        {isAbove50 ? MACRO_INFO[fallbackTicker]?.descUp : MACRO_INFO[fallbackTicker]?.descDown}
       </p>
     </div>
   );

@@ -132,12 +132,13 @@ export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
       if (!result) return null;
 
       const meta = result.meta;
-      const currentPrice = meta.regularMarketPrice || 0;
-      const prevClose = meta.chartPreviousClose || currentPrice;
-      const changePct = prevClose ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
-
       const closes: number[] = result.indicators?.quote?.[0]?.close || [];
       const validCloses = closes.filter((c: any) => typeof c === 'number' && c > 0);
+
+      const currentPrice = meta.regularMarketPrice || (validCloses.length > 0 ? validCloses[validCloses.length - 1] : 0);
+      const prevClose = meta.previousClose || (validCloses.length > 1 ? validCloses[validCloses.length - 2] : currentPrice);
+      const changePct = prevClose && prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
+
       const fiftyDayAverage = validCloses.length > 0
         ? validCloses.reduce((a: number, b: number) => a + b, 0) / validCloses.length
         : currentPrice;
