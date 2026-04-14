@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Play, ScanSearch, Square, Star } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -18,6 +18,13 @@ import type {
 const TOTAL_EQUITY_FOR_SCAN = '50000';
 const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
+const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v1:';
+
+interface StoredScannerSnapshot {
+  savedAt: string;
+  universeMeta: ScannerUniverseResponse;
+  results: ScannerResult[];
+}
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }> = {
   NASDAQ100: {
@@ -49,6 +56,10 @@ const SORTS = [
 
 type FilterKey = (typeof FILTERS)[number]['key'];
 type SortKey = (typeof SORTS)[number]['key'];
+
+function scannerStorageKey(universe: ScannerUniverse) {
+  return `${SCANNER_STORAGE_PREFIX}${universe}`;
+}
 
 function round(value: number, digits = 2) {
   const factor = 10 ** digits;
@@ -262,10 +273,13 @@ function distanceClass(value: number | null) {
 }
 
 export default function ScannerPage() {
+  const [selectedUniverse, setSelectedUniverse] = useState<ScannerUniverse>('NASDAQ100');
   const [universeMeta, setUniverseMeta] = useState<ScannerUniverseResponse | null>(null);
   const [results, setResults] = useState<ScannerResult[]>([]);
   const [scanning, setScanning] = useState(false);
   const [activeUniverse, setActiveUniverse] = useState<ScannerUniverse | null>(null);
+  const [snapshotAt, setSnapshotAt] = useState<string | null>(null);
+  const [restoredSnapshot, setRestoredSnapshot] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -300,18 +314,63 @@ export default function ScannerPage() {
     setResults((prev) => prev.map((item) => (item.ticker === ticker ? { ...item, ...next } : item)));
   };
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(scannerStorageKey(selectedUniverse));
+      if (!raw) {
+        setUniverseMeta(null);
+        setResults([]);
+        setSnapshotAt(null);
+        setRestoredSnapshot(false);
+        setNotice(null);
+        setFilter('all');
+        setSortKey('marketCap');
+        return;
+      }
+
+      const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
+      if (!snapshot.universeMeta || snapshot.universeMeta.universe !== selectedUniverse || !Array.isArray(snapshot.results)) return;
+
+      setUniverseMeta(snapshot.universeMeta);
+      setResults(snapshot.results);
+      setSnapshotAt(snapshot.savedAt);
+      setRestoredSnapshot(true);
+      setNotice(`${formatDateTime(snapshot.savedAt)} 스캔 기록을 불러왔습니다. 새 스캔 버튼을 누르면 기록이 갱신됩니다.`);
+    } catch {
+      window.localStorage.removeItem(scannerStorageKey(selectedUniverse));
+    }
+  }, [selectedUniverse]);
+
+  useEffect(() => {
+    if (scanning || !snapshotAt || !universeMeta || universeMeta.universe !== selectedUniverse || results.length === 0) return;
+
+    try {
+      const snapshot: StoredScannerSnapshot = {
+        savedAt: snapshotAt,
+        universeMeta,
+        results,
+      };
+      window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
+    } catch {
+      setError('스캔 결과를 브라우저에 저장하지 못했습니다. 저장 공간을 확인해 주세요.');
+    }
+  }, [results, scanning, selectedUniverse, snapshotAt, universeMeta]);
+
   const runScan = async (universe: ScannerUniverse) => {
     runIdRef.current += 1;
     const runId = runIdRef.current;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
 
+    setSelectedUniverse(universe);
     setScanning(true);
     setActiveUniverse(universe);
     setError(null);
     setNotice(null);
     setUniverseMeta(null);
     setResults([]);
+    setSnapshotAt(null);
+    setRestoredSnapshot(false);
     setFilter('all');
     setSortKey('marketCap');
 
@@ -357,7 +416,9 @@ export default function ScannerPage() {
 
       await Promise.all(workers);
       if (runIdRef.current === runId) {
-        setNotice(`${data.label} 스캔이 완료되었습니다.`);
+        const completedAt = new Date().toISOString();
+        setSnapshotAt(completedAt);
+        setNotice(`${data.label} 스캔이 완료되었습니다. 이 결과는 ${formatDateTime(completedAt)} 기준 기록으로 저장됩니다.`);
       }
     } catch (scanError) {
       if (runIdRef.current === runId && !abortRef.current?.signal.aborted) {
@@ -374,8 +435,10 @@ export default function ScannerPage() {
   const stopScan = () => {
     runIdRef.current += 1;
     abortRef.current?.abort();
+    const stoppedAt = results.length > 0 ? new Date().toISOString() : null;
     setScanning(false);
     setActiveUniverse(null);
+    setSnapshotAt(stoppedAt);
     setNotice('스캔을 중지했습니다. 이미 완료된 결과는 그대로 남겨두었습니다.');
   };
 
@@ -425,19 +488,15 @@ export default function ScannerPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((universe) => (
-            <Button
-              key={universe}
-              type="button"
-              onClick={() => runScan(universe)}
-              disabled={scanning}
-              className="gap-2"
-              variant={universe === 'NASDAQ100' ? 'primary' : 'secondary'}
-            >
-              {scanning && activeUniverse === universe ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4" />}
-              {UNIVERSES[universe].label} 스캔
-            </Button>
-          ))}
+          <Button
+            type="button"
+            onClick={() => runScan(selectedUniverse)}
+            disabled={scanning}
+            className="gap-2"
+          >
+            {scanning && activeUniverse === selectedUniverse ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4" />}
+            {UNIVERSES[selectedUniverse].label} 스캔
+          </Button>
           {scanning && (
             <Button type="button" variant="ghost" onClick={stopScan} className="gap-2">
               <Square className="h-4 w-4" />
@@ -446,6 +505,34 @@ export default function ScannerPage() {
           )}
         </div>
       </div>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-2">
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((universe) => {
+            const isSelected = selectedUniverse === universe;
+            return (
+              <button
+                key={universe}
+                type="button"
+                onClick={() => setSelectedUniverse(universe)}
+                disabled={scanning}
+                className={`rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isSelected
+                    ? 'border-emerald-500/50 bg-emerald-500/15'
+                    : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'
+                }`}
+              >
+                <span className={`text-sm font-bold ${isSelected ? 'text-emerald-200' : 'text-slate-200'}`}>
+                  {UNIVERSES[universe].label}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-slate-400">
+                  {UNIVERSES[universe].description}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -464,6 +551,12 @@ export default function ScannerPage() {
           {universeMeta && (
             <div className="min-w-[240px] rounded-lg border border-slate-800 bg-slate-900/70 p-3 text-xs text-slate-400">
               <p className="font-semibold text-slate-200">{universeMeta.label}</p>
+              {snapshotAt && (
+                <p className="mt-1 text-emerald-300">
+                  스캔 기록: {formatDateTime(snapshotAt)}
+                  {restoredSnapshot ? ' 불러옴' : ''}
+                </p>
+              )}
               <p className="mt-1">목록 기준: {formatDateTime(universeMeta.asOf)}</p>
               <p className="mt-1">소스: {universeMeta.source}</p>
               {universeMeta.delayNote && <p className="mt-1 text-amber-300">{universeMeta.delayNote}</p>}

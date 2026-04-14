@@ -1,5 +1,5 @@
 import Card from '@/components/ui/Card';
-import { Activity, BarChart2, CheckCircle2, Crosshair, Shield, TrendingDown, TrendingUp, Volume2 } from 'lucide-react';
+import { Activity, BarChart2, CheckCircle2, Crosshair, ScanSearch, Shield, TrendingDown, TrendingUp, Volume2 } from 'lucide-react';
 
 const sepaRules = [
   { rule: '현재가 > 50일/150일/200일 이동평균', desc: '주가가 주요 이동평균 위에서 움직이는 강한 상승 추세 종목만 후보로 둡니다.' },
@@ -59,11 +59,19 @@ const vcpLayers = [
 ];
 
 const flow = [
-  { step: '1', label: 'SEPA 필터', desc: '강한 상승 추세 후보 선별', color: 'border-emerald-500 text-emerald-400' },
-  { step: '2', label: 'VCP 피벗', desc: '최종 수축 고점 확인', color: 'border-sky-500 text-sky-400' },
-  { step: '3', label: '무효화선', desc: '최종 수축 저점 확인', color: 'border-orange-500 text-orange-400' },
-  { step: '4', label: '수량 계산', desc: '1% 리스크와 8% 캡 적용', color: 'border-amber-500 text-amber-400' },
-  { step: '5', label: '체결/복기', desc: '계획 준수와 R 추적', color: 'border-rose-500 text-rose-400' },
+  { step: '1', label: '스캐너', desc: '종목군 후보 압축', color: 'border-emerald-500 text-emerald-400' },
+  { step: '2', label: 'SEPA 필터', desc: '강한 상승 추세 선별', color: 'border-sky-500 text-sky-400' },
+  { step: '3', label: 'VCP 피벗', desc: '최종 수축 고점 확인', color: 'border-cyan-500 text-cyan-400' },
+  { step: '4', label: '무효화선', desc: '최종 수축 저점 확인', color: 'border-orange-500 text-orange-400' },
+  { step: '5', label: '수량 계산', desc: '1% 리스크와 8% 캡 적용', color: 'border-amber-500 text-amber-400' },
+  { step: '6', label: '체결/복기', desc: '계획 준수와 R 추적', color: 'border-rose-500 text-rose-400' },
+];
+
+const scannerRows = [
+  { item: 'NASDAQ 100', source: 'Nasdaq 공식 목록 API', use: '미국 대형 성장주 후보를 시가총액순으로 보고 SEPA/VCP를 빠르게 점검합니다.' },
+  { item: 'KOSPI 100', source: 'KRX 구성종목 우선, KIS 시가총액 fallback', use: '공식 구성종목 확인을 우선하되, 가격과 일봉 분석은 KIS 데이터를 사용합니다.' },
+  { item: '현재가 기준', source: '종목군 원천 또는 최근 일봉', use: '테이블의 현재가에는 기준 시각을 함께 표시해 지연 데이터인지 확인합니다.' },
+  { item: '스캔 기록', source: '브라우저 저장', use: '새 스캔 버튼을 누르기 전까지 마지막 스캔 날짜와 결과를 유지합니다.' },
 ];
 
 export default function GuidePage() {
@@ -73,7 +81,7 @@ export default function GuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Minervini 전략 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          MTTCS는 Mark Minervini의 SEPA와 VCP 관점을 기준으로 후보를 고르고, 피벗 진입가와 패턴 무효화선을 중심으로 리스크를 계산합니다.
+          MTTCS는 종목군 스캐너로 후보를 압축한 뒤 Mark Minervini의 SEPA와 VCP 관점을 기준으로 피벗 진입가, 패턴 무효화선, 수량, 체결 복기를 연결합니다.
         </p>
       </div>
 
@@ -92,6 +100,36 @@ export default function GuidePage() {
               {index < flow.length - 1 && <div className="hidden md:block md:flex-1 md:border-t md:border-dashed md:border-slate-700" />}
             </div>
           ))}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <ScanSearch className="h-6 w-6 text-emerald-400" />
+          <h2 className="text-xl font-bold text-white">종목군 스캐너</h2>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          대시보드 다음 단계에서 NASDAQ 100과 KOSPI 100을 별도 서브 메뉴로 확인합니다. 전체 종목을 먼저 훑고, 조건이 좋은 종목만 신규 계획으로 넘깁니다.
+        </p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
+            <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="py-3">항목</th>
+                <th className="py-3">데이터 기준</th>
+                <th className="py-3">사용 방식</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scannerRows.map((row) => (
+                <tr key={row.item} className="border-b border-slate-800">
+                  <td className="py-3 font-medium text-white">{row.item}</td>
+                  <td className="py-3 text-slate-300">{row.source}</td>
+                  <td className="py-3 text-slate-400">{row.use}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </Card>
 
