@@ -18,7 +18,8 @@ import type {
 const TOTAL_EQUITY_FOR_SCAN = '50000';
 const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
-const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v1:';
+const KOSPI_SCAN_CONCURRENCY = 2;
+const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v2:';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -390,7 +391,8 @@ export default function ScannerPage() {
       setResults(data.items.map(initialResult));
 
       let nextIndex = 0;
-      const workers = Array.from({ length: Math.min(SCAN_CONCURRENCY, data.items.length) }, async () => {
+      const concurrency = data.universe === 'KOSPI100' ? KOSPI_SCAN_CONCURRENCY : SCAN_CONCURRENCY;
+      const workers = Array.from({ length: Math.min(concurrency, data.items.length) }, async () => {
         while (nextIndex < data.items.length && runIdRef.current === runId) {
           const item = data.items[nextIndex];
           nextIndex += 1;

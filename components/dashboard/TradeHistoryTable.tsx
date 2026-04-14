@@ -57,6 +57,11 @@ interface ReviewDraft {
 }
 
 type DetailTab = 'plan' | 'executions' | 'review';
+type SecurityNameMap = Record<string, string | null>;
+
+interface SecurityLookupResponse {
+  name: string | null;
+}
 
 const statusOptions: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const setupTagOptions = ['VCP', 'SEPA', '돌파', '실적', '추세', '관심종목'];
@@ -129,6 +134,7 @@ function getSepaEvidence(value: SepaEvidence | string | null): SepaEvidence | nu
 
 export default function TradeHistoryTable({ trades, limit, title = '매매 히스토리' }: TradeHistoryTableProps) {
   const [rows, setRows] = useState<Trade[]>(trades);
+  const [securityNames, setSecurityNames] = useState<SecurityNameMap>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTabs, setActiveTabs] = useState<Record<string, DetailTab>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -142,6 +148,40 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
   }, [trades]);
 
   const visibleRows = useMemo(() => (limit ? rows.slice(0, limit) : rows), [rows, limit]);
+
+  useEffect(() => {
+    const tickers = Array.from(new Set(visibleRows.map((trade) => trade.ticker).filter(Boolean)));
+    const missing = tickers.filter((ticker) => securityNames[ticker] === undefined);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+
+    Promise.allSettled(
+      missing.map(async (ticker) => {
+        const exchange = isKorean(ticker) ? 'KOSPI' : 'NAS';
+        const response = await axios.get<SecurityLookupResponse>('/api/security-lookup', {
+          params: { ticker, exchange },
+        });
+        return { ticker, name: response.data.name };
+      })
+    ).then((results) => {
+      if (cancelled) return;
+
+      setSecurityNames((prev) => {
+        const next = { ...prev };
+        for (let index = 0; index < results.length; index += 1) {
+          const result = results[index];
+          const ticker = missing[index];
+          next[ticker] = result.status === 'fulfilled' ? result.value.name : null;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [securityNames, visibleRows]);
 
   const replaceRow = (trade: Trade) => {
     setRows((prev) => prev.map((item) => (item.id === trade.id ? trade : item)));
@@ -366,7 +406,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
           <thead className="border-b border-slate-700 bg-slate-800 text-xs uppercase text-slate-400">
             <tr>
               <th scope="col" className="px-4 py-3">날짜</th>
-              <th scope="col" className="px-4 py-3">티커</th>
+              <th scope="col" className="px-4 py-3">종목</th>
               <th scope="col" className="px-4 py-3">상태</th>
               <th scope="col" className="px-4 py-3 text-right">R</th>
               <th scope="col" className="px-4 py-3 text-right">순보유</th>
@@ -397,7 +437,12 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                       <td className="whitespace-nowrap px-4 py-3">
                         {new Date(trade.created_at).toLocaleDateString('ko-KR')}
                       </td>
-                      <td className="px-4 py-3 font-mono font-medium text-white">{trade.ticker}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-mono font-medium text-white">{trade.ticker}</p>
+                        <p className="mt-1 max-w-[180px] truncate text-xs text-slate-500">
+                          {securityNames[trade.ticker] === undefined ? '종목명 확인 중' : securityNames[trade.ticker] || '종목명 없음'}
+                        </p>
+                      </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={trade.status} />
                       </td>
