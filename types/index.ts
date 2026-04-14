@@ -222,6 +222,46 @@ export interface MarketAnalysisResponse {
   warnings: string[];
 }
 
+export type ScannerUniverse = 'NASDAQ100' | 'KOSPI100';
+export type ScannerStatus = 'queued' | 'running' | 'done' | 'error';
+
+export interface ScannerConstituent {
+  rank: number;
+  ticker: string;
+  exchange: string;
+  name: string;
+  marketCap: number | null;
+  currency: 'USD' | 'KRW';
+  currentPrice: number | null;
+  priceAsOf: string | null;
+  priceSource: string;
+}
+
+export interface ScannerUniverseResponse {
+  universe: ScannerUniverse;
+  label: string;
+  asOf: string;
+  source: string;
+  delayNote: string | null;
+  items: ScannerConstituent[];
+  warnings: string[];
+}
+
+export interface ScannerResult extends ScannerConstituent {
+  status: ScannerStatus;
+  sepaStatus: AssessmentStatus | null;
+  sepaPassed: number | null;
+  sepaFailed: number | null;
+  vcpScore: number | null;
+  vcpGrade: VcpAnalysis['grade'] | null;
+  pivotPrice: number | null;
+  recommendedEntry: number | null;
+  distanceToPivotPct: number | null;
+  breakoutVolumeStatus: VcpAnalysis['breakoutVolumeStatus'] | null;
+  analyzedAt: string | null;
+  errorMessage: string | null;
+}
+
 // --- 관심 종목 (Watchlist) ---
 
 export type WatchlistPriority = 0 | 1 | 2; // 0=보통, 1=높음, 2=긴급

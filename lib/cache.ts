@@ -11,7 +11,7 @@ interface CacheEntry<T> {
 }
 
 const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10분
-const MAX_ENTRIES = 50;
+const MAX_ENTRIES = 300;
 
 const store = new Map<string, CacheEntry<unknown>>();
 

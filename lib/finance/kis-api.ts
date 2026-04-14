@@ -26,6 +26,16 @@ interface KisDomesticDailyPriceRow {
   acml_vol: string;
 }
 
+interface KisMarketCapRow {
+  data_rank?: string;
+  mksc_shrn_iscd?: string;
+  hts_kor_isnm?: string;
+  stck_prpr?: string;
+  acml_vol?: string;
+  avls?: string;
+  mrkt_whol_avls?: string;
+}
+
 const KIS_PAGE_SIZE = 100;
 const DEFAULT_TARGET_BARS = 260;
 
@@ -245,4 +255,63 @@ export async function getMarketDailyPrice(
   }
   
   return getOverseasDailyPrice(ticker, exchange, targetBars);
+}
+
+export async function getKisKospiMarketCapRanking(limit = 100): Promise<{
+  rank: number;
+  ticker: string;
+  name: string;
+  marketCap: number | null;
+  currentPrice: number | null;
+}[]> {
+  const token = await getKisToken();
+  const KIS_APP_KEY = kisAppKey();
+  const KIS_APP_SECRET = kisAppSecret();
+  const KIS_BASE_URL = kisBaseUrl();
+
+  const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/ranking/market-cap`, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      authorization: `Bearer ${token}`,
+      appkey: KIS_APP_KEY,
+      appsecret: KIS_APP_SECRET,
+      tr_id: 'FHPST01740000',
+      custtype: 'P',
+    },
+    params: {
+      FID_COND_MRKT_DIV_CODE: 'J',
+      FID_COND_SCR_DIV_CODE: '20174',
+      FID_DIV_CLS_CODE: '0',
+      FID_INPUT_ISCD: '0000',
+      FID_TRGT_CLS_CODE: '0',
+      FID_TRGT_EXLS_CLS_CODE: '0',
+      FID_INPUT_PRICE_1: '',
+      FID_INPUT_PRICE_2: '',
+      FID_VOL_CNT: '',
+    },
+  });
+
+  if (response.data.rt_cd !== '0') {
+    throw new Error(response.data.msg1 || 'KIS 시가총액 순위 조회 오류');
+  }
+
+  const output: KisMarketCapRow[] = response.data.output || response.data.output2 || [];
+  return output
+    .map((item, index) => {
+      const marketCapRaw = item.avls || item.mrkt_whol_avls;
+      const marketCap = marketCapRaw ? Number(String(marketCapRaw).replaceAll(',', '')) : null;
+      const currentPrice = item.stck_prpr ? Number(String(item.stck_prpr).replaceAll(',', '')) : null;
+
+      return {
+        rank: Number(item.data_rank) || index + 1,
+        ticker: String(item.mksc_shrn_iscd || '').padStart(6, '0'),
+        name: item.hts_kor_isnm || '',
+        marketCap: Number.isFinite(marketCap) ? marketCap : null,
+        currentPrice: Number.isFinite(currentPrice) ? currentPrice : null,
+      };
+    })
+    .filter((item) => item.ticker.length === 6 && item.name)
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, limit)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
 }

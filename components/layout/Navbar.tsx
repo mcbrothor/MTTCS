@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, BookOpen, History, LayoutDashboard, PlusCircle, Star, BarChart3 } from 'lucide-react';
+import { Activity, BarChart3, BookOpen, History, LayoutDashboard, PlusCircle, ScanSearch, Star } from 'lucide-react';
 
 export default function Navbar() {
   return (
@@ -14,6 +14,10 @@ export default function Navbar() {
           <Link href="/" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">대시보드</span>
+          </Link>
+          <Link href="/scanner" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+            <ScanSearch className="h-4 w-4 text-emerald-400" />
+            <span className="hidden sm:inline">스캐너</span>
           </Link>
           <Link href="/plan" className="flex items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
             <PlusCircle className="h-4 w-4 text-electric-blue" />
@@ -40,4 +44,3 @@ export default function Navbar() {
     </nav>
   );
 }
-

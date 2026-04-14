@@ -166,6 +166,7 @@ export async function GET(request: Request) {
   const exchange = searchParams.get('exchange')?.trim().toUpperCase() || 'NAS';
   const totalEquity = Number(searchParams.get('totalEquity') || DEFAULT_TOTAL_EQUITY);
   const riskPercentInput = Number(searchParams.get('riskPercent') || DEFAULT_RISK_PERCENT_INPUT);
+  const includeFundamentals = searchParams.get('includeFundamentals') !== 'false';
   const riskPercent = riskPercentInput / 100;
 
   if (!ticker) {
@@ -182,7 +183,7 @@ export async function GET(request: Request) {
 
   try {
     // I-3: 동일 티커 중복 호출 방지용 캐시
-    const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput);
+    const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = cacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
       return NextResponse.json(cached);
@@ -196,7 +197,7 @@ export async function GET(request: Request) {
 
     const [benchmarkData, fundamentals] = await Promise.all([
       getYahooDailyPrice(benchmarkTicker).catch(() => []),
-      fetchFundamentals(ticker, exchange, warnings),
+      includeFundamentals ? fetchFundamentals(ticker, exchange, warnings) : Promise.resolve(null),
     ]);
 
     const atr = calculateATR(data);
