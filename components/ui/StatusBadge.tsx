@@ -1,17 +1,19 @@
 interface StatusBadgeProps {
-  status: 'PLANNED' | 'COMPLETED' | 'CANCELLED';
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
   className?: string;
 }
 
 export default function StatusBadge({ status, className = '' }: StatusBadgeProps) {
   const styles = {
     PLANNED: 'bg-electric-blue/20 text-electric-blue border-electric-blue/30',
+    ACTIVE: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
     COMPLETED: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30',
     CANCELLED: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
   };
 
   const labels = {
     PLANNED: '진행 중',
+    ACTIVE: '보유 중',
     COMPLETED: '완료',
     CANCELLED: '취소',
   };

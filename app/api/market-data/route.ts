@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-api';
 import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
-import { analyzeSepa, calculateATR, calculateEntryPrice, calculatePyramidPlan } from '@/lib/finance/calculations';
+import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/calculations';
 import { analyzeVcp } from '@/lib/finance/vcp-engine';
 import { cacheGet, cacheSet, cacheKey } from '@/lib/cache';
 import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData } from '@/types';
@@ -10,7 +10,7 @@ import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData } from '@/ty
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
 const DEFAULT_TOTAL_EQUITY = 50_000;
-const DEFAULT_RISK_PERCENT_INPUT = 3;
+const DEFAULT_RISK_PERCENT_INPUT = 1;
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
@@ -200,21 +200,34 @@ export async function GET(request: Request) {
     ]);
 
     const atr = calculateATR(data);
-    const entryPrice = calculateEntryPrice(data);
+    const entryPrice = calculateEntryPrice(data, 50);
     const sepaEvidence = analyzeSepa(data, { benchmarkData, fundamentals });
 
-    // VCP 분석 — SEPA 필터 후 매수 타점 정밀 분석
+    // VCP 분석 — SEPA 필터 후 피벗/무효화 기준 정밀 분석
     const vcpAnalysis = analyzeVcp(data, entryPrice);
 
-    // VCP 피벗이 있으면 그쪽 기준으로 피라미딩 계획도 생성
+    // Minervini식 기본 계획: VCP 피벗 진입, 패턴 무효화선 + 8% 손실 캡 기반 수량 산출
     const effectiveEntry = vcpAnalysis.recommendedEntry;
-    const riskPlan = calculatePyramidPlan(totalEquity, effectiveEntry, atr, riskPercent);
+    const riskPlan = calculateMinerviniRiskPlan(
+      totalEquity,
+      effectiveEntry,
+      atr,
+      riskPercent,
+      vcpAnalysis.invalidationPrice,
+      data
+    );
 
     if (data.length < REQUIRED_SEPA_BARS) {
       warnings.push('장기 이동평균과 52주 고점 계산에 필요한 가격 데이터가 부족할 수 있습니다.');
     }
     if (sepaEvidence.summary.info > 0) {
       warnings.push('일부 보조 지표는 데이터 제공 상황에 따라 정보 항목으로 표시됩니다.');
+    }
+    if (vcpAnalysis.entrySource === 'RECENT_HIGH_FALLBACK') {
+      warnings.push('VCP 피벗이 확정되지 않아 최근 고점 참고가로 계획을 산출했습니다. 실제 진입 전 피벗과 거래량을 다시 확인하세요.');
+    }
+    if (vcpAnalysis.breakoutVolumeStatus === 'weak') {
+      warnings.push('피벗 위에 있으나 돌파 거래량이 충분히 강하지 않습니다. 추격 진입보다 확인을 우선하세요.');
     }
 
     const response: MarketAnalysisResponse = {

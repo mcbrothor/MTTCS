@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { Search } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -10,16 +11,94 @@ interface TickerInputProps {
   initialExchange?: string;
 }
 
+interface TickerLookupState {
+  status: 'idle' | 'loading' | 'found' | 'not-found';
+  name: string | null;
+  symbol: string | null;
+  message: string | null;
+}
+
+interface SecurityLookupResponse {
+  name: string;
+  symbol: string | null;
+}
+
 export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS' }: TickerInputProps) {
-  const [ticker, setTicker] = useState(initialTicker);
+  const [ticker, setTicker] = useState(initialTicker.toUpperCase());
   const [exchange, setExchange] = useState(initialExchange);
   const [totalEquity, setTotalEquity] = useState(50_000);
-  const [riskPercent, setRiskPercent] = useState(3);
+  const [riskPercent, setRiskPercent] = useState(1);
+  const [lookup, setLookup] = useState<TickerLookupState>({
+    status: 'idle',
+    name: null,
+    symbol: null,
+    message: null,
+  });
+
+  const normalizedTicker = ticker.trim().toUpperCase();
+
+  useEffect(() => {
+    if (!normalizedTicker) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const lookupTimer = window.setTimeout(async () => {
+      setLookup({ status: 'loading', name: null, symbol: null, message: null });
+
+      try {
+        const response = await axios.get<SecurityLookupResponse>('/api/security-lookup', {
+          params: { ticker: normalizedTicker, exchange },
+          signal: controller.signal,
+        });
+
+        setLookup({
+          status: 'found',
+          name: response.data.name,
+          symbol: response.data.symbol,
+          message: null,
+        });
+      } catch (err: unknown) {
+        if (axios.isCancel(err)) return;
+
+        const message = axios.isAxiosError(err)
+          ? err.response?.data?.message || '종목명을 찾을 수 없습니다.'
+          : '종목명을 찾을 수 없습니다.';
+
+        setLookup({ status: 'not-found', name: null, symbol: null, message });
+      }
+    }, 450);
+
+    return () => {
+      window.clearTimeout(lookupTimer);
+      controller.abort();
+    };
+  }, [normalizedTicker, exchange]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!ticker.trim() || totalEquity <= 0 || riskPercent <= 0) return;
     onAnalyze(ticker.trim().toUpperCase(), exchange, totalEquity, riskPercent);
+  };
+
+  const handleTickerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextTicker = event.target.value.toUpperCase();
+    setTicker(nextTicker);
+
+    setLookup({
+      status: nextTicker.trim() ? 'loading' : 'idle',
+      name: null,
+      symbol: null,
+      message: null,
+    });
+  };
+
+  const handleExchangeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setExchange(event.target.value);
+
+    if (normalizedTicker) {
+      setLookup({ status: 'loading', name: null, symbol: null, message: null });
+    }
   };
 
   return (
@@ -28,7 +107,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
         <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">1. 종목 입력</p>
         <h2 className="mt-1 text-xl font-bold text-white">분석할 종목과 리스크 한도를 입력하세요</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          기본 허용 손실은 총 자본의 3%입니다. 입력한 비율에 따라 최대 손실, 총 수량, 3분할 피라미딩 가격을 다시 계산합니다.
+          기본 허용 손실은 총 자본의 1%입니다. 입력한 비율에 따라 피벗 진입가, 무효화선, 총 수량을 다시 계산합니다.
         </p>
       </div>
 
@@ -41,11 +120,27 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
               type="text"
               autoComplete="off"
               value={ticker}
-              onChange={(event) => setTicker(event.target.value.toUpperCase())}
+              onChange={handleTickerChange}
               disabled={loading}
               placeholder="예: AAPL"
               className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-10 py-2.5 text-sm uppercase text-white outline-none transition-colors placeholder:text-slate-500 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
             />
+          </div>
+          <div className="mt-2 min-h-5 text-xs">
+            {lookup.status === 'loading' && (
+              <span className="text-slate-500">종목명을 확인하는 중입니다.</span>
+            )}
+            {lookup.status === 'found' && lookup.name && (
+              <span className="text-emerald-300">
+                종목명: <span className="font-semibold text-white">{lookup.name}</span>
+                {lookup.symbol && lookup.symbol !== normalizedTicker ? (
+                  <span className="ml-1 text-slate-500">({lookup.symbol})</span>
+                ) : null}
+              </span>
+            )}
+            {lookup.status === 'not-found' && (
+              <span className="text-amber-300">{lookup.message}</span>
+            )}
           </div>
         </label>
 
@@ -53,7 +148,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
           <span className="mb-2 block text-sm font-medium text-slate-300">거래소</span>
           <select
             value={exchange}
-            onChange={(event) => setExchange(event.target.value)}
+            onChange={handleExchangeChange}
             disabled={loading}
             className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
           >

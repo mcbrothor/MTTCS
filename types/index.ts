@@ -1,6 +1,10 @@
-export type TradeStatus = 'PLANNED' | 'COMPLETED' | 'CANCELLED';
+export type TradeStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 export type Direction = 'LONG' | 'SHORT';
 export type AssessmentStatus = 'pass' | 'fail' | 'info' | 'warning';
+export type TradeExecutionSide = 'ENTRY' | 'EXIT';
+export type TradeLegLabel = 'E1' | 'E2' | 'E3' | 'MANUAL';
+export type SetupTag = 'VCP' | 'SEPA' | '돌파' | '실적' | '추세' | '관심종목';
+export type MistakeTag = '추격매수' | '손절지연' | '비중초과' | '조기매도' | '계획미준수' | '진입지연';
 
 export interface Trade {
   id: string;
@@ -35,6 +39,49 @@ export interface Trade {
   result_amount: number | null;
   final_discipline: number | null;
   emotion_note: string | null;
+
+  setup_tags?: string[] | null;
+  mistake_tags?: string[] | null;
+  plan_note?: string | null;
+  invalidation_note?: string | null;
+  review_note?: string | null;
+  review_action?: string | null;
+
+  executions?: TradeExecution[];
+  metrics?: TradeMetrics;
+}
+
+export interface TradeExecution {
+  id: string;
+  trade_id: string;
+  created_at: string;
+  updated_at: string;
+  side: TradeExecutionSide;
+  executed_at: string;
+  price: number;
+  shares: number;
+  fees: number;
+  leg_label: TradeLegLabel;
+  note: string | null;
+}
+
+export interface TradeMetrics {
+  entryShares: number;
+  exitShares: number;
+  netShares: number;
+  avgEntryPrice: number | null;
+  avgExitPrice: number | null;
+  realizedPnL: number | null;
+  fees: number;
+  plannedRisk: number | null;
+  rMultiple: number | null;
+  entrySlippagePct: number | null;
+  executionProgressPct: number;
+  openRisk: number;
+  hasExecutions: boolean;
+  hasEntries: boolean;
+  isFullyClosed: boolean;
+  invalidExitShares: boolean;
 }
 
 export interface OHLCData {
@@ -115,6 +162,11 @@ export interface RiskPlan {
   totalShares: number;
   entryTargets: EntryTargets;
   trailingStops: TrailingStops;
+  strategy?: 'MINERVINI_VCP';
+  riskModel?: 'PATTERN_INVALIDATION';
+  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK';
+  maxLossPct?: number;
+  invalidationPrice?: number | null;
 }
 
 // --- VCP (Volatility Contraction Pattern) 관련 타입 ---
@@ -139,8 +191,12 @@ export interface VcpAnalysis {
   bbSqueezeScore: number;
   pocketPivotScore: number;
   pivotPrice: number | null;         // VCP 피벗 가격
-  breakoutPrice: number;             // 20일 돌파가 (기존)
+  invalidationPrice: number | null;  // 최종 수축 저점 또는 최근 저점
+  breakoutPrice: number;             // 최근 고점 참고가
   recommendedEntry: number;          // 최종 권장 진입가
+  entrySource: 'VCP_PIVOT' | 'RECENT_HIGH_FALLBACK';
+  breakoutVolumeRatio: number | null;
+  breakoutVolumeStatus: 'confirmed' | 'pending' | 'weak' | 'unknown';
   pocketPivots: { date: string; close: number; volume: number }[];
   bbWidth: number | null;
   bbWidthPercentile: number | null;  // 6개월 내 백분위

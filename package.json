@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --no-warnings --experimental-strip-types tests/calculations.test.mjs"
+    "test": "node --no-warnings --experimental-strip-types tests/calculations.test.mjs && node --no-warnings --experimental-strip-types tests/vcp-engine.test.mjs && node --no-warnings --experimental-strip-types tests/trade-metrics.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",

@@ -10,6 +10,10 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
     sepaPassRate: number;
     winRate: number;
     totalPnL: number;
+    avgRMultiple: number;
+    expectancyR: number;
+    openRisk: number;
+    planAdherenceRate: number;
     avgDiscipline: number;
     highDiscipline: { winRate: number; avgPnL: number; count: number };
     lowDiscipline: { winRate: number; avgPnL: number; count: number };
@@ -23,6 +27,10 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
     sepaPassRate: 0,
     winRate: 0,
     totalPnL: 0,
+    avgRMultiple: 0,
+    expectancyR: 0,
+    openRisk: 0,
+    planAdherenceRate: 0,
     avgDiscipline: 0,
     highDiscipline: { winRate: 0, avgPnL: 0, count: 0 },
     lowDiscipline: { winRate: 0, avgPnL: 0, count: 0 },
@@ -41,11 +49,22 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
 
         const completed = trades.filter((trade) => trade.status === 'COMPLETED');
         const planned = trades.filter((trade) => trade.status === 'PLANNED');
+        const active = trades.filter((trade) => trade.status === 'ACTIVE');
         const winning = completed.filter((trade) => (trade.result_amount || 0) > 0);
         const sepaKnown = trades.filter((trade) => trade.chk_sepa !== undefined || trade.chk_market !== undefined);
         const sepaPass = sepaKnown.filter((trade) => (trade.chk_sepa ?? trade.chk_market) === true);
 
         const totalPnL = completed.reduce((sum, trade) => sum + (trade.result_amount || 0), 0);
+        const rTrades = completed.filter((trade) => typeof trade.metrics?.rMultiple === 'number');
+        const avgRMultiple = rTrades.length
+          ? rTrades.reduce((sum, trade) => sum + (trade.metrics?.rMultiple || 0), 0) / rTrades.length
+          : 0;
+        const expectancyR = avgRMultiple;
+        const openRisk = active.reduce((sum, trade) => sum + (trade.metrics?.openRisk || 0), 0);
+        const reviewedTrades = completed.filter((trade) => trade.mistake_tags !== undefined || trade.review_action);
+        const planAdherenceRate = reviewedTrades.length
+          ? (reviewedTrades.filter((trade) => !(trade.mistake_tags || []).includes('계획미준수')).length / reviewedTrades.length) * 100
+          : 0;
         const avgDiscipline = completed.length
           ? completed.reduce((sum, trade) => sum + (trade.final_discipline || 0), 0) / completed.length
           : 0;
@@ -82,6 +101,10 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
           sepaPassRate: sepaKnown.length ? (sepaPass.length / sepaKnown.length) * 100 : 0,
           winRate: completed.length ? (winning.length / completed.length) * 100 : 0,
           totalPnL,
+          avgRMultiple,
+          expectancyR,
+          openRisk,
+          planAdherenceRate,
           avgDiscipline,
           highDiscipline: calcGroup(highDisciplineTrades),
           lowDiscipline: calcGroup(lowDisciplineTrades),
@@ -104,7 +127,7 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
     };
 
     fetchTrades();
-  }, []);
+  }, [market]);
 
   return data;
 }

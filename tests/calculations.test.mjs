@@ -3,8 +3,8 @@ import {
   analyzeSepa,
   calculateATR,
   calculateEntryPrice,
+  calculateMinerviniRiskPlan,
   calculatePositionSize,
-  calculatePyramidPlan,
 } from '../lib/finance/calculations.ts';
 
 function makeUptrendBars(length = 260, slope = 0.5, start = 50) {
@@ -36,34 +36,46 @@ run('calculates 20 day ATR from true ranges', () => {
   assert.equal(calculateATR(data), 2);
 });
 
-run('calculates 20 day breakout entry price', () => {
-  const data = makeUptrendBars(30);
-  assert.equal(calculateEntryPrice(data), 65.5);
+run('calculates recent high reference price', () => {
+  const data = makeUptrendBars(60);
+  assert.equal(calculateEntryPrice(data, 50), 80.5);
 });
 
-run('calculates default 3 percent risk position size', () => {
-  const result = calculatePositionSize(50_000, 100, 2);
-  assert.equal(result.maxRisk, 1500);
-  assert.equal(result.stopLossPrice, 96);
-  assert.equal(result.riskPerShare, 4);
-  assert.equal(result.shares, 375);
-});
-
-run('calculates explicit 1 percent risk position size', () => {
-  const result = calculatePositionSize(50_000, 100, 2, 0.01);
+run('calculates default 1 percent risk position size from stop price', () => {
+  const result = calculatePositionSize(50_000, 100, 92);
   assert.equal(result.maxRisk, 500);
-  assert.equal(result.shares, 125);
+  assert.equal(result.stopLossPrice, 92);
+  assert.equal(result.riskPerShare, 8);
+  assert.equal(result.shares, 62);
 });
 
-run('builds three leg pyramid plan with 3 percent default risk', () => {
-  const plan = calculatePyramidPlan(50_000, 100, 2);
-  assert.equal(plan.totalShares, 375);
-  assert.equal(plan.riskPercent, 0.03);
+run('rejects stop prices at or above entry', () => {
+  const result = calculatePositionSize(50_000, 100, 101);
+  assert.equal(result.shares, 0);
+  assert.equal(result.riskPerShare, 0);
+});
+
+run('builds Minervini plan from VCP invalidation stop', () => {
+  const plan = calculateMinerviniRiskPlan(50_000, 100, 2, 0.01, 94);
+  assert.equal(plan.totalShares, 83);
+  assert.equal(plan.riskPercent, 0.01);
+  assert.equal(plan.stopLossPrice, 94);
+  assert.equal(plan.stopSource, 'VCP_INVALIDATION');
   assert.deepEqual(
     [plan.entryTargets.e1.price, plan.entryTargets.e2.price, plan.entryTargets.e3.price],
-    [100, 101, 102]
+    [100, 102, 104]
   );
-  assert.equal(plan.trailingStops.initial, 96);
+  assert.deepEqual(
+    [plan.entryTargets.e1.shares, plan.entryTargets.e2.shares, plan.entryTargets.e3.shares],
+    [83, 0, 0]
+  );
+});
+
+run('caps Minervini stop at 8 percent max loss', () => {
+  const plan = calculateMinerviniRiskPlan(50_000, 100, 2, 0.01, 85);
+  assert.equal(plan.stopLossPrice, 92);
+  assert.equal(plan.stopSource, 'MAX_LOSS_CAP');
+  assert.equal(plan.totalShares, 62);
 });
 
 run('uses benchmark RS proxy and marks missing fundamentals as info', () => {

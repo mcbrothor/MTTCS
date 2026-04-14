@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getYahooQuotes } from '@/lib/finance/yahoo-api';
+import { getYahooQuotes, type YahooQuote } from '@/lib/finance/yahoo-api';
 
 const MACRO_SYMBOLS = [
   'UVXY', '^VIX', 'UUP', 'KRE', // 위험 & 유동성 (UVXY or ^VIX 로 가져옴)
@@ -16,7 +16,7 @@ export async function GET() {
     const macroData = quotes.reduce((acc, quote) => {
       acc[quote.symbol] = quote;
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, YahooQuote>);
 
     return NextResponse.json({ data: macroData });
   } catch (error: unknown) {

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
-import type { TradeStatus } from '@/types';
+import { attachTradeMetrics, calculateTradeMetrics } from '@/lib/finance/trade-metrics';
+import type { Trade, TradeStatus } from '@/types';
 
-const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'COMPLETED', 'CANCELLED'];
+const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
@@ -33,6 +34,23 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(numeric) ? numeric : Number.NaN;
 }
 
+function normalizeStringArray(value: unknown, max = 12) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, max);
+}
+
+function nullableText(value: unknown, max = 2000) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, max) : null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -57,7 +75,7 @@ export async function POST(request: Request) {
       return apiError('허용 손실 비율은 0% 초과 10% 이하로 저장해야 합니다.', 'INVALID_RISK_PERCENT');
     }
     if (!body.entry_targets || !body.trailing_stops || !body.sepa_evidence) {
-      return apiError('v3.0 분석 근거와 피라미딩 계획이 필요합니다.', 'MISSING_V3_FIELDS');
+      return apiError('SEPA 분석 근거와 Minervini 진입 계획이 필요합니다.', 'MISSING_STRATEGY_FIELDS');
     }
 
     // C-4 수정: 허용 필드만 명시적으로 추출 (body spread로 인한 필드 주입 방지)
@@ -84,6 +102,12 @@ export async function POST(request: Request) {
       total_shares: totalShares,
       entry_targets: body.entry_targets,
       trailing_stops: body.trailing_stops,
+      setup_tags: normalizeStringArray(body.setup_tags) ?? [],
+      mistake_tags: normalizeStringArray(body.mistake_tags) ?? [],
+      plan_note: nullableText(body.plan_note),
+      invalidation_note: nullableText(body.invalidation_note),
+      review_note: nullableText(body.review_note),
+      review_action: nullableText(body.review_action, 500),
       updated_at: new Date().toISOString(),
     };
 
@@ -106,12 +130,20 @@ export async function GET() {
   try {
     const { data, error } = await supabaseServer
       .from('trades')
-      .select('*')
+      .select('*, trade_executions(*)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    return NextResponse.json({ data });
+    const trades = ((data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[]).map((trade) => {
+      const { trade_executions: tradeExecutions, ...rest } = trade;
+      return attachTradeMetrics({
+        ...rest,
+        executions: tradeExecutions || [],
+      } as Trade);
+    });
+
+    return NextResponse.json({ data: trades });
   } catch (error: unknown) {
     console.error('Fetch Trades Error:', error);
     return apiError(getErrorMessage(error) || '매매 데이터를 불러오는 중 오류가 발생했습니다.', 'FETCH_TRADES_FAILED', 500);
@@ -181,20 +213,63 @@ export async function PATCH(request: Request) {
     if (body.emotion_note !== undefined) {
       update.emotion_note = body.emotion_note === null ? null : String(body.emotion_note);
     }
+    const setupTags = normalizeStringArray(body.setup_tags);
+    if (setupTags !== undefined) update.setup_tags = setupTags;
+    const mistakeTags = normalizeStringArray(body.mistake_tags);
+    if (mistakeTags !== undefined) update.mistake_tags = mistakeTags;
+    const planNote = nullableText(body.plan_note);
+    if (planNote !== undefined) update.plan_note = planNote;
+    const invalidationNote = nullableText(body.invalidation_note);
+    if (invalidationNote !== undefined) update.invalidation_note = invalidationNote;
+    const reviewNote = nullableText(body.review_note);
+    if (reviewNote !== undefined) update.review_note = reviewNote;
+    const reviewAction = nullableText(body.review_action, 500);
+    if (reviewAction !== undefined) update.review_action = reviewAction;
     if (body.entry_targets !== undefined) update.entry_targets = body.entry_targets;
     if (body.trailing_stops !== undefined) update.trailing_stops = body.trailing_stops;
     if (body.sepa_evidence !== undefined) update.sepa_evidence = body.sepa_evidence;
+
+    if (update.status === 'ACTIVE' || update.status === 'COMPLETED') {
+      const { data: current, error: currentError } = await supabaseServer
+        .from('trades')
+        .select('*, trade_executions(*)')
+        .eq('id', id)
+        .single();
+
+      if (currentError) throw currentError;
+      const currentTrade = current as unknown as Trade & { trade_executions?: Trade['executions'] };
+      const mergedTrade = {
+        ...currentTrade,
+        ...update,
+        executions: currentTrade.trade_executions || [],
+      } as Trade;
+      const metrics = calculateTradeMetrics(mergedTrade, mergedTrade.executions);
+
+      if (update.status === 'ACTIVE' && metrics.netShares <= 0) {
+        return apiError('ACTIVE 상태는 보유 수량이 1주 이상이어야 합니다.', 'INVALID_ACTIVE_STATUS');
+      }
+      if (update.status === 'COMPLETED' && metrics.hasExecutions && !metrics.isFullyClosed) {
+        return apiError('COMPLETED 상태는 체결 기준 보유 수량이 0이어야 합니다.', 'INVALID_COMPLETED_STATUS');
+      }
+    }
 
     const { data, error } = await supabaseServer
       .from('trades')
       .update(update)
       .eq('id', id)
-      .select()
+      .select('*, trade_executions(*)')
       .single();
 
     if (error) throw error;
 
-    return NextResponse.json({ data });
+    const trade = data as unknown as Trade & { trade_executions?: Trade['executions'] };
+    const { trade_executions: tradeExecutions, ...rest } = trade;
+    return NextResponse.json({
+      data: attachTradeMetrics({
+        ...rest,
+        executions: tradeExecutions || [],
+      } as Trade),
+    });
   } catch (error: unknown) {
     console.error('Update Trade Error:', error);
     return apiError(getErrorMessage(error) || '매매 계획 수정 중 오류가 발생했습니다.', 'UPDATE_TRADE_FAILED', 500);

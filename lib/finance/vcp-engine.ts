@@ -336,38 +336,89 @@ function detectPocketPivots(data: OHLCData[]): {
 }
 
 // =============================================
-// 6. 피벗 포인트 결정
+// 6. 피벗/무효화 포인트 결정
 // =============================================
 
-/** 최종 수축 고점을 VCP 피벗으로 사용합니다. */
+function recentLow(data: OHLCData[], lookback = 20): number | null {
+  const slice = data.slice(-lookback);
+  if (slice.length === 0) return null;
+  return round(Math.min(...slice.map((d) => d.low)));
+}
+
+/** 최종 수축 고점을 VCP 피벗으로, 최종 수축 저점을 무효화 기준으로 사용합니다. */
 function determinePivot(
   data: OHLCData[],
   contractions: VcpContraction[],
-  breakoutPrice: number
-): { pivotPrice: number | null; recommendedEntry: number; details: string[] } {
+  breakoutReference: number
+): {
+  pivotPrice: number | null;
+  invalidationPrice: number | null;
+  recommendedEntry: number;
+  entrySource: VcpAnalysis['entrySource'];
+  details: string[];
+} {
   const details: string[] = [];
 
   if (contractions.length < 2) {
-    details.push('수축 부족으로 VCP 피벗을 설정하지 못해 20일 돌파가를 사용합니다.');
-    return { pivotPrice: null, recommendedEntry: breakoutPrice, details };
+    const fallbackInvalidation = recentLow(data);
+    details.push('수축이 2개 미만이라 VCP 피벗을 확정하지 못했습니다. 최근 고점 참고가를 보조 진입가로 사용합니다.');
+    if (fallbackInvalidation !== null) {
+      details.push(`최근 저점 기반 무효화 참고선: $${fallbackInvalidation.toFixed(2)}`);
+    }
+    return {
+      pivotPrice: null,
+      invalidationPrice: fallbackInvalidation,
+      recommendedEntry: breakoutReference,
+      entrySource: 'RECENT_HIGH_FALLBACK',
+      details,
+    };
   }
 
-  // 최종 수축의 peak 가격 = VCP 피벗
   const lastContraction = contractions.at(-1)!;
   const pivotPrice = lastContraction.peakPrice;
+  const invalidationPrice = lastContraction.troughPrice;
+  const recommendedEntry = pivotPrice;
 
-  // 두 가격 중 보수적인(낮은) 쪽을 권장 진입가로
-  const recommendedEntry = Math.min(pivotPrice, breakoutPrice);
+  details.push(`VCP 피벗 진입가: $${pivotPrice.toFixed(2)} (최종 수축 고점 돌파)`);
+  details.push(`패턴 무효화 기준: $${invalidationPrice.toFixed(2)} (최종 수축 저점 이탈)`);
+  details.push(`최근 고점 참고가: $${breakoutReference.toFixed(2)} (피벗 판단 보조용)`);
 
-  details.push(`VCP 피벗: $${pivotPrice.toFixed(2)} (최종 수축 고점)`);
-  details.push(`20일 돌파가: $${breakoutPrice.toFixed(2)}`);
-  details.push(`권장 진입가: $${recommendedEntry.toFixed(2)} (보수적 선택)`);
-
-  if (breakoutPrice > pivotPrice * 1.05) {
-    details.push('⚠️ 20일 돌파가가 VCP 피벗보다 5% 이상 높습니다 — 갭업/과열 주의');
+  if (breakoutReference > pivotPrice * 1.05) {
+    details.push('최근 고점 참고가가 VCP 피벗보다 5% 이상 높습니다. 피벗 돌파 후 과도하게 추격하지 않도록 주의합니다.');
   }
 
-  return { pivotPrice, recommendedEntry, details };
+  return { pivotPrice, invalidationPrice, recommendedEntry, entrySource: 'VCP_PIVOT', details };
+}
+
+function assessBreakoutVolume(data: OHLCData[], entryPrice: number): {
+  ratio: number | null;
+  status: VcpAnalysis['breakoutVolumeStatus'];
+  details: string[];
+} {
+  const details: string[] = [];
+  const latest = data.at(-1);
+  if (!latest || data.length < 50 || entryPrice <= 0) {
+    return { ratio: null, status: 'unknown', details: ['거래량 확인에 필요한 데이터가 부족합니다.'] };
+  }
+
+  const avg50Volume = data.slice(-50).reduce((sum, item) => sum + item.volume, 0) / 50;
+  const ratio = avg50Volume > 0 ? round(latest.volume / avg50Volume, 2) : null;
+  if (ratio === null) {
+    return { ratio: null, status: 'unknown', details: ['평균 거래량을 계산할 수 없습니다.'] };
+  }
+
+  if (latest.close < entryPrice) {
+    details.push(`아직 피벗 위에서 마감하지 않았습니다. 돌파 당일 거래량은 50일 평균 대비 ${ratio}배입니다.`);
+    return { ratio, status: 'pending', details };
+  }
+
+  if (ratio >= 1.5) {
+    details.push(`피벗 돌파와 함께 거래량이 50일 평균 대비 ${ratio}배로 증가했습니다.`);
+    return { ratio, status: 'confirmed', details };
+  }
+
+  details.push(`피벗 위에 있으나 거래량은 50일 평균 대비 ${ratio}배입니다. 돌파 확신도는 낮게 봅니다.`);
+  return { ratio, status: 'weak', details };
 }
 
 // =============================================
@@ -414,8 +465,12 @@ export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis
       bbSqueezeScore: 0,
       pocketPivotScore: 0,
       pivotPrice: null,
+      invalidationPrice: null,
       breakoutPrice,
       recommendedEntry: breakoutPrice,
+      entrySource: 'RECENT_HIGH_FALLBACK',
+      breakoutVolumeRatio: null,
+      breakoutVolumeStatus: 'unknown',
       pocketPivots: [],
       bbWidth: null,
       bbWidthPercentile: null,
@@ -448,8 +503,21 @@ export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis
   allDetails.push(...ppDetails);
 
   // 피벗 결정
-  const { pivotPrice, recommendedEntry, details: pivotDetails } = determinePivot(data, contractions, breakoutPrice);
+  const {
+    pivotPrice,
+    invalidationPrice,
+    recommendedEntry,
+    entrySource,
+    details: pivotDetails,
+  } = determinePivot(data, contractions, breakoutPrice);
   allDetails.push(...pivotDetails);
+
+  const {
+    ratio: breakoutVolumeRatio,
+    status: breakoutVolumeStatus,
+    details: breakoutVolumeDetails,
+  } = assessBreakoutVolume(data, recommendedEntry);
+  allDetails.push(...breakoutVolumeDetails);
 
   // 종합 스코어
   const score = round(
@@ -478,8 +546,12 @@ export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis
     bbSqueezeScore,
     pocketPivotScore,
     pivotPrice,
+    invalidationPrice,
     breakoutPrice,
     recommendedEntry,
+    entrySource,
+    breakoutVolumeRatio,
+    breakoutVolumeStatus,
     pocketPivots,
     bbWidth,
     bbWidthPercentile,

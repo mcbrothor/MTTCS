@@ -33,7 +33,7 @@ const STEPS = [
     id: 'entry',
     title: 'Entry',
     label: '3. 진입 규율',
-    desc: '20일 고점 돌파 가격에 도달하기 전에 예측 진입하지 않습니다.',
+    desc: 'VCP 피벗을 돌파하고 거래량 확인이 붙기 전에는 예측 진입하지 않습니다.',
   },
   {
     id: 'stoploss',

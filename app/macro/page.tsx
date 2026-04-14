@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { ArrowDown, ArrowUp, Activity, DollarSign, Shield, TrendingUp, BarChart3, Droplets, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Activity, Shield, TrendingUp, Droplets } from 'lucide-react';
 
 interface MacroData {
   symbol: string;
@@ -146,8 +146,8 @@ export default function MacroDashboardPage() {
       try {
         const res = await axios.get('/api/macro');
         setData(res.data.data);
-      } catch (err: any) {
-        setError(err.response?.data?.message || '데이터를 가져오는 데 실패했습니다.');
+      } catch (err: unknown) {
+        setError(axios.isAxiosError(err) ? err.response?.data?.message || err.message : '데이터를 가져오는 데 실패했습니다.');
       } finally {
         setLoading(false);
       }

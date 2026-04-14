@@ -113,6 +113,120 @@ export interface YahooQuote {
   fiftyDayAverage: number;
 }
 
+export interface YahooSecurityProfile {
+  symbol: string;
+  name: string | null;
+  exchangeName: string | null;
+  currency: string | null;
+  source: string;
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+async function getYahooSearchProfile(ticker: string): Promise<YahooSecurityProfile | null> {
+  try {
+    const url = new URL('https://query2.finance.yahoo.com/v1/finance/search');
+    url.searchParams.set('q', ticker);
+    url.searchParams.set('quotesCount', '8');
+    url.searchParams.set('newsCount', '0');
+
+    const response = await fetch(url, {
+      headers: {
+        'user-agent': 'Mozilla/5.0',
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as { quotes?: unknown[] };
+    const quotes: unknown[] = payload.quotes || [];
+    const normalizedTicker = ticker.toUpperCase();
+    const exact = quotes.find((quote) => {
+      if (!quote || typeof quote !== 'object') return false;
+      const symbol = firstString((quote as { symbol?: unknown }).symbol);
+      return symbol?.toUpperCase() === normalizedTicker;
+    });
+    const firstEquity = quotes.find((quote) => {
+      if (!quote || typeof quote !== 'object') return false;
+      const type = firstString((quote as { quoteType?: unknown }).quoteType);
+      return type === 'EQUITY' || type === 'ETF';
+    });
+    const quote = (exact || firstEquity || quotes[0]) as Record<string, unknown> | undefined;
+    if (!quote) return null;
+
+    return {
+      symbol: firstString(quote.symbol) || ticker,
+      name: firstString(quote.longname, quote.shortname, quote.name),
+      exchangeName: firstString(quote.exchange, quote.exchDisp),
+      currency: null,
+      source: 'Yahoo Finance search',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getYahooSecurityProfile(ticker: string): Promise<YahooSecurityProfile | null> {
+  const searchProfile = await getYahooSearchProfile(ticker);
+  if (searchProfile?.name) return searchProfile;
+
+  try {
+    const response = await axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
+      params: {
+        modules: 'price',
+      },
+      headers: {
+        'user-agent': 'MTTCS/3.0',
+      },
+    });
+
+    const price = response.data?.quoteSummary?.result?.[0]?.price;
+    if (price) {
+      return {
+        symbol: firstString(price.symbol) || ticker,
+        name: firstString(price.longName, price.shortName, price.displayName),
+        exchangeName: firstString(price.exchangeName, price.fullExchangeName),
+        currency: firstString(price.currency),
+        source: 'Yahoo Finance quoteSummary',
+      };
+    }
+  } catch {
+    // Fall through to the chart endpoint, which is often available when quoteSummary is sparse.
+  }
+
+  try {
+    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
+      params: {
+        range: '1d',
+        interval: '1d',
+      },
+      headers: {
+        'user-agent': 'MTTCS/3.0',
+      },
+    });
+
+    const meta = response.data?.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+
+    const chartProfile = {
+      symbol: firstString(meta.symbol) || ticker,
+      name: firstString(meta.longName, meta.shortName),
+      exchangeName: firstString(meta.exchangeName, meta.fullExchangeName),
+      currency: firstString(meta.currency),
+      source: 'Yahoo Finance chart',
+    };
+
+    return chartProfile.name ? chartProfile : searchProfile;
+  } catch {
+    return null;
+  }
+}
+
 export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
   if (!symbols || symbols.length === 0) return [];
 
@@ -133,7 +247,7 @@ export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
 
       const meta = result.meta;
       const closes: number[] = result.indicators?.quote?.[0]?.close || [];
-      const validCloses = closes.filter((c: any) => typeof c === 'number' && c > 0);
+      const validCloses = closes.filter((c: unknown): c is number => typeof c === 'number' && c > 0);
 
       const currentPrice = meta.regularMarketPrice || (validCloses.length > 0 ? validCloses[validCloses.length - 1] : 0);
       const prevClose = meta.previousClose || (validCloses.length > 1 ? validCloses[validCloses.length - 2] : currentPrice);

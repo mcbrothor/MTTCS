@@ -11,6 +11,9 @@ import type {
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+const DEFAULT_MINERVINI_RISK_PERCENT = 0.01;
+const MINERVINI_MAX_LOSS_PCT = 0.08;
+const ADD_ON_CANDIDATE_PCTS = [0.02, 0.04] as const;
 
 function average(values: number[]): number {
   if (values.length === 0) return 0;
@@ -56,7 +59,7 @@ export function calculateAvgVolume(data: OHLCData[], period: number = 20): {
   return { avgDollarVolume: round(avgDollarVolume, 0), passesFilter: avgDollarVolume >= 10_000_000 };
 }
 
-export function calculateEntryPrice(data: OHLCData[], period: number = 20): number {
+export function calculateEntryPrice(data: OHLCData[], period: number = 50): number {
   if (data.length < period) return 0;
   return round(Math.max(...data.slice(-period).map((d) => d.high)));
 }
@@ -64,21 +67,25 @@ export function calculateEntryPrice(data: OHLCData[], period: number = 20): numb
 export function calculatePositionSize(
   totalEquity: number,
   entryPrice: number,
-  atr: number,
-  riskPercent: number = 0.03,
-  atrMultiplier: number = 2
+  stopLossPrice: number,
+  riskPercent: number = DEFAULT_MINERVINI_RISK_PERCENT
 ): {
   maxRisk: number;
   stopLossPrice: number;
   shares: number;
   riskPerShare: number;
 } {
-  if (totalEquity <= 0 || atr <= 0 || entryPrice <= 0 || riskPercent <= 0) {
+  if (
+    totalEquity <= 0 ||
+    entryPrice <= 0 ||
+    stopLossPrice <= 0 ||
+    stopLossPrice >= entryPrice ||
+    riskPercent <= 0
+  ) {
     return { maxRisk: 0, stopLossPrice: 0, shares: 0, riskPerShare: 0 };
   }
 
   const maxRisk = totalEquity * riskPercent;
-  const stopLossPrice = entryPrice - atr * atrMultiplier;
   const riskPerShare = entryPrice - stopLossPrice;
   const shares = Math.max(0, Math.floor(maxRisk / riskPerShare));
 
@@ -90,27 +97,68 @@ export function calculatePositionSize(
   };
 }
 
-export function calculatePyramidPlan(
+function recentSwingLow(data: OHLCData[], lookback = 20): number | null {
+  if (data.length === 0) return null;
+  const slice = data.slice(-lookback);
+  if (slice.length === 0) return null;
+  return round(Math.min(...slice.map((d) => d.low)));
+}
+
+function chooseMinerviniStop(
+  entryPrice: number,
+  invalidationPrice?: number | null,
+  data?: OHLCData[],
+  maxLossPct: number = MINERVINI_MAX_LOSS_PCT
+) {
+  const cappedStop = round(entryPrice * (1 - maxLossPct));
+  const fallbackLow = data ? recentSwingLow(data) : null;
+  const hasVcpInvalidation =
+    typeof invalidationPrice === 'number' && invalidationPrice > 0 && invalidationPrice < entryPrice;
+  const patternStop = hasVcpInvalidation
+    ? round(invalidationPrice)
+    : fallbackLow && fallbackLow > 0 && fallbackLow < entryPrice
+      ? fallbackLow
+      : null;
+
+  if (!patternStop) {
+    return { stopLossPrice: cappedStop, stopSource: 'MAX_LOSS_CAP' as const, invalidationPrice: null };
+  }
+
+  const stopLossPrice = Math.max(patternStop, cappedStop);
+  return {
+    stopLossPrice: round(stopLossPrice),
+    stopSource: stopLossPrice === patternStop
+      ? hasVcpInvalidation
+        ? 'VCP_INVALIDATION' as const
+        : 'RECENT_LOW_FALLBACK' as const
+      : 'MAX_LOSS_CAP' as const,
+    invalidationPrice: patternStop,
+  };
+}
+
+export function calculateMinerviniRiskPlan(
   totalEquity: number,
   entryPrice: number,
   atr: number,
-  riskPercent: number = 0.03
+  riskPercent: number = DEFAULT_MINERVINI_RISK_PERCENT,
+  invalidationPrice?: number | null,
+  data?: OHLCData[]
 ): RiskPlan {
-  const position = calculatePositionSize(totalEquity, entryPrice, atr, riskPercent);
-  const first = Math.ceil(position.shares / 3);
-  const second = Math.ceil((position.shares - first) / 2);
-  const third = Math.max(0, position.shares - first - second);
+  const stop = entryPrice > 0
+    ? chooseMinerviniStop(entryPrice, invalidationPrice, data)
+    : { stopLossPrice: 0, stopSource: 'MAX_LOSS_CAP' as const, invalidationPrice: null };
+  const position = calculatePositionSize(totalEquity, entryPrice, stop.stopLossPrice, riskPercent);
 
   const entryTargets: EntryTargets = {
-    e1: { label: '1차 돌파 진입', price: round(entryPrice), shares: first },
-    e2: { label: '2차 피라미딩', price: round(entryPrice + atr * 0.5), shares: second },
-    e3: { label: '3차 피라미딩', price: round(entryPrice + atr), shares: third },
+    e1: { label: '피벗 돌파 진입', price: round(entryPrice), shares: position.shares },
+    e2: { label: '추가매수 후보 +2%', price: round(entryPrice * (1 + ADD_ON_CANDIDATE_PCTS[0])), shares: 0 },
+    e3: { label: '추가매수 후보 +4%', price: round(entryPrice * (1 + ADD_ON_CANDIDATE_PCTS[1])), shares: 0 },
   };
 
   const trailingStops: TrailingStops = {
     initial: position.stopLossPrice,
-    afterEntry2: round(entryTargets.e2.price - atr * 2),
-    afterEntry3: round(entryTargets.e3.price - atr * 2),
+    afterEntry2: round(entryPrice),
+    afterEntry3: round(entryTargets.e2.price),
   };
 
   return {
@@ -124,6 +172,11 @@ export function calculatePyramidPlan(
     totalShares: position.shares,
     entryTargets,
     trailingStops,
+    strategy: 'MINERVINI_VCP',
+    riskModel: 'PATTERN_INVALIDATION',
+    stopSource: stop.stopSource,
+    maxLossPct: MINERVINI_MAX_LOSS_PCT,
+    invalidationPrice: stop.invalidationPrice,
   };
 }
 

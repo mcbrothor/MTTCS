@@ -16,6 +16,10 @@ export default function DashboardPage() {
     trades,
     winRate,
     totalPnL,
+    avgRMultiple,
+    expectancyR,
+    openRisk,
+    planAdherenceRate,
     avgDiscipline,
     highDiscipline,
     lowDiscipline,
@@ -74,6 +78,10 @@ export default function DashboardPage() {
       <MetricCards
         winRate={winRate}
         totalPnL={totalPnL}
+        avgRMultiple={avgRMultiple}
+        expectancyR={expectancyR}
+        openRisk={openRisk}
+        planAdherenceRate={planAdherenceRate}
         avgDiscipline={avgDiscipline}
         plannedCount={plannedCount}
         sepaPassRate={sepaPassRate}

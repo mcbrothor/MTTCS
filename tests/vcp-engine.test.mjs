@@ -164,6 +164,7 @@ console.log('=== VCP Engine Tests ===\n');
   assert.equal(result.score, 0, '빈 데이터 → 스코어 0');
   assert.equal(result.grade, 'none', '빈 데이터 → 등급 none');
   assert.equal(result.recommendedEntry, 100, '빈 데이터 → breakoutPrice 반환');
+  assert.equal(result.entrySource, 'RECENT_HIGH_FALLBACK', '빈 데이터 → 최근 고점 참고가 사용');
   console.log('✅ Test 1: 데이터 부족 시 안전한 기본값 반환');
 }
 
@@ -209,17 +210,15 @@ console.log('=== VCP Engine Tests ===\n');
   const breakoutPrice = 200;
   const result = analyzeVcp(data, breakoutPrice);
 
-  // VCP 피벗이 있으면 두 가격 중 낮은쪽이 권장 진입가
+  // VCP 피벗이 있으면 피벗 자체가 권장 진입가
   if (result.pivotPrice !== null) {
-    assert.equal(
-      result.recommendedEntry,
-      Math.min(result.pivotPrice, breakoutPrice),
-      '권장 진입가 = min(VCP 피벗, 20일 돌파가)'
-    );
+    assert.equal(result.recommendedEntry, result.pivotPrice, '권장 진입가 = VCP 피벗');
+    assert.equal(result.entrySource, 'VCP_PIVOT', '진입 출처 = VCP 피벗');
+    assert.ok(result.invalidationPrice !== null, '무효화 기준이 생성됨');
     console.log(`✅ Test 5: 피벗 결정 — VCP $${result.pivotPrice}, 돌파가 $${breakoutPrice}, 권장 $${result.recommendedEntry}`);
   } else {
     assert.equal(result.recommendedEntry, breakoutPrice, '피벗 없으면 돌파가 사용');
-    console.log(`✅ Test 5: 피벗 미감지 → 20일 돌파가 $${breakoutPrice} 사용`);
+    console.log(`✅ Test 5: 피벗 미감지 → 최근 고점 참고가 $${breakoutPrice} 사용`);
   }
 }
 

@@ -5,16 +5,34 @@ import { Activity, DollarSign, ShieldCheck, Target, TrendingUp } from 'lucide-re
 interface MetricCardsProps {
   winRate: number;
   totalPnL: number;
+  avgRMultiple: number;
+  expectancyR: number;
+  openRisk: number;
+  planAdherenceRate: number;
   avgDiscipline: number;
   plannedCount: number;
   sepaPassRate: number;
   market?: 'US' | 'KR';
 }
 
-export default function MetricCards({ winRate, totalPnL, avgDiscipline, plannedCount, sepaPassRate, market = 'US' }: MetricCardsProps) {
+export default function MetricCards({
+  winRate,
+  totalPnL,
+  avgRMultiple,
+  expectancyR,
+  openRisk,
+  planAdherenceRate,
+  avgDiscipline,
+  plannedCount,
+  sepaPassRate,
+  market = 'US',
+}: MetricCardsProps) {
   const pnlStr = market === 'US' 
     ? `${totalPnL >= 0 ? '+' : ''}$${totalPnL.toFixed(2)}` 
     : `${totalPnL >= 0 ? '+' : ''}₩${Math.round(totalPnL).toLocaleString()}`;
+  const riskStr = market === 'US'
+    ? `$${openRisk.toFixed(2)}`
+    : `₩${Math.round(openRisk).toLocaleString()}`;
 
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
@@ -29,6 +47,10 @@ export default function MetricCards({ winRate, totalPnL, avgDiscipline, plannedC
       <Metric icon={<TrendingUp className="h-6 w-6 text-amber-500" />} label="평균 규율 점수" value={`${avgDiscipline.toFixed(1)}pt`} border="border-t-amber-500" valueClass="text-amber-500" />
       <Metric icon={<Activity className="h-6 w-6 text-sky-400" />} label="진행 중 계획" value={String(plannedCount)} border="border-t-sky-400" />
       <Metric icon={<ShieldCheck className="h-6 w-6 text-emerald-300" />} label="SEPA 통과율" value={`${sepaPassRate.toFixed(1)}%`} border="border-t-emerald-300" />
+      <Metric icon={<Target className="h-6 w-6 text-lime-300" />} label="평균 R" value={`${avgRMultiple.toFixed(2)}R`} border="border-t-lime-300" />
+      <Metric icon={<TrendingUp className="h-6 w-6 text-fuchsia-300" />} label="기대값" value={`${expectancyR.toFixed(2)}R`} border="border-t-fuchsia-300" />
+      <Metric icon={<Activity className="h-6 w-6 text-orange-300" />} label="오픈 리스크" value={riskStr} border="border-t-orange-300" />
+      <Metric icon={<ShieldCheck className="h-6 w-6 text-cyan-300" />} label="계획 준수율" value={`${planAdherenceRate.toFixed(1)}%`} border="border-t-cyan-300" />
     </div>
   );
 }

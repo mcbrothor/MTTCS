@@ -96,7 +96,7 @@ function PlanPageContent() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">New Trade Plan</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">신규 매매 계획</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          SEPA 후보 검증 → VCP 매수 타점 분석 → 허용 손실 기반 수량 산출 → 3분할 피라미딩 → Centaur 체크리스트를 한 흐름으로 실행합니다.
+          SEPA 후보 검증 → VCP 피벗 분석 → 패턴 무효화 기반 수량 산출 → Centaur 체크리스트를 한 흐름으로 실행합니다.
         </p>
       </div>
 
@@ -141,7 +141,7 @@ function PlanPageContent() {
 
           <div className="flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-400">
-              저장 시 SEPA 판정 근거, VCP 분석, 허용 손실 비율, 피라미딩 가격과 단계별 스탑이 함께 기록됩니다.
+              저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.
             </p>
             <Button className="px-8 py-3" onClick={handleSavePlan} disabled={saveBlocked}>
               {saving ? '저장 중...' : '계획 저장'}

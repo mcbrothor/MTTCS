@@ -4,8 +4,17 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
 import axios from 'axios';
-import { Star } from 'lucide-react';
-import type { EntryTargets, SepaEvidence, Trade, TradeStatus, TrailingStops } from '@/types';
+import { Star, Trash2 } from 'lucide-react';
+import type {
+  EntryTargets,
+  SepaEvidence,
+  Trade,
+  TradeExecution,
+  TradeExecutionSide,
+  TradeLegLabel,
+  TradeStatus,
+  TrailingStops,
+} from '@/types';
 
 interface TradeHistoryTableProps {
   trades: Trade[];
@@ -25,9 +34,33 @@ interface EditDraft {
   result_amount: string;
   final_discipline: string;
   emotion_note: string;
+  plan_note: string;
+  invalidation_note: string;
 }
 
-const statusOptions: TradeStatus[] = ['PLANNED', 'COMPLETED', 'CANCELLED'];
+interface ExecutionDraft {
+  side: TradeExecutionSide;
+  leg_label: TradeLegLabel;
+  executed_at: string;
+  price: string;
+  shares: string;
+  fees: string;
+  note: string;
+}
+
+interface ReviewDraft {
+  final_discipline: string;
+  setup_tags: string[];
+  mistake_tags: string[];
+  review_note: string;
+  review_action: string;
+}
+
+type DetailTab = 'plan' | 'executions' | 'review';
+
+const statusOptions: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+const setupTagOptions = ['VCP', 'SEPA', '돌파', '실적', '추세', '관심종목'];
+const mistakeTagOptions = ['추격매수', '손절지연', '비중초과', '조기매도', '계획미준수', '진입지연'];
 
 const isKorean = (ticker?: string) => ticker && /^\d{6}$/.test(ticker);
 
@@ -40,6 +73,14 @@ const currency = (value: number | null | undefined, ticker?: string) =>
 
 const numberText = (value: number | null | undefined, suffix = '') =>
   typeof value === 'number' && Number.isFinite(value) ? `${value.toLocaleString()}${suffix}` : '-';
+
+const signedCurrency = (value: number | null | undefined, ticker?: string) =>
+  typeof value === 'number' && Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${currency(value, ticker)}` : '-';
+
+const dateInputValue = (date?: string | null) => {
+  const source = date ? new Date(date) : new Date();
+  return Number.isNaN(source.getTime()) ? new Date().toISOString().slice(0, 10) : source.toISOString().slice(0, 10);
+};
 
 const toInput = (value: number | null | undefined) =>
   typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
@@ -89,6 +130,7 @@ function getSepaEvidence(value: SepaEvidence | string | null): SepaEvidence | nu
 export default function TradeHistoryTable({ trades, limit, title = '매매 히스토리' }: TradeHistoryTableProps) {
   const [rows, setRows] = useState<Trade[]>(trades);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeTabs, setActiveTabs] = useState<Record<string, DetailTab>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -101,8 +143,17 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
 
   const visibleRows = useMemo(() => (limit ? rows.slice(0, limit) : rows), [rows, limit]);
 
+  const replaceRow = (trade: Trade) => {
+    setRows((prev) => prev.map((item) => (item.id === trade.id ? trade : item)));
+  };
+
+  const setTab = (tradeId: string, tab: DetailTab) => {
+    setActiveTabs((prev) => ({ ...prev, [tradeId]: tab }));
+  };
+
   const startEdit = (trade: Trade) => {
     setExpandedId(trade.id);
+    setTab(trade.id, 'plan');
     setEditingId(trade.id);
     setError(null);
     setDraft({
@@ -117,6 +168,8 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
       result_amount: toInput(trade.result_amount),
       final_discipline: toInput(trade.final_discipline),
       emotion_note: trade.emotion_note ?? '',
+      plan_note: trade.plan_note ?? '',
+      invalidation_note: trade.invalidation_note ?? '',
     });
   };
 
@@ -146,17 +199,98 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
           result_amount: toNumberOrNull(draft.result_amount),
           final_discipline: toNumberOrNull(draft.final_discipline),
           emotion_note: draft.emotion_note.trim() || null,
+          plan_note: draft.plan_note.trim() || null,
+          invalidation_note: draft.invalidation_note.trim() || null,
         }),
       });
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || '전략 수정에 실패했습니다.');
 
-      setRows((prev) => prev.map((item) => (item.id === trade.id ? result.data : item)));
+      replaceRow(result.data);
       setEditingId(null);
       setDraft(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '전략 수정 중 오류가 발생했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveExecution = async (trade: Trade, executionDraft: ExecutionDraft) => {
+    setBusyId(trade.id);
+    setError(null);
+    try {
+      const response = await fetch('/api/trade-executions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          trade_id: trade.id,
+          side: executionDraft.side,
+          leg_label: executionDraft.leg_label,
+          executed_at: executionDraft.executed_at,
+          price: executionDraft.price,
+          shares: executionDraft.shares,
+          fees: executionDraft.fees,
+          note: executionDraft.note,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '체결 기록 저장에 실패했습니다.');
+
+      replaceRow(result.data);
+      setSuccessMsg(`${trade.ticker} 체결이 기록되었습니다.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '체결 기록 저장 중 오류가 발생했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const deleteExecution = async (trade: Trade, execution: TradeExecution) => {
+    if (!window.confirm(`${trade.ticker} ${execution.side === 'ENTRY' ? '진입' : '청산'} 체결을 삭제할까요?`)) return;
+
+    setBusyId(trade.id);
+    setError(null);
+    try {
+      const response = await fetch(`/api/trade-executions?id=${encodeURIComponent(execution.id)}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '체결 기록 삭제에 실패했습니다.');
+
+      replaceRow(result.data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '체결 기록 삭제 중 오류가 발생했습니다.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveReview = async (trade: Trade, reviewDraft: ReviewDraft) => {
+    setBusyId(trade.id);
+    setError(null);
+    try {
+      const response = await fetch('/api/trades', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: trade.id,
+          final_discipline: toNumberOrNull(reviewDraft.final_discipline),
+          setup_tags: reviewDraft.setup_tags,
+          mistake_tags: reviewDraft.mistake_tags,
+          review_note: reviewDraft.review_note.trim() || null,
+          review_action: reviewDraft.review_action.trim() || null,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '복기 저장에 실패했습니다.');
+
+      replaceRow(result.data);
+      setSuccessMsg(`${trade.ticker} 복기가 저장되었습니다.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '복기 저장 중 오류가 발생했습니다.');
     } finally {
       setBusyId(null);
     }
@@ -188,7 +322,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     try {
       await axios.post('/api/watchlist', {
         ticker,
-        exchange: 'NAS', // 기본값으로 전달
+        exchange: isKorean(ticker) ? 'KOSPI' : 'NAS',
         priority: 0,
         memo: '히스토리에서 추가됨',
         tags: ['History'],
@@ -209,7 +343,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-bold text-white">{title}</h3>
-          <p className="mt-1 text-sm text-slate-400">각 행에서 전략 근거를 확인하고 핵심 값을 수정하거나 삭제할 수 있습니다.</p>
+          <p className="mt-1 text-sm text-slate-400">계획, 실제 체결, 복기를 한 거래 안에서 이어서 관리합니다.</p>
         </div>
       </div>
 
@@ -228,15 +362,15 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] text-left text-sm text-slate-300">
+        <table className="w-full min-w-[1080px] text-left text-sm text-slate-300">
           <thead className="border-b border-slate-700 bg-slate-800 text-xs uppercase text-slate-400">
             <tr>
               <th scope="col" className="px-4 py-3">날짜</th>
               <th scope="col" className="px-4 py-3">티커</th>
               <th scope="col" className="px-4 py-3">상태</th>
-              <th scope="col" className="px-4 py-3 text-right">SEPA</th>
-              <th scope="col" className="px-4 py-3 text-right">허용 손실</th>
-              <th scope="col" className="px-4 py-3 text-right">계획 리스크</th>
+              <th scope="col" className="px-4 py-3 text-right">R</th>
+              <th scope="col" className="px-4 py-3 text-right">순보유</th>
+              <th scope="col" className="px-4 py-3 text-right">평균 진입가</th>
               <th scope="col" className="px-4 py-3 text-right">손익</th>
               <th scope="col" className="px-4 py-3 text-right">규율</th>
               <th scope="col" className="px-4 py-3 text-right">관리</th>
@@ -246,15 +380,16 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
             {visibleRows.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                  아직 매매 기록이 없습니다.
+                  첫 진입 체결을 기록하면 평균 진입가와 현재 R이 자동 계산됩니다.
                 </td>
               </tr>
             ) : (
               visibleRows.map((trade) => {
-                const sepaPassed = trade.chk_sepa ?? trade.chk_market;
-                const riskPct = (getRiskPercent(trade) * 100).toFixed(1).replace('.0', '');
+                const metrics = trade.metrics;
                 const isExpanded = expandedId === trade.id;
                 const isEditing = editingId === trade.id;
+                const activeTab = activeTabs[trade.id] || 'plan';
+                const realizedPnL = metrics?.realizedPnL ?? trade.result_amount;
 
                 return (
                   <Fragment key={trade.id}>
@@ -266,24 +401,18 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                       <td className="px-4 py-3">
                         <StatusBadge status={trade.status} />
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={sepaPassed ? 'text-emerald-300' : 'text-slate-500'}>
-                          {sepaPassed ? 'Pass' : '-'}
+                      <td className="px-4 py-3 text-right font-mono">
+                        {typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono">{numberText(metrics?.netShares, '주')}</td>
+                      <td className="px-4 py-3 text-right font-mono">{currency(metrics?.avgEntryPrice ?? trade.entry_price, trade.ticker)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-medium">
+                        <span className={(realizedPnL || 0) >= 0 ? 'text-emerald-500' : 'text-coral-red'}>
+                          {signedCurrency(realizedPnL, trade.ticker)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono">{riskPct}%</td>
-                      <td className="px-4 py-3 text-right font-mono">{currency(trade.planned_risk, trade.ticker)}</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium">
-                        {trade.status === 'COMPLETED' ? (
-                          <span className={(trade.result_amount || 0) >= 0 ? 'text-emerald-500' : 'text-coral-red'}>
-                            {(trade.result_amount || 0) >= 0 ? '+' : ''}{currency(trade.result_amount || 0, trade.ticker)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">-</span>
-                        )}
-                      </td>
                       <td className="px-4 py-3 text-right">
-                        {trade.status === 'COMPLETED' ? (
+                        {trade.final_discipline !== null ? (
                           <span className={`font-bold ${(trade.final_discipline || 0) >= 80 ? 'text-emerald-500' : 'text-orange-400'}`}>
                             {trade.final_discipline}pt
                           </span>
@@ -302,7 +431,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                             <Star className="h-4 w-4" />
                           </button>
                           <ActionButton onClick={() => setExpandedId(isExpanded ? null : trade.id)}>
-                            {isExpanded ? '접기' : '전략 보기'}
+                            {isExpanded ? '접기' : '상세'}
                           </ActionButton>
                           <ActionButton onClick={() => startEdit(trade)}>수정</ActionButton>
                           <ActionButton danger onClick={() => deleteTrade(trade)} disabled={busyId === trade.id}>
@@ -314,19 +443,41 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                     {isExpanded && (
                       <tr className="border-b border-slate-800 bg-slate-950/50">
                         <td colSpan={9} className="px-4 py-5">
-                          {isEditing && draft ? (
-                            <EditPanel
-                              draft={draft}
+                          <div className="mb-4 flex flex-wrap gap-2">
+                            <TabButton active={activeTab === 'plan'} onClick={() => setTab(trade.id, 'plan')}>계획</TabButton>
+                            <TabButton active={activeTab === 'executions'} onClick={() => setTab(trade.id, 'executions')}>체결</TabButton>
+                            <TabButton active={activeTab === 'review'} onClick={() => setTab(trade.id, 'review')}>복기</TabButton>
+                          </div>
+                          {activeTab === 'plan' && (
+                            isEditing && draft ? (
+                              <EditPanel
+                                draft={draft}
+                                busy={busyId === trade.id}
+                                onChange={updateDraft}
+                                onCancel={() => {
+                                  setEditingId(null);
+                                  setDraft(null);
+                                }}
+                                onSave={() => saveEdit(trade)}
+                              />
+                            ) : (
+                              <StrategyDetail trade={trade} />
+                            )
+                          )}
+                          {activeTab === 'executions' && (
+                            <ExecutionsPanel
+                              trade={trade}
                               busy={busyId === trade.id}
-                              onChange={updateDraft}
-                              onCancel={() => {
-                                setEditingId(null);
-                                setDraft(null);
-                              }}
-                              onSave={() => saveEdit(trade)}
+                              onSave={(executionDraft) => saveExecution(trade, executionDraft)}
+                              onDelete={(execution) => deleteExecution(trade, execution)}
                             />
-                          ) : (
-                            <StrategyDetail trade={trade} />
+                          )}
+                          {activeTab === 'review' && (
+                            <ReviewPanel
+                              trade={trade}
+                              busy={busyId === trade.id}
+                              onSave={(reviewDraft) => saveReview(trade, reviewDraft)}
+                            />
                           )}
                         </td>
                       </tr>
@@ -369,6 +520,327 @@ function ActionButton({
   );
 }
 
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-4 py-2 text-xs font-semibold transition-colors ${
+        active ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ExecutionsPanel({
+  trade,
+  busy,
+  onSave,
+  onDelete,
+}: {
+  trade: Trade;
+  busy: boolean;
+  onSave: (draft: ExecutionDraft) => void;
+  onDelete: (execution: TradeExecution) => void;
+}) {
+  const metrics = trade.metrics;
+  const executions = [...(trade.executions || [])].sort((a, b) => a.executed_at.localeCompare(b.executed_at));
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <DetailMetric label="평균 진입가" value={currency(metrics?.avgEntryPrice, trade.ticker)} />
+        <DetailMetric label="평균 청산가" value={currency(metrics?.avgExitPrice, trade.ticker)} />
+        <DetailMetric label="순보유" value={numberText(metrics?.netShares, '주')} />
+        <DetailMetric label="실현손익" value={signedCurrency(metrics?.realizedPnL, trade.ticker)} />
+        <DetailMetric label="현재 R" value={typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'} />
+      </div>
+
+      <ExecutionForm trade={trade} busy={busy} onSave={onSave} />
+
+      {executions.length === 0 ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-950 p-5 text-center text-sm text-slate-500">
+          첫 진입 체결을 기록하면 평균 진입가, 순보유 수량, 현재 R이 자동 계산됩니다.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+              <tr>
+                <th className="py-2">일자</th>
+                <th className="py-2">구분</th>
+                <th className="py-2">단계</th>
+                <th className="py-2 text-right">가격</th>
+                <th className="py-2 text-right">수량</th>
+                <th className="py-2 text-right">수수료</th>
+                <th className="py-2">메모</th>
+                <th className="py-2 text-right">삭제</th>
+              </tr>
+            </thead>
+            <tbody>
+              {executions.map((execution) => (
+                <tr key={execution.id} className="border-b border-slate-900">
+                  <td className="py-2">{new Date(execution.executed_at).toLocaleDateString('ko-KR')}</td>
+                  <td className={execution.side === 'ENTRY' ? 'py-2 text-emerald-300' : 'py-2 text-sky-300'}>
+                    {execution.side === 'ENTRY' ? '진입' : '청산'}
+                  </td>
+                  <td className="py-2 font-mono">{execution.leg_label}</td>
+                  <td className="py-2 text-right font-mono">{currency(execution.price, trade.ticker)}</td>
+                  <td className="py-2 text-right font-mono">{execution.shares.toLocaleString()}주</td>
+                  <td className="py-2 text-right font-mono">{currency(execution.fees, trade.ticker)}</td>
+                  <td className="py-2 text-slate-400">{execution.note || '-'}</td>
+                  <td className="py-2 text-right">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onDelete(execution)}
+                      className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-500/20 hover:text-red-400 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExecutionForm({ trade, busy, onSave }: { trade: Trade; busy: boolean; onSave: (draft: ExecutionDraft) => void }) {
+  const targets = getEntryTargets(trade.entry_targets);
+  const [draft, setDraft] = useState<ExecutionDraft>({
+    side: 'ENTRY',
+    leg_label: 'E1',
+    executed_at: dateInputValue(),
+    price: '',
+    shares: '',
+    fees: '0',
+    note: '',
+  });
+
+  const fillLeg = (leg: TradeLegLabel) => {
+    if (!targets || leg === 'MANUAL') return;
+    const target = leg === 'E1' ? targets.e1 : leg === 'E2' ? targets.e2 : targets.e3;
+    setDraft((prev) => ({
+      ...prev,
+      side: 'ENTRY',
+      leg_label: leg,
+      price: String(target.price),
+      shares: target.shares > 0 ? String(target.shares) : '',
+    }));
+  };
+
+  const fillFullExit = () => {
+    setDraft((prev) => ({
+      ...prev,
+      side: 'EXIT',
+      leg_label: 'MANUAL',
+      shares: String(trade.metrics?.netShares || ''),
+      price: '',
+    }));
+  };
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onSave(draft);
+    setDraft({
+      side: draft.side,
+      leg_label: draft.side === 'ENTRY' ? 'E1' : 'MANUAL',
+      executed_at: dateInputValue(),
+      price: '',
+      shares: '',
+      fees: '0',
+      note: '',
+    });
+  };
+
+  return (
+    <form onSubmit={submit} className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+      <div className="mb-3 flex flex-wrap gap-2">
+        {(['E1', 'E2', 'E3'] as TradeLegLabel[]).map((leg) => (
+          <button
+            key={leg}
+            type="button"
+            disabled={!targets || busy}
+            onClick={() => fillLeg(leg)}
+            className="rounded-lg border border-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {leg} 계획 불러오기
+          </button>
+        ))}
+        <button
+          type="button"
+          disabled={busy || !trade.metrics?.netShares}
+          onClick={fillFullExit}
+          className="rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          전량 청산
+        </button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-slate-400">구분</span>
+          <select
+            value={draft.side}
+            onChange={(event) => setDraft((prev) => ({ ...prev, side: event.target.value as TradeExecutionSide }))}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+          >
+            <option value="ENTRY">진입</option>
+            <option value="EXIT">청산</option>
+          </select>
+        </label>
+        <TextInput label="체결일" type="date" value={draft.executed_at} onChange={(value) => setDraft((prev) => ({ ...prev, executed_at: value }))} />
+        <TextInput label="가격" type="number" step="0.0001" value={draft.price} onChange={(value) => setDraft((prev) => ({ ...prev, price: value }))} />
+        <TextInput label="수량" type="number" step="0.0001" value={draft.shares} onChange={(value) => setDraft((prev) => ({ ...prev, shares: value }))} />
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-slate-400">단계</span>
+          <select
+            value={draft.leg_label}
+            onChange={(event) => setDraft((prev) => ({ ...prev, leg_label: event.target.value as TradeLegLabel }))}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+          >
+            <option value="E1">E1</option>
+            <option value="E2">E2</option>
+            <option value="E3">E3</option>
+            <option value="MANUAL">MANUAL</option>
+          </select>
+        </label>
+        <TextInput label="수수료" type="number" min="0" step="0.01" value={draft.fees} onChange={(value) => setDraft((prev) => ({ ...prev, fees: value }))} />
+        <div className="md:col-span-2">
+          <TextInput label="메모" value={draft.note} onChange={(value) => setDraft((prev) => ({ ...prev, note: value }))} />
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end">
+        <button
+          type="submit"
+          disabled={busy || !draft.price || !draft.shares}
+          className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {busy ? '저장 중...' : draft.side === 'ENTRY' ? '진입 기록' : '청산 기록'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ReviewPanel({ trade, busy, onSave }: { trade: Trade; busy: boolean; onSave: (draft: ReviewDraft) => void }) {
+  const [draft, setDraft] = useState<ReviewDraft>({
+    final_discipline: toInput(trade.final_discipline),
+    setup_tags: trade.setup_tags || [],
+    mistake_tags: trade.mistake_tags || [],
+    review_note: trade.review_note || '',
+    review_action: trade.review_action || '',
+  });
+
+  const toggleTag = (field: 'setup_tags' | 'mistake_tags', tag: string) => {
+    setDraft((prev) => {
+      const current = prev[field];
+      return {
+        ...prev,
+        [field]: current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag],
+      };
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <DetailMetric label="실현손익" value={signedCurrency(trade.metrics?.realizedPnL ?? trade.result_amount, trade.ticker)} />
+        <DetailMetric label="최종 R" value={typeof trade.metrics?.rMultiple === 'number' ? `${trade.metrics.rMultiple.toFixed(2)}R` : '-'} />
+        <DetailMetric label="슬리피지" value={typeof trade.metrics?.entrySlippagePct === 'number' ? `${trade.metrics.entrySlippagePct.toFixed(2)}%` : '-'} />
+        <DetailMetric label="계획 실행률" value={`${(trade.metrics?.executionProgressPct || 0).toFixed(1)}%`} />
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold text-slate-400">셋업 태그</p>
+        <div className="flex flex-wrap gap-2">
+          {setupTagOptions.map((tag) => (
+            <TagChip key={tag} active={draft.setup_tags.includes(tag)} onClick={() => toggleTag('setup_tags', tag)}>
+              {tag}
+            </TagChip>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-xs font-semibold text-slate-400">실수 태그</p>
+        <div className="flex flex-wrap gap-2">
+          {mistakeTagOptions.map((tag) => (
+            <TagChip key={tag} active={draft.mistake_tags.includes(tag)} onClick={() => toggleTag('mistake_tags', tag)}>
+              {tag}
+            </TagChip>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <TextInput
+          label="규율 점수"
+          type="number"
+          min="0"
+          max="100"
+          value={draft.final_discipline}
+          onChange={(value) => setDraft((prev) => ({ ...prev, final_discipline: value }))}
+        />
+        <div className="md:col-span-2">
+          <TextInput
+            label="다음 개선 액션"
+            value={draft.review_action}
+            onChange={(value) => setDraft((prev) => ({ ...prev, review_action: value }))}
+          />
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-slate-400">사후 복기 메모</span>
+        <textarea
+          value={draft.review_note}
+          onChange={(event) => setDraft((prev) => ({ ...prev, review_note: event.target.value }))}
+          rows={4}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+          placeholder="좋았던 점, 놓친 점, 다음에 반복하거나 줄일 행동을 적어두세요."
+        />
+      </label>
+
+      <div className="flex justify-end">
+        <ActionButton onClick={() => onSave(draft)} disabled={busy}>
+          {busy ? '저장 중...' : '복기 저장'}
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
+function TagChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+        active ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400 hover:text-slate-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function NoteBox({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm leading-6 text-slate-300">
+      <p className="mb-1 text-xs font-semibold text-slate-500">{title}</p>
+      {text}
+    </div>
+  );
+}
+
 function StrategyDetail({ trade }: { trade: Trade }) {
   const targets = getEntryTargets(trade.entry_targets);
   const stops = getTrailingStops(trade.trailing_stops);
@@ -380,20 +852,25 @@ function StrategyDetail({ trade }: { trade: Trade }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <DetailMetric label="총 자본" value={currency(trade.total_equity, trade.ticker)} />
         <DetailMetric label="허용 손실" value={`${riskPct}%`} />
-        <DetailMetric label="ATR" value={numberText(trade.atr_value)} />
+        <DetailMetric label="ATR 참고" value={numberText(trade.atr_value)} />
         <DetailMetric label="진입가" value={currency(trade.entry_price, trade.ticker)} />
         <DetailMetric label="초기 손절가" value={currency(trade.stoploss_price, trade.ticker)} />
       </div>
 
+      <div className="grid gap-3 md:grid-cols-2">
+        <NoteBox title="진입 전 시나리오" text={trade.plan_note || '수정 버튼으로 계획의 핵심 시나리오를 기록하세요.'} />
+        <NoteBox title="무효화 조건" text={trade.invalidation_note || '이 아이디어가 틀렸다고 판단할 조건을 짧게 적어두면 복기가 쉬워집니다.'} />
+      </div>
+
       {targets && stops && (
         <div>
-          <h4 className="mb-2 text-sm font-bold text-white">피라미딩 계획</h4>
+          <h4 className="mb-2 text-sm font-bold text-white">진입 계획</h4>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
                 <tr>
                   <th className="py-2">단계</th>
-                  <th className="py-2 text-right">목표가</th>
+                  <th className="py-2 text-right">기준가</th>
                   <th className="py-2 text-right">수량</th>
                   <th className="py-2 text-right">스탑</th>
                 </tr>
@@ -405,7 +882,7 @@ function StrategyDetail({ trade }: { trade: Trade }) {
                     <tr key={leg.label} className="border-b border-slate-900">
                       <td className="py-2 font-medium text-white">{leg.label}</td>
                       <td className="py-2 text-right font-mono">{currency(leg.price, trade.ticker)}</td>
-                      <td className="py-2 text-right font-mono">{leg.shares.toLocaleString()}주</td>
+                      <td className="py-2 text-right font-mono">{leg.shares > 0 ? `${leg.shares.toLocaleString()}주` : '수동'}</td>
                       <td className="py-2 text-right font-mono text-orange-300">{currency(stop, trade.ticker)}</td>
                     </tr>
                   );
@@ -500,6 +977,24 @@ function EditPanel({
         <TextInput label="규율 점수" type="number" min="0" max="100" value={draft.final_discipline} onChange={(value) => onChange('final_discipline', value)} />
       </div>
 
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-slate-400">진입 전 시나리오</span>
+        <textarea
+          value={draft.plan_note}
+          onChange={(event) => onChange('plan_note', event.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold text-slate-400">무효화 조건</span>
+        <textarea
+          value={draft.invalidation_note}
+          onChange={(event) => onChange('invalidation_note', event.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
+        />
+      </label>
       <label className="block">
         <span className="mb-1 block text-xs font-semibold text-slate-400">메모</span>
         <textarea

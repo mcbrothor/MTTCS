@@ -121,7 +121,7 @@ export default function WatchlistPage() {
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <Star className="mb-4 h-12 w-12 text-slate-600" />
             <p className="text-lg font-semibold text-slate-300">관심 종목이 없습니다</p>
-            <p className="mt-2 text-sm text-slate-500">상단의 "종목 추가" 버튼으로 분석할 종목을 등록해 보세요.</p>
+            <p className="mt-2 text-sm text-slate-500">상단의 &quot;종목 추가&quot; 버튼으로 분석할 종목을 등록해 보세요.</p>
           </div>
         </Card>
       )}

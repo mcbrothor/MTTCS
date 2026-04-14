@@ -10,7 +10,7 @@ import { useState } from 'react';
  * - VCP 종합 스코어 게이지 (0~100)
  * - 4가지 하위 지표 카드 (수축, 볼륨-건조화, BB-스퀴즈, Pocket Pivot)
  * - 수축 단계 테이블
- * - 진입가 비교 (VCP 피벗 vs 20일 돌파가)
+ * - 진입/무효화 기준 비교 (VCP 피벗 vs 최근 고점 참고가)
  * - 판정 근거 텍스트
  */
 
@@ -131,13 +131,13 @@ export default function VcpAnalysisPanel({ analysis }: VcpAnalysisPanelProps) {
         />
       </div>
 
-      {/* 진입가 비교 */}
+      {/* 진입/무효화 기준 */}
       <div className={`rounded-lg border p-4 ${colors.border} ${colors.bg}`}>
         <div className="flex items-center gap-2">
           <Crosshair className={`h-4 w-4 ${colors.text}`} />
-          <h4 className="text-sm font-semibold text-white">진입가 비교</h4>
+          <h4 className="text-sm font-semibold text-white">진입/무효화 기준</h4>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-4 text-center">
+        <div className="mt-3 grid gap-4 text-center sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-xs text-slate-400">VCP 피벗</p>
             <p className="mt-1 font-mono text-lg font-bold text-white">
@@ -146,18 +146,30 @@ export default function VcpAnalysisPanel({ analysis }: VcpAnalysisPanelProps) {
             <p className="mt-0.5 text-[10px] text-slate-500">최종 수축 고점</p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">20일 돌파가</p>
+            <p className="text-xs text-slate-400">최근 고점 참고가</p>
             <p className="mt-1 font-mono text-lg font-bold text-white">
               ${analysis.breakoutPrice.toFixed(2)}
             </p>
-            <p className="mt-0.5 text-[10px] text-slate-500">터틀 시스템 기준</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">피벗 보조 확인용</p>
           </div>
           <div>
             <p className="text-xs text-slate-400">권장 진입가</p>
             <p className={`mt-1 font-mono text-lg font-bold ${colors.text}`}>
               ${analysis.recommendedEntry.toFixed(2)}
             </p>
-            <p className="mt-0.5 text-[10px] text-slate-500">보수적 선택 (둘 중 낮은 가격)</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              {analysis.entrySource === 'VCP_PIVOT' ? 'VCP 피벗 우선' : '최근 고점 참고'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-400">무효화 기준</p>
+            <p className="mt-1 font-mono text-lg font-bold text-orange-200">
+              {analysis.invalidationPrice !== null ? `$${analysis.invalidationPrice.toFixed(2)}` : '—'}
+            </p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              거래량 {analysis.breakoutVolumeStatus === 'confirmed' ? '확인' : analysis.breakoutVolumeStatus === 'pending' ? '대기' : analysis.breakoutVolumeStatus === 'weak' ? '약함' : '정보 부족'}
+              {analysis.breakoutVolumeRatio !== null ? ` · ${analysis.breakoutVolumeRatio}x` : ''}
+            </p>
           </div>
         </div>
       </div>

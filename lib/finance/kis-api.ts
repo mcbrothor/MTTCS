@@ -17,6 +17,15 @@ interface KisDailyPriceRow {
   tvol: string;
 }
 
+interface KisDomesticDailyPriceRow {
+  stck_bsop_date?: string;
+  stck_oprc: string;
+  stck_hgpr: string;
+  stck_lwpr: string;
+  stck_clpr: string;
+  acml_vol: string;
+}
+
 const KIS_PAGE_SIZE = 100;
 const DEFAULT_TARGET_BARS = 260;
 
@@ -183,9 +192,9 @@ async function getDomesticDailyPricePage(
     throw new Error(response.data.msg1 || 'KIS 국내주식 일봉 조회 오류');
   }
 
-  const output2: any[] = response.data.output2 || [];
+  const output2: KisDomesticDailyPriceRow[] = response.data.output2 || [];
   return output2
-    .filter((item) => item.stck_bsop_date)
+    .filter((item): item is KisDomesticDailyPriceRow & { stck_bsop_date: string } => Boolean(item.stck_bsop_date))
     .map((item) => ({
       date: item.stck_bsop_date,
       open: Number(item.stck_oprc),

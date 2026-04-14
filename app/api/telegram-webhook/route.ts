@@ -48,7 +48,7 @@ if (bot) {
     const { data, error } = await supabaseServer
       .from('trades')
       .select('ticker, entry_price, total_shares, status')
-      .eq('status', 'PLANNED')
+      .in('status', ['PLANNED', 'ACTIVE'])
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -93,7 +93,7 @@ if (bot) {
       .from('trades')
       .select('id')
       .eq('ticker', ticker)
-      .eq('status', 'PLANNED')
+      .in('status', ['PLANNED', 'ACTIVE'])
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -138,7 +138,7 @@ if (bot) {
       .from('trades')
       .select('id')
       .eq('ticker', ticker)
-      .eq('status', 'PLANNED')
+      .in('status', ['PLANNED', 'ACTIVE'])
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
