@@ -22,6 +22,7 @@ const KOSPI_SCAN_CONCURRENCY = 2;
 const KOSDAQ_SCAN_CONCURRENCY = 2;
 const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v2:';
 const LAST_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:last-universe:v1';
+const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:latest-scan-universe:v1';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -78,12 +79,16 @@ function parseScannerUniverse(value: string | null): ScannerUniverse | null {
 }
 
 function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
-  const raw = window.localStorage.getItem(scannerStorageKey(universe));
-  if (!raw) return null;
+  try {
+    const raw = window.localStorage.getItem(scannerStorageKey(universe));
+    if (!raw) return null;
 
-  const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
-  if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
-  return snapshot;
+    const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
+    if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
+    return snapshot;
+  } catch {
+    return null;
+  }
 }
 
 function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: ScannerResult[], savedAt: string) {
@@ -94,6 +99,31 @@ function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: Sc
   };
   window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
+  window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, universeMeta.universe);
+}
+
+function readStoredUniverse(key: string) {
+  return parseScannerUniverse(window.localStorage.getItem(key));
+}
+
+function uniqueUniverses(items: (ScannerUniverse | null)[]) {
+  return items.filter((item, index): item is ScannerUniverse => Boolean(item) && items.indexOf(item) === index);
+}
+
+function getInitialRestoredUniverse() {
+  const latestScannedUniverse = readStoredUniverse(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+  const lastSelectedUniverse = readStoredUniverse(LAST_UNIVERSE_STORAGE_KEY);
+  const candidates = uniqueUniverses([
+    latestScannedUniverse,
+    lastSelectedUniverse,
+    'NASDAQ100',
+    'SP500',
+    'KOSPI100',
+    'KOSDAQ100',
+  ]);
+
+  const universeWithSnapshot = candidates.find((candidate) => readScannerSnapshot(candidate));
+  return universeWithSnapshot ?? lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
 }
 
 function round(value: number, digits = 2) {
@@ -322,6 +352,9 @@ export default function ScannerPage() {
   const [savingWatchlist, setSavingWatchlist] = useState<Set<string>>(new Set());
   const runIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const universeMetaRef = useRef<ScannerUniverseResponse | null>(null);
+  const resultsRef = useRef<ScannerResult[]>([]);
+  const snapshotAtRef = useRef<string | null>(null);
 
   const completedCount = results.filter((item) => item.status === 'done' || item.status === 'error').length;
   const runningCount = results.filter((item) => item.status === 'running').length;
@@ -344,6 +377,18 @@ export default function ScannerPage() {
     () => sortResults(results.filter((item) => applyFilter(item, filter)), sortKey),
     [filter, results, sortKey]
   );
+
+  useEffect(() => {
+    universeMetaRef.current = universeMeta;
+  }, [universeMeta]);
+
+  useEffect(() => {
+    resultsRef.current = results;
+  }, [results]);
+
+  useEffect(() => {
+    snapshotAtRef.current = snapshotAt;
+  }, [snapshotAt]);
 
   const updateResult = (ticker: string, next: Partial<ScannerResult>) => {
     setResults((prev) => prev.map((item) => (item.ticker === ticker ? { ...item, ...next } : item)));
@@ -373,14 +418,29 @@ export default function ScannerPage() {
 
   useEffect(() => {
     try {
-      const lastUniverse = parseScannerUniverse(window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY)) ?? 'NASDAQ100';
-      setSelectedUniverse(lastUniverse);
-      restoreUniverseSnapshot(lastUniverse);
+      const initialUniverse = getInitialRestoredUniverse();
+      setSelectedUniverse(initialUniverse);
+      restoreUniverseSnapshot(initialUniverse);
     } catch {
       setSelectedUniverse('NASDAQ100');
       restoreUniverseSnapshot('NASDAQ100');
     }
   }, [restoreUniverseSnapshot]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      const currentMeta = universeMetaRef.current;
+      const currentResults = resultsRef.current;
+      if (!currentMeta || currentResults.length === 0) return;
+
+      try {
+        writeScannerSnapshot(currentMeta, currentResults, snapshotAtRef.current ?? new Date().toISOString());
+      } catch {
+        // Browser storage failures should not block leaving the page.
+      }
+    };
+  }, []);
 
   const selectUniverse = (universe: ScannerUniverse) => {
     if (scanning) return;
