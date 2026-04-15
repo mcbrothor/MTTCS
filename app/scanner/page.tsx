@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Play, ScanSearch, Square, Star } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -20,6 +20,7 @@ const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
 const KOSPI_SCAN_CONCURRENCY = 2;
 const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v2:';
+const LAST_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:last-universe:v1';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -60,6 +61,30 @@ type SortKey = (typeof SORTS)[number]['key'];
 
 function scannerStorageKey(universe: ScannerUniverse) {
   return `${SCANNER_STORAGE_PREFIX}${universe}`;
+}
+
+function parseScannerUniverse(value: string | null): ScannerUniverse | null {
+  if (value === 'NASDAQ100' || value === 'KOSPI100') return value;
+  return null;
+}
+
+function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
+  const raw = window.localStorage.getItem(scannerStorageKey(universe));
+  if (!raw) return null;
+
+  const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
+  if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
+  return snapshot;
+}
+
+function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: ScannerResult[], savedAt: string) {
+  const snapshot: StoredScannerSnapshot = {
+    savedAt,
+    universeMeta,
+    results,
+  };
+  window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
+  window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
 }
 
 function round(value: number, digits = 2) {
@@ -315,47 +340,49 @@ export default function ScannerPage() {
     setResults((prev) => prev.map((item) => (item.ticker === ticker ? { ...item, ...next } : item)));
   };
 
+  const restoreUniverseSnapshot = useCallback((universe: ScannerUniverse) => {
+    const snapshot = readScannerSnapshot(universe);
+    if (!snapshot) {
+      setUniverseMeta(null);
+      setResults([]);
+      setSnapshotAt(null);
+      setRestoredSnapshot(false);
+      setNotice(null);
+      setFilter('all');
+      setSortKey('marketCap');
+      return;
+    }
+
+    setUniverseMeta(snapshot.universeMeta);
+    setResults(snapshot.results);
+    setSnapshotAt(snapshot.savedAt);
+    setRestoredSnapshot(true);
+    setFilter('all');
+    setSortKey('marketCap');
+    setNotice(`${formatDateTime(snapshot.savedAt)} 스캔 기록을 불러왔습니다. 새 스캔 버튼을 누르면 기록이 갱신됩니다.`);
+  }, []);
+
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(scannerStorageKey(selectedUniverse));
-      if (!raw) {
-        setUniverseMeta(null);
-        setResults([]);
-        setSnapshotAt(null);
-        setRestoredSnapshot(false);
-        setNotice(null);
-        setFilter('all');
-        setSortKey('marketCap');
-        return;
-      }
-
-      const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
-      if (!snapshot.universeMeta || snapshot.universeMeta.universe !== selectedUniverse || !Array.isArray(snapshot.results)) return;
-
-      setUniverseMeta(snapshot.universeMeta);
-      setResults(snapshot.results);
-      setSnapshotAt(snapshot.savedAt);
-      setRestoredSnapshot(true);
-      setNotice(`${formatDateTime(snapshot.savedAt)} 스캔 기록을 불러왔습니다. 새 스캔 버튼을 누르면 기록이 갱신됩니다.`);
+      const lastUniverse = parseScannerUniverse(window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY)) ?? 'NASDAQ100';
+      setSelectedUniverse(lastUniverse);
+      restoreUniverseSnapshot(lastUniverse);
     } catch {
-      window.localStorage.removeItem(scannerStorageKey(selectedUniverse));
+      setSelectedUniverse('NASDAQ100');
+      restoreUniverseSnapshot('NASDAQ100');
     }
-  }, [selectedUniverse]);
+  }, [restoreUniverseSnapshot]);
 
-  useEffect(() => {
-    if (scanning || !snapshotAt || !universeMeta || universeMeta.universe !== selectedUniverse || results.length === 0) return;
-
+  const selectUniverse = (universe: ScannerUniverse) => {
+    if (scanning) return;
+    setSelectedUniverse(universe);
     try {
-      const snapshot: StoredScannerSnapshot = {
-        savedAt: snapshotAt,
-        universeMeta,
-        results,
-      };
-      window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
+      window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universe);
     } catch {
-      setError('스캔 결과를 브라우저에 저장하지 못했습니다. 저장 공간을 확인해 주세요.');
+      // 선택 상태 저장 실패는 화면 전환 자체를 막지 않습니다.
     }
-  }, [results, scanning, selectedUniverse, snapshotAt, universeMeta]);
+    restoreUniverseSnapshot(universe);
+  };
 
   const runScan = async (universe: ScannerUniverse) => {
     runIdRef.current += 1;
@@ -376,6 +403,12 @@ export default function ScannerPage() {
     setSortKey('marketCap');
 
     try {
+      window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universe);
+    } catch {
+      // 스캔 자체는 계속 진행하고, 완료 시점에 저장 실패를 다시 안내합니다.
+    }
+
+    try {
       const universeResponse = await fetch(`/api/scanner/universe?universe=${universe}`, {
         signal: abortRef.current.signal,
       });
@@ -388,7 +421,8 @@ export default function ScannerPage() {
       if (runIdRef.current !== runId) return;
 
       setUniverseMeta(data);
-      setResults(data.items.map(initialResult));
+      const resultByTicker = new Map(data.items.map((item) => [item.ticker, initialResult(item)]));
+      setResults(Array.from(resultByTicker.values()));
 
       let nextIndex = 0;
       const concurrency = data.universe === 'KOSPI100' ? KOSPI_SCAN_CONCURRENCY : SCAN_CONCURRENCY;
@@ -397,20 +431,25 @@ export default function ScannerPage() {
           const item = data.items[nextIndex];
           nextIndex += 1;
 
+          resultByTicker.set(item.ticker, { ...resultByTicker.get(item.ticker)!, status: 'running' });
           updateResult(item.ticker, { status: 'running' });
 
           try {
             const analyzed = await scanConstituent(item, abortRef.current?.signal || new AbortController().signal);
             if (runIdRef.current === runId) {
+              resultByTicker.set(item.ticker, analyzed);
               updateResult(item.ticker, analyzed);
             }
           } catch (scanError) {
             if (runIdRef.current === runId && !abortRef.current?.signal.aborted) {
-              updateResult(item.ticker, {
+              const failedResult: ScannerResult = {
+                ...resultByTicker.get(item.ticker)!,
                 status: 'error',
                 errorMessage: getErrorMessage(scanError),
                 analyzedAt: new Date().toISOString(),
-              });
+              };
+              resultByTicker.set(item.ticker, failedResult);
+              updateResult(item.ticker, failedResult);
             }
           }
         }
@@ -419,6 +458,9 @@ export default function ScannerPage() {
       await Promise.all(workers);
       if (runIdRef.current === runId) {
         const completedAt = new Date().toISOString();
+        const finalResults = data.items.map((item) => resultByTicker.get(item.ticker) || initialResult(item));
+        setResults(finalResults);
+        writeScannerSnapshot(data, finalResults, completedAt);
         setSnapshotAt(completedAt);
         setNotice(`${data.label} 스캔이 완료되었습니다. 이 결과는 ${formatDateTime(completedAt)} 기준 기록으로 저장됩니다.`);
       }
@@ -438,6 +480,13 @@ export default function ScannerPage() {
     runIdRef.current += 1;
     abortRef.current?.abort();
     const stoppedAt = results.length > 0 ? new Date().toISOString() : null;
+    if (stoppedAt && universeMeta) {
+      try {
+        writeScannerSnapshot(universeMeta, results, stoppedAt);
+      } catch {
+        setError('스캔 결과를 브라우저에 저장하지 못했습니다. 저장 공간을 확인해 주세요.');
+      }
+    }
     setScanning(false);
     setActiveUniverse(null);
     setSnapshotAt(stoppedAt);
@@ -516,7 +565,7 @@ export default function ScannerPage() {
               <button
                 key={universe}
                 type="button"
-                onClick={() => setSelectedUniverse(universe)}
+                onClick={() => selectUniverse(universe)}
                 disabled={scanning}
                 className={`rounded-lg border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   isSelected
@@ -646,7 +695,93 @@ export default function ScannerPage() {
           </label>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
+        <div className="mt-5 space-y-3 lg:hidden">
+          {visibleResults.length === 0 ? (
+            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-center text-sm text-slate-500">
+              스캔 버튼을 누르면 종목군의 SEPA, VCP, 피벗 근접도가 자동 계산됩니다.
+            </div>
+          ) : (
+            visibleResults.map((item) => (
+              <article key={item.ticker} className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-mono text-slate-500">#{item.rank}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-lg font-bold text-white">{item.ticker}</span>
+                      {item.status === 'running' && <LoadingSpinner size="sm" />}
+                      {item.status === 'error' && <span className="text-xs text-red-300">오류</span>}
+                    </div>
+                    <p className="mt-1 truncate text-sm text-slate-300">{item.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{item.exchange}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-mono text-sm text-slate-100">{formatPrice(item.currentPrice, item.currency)}</p>
+                    <p className="mt-1 text-xs text-slate-500">기준: {formatDateTime(item.priceAsOf)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">시가총액</p>
+                    <p className="mt-1 font-mono text-slate-200">{formatMarketCap(item.marketCap, item.currency)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">피벗 근접도</p>
+                    <p className={`mt-1 font-semibold ${distanceClass(item.distanceToPivotPct)}`}>
+                      {distanceText(item.distanceToPivotPct)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">SEPA</p>
+                    <span className={`mt-1 inline-flex rounded-lg border px-2 py-1 text-xs font-semibold ${sepaBadge(item.sepaStatus)}`}>
+                      {sepaLabel(item.sepaStatus)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">VCP</p>
+                    <span className={`mt-1 inline-flex rounded-lg border px-2 py-1 text-xs font-semibold ${vcpBadge(item.vcpGrade)}`}>
+                      {vcpLabel(item.vcpGrade)}
+                      {item.vcpScore !== null ? ` ${item.vcpScore}점` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">거래량</p>
+                    <p className="mt-1 text-slate-300">{volumeLabel(item.breakoutVolumeStatus)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">진입가</p>
+                    <p className="mt-1 font-mono text-slate-300">
+                      {item.recommendedEntry !== null ? formatPrice(item.recommendedEntry, item.currency) : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                {item.errorMessage && <p className="mt-3 text-xs text-red-300">{item.errorMessage}</p>}
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Link
+                    href={`/plan?ticker=${encodeURIComponent(item.ticker)}&exchange=${encodeURIComponent(item.exchange)}`}
+                    className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/30"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    계획
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => addToWatchlist(item)}
+                    disabled={savingWatchlist.has(item.ticker)}
+                    className="inline-flex items-center justify-center gap-1 rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                    {savingWatchlist.has(item.ticker) ? '저장 중' : '관심'}
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+
+        <div className="mt-5 hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[1120px] text-left text-sm text-slate-300">
             <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
               <tr>
