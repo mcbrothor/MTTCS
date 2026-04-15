@@ -69,7 +69,9 @@ const flow = [
 
 const scannerRows = [
   { item: 'NASDAQ 100', source: 'Nasdaq 공식 목록 API', use: '미국 대형 성장주 후보를 시가총액순으로 보고 SEPA/VCP를 빠르게 점검합니다.' },
-  { item: 'KOSPI 100', source: 'KRX 구성종목 우선, KIS 시가총액 fallback', use: '공식 구성종목 확인을 우선하되, 가격과 일봉 분석은 KIS 데이터를 사용합니다.' },
+  { item: 'S&P 500', source: 'StockAnalysis S&P 500 표', use: '미국 대형주 전체를 시가총액순으로 넓게 훑고 후보를 압축합니다.' },
+  { item: 'KOSPI 100', source: 'KRX 구성종목 우선, KIS/Naver 시가총액 fallback', use: '공식 구성종목 확인을 우선하되, 가격과 일봉 분석은 KIS 데이터를 사용합니다.' },
+  { item: 'KOSDAQ 100', source: 'Naver Finance KOSDAQ 시가총액 fallback', use: '국내 성장주 후보군을 같은 SEPA/VCP 기준으로 빠르게 점검합니다.' },
   { item: '현재가 기준', source: '종목군 원천 또는 최근 일봉', use: '테이블의 현재가에는 기준 시각을 함께 표시해 지연 데이터인지 확인합니다.' },
   { item: '스캔 기록', source: '브라우저 저장', use: '새 스캔 버튼을 누르기 전까지 마지막 스캔 날짜와 결과를 유지합니다.' },
 ];
@@ -109,7 +111,7 @@ export default function GuidePage() {
           <h2 className="text-xl font-bold text-white">종목군 스캐너</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          대시보드 다음 단계에서 NASDAQ 100과 KOSPI 100을 별도 서브 메뉴로 확인합니다. 전체 종목을 먼저 훑고, 조건이 좋은 종목만 신규 계획으로 넘깁니다.
+          대시보드 다음 단계에서 NASDAQ 100, S&P 500, KOSPI 100, KOSDAQ 100을 별도 서브 메뉴로 확인합니다. 전체 종목을 먼저 훑고, 조건이 좋은 종목만 신규 계획으로 넘깁니다.
         </p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm text-slate-300">

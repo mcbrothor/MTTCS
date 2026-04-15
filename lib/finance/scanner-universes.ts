@@ -14,6 +14,8 @@ type KospiRankingItem = {
   source: string;
 };
 
+type KoreaMarket = 'KOSPI' | 'KOSDAQ';
+
 export { normalizeNasdaqRows } from './scanner-normalizers';
 
 function krxValue(row: KrxRow, keys: string[]) {
@@ -47,6 +49,22 @@ function parseNumberText(value: string): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function parseAbbreviatedUsd(value: string): number | null {
+  const cleaned = stripHtml(value).replaceAll(',', '').replaceAll('$', '').trim();
+  const match = cleaned.match(/^(-?\d+(?:\.\d+)?)([TBMK])?$/i);
+  if (!match) return null;
+
+  const numeric = Number(match[1]);
+  if (!Number.isFinite(numeric)) return null;
+
+  const suffix = match[2]?.toUpperCase();
+  if (suffix === 'T') return numeric * 1_000_000_000_000;
+  if (suffix === 'B') return numeric * 1_000_000_000;
+  if (suffix === 'M') return numeric * 1_000_000;
+  if (suffix === 'K') return numeric * 1_000;
+  return numeric;
+}
+
 function decodeKoreanHtml(buffer: ArrayBuffer) {
   try {
     return new TextDecoder('euc-kr').decode(buffer);
@@ -55,11 +73,12 @@ function decodeKoreanHtml(buffer: ArrayBuffer) {
   }
 }
 
-async function fetchNaverKospiMarketCapRanking(limit = 100): Promise<KospiRankingItem[]> {
+async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100): Promise<KospiRankingItem[]> {
   const items: KospiRankingItem[] = [];
+  const sosok = market === 'KOSPI' ? '0' : '1';
 
   for (let page = 1; page <= 4 && items.length < limit; page += 1) {
-    const response = await fetch(`https://finance.naver.com/sise/sise_market_sum.naver?sosok=0&page=${page}`, {
+    const response = await fetch(`https://finance.naver.com/sise/sise_market_sum.naver?sosok=${sosok}&page=${page}`, {
       headers: {
         accept: 'text/html',
         'user-agent': 'Mozilla/5.0',
@@ -86,7 +105,7 @@ async function fetchNaverKospiMarketCapRanking(limit = 100): Promise<KospiRankin
         name: stripHtml(link[2]),
         marketCap: marketCapHundredMillion === null ? null : marketCapHundredMillion * 100_000_000,
         currentPrice,
-        source: 'Naver Finance market-cap fallback',
+        source: `Naver Finance ${market} market-cap fallback`,
       });
 
       if (items.length >= limit) break;
@@ -94,6 +113,66 @@ async function fetchNaverKospiMarketCapRanking(limit = 100): Promise<KospiRankin
   }
 
   return items;
+}
+
+async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
+  const response = await fetch('https://stockanalysis.com/list/sp-500-stocks/', {
+    headers: {
+      accept: 'text/html',
+      'user-agent': 'Mozilla/5.0',
+    },
+    next: { revalidate: 60 * 30 },
+  });
+
+  if (!response.ok) {
+    throw new Error(`StockAnalysis S&P 500 응답 오류 (${response.status})`);
+  }
+
+  const html = await response.text();
+  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+  const items = rows
+    .map((match) => {
+      const row = match[1] || '';
+      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!symbolMatch) return null;
+
+      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
+      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase();
+      const ticker = rawTicker.replace('.', '-');
+      const name = cells[2] || ticker;
+      const marketCap = parseAbbreviatedUsd(cells[3] || '');
+      const currentPrice = parseNumberText(cells[4] || '');
+
+      return {
+        rank: 0,
+        ticker,
+        exchange: 'NAS',
+        name,
+        marketCap,
+        currency: 'USD' as const,
+        currentPrice,
+        priceAsOf: new Date().toISOString(),
+        priceSource: 'StockAnalysis S&P 500 table',
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, 500)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+
+  if (items.length === 0) {
+    throw new Error('S&P 500 구성종목을 파싱하지 못했습니다.');
+  }
+
+  return {
+    universe: 'SP500',
+    label: 'S&P 500',
+    asOf: new Date().toISOString(),
+    source: 'StockAnalysis S&P 500 table',
+    delayNote: 'S&P 500 현재가와 시가총액은 StockAnalysis 표 기준이며 지연될 수 있습니다.',
+    items,
+    warnings: items.length < 500 ? [`S&P 500 응답에서 ${items.length}개 종목만 확인되었습니다.`] : [],
+  };
 }
 
 async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
@@ -197,7 +276,7 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
   let ranking: KospiRankingItem[] = kisRanking.map((item) => ({ ...item, source: 'KIS market-cap ranking' }));
 
   if (ranking.length < 100) {
-    const naverRanking = await fetchNaverKospiMarketCapRanking(100);
+    const naverRanking = await fetchNaverKoreaMarketCapRanking('KOSPI', 100);
     const byTicker = new Map(ranking.map((item) => [item.ticker, item]));
     for (const item of naverRanking) {
       if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, item);
@@ -254,8 +333,48 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
   };
 }
 
+async function fetchKosdaq100(): Promise<ScannerUniverseResponse> {
+  const warnings: string[] = ['KRX KOSDAQ 100 공식 구성종목 조회는 세션 제한이 있어 Naver Finance KOSDAQ 시가총액 상위 100개를 fallback으로 표시합니다.'];
+  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 100);
+
+  const items = ranking
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, 100)
+    .map((item, index) => ({
+      rank: index + 1,
+      ticker: item.ticker,
+      exchange: 'KOSDAQ',
+      name: item.name,
+      marketCap: item.marketCap,
+      currency: 'KRW' as const,
+      currentPrice: item.currentPrice,
+      priceAsOf: new Date().toISOString(),
+      priceSource: item.source,
+    }));
+
+  if (items.length === 0) {
+    throw new Error('KOSDAQ 100 종목군을 불러오지 못했습니다.');
+  }
+
+  if (items.length < 100) {
+    warnings.push(`Naver Finance KOSDAQ 시가총액 페이지에서 ${items.length}개 종목만 확인되었습니다.`);
+  }
+
+  return {
+    universe: 'KOSDAQ100',
+    label: 'KOSDAQ 시가총액 상위 100',
+    asOf: new Date().toISOString(),
+    source: 'Naver Finance KOSDAQ market-cap fallback',
+    delayNote: 'KOSDAQ 현재가와 시가총액은 Naver Finance 시가총액 페이지 기준이며 지연될 수 있습니다.',
+    items,
+    warnings,
+  };
+}
+
 export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
   if (universe === 'NASDAQ100') return fetchNasdaq100();
+  if (universe === 'SP500') return fetchStockAnalysisSp500();
   if (universe === 'KOSPI100') return fetchKospi100();
+  if (universe === 'KOSDAQ100') return fetchKosdaq100();
   throw new Error('지원하지 않는 종목군입니다.');
 }

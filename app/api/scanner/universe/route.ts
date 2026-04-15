@@ -10,7 +10,7 @@ function apiError(message: string, code: string, status = 500) {
 }
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
-  if (value === 'NASDAQ100' || value === 'KOSPI100') return value;
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
   return null;
 }
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const universe = parseUniverse(searchParams.get('universe'));
 
   if (!universe) {
-    return apiError('지원하는 종목군은 NASDAQ100 또는 KOSPI100입니다.', 'INVALID_UNIVERSE', 400);
+    return apiError('지원하는 종목군은 NASDAQ100, SP500, KOSPI100, KOSDAQ100입니다.', 'INVALID_UNIVERSE', 400);
   }
 
   try {

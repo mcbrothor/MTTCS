@@ -222,7 +222,7 @@ export interface MarketAnalysisResponse {
   warnings: string[];
 }
 
-export type ScannerUniverse = 'NASDAQ100' | 'KOSPI100';
+export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI100' | 'KOSDAQ100';
 export type ScannerStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface ScannerConstituent {

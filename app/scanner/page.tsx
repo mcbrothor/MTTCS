@@ -19,6 +19,7 @@ const TOTAL_EQUITY_FOR_SCAN = '50000';
 const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
 const KOSPI_SCAN_CONCURRENCY = 2;
+const KOSDAQ_SCAN_CONCURRENCY = 2;
 const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v2:';
 const LAST_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:last-universe:v1';
 
@@ -33,9 +34,17 @@ const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }>
     label: 'NASDAQ 100',
     description: 'Nasdaq 공식 목록을 시가총액 기준으로 정렬하고 SEPA/VCP 후보를 빠르게 확인합니다.',
   },
+  SP500: {
+    label: 'S&P 500',
+    description: 'S&P 500 대형주를 시가총액 기준으로 정렬하고 SEPA/VCP 후보를 확인합니다.',
+  },
   KOSPI100: {
     label: 'KOSPI 100',
     description: 'KRX 공식 구성종목을 우선 확인하고, 세션 제한 시 KIS 시가총액 순위로 대체합니다.',
+  },
+  KOSDAQ100: {
+    label: 'KOSDAQ 100',
+    description: 'KOSDAQ 100 후보군을 시가총액 기준으로 정렬하고 국내 성장주 패턴을 확인합니다.',
   },
 };
 
@@ -64,7 +73,7 @@ function scannerStorageKey(universe: ScannerUniverse) {
 }
 
 function parseScannerUniverse(value: string | null): ScannerUniverse | null {
-  if (value === 'NASDAQ100' || value === 'KOSPI100') return value;
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
   return null;
 }
 
@@ -425,7 +434,12 @@ export default function ScannerPage() {
       setResults(Array.from(resultByTicker.values()));
 
       let nextIndex = 0;
-      const concurrency = data.universe === 'KOSPI100' ? KOSPI_SCAN_CONCURRENCY : SCAN_CONCURRENCY;
+      const concurrency =
+        data.universe === 'KOSPI100'
+          ? KOSPI_SCAN_CONCURRENCY
+          : data.universe === 'KOSDAQ100'
+            ? KOSDAQ_SCAN_CONCURRENCY
+            : SCAN_CONCURRENCY;
       const workers = Array.from({ length: Math.min(concurrency, data.items.length) }, async () => {
         while (nextIndex < data.items.length && runIdRef.current === runId) {
           const item = data.items[nextIndex];
