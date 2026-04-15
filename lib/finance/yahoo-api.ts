@@ -24,7 +24,7 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
       events: 'history',
     },
     headers: {
-      'user-agent': 'MTTCS/3.0',
+      'user-agent': 'MTN/4.0',
     },
   });
 
@@ -80,7 +80,7 @@ export async function getYahooFundamentals(ticker: string): Promise<FundamentalS
         modules: 'financialData,defaultKeyStatistics,earningsTrend',
       },
       headers: {
-        'user-agent': 'MTTCS/3.0',
+        'user-agent': 'MTN/4.0',
       },
     });
 
@@ -181,7 +181,7 @@ export async function getYahooSecurityProfile(ticker: string): Promise<YahooSecu
         modules: 'price',
       },
       headers: {
-        'user-agent': 'MTTCS/3.0',
+        'user-agent': 'MTN/4.0',
       },
     });
 
@@ -206,7 +206,7 @@ export async function getYahooSecurityProfile(ticker: string): Promise<YahooSecu
         interval: '1d',
       },
       headers: {
-        'user-agent': 'MTTCS/3.0',
+        'user-agent': 'MTN/4.0',
       },
     });
 

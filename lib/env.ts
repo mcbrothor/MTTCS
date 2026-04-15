@@ -8,7 +8,7 @@ function required(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(
-      `[MTTCS] 필수 환경변수 "${name}"이(가) 설정되지 않았습니다. .env.local 파일을 확인하세요.`
+      `[MTN] 필수 환경변수 "${name}"이(가) 설정되지 않았습니다. .env.local 파일을 확인하세요.`
     );
   }
   return value;
@@ -66,5 +66,5 @@ export function telegramWebhookSecret(): string {
 // --- SEC ---
 
 export function secUserAgent(): string {
-  return optional('SEC_USER_AGENT', 'MTTCS/4.0 contact@mttcs.local');
+  return optional('SEC_USER_AGENT', 'MTN/4.0 contact@mtn.local');
 }

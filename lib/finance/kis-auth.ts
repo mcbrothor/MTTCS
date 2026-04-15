@@ -16,16 +16,16 @@ interface KisTokenResponse {
 const TOKEN_EXPIRY_SAFETY_MS = 60 * 1000;
 
 declare global {
-  var __mttcsKisTokenCache: KisTokenCache | undefined;
+  var __mtnKisTokenCache: KisTokenCache | undefined;
 }
 
-const tokenCache = globalThis.__mttcsKisTokenCache ?? {
+const tokenCache = globalThis.__mtnKisTokenCache ?? {
   cachedToken: null,
   tokenExpiresAt: 0,
   pendingTokenRequest: null,
 };
 
-globalThis.__mttcsKisTokenCache = tokenCache;
+globalThis.__mtnKisTokenCache = tokenCache;
 
 function parseTokenExpiresAt(payload: KisTokenResponse, fallbackNow: number) {
   if (payload.access_token_token_expired) {

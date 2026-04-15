@@ -277,3 +277,26 @@ export interface WatchlistItem {
   priority: WatchlistPriority;
 }
 
+
+// --- Master Filter (Top-down Risk Management) ---
+
+export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
+
+export interface MasterFilterMetrics {
+  trendState: 'UP' | 'NEUTRAL' | 'DOWN';
+  trendDetails: string;
+  breadthScore: number;
+  breadthDetails: string;
+  liquidityState: 'GOOD' | 'WARNING' | 'BAD';
+  distributionDays: number;
+  vixValue: number | null;
+  vixState: 'CALM' | 'ELEVATED' | 'FEAR';
+  leadershipState: 'FOCUSED' | 'SCATTERED' | 'WEAK';
+  updatedAt: string;
+}
+
+export interface MasterFilterResponse {
+  state: MarketState;
+  metrics: MasterFilterMetrics;
+  insightLog: string;
+}

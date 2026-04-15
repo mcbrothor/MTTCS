@@ -7,6 +7,9 @@ import EquityCurve from '@/components/dashboard/EquityCurve';
 import DisciplineChart from '@/components/dashboard/DisciplineChart';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import StatusCenter from '@/components/master-filter/StatusCenter';
+import MetricsGrid from '@/components/master-filter/MetricsGrid';
+import InsightLog from '@/components/master-filter/InsightLog';
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<'US' | 'KR'>('US');
@@ -52,7 +55,7 @@ export default function DashboardPage() {
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Dashboard</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">대시보드</h1>
-          <p className="mt-3 text-sm text-slate-400">MTTCS v3.0 매매 성과와 규율 준수율을 추적합니다.</p>
+          <p className="mt-3 text-sm text-slate-400">MTN v4.0 매매 성과와 규율 준수율을 추적합니다.</p>
         </div>
         
         <div className="flex rounded-lg bg-slate-800 p-1">
@@ -72,6 +75,16 @@ export default function DashboardPage() {
           >
             🇰🇷 한국 주식
           </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 mt-4">
+        <div className="md:col-span-1 flex flex-col gap-4">
+          <StatusCenter />
+          <InsightLog />
+        </div>
+        <div className="md:col-span-2">
+          <MetricsGrid />
         </div>
       </div>
 

@@ -29,7 +29,7 @@ const TICKER_MAP_TTL_MS = 24 * 60 * 60 * 1000;
 
 function secHeaders() {
   return {
-    'user-agent': process.env.SEC_USER_AGENT || 'MTTCS/3.0 contact@mttcs.local',
+    'user-agent': process.env.SEC_USER_AGENT || 'MTN/4.0 contact@mtn.local',
     accept: 'application/json',
   };
 }

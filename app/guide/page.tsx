@@ -83,7 +83,7 @@ export default function GuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Minervini 전략 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          MTTCS는 종목군 스캐너로 후보를 압축한 뒤 Mark Minervini의 SEPA와 VCP 관점을 기준으로 피벗 진입가, 패턴 무효화선, 수량, 체결 복기를 연결합니다.
+          Mantori&apos;s Trading Navigator(MTN)은 종목군 스캐너로 후보를 압축한 뒤 Mark Minervini의 SEPA와 VCP 관점을 기준으로 피벗 진입가, 패턴 무효화선, 수량, 체결 복기를 연결합니다.
         </p>
       </div>
 

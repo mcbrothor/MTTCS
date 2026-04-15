@@ -14,9 +14,11 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MTTCS - Mantori Trend Trading Centaur System',
+  title: 'MTN - Mantori\'s Trading Navigator',
   description: 'SEPA, VCP pivot entries, pattern invalidation risk, and disciplined trade tracking workflow.',
 };
+
+import { MarketProvider } from '@/contexts/MarketContext';
 
 export default function RootLayout({
   children,
@@ -26,8 +28,10 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased dark`}>
       <body className="flex min-h-full flex-col font-sans">
-        <Navbar />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <MarketProvider>
+          <Navbar />
+          <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        </MarketProvider>
       </body>
     </html>
   );

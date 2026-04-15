@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Play, ScanSearch, Square, Star } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import MarketBanner from '@/components/ui/MarketBanner';
+import RiskModal from '@/components/ui/RiskModal';
+import { useMarket } from '@/contexts/MarketContext';
 import type {
   AssessmentStatus,
   MarketAnalysisResponse,
@@ -20,9 +23,9 @@ const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
 const KOSPI_SCAN_CONCURRENCY = 2;
 const KOSDAQ_SCAN_CONCURRENCY = 2;
-const SCANNER_STORAGE_PREFIX = 'mttcs:scanner-snapshot:v2:';
-const LAST_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:last-universe:v1';
-const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mttcs:scanner:latest-scan-universe:v1';
+const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v2:';
+const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
+const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -338,6 +341,8 @@ function distanceClass(value: number | null) {
 }
 
 export default function ScannerPage() {
+  const { data: marketData, bypassRisk } = useMarket();
+  const isRed = marketData?.state === 'RED' && !bypassRisk;
   const [selectedUniverse, setSelectedUniverse] = useState<ScannerUniverse>('NASDAQ100');
   const [universeMeta, setUniverseMeta] = useState<ScannerUniverseResponse | null>(null);
   const [results, setResults] = useState<ScannerResult[]>([]);
@@ -602,7 +607,10 @@ export default function ScannerPage() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-12">
+    <>
+      <MarketBanner />
+      <RiskModal />
+      <div className={`mx-auto max-w-7xl space-y-6 pb-12 transition-all duration-500 ${isRed ? 'blur-md pointer-events-none select-none overflow-hidden h-[80vh]' : ''}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Scanner</p>
@@ -956,9 +964,9 @@ export default function ScannerPage() {
         </div>
       </section>
     </div>
+    </>
   );
 }
-
 function Metric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'warning' }) {
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">

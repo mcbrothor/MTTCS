@@ -1,0 +1,16 @@
+# 의존성 및 패키지
+node_modules/
+.venv/
+
+# 빌드 및 컴파일 결과물
+dist/
+build/
+.next/
+
+# 대용량 미디어 및 데이터/로그
+*.log
+*.csv
+*.sql
+*.mp4
+
+supabase/

@@ -7,7 +7,12 @@ export default function Navbar() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-mono text-lg font-bold text-emerald-500 transition-colors hover:text-emerald-400">
           <Activity className="h-6 w-6" />
-          <span>MTTCS</span>
+          <span>
+            MTN
+            <span className="hidden ml-2 text-sm font-normal text-slate-400 lg:inline">
+              Mantori&apos;s Trading Navigator
+            </span>
+          </span>
         </Link>
 
         <div className="flex min-w-0 items-center justify-end gap-3 overflow-x-auto sm:gap-6">

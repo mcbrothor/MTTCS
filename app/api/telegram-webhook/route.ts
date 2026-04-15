@@ -33,7 +33,7 @@ if (bot) {
   bot.command('help', (ctx) => {
     ctx.reply(
       [
-        '*MTTCS v3.0 명령어*',
+        '*MTN v4.0 명령어*',
         '',
         '/status - 진행 중인 매매 계획 확인',
         '/close 티커 / 손익 / 규율점수 / 메모 - 매매 완료 기록',
