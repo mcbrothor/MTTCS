@@ -1,4 +1,5 @@
 'use client';
+'use client';
 
 import { useState } from 'react';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
@@ -7,9 +8,6 @@ import EquityCurve from '@/components/dashboard/EquityCurve';
 import DisciplineChart from '@/components/dashboard/DisciplineChart';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import StatusCenter from '@/components/master-filter/StatusCenter';
-import MetricsGrid from '@/components/master-filter/MetricsGrid';
-import InsightLog from '@/components/master-filter/InsightLog';
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<'US' | 'KR'>('US');
@@ -78,15 +76,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 mt-4">
-        <div className="md:col-span-1 flex flex-col gap-4">
-          <StatusCenter />
-          <InsightLog />
-        </div>
-        <div className="md:col-span-2">
-          <MetricsGrid />
-        </div>
-      </div>
 
       <MetricCards
         winRate={winRate}

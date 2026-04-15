@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, BarChart3, BookOpen, History, LayoutDashboard, PlusCircle, ScanSearch, Star } from 'lucide-react';
+import { Activity, BarChart3, BookOpen, Compass, History, LayoutDashboard, PlusCircle, ScanSearch, Star } from 'lucide-react';
 
 export default function Navbar() {
   return (
@@ -20,8 +20,12 @@ export default function Navbar() {
             <LayoutDashboard className="h-4 w-4" />
             <span className="hidden sm:inline">대시보드</span>
           </Link>
+          <Link href="/master-filter" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+            <Compass className="h-4 w-4 text-emerald-400" />
+            <span className="hidden sm:inline">마스터 필터</span>
+          </Link>
           <Link href="/scanner" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <ScanSearch className="h-4 w-4 text-emerald-400" />
+            <ScanSearch className="h-4 w-4 text-indigo-400" />
             <span className="hidden sm:inline">스캐너</span>
           </Link>
           <Link href="/plan" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
