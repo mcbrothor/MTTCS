@@ -141,7 +141,9 @@ export default function MetricsGrid() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="animate-pulse h-64 bg-slate-800/30 border-slate-700/50" />
+          <Card key={i} className="animate-pulse h-64 bg-slate-800/30 border-slate-700/50">
+            <div />
+          </Card>
         ))}
       </div>
     );
