@@ -292,6 +292,14 @@ export interface MasterFilterMetrics {
   vixValue: number | null;
   vixState: 'CALM' | 'ELEVATED' | 'FEAR';
   leadershipState: 'FOCUSED' | 'SCATTERED' | 'WEAK';
+  // 추가된 원천 데이터 및 차트 히스토리
+  spyPrice?: number;
+  ma50?: number;
+  ma150?: number;
+  ma200?: number;
+  spyHistory?: { date: string; close: number }[];
+  vixHistory?: { date: string; close: number }[];
+  macroData?: Record<string, unknown>;
   updatedAt: string;
 }
 
@@ -299,4 +307,6 @@ export interface MasterFilterResponse {
   state: MarketState;
   metrics: MasterFilterMetrics;
   insightLog: string;
+  isAiGenerated?: boolean;
+  aiModelUsed?: string;
 }
