@@ -153,7 +153,7 @@ export async function GET() {
         trend: trendMetric,
         breadth: breadthMetric,
         liquidity: liquidityMetric,
-        vix: volatilityMetric,
+        volatility: volatilityMetric,
         leadership: leadershipMetric,
         totalScore
       },
