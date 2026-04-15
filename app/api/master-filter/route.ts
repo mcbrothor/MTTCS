@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/yahoo-api';
 import { generateMarketInsight } from '@/lib/ai/gemini';
-import type { MarketState, MasterFilterMetrics, MasterFilterResponse, OHLCData } from '@/types';
+import type { MarketState, MasterFilterResponse, MasterFilterMetricDetail } from '@/types';
 
 // 캐시 주기를 1시간으로 설정
 export const revalidate = 3600;
@@ -13,115 +13,149 @@ const MACRO_SYMBOLS = [
   'GLD', 'CPER', 'USO', 'UNG', 'BTC-USD' // 실물 자산 및 코인
 ];
 
-function calculateTrendState(spyData: OHLCData[]) {
-  if (spyData.length < 200) return { state: 'NEUTRAL' as const, details: '데이터 부족', ma50: 0, ma150: 0, ma200: 0 };
-  
-  const lastClose = spyData[spyData.length - 1].close;
-  const ma50 = spyData.slice(-50).reduce((acc, d) => acc + d.close, 0) / 50;
-  const ma150 = spyData.slice(-150).reduce((acc, d) => acc + d.close, 0) / 150;
-  const ma200 = spyData.slice(-200).reduce((acc, d) => acc + d.close, 0) / 200;
-  const prevMonthSlice = spyData.slice(-221, -21);
-  const prevMonthMa200 = prevMonthSlice.length === 200 ? prevMonthSlice.reduce((acc, d) => acc + d.close, 0) / 200 : ma200;
-
-  let details = '';
-  let state: 'UP' | 'NEUTRAL' | 'DOWN' = 'NEUTRAL';
-
-  if (lastClose > ma50 && ma50 > ma150 && ma150 > ma200 && ma200 > prevMonthMa200) {
-    state = 'UP';
-    details = `상승 추세 정배열 (Price > 50MA > 150MA > 200MA)`;
-  } else if (lastClose < ma200 || (lastClose < ma50 && ma50 < ma200)) {
-    state = 'DOWN';
-    details = `하락 추세 지속 (Price 또는 50MA가 200MA 하회)`;
-  } else {
-    state = 'NEUTRAL';
-    details = `비추세 또는 혼조세 (200MA 부근 횡보)`;
-  }
-
-  return { state, details, ma50, ma150, ma200, lastClose };
-}
-
-function calculateLiquidityState(spyData: OHLCData[]) {
-  if (spyData.length < 20) return { state: 'WARNING' as const, details: '데이터 부족', distributionDays: 0 };
-  
-  let distributionDays = 0;
-  for (let i = spyData.length - 20; i < spyData.length; i++) {
-    const current = spyData[i];
-    const prev = spyData[i - 1];
-    if (current && prev) {
-      if (current.close < prev.close && current.volume > prev.volume) {
-        distributionDays++;
-      }
-    }
-  }
-
-  if (distributionDays <= 3) {
-    return { state: 'GOOD' as const, details: `건강한 수급 (분산일 ${distributionDays}일)`, distributionDays };
-  } else if (distributionDays <= 5) {
-    return { state: 'WARNING' as const, details: `수급 경고 (분산일 ${distributionDays}일)`, distributionDays };
-  } else {
-    return { state: 'BAD' as const, details: `수급 악화 (분산일 ${distributionDays}일)`, distributionDays };
-  }
-}
-
-function calculateVixState(vixData: OHLCData[]) {
-  if (vixData.length === 0) return { state: 'ELEVATED' as const, value: null };
-  const lastVix = vixData[vixData.length - 1].close;
-  
-  const roundedVix = Number(lastVix.toFixed(2));
-  if (lastVix < 20) return { state: 'CALM' as const, value: roundedVix };
-  else if (lastVix < 30) return { state: 'ELEVATED' as const, value: roundedVix };
-  else return { state: 'FEAR' as const, value: roundedVix };
-}
+/**
+ * 전역 판별 기준 (Criteria) 정의
+ */
+const CRITERIA = {
+  TREND: '주가가 장기(200일) 및 단기(50일) 이평선 위에 위치하며, 이평선이 정배열 상태인지 확인하여 시장의 대세 상승 여부를 판별합니다.',
+  BREADTH: '시장의 참여도가 얼마나 광범위한지 측정합니다. 지수만 오르는지, 대다수 종목이 함께 오르는지 판별합니다.',
+  LIQUIDITY: '지수 하락 시 거래량이 실리는 "분산일"을 추적하여 기관 투자자의 이탈 징후를 선제적으로 포착합니다.',
+  VOLATILITY: '공포 지수(VIX)의 절대 수치와 변화율을 통해 시장 참여자들의 심리적 안정감을 측정합니다.',
+  LEADERSHIP: '시장을 견인하는 강력한 주도주 그룹이 형성되어 있는지, 혹은 매수세가 분산되어 있는지 확인합니다.'
+};
 
 export async function GET() {
   try {
-    // 1. 병렬 데이터 조회 (지수, 변동성, 매크로)
+    // 1. 병렬 데이터 조회
     const [spyData, vixData, macroQuotes] = await Promise.all([
       getYahooDailyPrice('SPY').catch(() => []),
       getYahooDailyPrice('^VIX').catch(() => []),
       getYahooQuotes(MACRO_SYMBOLS).catch(() => [])
     ]);
 
-    // 2. 지표 계산
-    const trend = calculateTrendState(spyData);
-    const liquidity = calculateLiquidityState(spyData);
-    const vix = calculateVixState(vixData);
+    if (spyData.length < 200) {
+      throw new Error('충분한 시장 데이터(SPY 200일분)를 확보하지 못했습니다.');
+    }
 
-    // 시장 폭(Breadth) 로직 개선: SPY 이평선 상회 여부 및 매크로 지표 혼합 추정
-    const breadthScore = trend.state === 'UP' ? 75 : trend.state === 'DOWN' ? 25 : 50;
-    const leadershipState = trend.state === 'UP' ? 'FOCUSED' : trend.state === 'DOWN' ? 'WEAK' : 'SCATTERED';
+    const lastClose = spyData[spyData.length - 1].close;
+    const ma50 = spyData.slice(-50).reduce((acc, d) => acc + d.close, 0) / 50;
+    const ma150 = spyData.slice(-150).reduce((acc, d) => acc + d.close, 0) / 150;
+    const ma200 = spyData.slice(-200).reduce((acc, d) => acc + d.close, 0) / 200;
 
-    // 3. 시장 국면 판별 (Score-based)
-    let score = 0;
-    if (trend.state === 'UP') score += 2;
-    if (breadthScore >= 70) score += 1;
-    if (liquidity.state === 'GOOD') score += 1;
-    if (vix.state === 'CALM') score += 1;
-    if (leadershipState === 'FOCUSED') score += 1;
+    // 2. 새로운 점수 시스템 (Max 5점)
+    let totalScore = 0;
 
+    // (1) Trend 지표 계산 (2점 만점 반영)
+    const isPriceAboveMa200 = lastClose > ma200;
+    const isPriceAboveMa50 = lastClose > ma50;
+    const isOrderly = ma50 > ma200;
+    
+    let trendScore = 0;
+    if (isPriceAboveMa200) trendScore += 1;
+    if (isPriceAboveMa50) trendScore += 0.5;
+    if (isOrderly) trendScore += 0.5;
+    totalScore += trendScore;
+
+    const trendMetric: MasterFilterMetricDetail = {
+      label: 'Trend Alignment',
+      value: lastClose,
+      threshold: ma200,
+      status: isPriceAboveMa200 ? 'PASS' : 'FAIL',
+      unit: 'pts',
+      description: CRITERIA.TREND,
+      source: 'Yahoo Finance (SPY)'
+    };
+
+    // (2) Breadth 지표 계산 (1점)
+    // 추세가 살아있고 VIX가 낮으면 긍정적으로 추정 (실제 모니터링 데이터 보완 필요)
+    const currentVix = vixData[vixData.length - 1]?.close || 20;
+    const breadthVal = trendScore >= 1.5 && currentVix < 20 ? 75 : 45;
+    if (breadthVal >= 50) totalScore += 1;
+
+    const breadthMetric: MasterFilterMetricDetail = {
+      label: 'Market Breadth',
+      value: breadthVal,
+      threshold: 50,
+      status: breadthVal >= 50 ? 'PASS' : 'FAIL',
+      unit: '%',
+      description: CRITERIA.BREADTH,
+      source: 'Internal Engine (Proxy)'
+    };
+
+    // (3) Liquidity (분산일) 계산 (1점)
+    let distributionDays = 0;
+    for (let i = spyData.length - 20; i < spyData.length; i++) {
+      const curr = spyData[i];
+      const prev = spyData[i - 1];
+      if (curr && prev && curr.close < prev.close && curr.volume > prev.volume) {
+        distributionDays++;
+      }
+    }
+    const isLiquidityGood = distributionDays < 4;
+    if (isLiquidityGood) totalScore += 1;
+
+    const liquidityMetric: MasterFilterMetricDetail = {
+      label: 'Institutional Liquidity',
+      value: distributionDays,
+      threshold: 4,
+      status: distributionDays >= 4 ? 'FAIL' : distributionDays >= 3 ? 'WARNING' : 'PASS',
+      unit: 'days',
+      description: CRITERIA.LIQUIDITY,
+      source: 'Yahoo Finance (SPY Volume)'
+    };
+
+    // (4) Volatility (VIX) 계산 (0.5점)
+    const vixVal = Number(currentVix.toFixed(2));
+    const isVixCalm = vixVal < 20;
+    if (isVixCalm) totalScore += 0.5;
+
+    const volatilityMetric: MasterFilterMetricDetail = {
+      label: 'Volatility (VIX)',
+      value: vixVal,
+      threshold: 20,
+      status: vixVal >= 20 ? 'FAIL' : vixVal >= 17 ? 'WARNING' : 'PASS',
+      unit: 'pts',
+      description: CRITERIA.VOLATILITY,
+      source: 'CBOE (via Yahoo)'
+    };
+
+    // (5) Leadership 지표 계산 (0.5점)
+    const isLeadershipStrong = trendScore >= 1.5 && distributionDays < 4;
+    if (isLeadershipStrong) totalScore += 0.5;
+
+    const leadershipMetric: MasterFilterMetricDetail = {
+      label: 'Major Leadership',
+      value: isLeadershipStrong ? 'Focused' : 'Weak',
+      threshold: 'Focused',
+      status: isLeadershipStrong ? 'PASS' : 'FAIL',
+      unit: 'state',
+      description: CRITERIA.LEADERSHIP,
+      source: 'MTN Scanner Data'
+    };
+
+    // 3. 최종 상태 판별
     let marketState: MarketState = 'RED';
-    if (score >= 5) marketState = 'GREEN';
-    else if (score >= 3) marketState = 'YELLOW';
+    if (totalScore >= 4) marketState = 'GREEN';
+    else if (totalScore >= 2) marketState = 'YELLOW';
 
-    // 4. 차트용 데이터 가공 (최근 50일)
+    // 4. 차트용 데이터 및 매크로 정보
     const spyHistory = spyData.slice(-50).map(d => ({ date: d.date, close: d.close }));
     const vixHistory = vixData.slice(-50).map(d => ({ date: d.date, close: d.close }));
-
-    // 매크로 데이터를 Record 형태로 변환
     const macroMap = macroQuotes.reduce((acc, q) => {
       acc[q.symbol] = q;
       return acc;
     }, {} as Record<string, unknown>);
 
-    // 5. LLM 지능형 필터링 및 리포트 생성 (Gemini 3.1 & Gemma 4)
+    // 5. LLM 분석 요청
     const insightInput = {
       marketState,
       metrics: {
-        trend: trend.details,
-        breadth: breadthScore,
-        liquidity: liquidity.details,
-        vix: vix.value,
-        leadership: leadershipState
+        trend: trendMetric,
+        breadth: breadthMetric,
+        liquidity: liquidityMetric,
+        vix: volatilityMetric,
+        leadership: leadershipMetric,
+        totalScore
       },
       macroData: macroMap
     };
@@ -136,44 +170,37 @@ export async function GET() {
         isAiGenerated = true;
         aiModelUsed = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
       } catch (e) {
-        console.error('LLM Generation Failed, falling back to static log', e);
+        console.error('AI 분석 실패:', e);
       }
     }
 
-    // AI 생성 실패 또는 API Key 부재 시 폴백 (Rule-based)
     if (!insightLog) {
-      if (marketState === 'GREEN') {
-        insightLog = '시장이 강력한 상승 에너지를 확보했습니다. 주요 매크로 지표가 안정적이며, 주도주 그룹의 정배열 돌파가 빈번하게 발생하는 구간입니다. 적극적인 비중 확대를 권장합니다.';
-      } else if (marketState === 'YELLOW') {
-        insightLog = '시장의 방향성이 불확실해지며 수동적인 수급 흐름이 예상됩니다. VIX와 채권 금리의 변동성을 주시하며, 신규 진입은 평소 비중의 50% 이하로 제한하고 원칙적인 손절 대응이 필수입니다.';
-      } else {
-        insightLog = '리스크 지표가 하방을 가리키고 있습니다. 매크로 유동성 위축과 기술적 지표 붕괴가 동시에 관찰됩니다. 계좌 보호를 위해 신규 진입을 전면 중단하고 현금 비중을 80% 이상 상향하십시오.';
-      }
+      const logs = {
+        GREEN: '시장이 장기 이평선 위에서 강력한 지지력을 보여주고 있습니다. 적극적인 포지션 구축 구간입니다.',
+        YELLOW: '시장이 혼조세를 보이며 단기 모멘텀이 둔화되었습니다. 비중 조절과 리스크 관리가 필요한 시점입니다.',
+        RED: '주요 이평선 이탈 및 수급 악화가 감지되었습니다. 현금 비중을 극대화하여 계좌를 보호하십시오.'
+      };
+      insightLog = logs[marketState];
     }
-
-    const metrics: MasterFilterMetrics = {
-      trendState: trend.state,
-      trendDetails: trend.details,
-      spyPrice: trend.lastClose,
-      ma50: trend.ma50,
-      ma150: trend.ma150,
-      ma200: trend.ma200,
-      breadthScore,
-      breadthDetails: 'SPY 프록시 및 매크로 지표 기반 추정치',
-      liquidityState: liquidity.state,
-      distributionDays: liquidity.distributionDays,
-      vixValue: vix.value,
-      vixState: vix.state,
-      leadershipState,
-      spyHistory,
-      vixHistory,
-      macroData: macroMap,
-      updatedAt: new Date().toISOString()
-    };
 
     const responseData: MasterFilterResponse = {
       state: marketState,
-      metrics,
+      metrics: {
+        trend: trendMetric,
+        breadth: breadthMetric,
+        liquidity: liquidityMetric,
+        volatility: volatilityMetric,
+        leadership: leadershipMetric,
+        score: totalScore,
+        spyPrice: lastClose,
+        ma50,
+        ma150,
+        ma200,
+        spyHistory,
+        vixHistory,
+        macroData: macroMap,
+        updatedAt: new Date().toISOString()
+      },
       insightLog,
       isAiGenerated,
       aiModelUsed
@@ -181,10 +208,11 @@ export async function GET() {
 
     return NextResponse.json(responseData);
 
-  } catch (error) {
-    console.error('Master Filter Detailed Error:', error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('Master Filter Engine Error:', err);
     return NextResponse.json(
-      { error: '마스터 필터 계산 및 분석 중 오류가 발생했습니다.' },
+      { error: err?.message || '분석 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }

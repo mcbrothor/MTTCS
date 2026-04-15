@@ -282,17 +282,26 @@ export interface WatchlistItem {
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
 
+export interface MasterFilterMetricDetail {
+  value: number | string | null;
+  threshold: number | string;
+  status: 'PASS' | 'FAIL' | 'WARNING';
+  label: string;
+  unit: string;
+  description: string;
+  source: string;
+}
+
 export interface MasterFilterMetrics {
-  trendState: 'UP' | 'NEUTRAL' | 'DOWN';
-  trendDetails: string;
-  breadthScore: number;
-  breadthDetails: string;
-  liquidityState: 'GOOD' | 'WARNING' | 'BAD';
-  distributionDays: number;
-  vixValue: number | null;
-  vixState: 'CALM' | 'ELEVATED' | 'FEAR';
-  leadershipState: 'FOCUSED' | 'SCATTERED' | 'WEAK';
-  // 추가된 원천 데이터 및 차트 히스토리
+  trend: MasterFilterMetricDetail;
+  breadth: MasterFilterMetricDetail;
+  liquidity: MasterFilterMetricDetail;
+  volatility: MasterFilterMetricDetail;
+  leadership: MasterFilterMetricDetail;
+  
+  score: number; // 0 - 5
+  
+  // 시각화를 위한 원천 데이터 히스토리
   spyPrice?: number;
   ma50?: number;
   ma150?: number;
@@ -307,6 +316,6 @@ export interface MasterFilterResponse {
   state: MarketState;
   metrics: MasterFilterMetrics;
   insightLog: string;
-  isAiGenerated?: boolean;
+  isAiGenerated: boolean;
   aiModelUsed?: string;
 }
