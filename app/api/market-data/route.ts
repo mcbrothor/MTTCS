@@ -66,6 +66,30 @@ function getYahooFormattedTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
+function getBenchmarkCandidates(exchange: string) {
+  if (exchange === 'KOSPI') return ['^KS200', '^KS11'];
+  if (exchange === 'KOSDAQ') return ['^KQ150', '^KQ11'];
+  return ['SPY', 'QQQ'];
+}
+
+async function fetchBenchmarkData(exchange: string, warnings: string[]) {
+  const candidates = getBenchmarkCandidates(exchange);
+  for (const ticker of candidates) {
+    try {
+      const data = await getYahooDailyPrice(ticker);
+      if (data.length > 0) {
+        if (ticker !== candidates[0]) {
+          warnings.push(`Primary RS benchmark ${candidates[0]} was unavailable; using ${ticker} fallback.`);
+        }
+        return { ticker, data };
+      }
+    } catch (error: unknown) {
+      warnings.push(`RS benchmark ${ticker} fetch failed: ${getErrorMessage(error)}.`);
+    }
+  }
+  return { ticker: candidates[0], data: [] };
+}
+
 async function fetchFundamentals(ticker: string, exchange: string, warnings: string[]) {
   const yahooTicker = getYahooFormattedTicker(ticker, exchange);
   const yahooFundamentals = await getYahooFundamentals(yahooTicker);
@@ -186,23 +210,30 @@ export async function GET(request: Request) {
     const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = cacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
-      return NextResponse.json(cached);
+      return NextResponse.json({
+        ...cached,
+        data: cached,
+        meta: {
+          asOf: new Date().toISOString(),
+          source: cached.providerUsed,
+          provider: cached.providerUsed,
+          delay: 'EOD',
+          fallbackUsed: cached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
+          warnings: cached.warnings,
+        },
+      });
     }
 
     const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
 
-    let benchmarkTicker = 'SPY';
-    if (exchange === 'KOSPI') benchmarkTicker = '^KS11';
-    if (exchange === 'KOSDAQ') benchmarkTicker = '^KQ11';
-
-    const [benchmarkData, fundamentals] = await Promise.all([
-      getYahooDailyPrice(benchmarkTicker).catch(() => []),
+    const [benchmark, fundamentals] = await Promise.all([
+      fetchBenchmarkData(exchange, warnings),
       includeFundamentals ? fetchFundamentals(ticker, exchange, warnings) : Promise.resolve(null),
     ]);
 
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
-    const sepaEvidence = analyzeSepa(data, { benchmarkData, fundamentals });
+    const sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
 
     // VCP 분석 — SEPA 필터 후 피벗/무효화 기준 정밀 분석
     const vcpAnalysis = analyzeVcp(data, entryPrice);
@@ -251,7 +282,18 @@ export async function GET(request: Request) {
 
     cacheSet(cacheId, response);
 
-    return NextResponse.json(response);
+    return NextResponse.json({
+      ...response,
+      data: response,
+      meta: {
+        asOf: new Date().toISOString(),
+        source: providerUsed,
+        provider: providerUsed,
+        delay: 'EOD',
+        fallbackUsed: warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
+        warnings,
+      },
+    });
   } catch (error: unknown) {
     console.error('Market Data API Error:', error);
     return apiError(

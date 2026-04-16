@@ -1,17 +1,17 @@
 'use client';
 
+import { AlertTriangle, CheckCircle2, Globe, ShieldAlert } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
-import { AlertTriangle, CheckCircle2, ShieldAlert, Globe } from 'lucide-react';
 
 export default function StatusCenter() {
-  const { data, isLoading } = useMarket();
+  const { data, isLoading, error } = useMarket();
 
   if (isLoading) {
     return (
-      <div className="flex h-40 items-center justify-center rounded-2xl bg-slate-900/50 border border-slate-800/50 backdrop-blur-md">
+      <div className="flex h-40 items-center justify-center rounded-lg border border-slate-800/50 bg-slate-900/50 backdrop-blur-md">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-3 border-indigo-500 border-t-transparent" />
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">Master Filter Synchronizing...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+          <p className="text-xs font-medium uppercase tracking-widest text-slate-500">Master Filter 동기화 중</p>
         </div>
       </div>
     );
@@ -19,66 +19,72 @@ export default function StatusCenter() {
 
   if (!data) return null;
 
-  const { state } = data;
-
   const stateConfig = {
     GREEN: {
       color: 'text-emerald-400',
       bg: 'bg-emerald-500/10',
       border: 'border-emerald-500/20',
       icon: <CheckCircle2 className="h-10 w-10 text-emerald-400" />,
-      title: 'GREEN 국면 (BULL MARKET)',
-      description: '시장 추세가 강력하게 살아있습니다. 공격적인 SEPA 전략 운영 및 신규 포지션 확대를 적극 고려하십시오.',
-      accent: 'bg-emerald-500/30'
+      title: 'GREEN 구간',
+      subtitle: '공격 가능한 상승장',
+      description:
+        '시장 추세와 내부 강도가 우호적입니다. SEPA/VCP 후보는 피벗 근처의 거래량과 리스크 금액을 확인한 뒤 계획대로 진입할 수 있습니다.',
+      accent: 'bg-emerald-500/30',
     },
     YELLOW: {
       color: 'text-amber-400',
       bg: 'bg-amber-500/10',
       border: 'border-amber-500/20',
       icon: <AlertTriangle className="h-10 w-10 text-amber-400" />,
-      title: 'YELLOW 국면 (NEUTRAL / CAUTION)',
-      description: '시장의 힘이 분산되고 혼조세를 보입니다. 투자 비중을 50% 이하로 줄이고, 보유 종목의 손절선을 타이트하게 상향 조정하십시오.',
-      accent: 'bg-amber-500/30'
+      title: 'YELLOW 구간',
+      subtitle: '중립 또는 경계',
+      description:
+        '상승 시도는 가능하지만 일부 지표가 불완전합니다. 신규 진입 규모를 줄이고 손절선과 실패 조건을 더 촘촘하게 관리하세요.',
+      accent: 'bg-amber-500/30',
     },
     RED: {
       color: 'text-rose-400',
       bg: 'bg-rose-500/10',
       border: 'border-rose-500/20',
       icon: <ShieldAlert className="h-10 w-10 text-rose-400" />,
-      title: 'RED 국면 (BEAR MARKET)',
-      description: '강력한 하락 위험이 감지되었습니다. 모든 신규 매수를 중단하고 계좌 보호를 위해 현금 비중을 80% 이상으로 상향하십시오.',
-      accent: 'bg-rose-500/30'
-    }
-  };
+      title: 'RED 구간',
+      subtitle: '방어 우선 하락장',
+      description:
+        '시장 압력이 높습니다. 신규 매수보다 현금 비중 확대, 보유 종목 손절선 준수, 포트폴리오 리스크 축소를 우선하세요.',
+      accent: 'bg-rose-500/30',
+    },
+  } as const;
 
-  const config = stateConfig[state];
+  const config = stateConfig[data.state];
+  const updatedAt = data.metrics.updatedAt ? new Date(data.metrics.updatedAt).toLocaleString('ko-KR') : '확인 불가';
 
   return (
-    <div className={`relative flex flex-col items-center justify-center gap-4 rounded-2xl border p-8 text-center shadow-2xl transition-all duration-700 backdrop-blur-md overflow-hidden ${config.bg} ${config.border}`}>
-      {/* Decorative Glow */}
-      <div className={`absolute -top-12 -left-12 w-32 h-32 blur-3xl rounded-full opacity-20 ${config.accent}`} />
-      
-      <div className="flex flex-col items-center gap-4 relative z-10">
-        <div className="p-3 rounded-full bg-slate-900/50 border border-slate-700/50 shadow-inner">
-          {config.icon}
-        </div>
+    <div
+      className={`relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-lg border p-8 text-center shadow-2xl backdrop-blur-md transition-all duration-700 ${config.bg} ${config.border}`}
+    >
+      <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${config.accent}`} />
+
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        <div className="rounded-full border border-slate-700/50 bg-slate-900/50 p-3 shadow-inner">{config.icon}</div>
         <div>
-          <h2 className={`text-3xl font-black tracking-tight mb-2 ${config.color}`}>
-            {config.title}
-          </h2>
-          <p className="max-w-xl text-slate-300 text-sm leading-relaxed font-medium">
-            {config.description}
-          </p>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{config.subtitle}</p>
+          <h2 className={`mb-2 mt-1 text-3xl font-black tracking-tight ${config.color}`}>{config.title}</h2>
+          <p className="max-w-xl text-sm font-medium leading-relaxed text-slate-300">{config.description}</p>
         </div>
       </div>
 
-      <div className="mt-2 flex items-center gap-4 relative z-10">
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/40 border border-slate-800/80">
+      <div className="relative z-10 mt-2 flex flex-wrap items-center justify-center gap-3">
+        <div className="flex items-center gap-1.5 rounded-full border border-slate-800/80 bg-slate-900/40 px-3 py-1">
           <Globe className="h-3 w-3 text-slate-500" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-            Data Source: Yahoo Finance (Delayed 15m)
+          <span className="text-[10px] font-bold uppercase tracking-tight text-slate-500">
+            Yahoo Finance 지연 데이터 · 기준 시각 {updatedAt}
           </span>
         </div>
+        {error && (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold text-amber-300">
+            일부 데이터는 fallback 상태입니다.
+          </span>
+        )}
       </div>
     </div>
   );

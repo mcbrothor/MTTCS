@@ -1,4 +1,4 @@
-export type TradeStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+﻿export type TradeStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 export type Direction = 'LONG' | 'SHORT';
 export type AssessmentStatus = 'pass' | 'fail' | 'info' | 'warning';
 export type TradeExecutionSide = 'ENTRY' | 'EXIT';
@@ -169,39 +169,39 @@ export interface RiskPlan {
   invalidationPrice?: number | null;
 }
 
-// --- VCP (Volatility Contraction Pattern) 관련 타입 ---
+// --- VCP (Volatility Contraction Pattern) ---
 
-/** 개별 수축 단계를 나타냅니다. */
+/** Individual contraction segment. */
 export interface VcpContraction {
   peakDate: string;
   troughDate: string;
   peakPrice: number;
   troughPrice: number;
-  depthPct: number;       // 수축 깊이 (%)
-  avgVolume: number;       // 구간 평균 거래량
+  depthPct: number;
+  avgVolume: number;
 }
 
-/** VCP 종합 분석 결과 */
+/** VCP analysis result. */
 export interface VcpAnalysis {
-  score: number;            // 종합 점수 0~100
+  score: number;
   grade: 'strong' | 'forming' | 'weak' | 'none';
   contractions: VcpContraction[];
   contractionScore: number;
   volumeDryUpScore: number;
   bbSqueezeScore: number;
   pocketPivotScore: number;
-  pivotPrice: number | null;         // VCP 피벗 가격
-  invalidationPrice: number | null;  // 최종 수축 저점 또는 최근 저점
-  breakoutPrice: number;             // 최근 고점 참고가
-  recommendedEntry: number;          // 최종 권장 진입가
+  pivotPrice: number | null;
+  invalidationPrice: number | null;
+  breakoutPrice: number;
+  recommendedEntry: number;
   entrySource: 'VCP_PIVOT' | 'RECENT_HIGH_FALLBACK';
   breakoutVolumeRatio: number | null;
   breakoutVolumeStatus: 'confirmed' | 'pending' | 'weak' | 'unknown';
   pocketPivots: { date: string; close: number; volume: number }[];
   bbWidth: number | null;
-  bbWidthPercentile: number | null;  // 6개월 내 백분위
-  baseLength: number;                // 베이스 기간 (일)
-  details: string[];                 // 판정 근거 텍스트
+  bbWidthPercentile: number | null;
+  baseLength: number;
+  details: string[];
 }
 
 export interface MarketAnalysisResponse {
@@ -254,6 +254,11 @@ export interface ScannerResult extends ScannerConstituent {
   sepaFailed: number | null;
   vcpScore: number | null;
   vcpGrade: VcpAnalysis['grade'] | null;
+  contractionScore?: number | null;
+  volumeDryUpScore?: number | null;
+  bbSqueezeScore?: number | null;
+  pocketPivotScore?: number | null;
+  vcpDetails?: string[] | null;
   pivotPrice: number | null;
   recommendedEntry: number | null;
   distanceToPivotPct: number | null;
@@ -262,9 +267,9 @@ export interface ScannerResult extends ScannerConstituent {
   errorMessage: string | null;
 }
 
-// --- 관심 종목 (Watchlist) ---
+// --- Watchlist ---
 
-export type WatchlistPriority = 0 | 1 | 2; // 0=보통, 1=높음, 2=긴급
+export type WatchlistPriority = 0 | 1 | 2; // 0=normal, 1=high, 2=urgent
 
 export interface WatchlistItem {
   id: string;
@@ -290,6 +295,8 @@ export interface MasterFilterMetricDetail {
   unit: string;
   description: string;
   source: string;
+  score?: number;
+  weight?: number;
 }
 
 export interface MasterFilterMetrics {
@@ -298,10 +305,17 @@ export interface MasterFilterMetrics {
   liquidity: MasterFilterMetricDetail;
   volatility: MasterFilterMetricDetail;
   leadership: MasterFilterMetricDetail;
+  ftd?: MasterFilterMetricDetail;
+  distribution?: MasterFilterMetricDetail;
+  newHighLow?: MasterFilterMetricDetail;
+  above200d?: MasterFilterMetricDetail;
+  sectorRotation?: MasterFilterMetricDetail;
   
   score: number; // 0 - 5
+  p3Score?: number; // 0 - 100
+  regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[];
   
-  // 시각화를 위한 원천 데이터 히스토리
+  // Source data for visualization and history.
   spyPrice?: number;
   ma50?: number;
   ma150?: number;
@@ -318,4 +332,155 @@ export interface MasterFilterResponse {
   insightLog: string;
   isAiGenerated: boolean;
   aiModelUsed?: string;
+}
+
+// --- Shared API contracts ---
+
+export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';
+
+export interface DataSourceMeta {
+  asOf: string;
+  source: string;
+  provider: string;
+  delay: 'REALTIME' | 'DELAYED_15M' | 'EOD' | 'UNKNOWN';
+  fallbackUsed: boolean;
+  warnings: string[];
+}
+
+export interface ApiSuccess<T> {
+  data: T;
+  meta: DataSourceMeta;
+}
+
+export interface ApiFailure {
+  message: string;
+  code: ApiErrorCode | string;
+  details?: unknown;
+  recoverable: boolean;
+  lastSuccessfulAt?: string | null;
+}
+
+// --- Beauty Contest review loop ---
+
+export type ContestMarket = 'US' | 'KR';
+export type BeautyContestStatus = 'OPEN' | 'REVIEW_READY' | 'COMPLETED';
+export type ContestReviewHorizon = 'W1' | 'M1';
+export type ContestReviewStatus = 'PENDING' | 'UPDATED' | 'ERROR' | 'MANUAL';
+
+export interface ContestPromptCandidate {
+  ticker: string;
+  exchange: string;
+  name: string;
+  user_rank: number;
+  rs_rating: number | null;
+  sepa_status: AssessmentStatus | null;
+  sepa_passed: number | null;
+  sepa_failed: number | null;
+  vcp_status: VcpAnalysis['grade'] | null;
+  vcp_score: number | null;
+  contraction_score: number | null;
+  volume_dry_up_score: number | null;
+  bb_squeeze_score: number | null;
+  pocket_pivot_score: number | null;
+  pivot_price: number | null;
+  distance_to_pivot_pct: number | null;
+  avg_dollar_volume: number | null;
+  price: number | null;
+  price_as_of: string | null;
+  source: string;
+}
+
+export interface BeautyContestSession {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  market: ContestMarket;
+  universe: ScannerUniverse | string;
+  selected_at: string;
+  prompt_payload: ContestPromptCandidate[];
+  llm_prompt: string;
+  llm_raw_response: string | null;
+  llm_provider: string | null;
+  status: BeautyContestStatus;
+  candidates?: ContestCandidate[];
+}
+
+export interface ContestCandidate {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  session_id: string;
+  ticker: string;
+  exchange: string;
+  name: string | null;
+  user_rank: number;
+  llm_rank: number | null;
+  llm_comment: string | null;
+  actual_invested: boolean;
+  linked_trade_id: string | null;
+  entry_reference_price: number | null;
+  snapshot: ContestPromptCandidate | Record<string, unknown> | null;
+  reviews?: ContestReview[];
+}
+
+export interface ContestReview {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  candidate_id: string;
+  horizon: ContestReviewHorizon;
+  due_date: string;
+  base_price: number | null;
+  review_price: number | null;
+  return_pct: number | null;
+  price_as_of: string | null;
+  price_source: string | null;
+  status: ContestReviewStatus;
+  mistake_tags: string[];
+  user_review_note: string | null;
+  error_message?: string | null;
+}
+
+// --- Portfolio and position risk ---
+
+export interface StopEvent {
+  id: string;
+  trade_id: string;
+  created_at: string;
+  stop_price: number;
+  reason: string;
+  source: 'INITIAL' | 'TEN_WEEK_MA' | 'HIGH_WATERMARK' | 'MANUAL' | 'PYRAMID';
+}
+
+export interface ExitRule {
+  id: string;
+  trade_id: string;
+  created_at: string;
+  trigger_type: 'GAIN_PCT' | 'PRICE' | 'R_MULTIPLE' | 'MANUAL';
+  trigger_value: number;
+  exit_fraction: number;
+  note: string | null;
+  executed: boolean;
+}
+
+export interface SecurityProfile {
+  ticker: string;
+  exchange: string;
+  name: string | null;
+  sector: string | null;
+  industry: string | null;
+  market: ContestMarket;
+}
+
+export interface PortfolioRiskSummary {
+  totalEquity: number;
+  investedCapital: number;
+  cash: number;
+  cashPct: number;
+  activePositions: number;
+  maxPositions: number;
+  totalOpenRisk: number;
+  openRiskPct: number;
+  sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[];
+  warnings: string[];
 }

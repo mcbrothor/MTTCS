@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Activity, BarChart3, BookOpen, Compass, History, LayoutDashboard, PlusCircle, ScanSearch, Star } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Activity, BarChart3, BookOpen, Compass, History, LayoutDashboard, PlusCircle, ScanSearch, Shield, Star, Trophy } from 'lucide-react';
 
 export default function Navbar() {
   return (
@@ -9,47 +10,32 @@ export default function Navbar() {
           <Activity className="h-6 w-6" />
           <span>
             MTN
-            <span className="hidden ml-2 text-sm font-normal text-slate-400 lg:inline">
-              Mantori&apos;s Trading Navigator
-            </span>
+            <span className="ml-2 hidden text-sm font-normal text-slate-400 lg:inline">Mantori&apos;s Trading Navigator</span>
           </span>
         </Link>
 
         <div className="flex min-w-0 items-center justify-end gap-3 overflow-x-auto sm:gap-6">
-          <Link href="/" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <LayoutDashboard className="h-4 w-4" />
-            <span className="hidden sm:inline">대시보드</span>
-          </Link>
-          <Link href="/master-filter" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <Compass className="h-4 w-4 text-emerald-400" />
-            <span className="hidden sm:inline">마스터 필터</span>
-          </Link>
-          <Link href="/scanner" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <ScanSearch className="h-4 w-4 text-indigo-400" />
-            <span className="hidden sm:inline">스캐너</span>
-          </Link>
-          <Link href="/plan" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <PlusCircle className="h-4 w-4 text-electric-blue" />
-            <span className="hidden sm:inline">신규 계획</span>
-          </Link>
-          <Link href="/watchlist" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <Star className="h-4 w-4 text-yellow-500" />
-            <span className="hidden sm:inline">관심 종목</span>
-          </Link>
-          <Link href="/guide" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <BookOpen className="h-4 w-4 text-amber-500" />
-            <span className="hidden sm:inline">알고리즘</span>
-          </Link>
-          <Link href="/history" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <History className="h-4 w-4" />
-            <span className="hidden sm:inline">히스토리</span>
-          </Link>
-          <Link href="/macro" className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
-            <BarChart3 className="h-4 w-4 text-purple-400" />
-            <span className="hidden sm:inline">매크로 분석</span>
-          </Link>
+          <NavLink href="/" icon={<LayoutDashboard className="h-4 w-4" />} label="대시보드" />
+          <NavLink href="/master-filter" icon={<Compass className="h-4 w-4 text-emerald-400" />} label="마스터 필터" />
+          <NavLink href="/scanner" icon={<ScanSearch className="h-4 w-4 text-indigo-400" />} label="스캐너" />
+          <NavLink href="/plan" icon={<PlusCircle className="h-4 w-4 text-electric-blue" />} label="신규 계획" />
+          <NavLink href="/watchlist" icon={<Star className="h-4 w-4 text-yellow-500" />} label="관심 종목" />
+          <NavLink href="/contest" icon={<Trophy className="h-4 w-4 text-emerald-400" />} label="콘테스트" />
+          <NavLink href="/portfolio" icon={<Shield className="h-4 w-4 text-cyan-400" />} label="리스크" />
+          <NavLink href="/guide" icon={<BookOpen className="h-4 w-4 text-amber-500" />} label="알고리즘" />
+          <NavLink href="/history" icon={<History className="h-4 w-4" />} label="히스토리" />
+          <NavLink href="/macro" icon={<BarChart3 className="h-4 w-4 text-purple-400" />} label="매크로" />
         </div>
       </div>
     </nav>
+  );
+}
+
+function NavLink({ href, icon, label }: { href: string; icon: ReactNode; label: string }) {
+  return (
+    <Link href={href} className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </Link>
   );
 }

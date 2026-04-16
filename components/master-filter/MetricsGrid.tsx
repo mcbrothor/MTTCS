@@ -1,147 +1,86 @@
 'use client';
 
-import { useMarket } from '@/contexts/MarketContext';
-import { TrendingUp, BarChart2, Activity, Users, AlertCircle, Info, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
-import { 
-  AreaChart, 
-  Area, 
-  YAxis, 
-  ResponsiveContainer,
-  ReferenceLine
-} from 'recharts';
-import { MasterFilterMetricDetail } from '@/types';
-import React from 'react';
+import { useMarket } from '@/contexts/MarketContext';
+import type { MasterFilterMetricDetail } from '@/types';
 
-/**
- * 지표 카드 렌더링 헬퍼 컴포넌트 (성능 및 린트 준수를 위해 외부 분리)
- */
 interface MetricCardProps {
   detail: MasterFilterMetricDetail;
-  icon: React.ElementType;
   chartData?: { date: string; close: number }[];
-  isStepGauge?: boolean;
+  compact?: boolean;
 }
 
-const MetricCard = ({ 
-  detail, 
-  icon: Icon, 
-  chartData,
-  isStepGauge = false
-}: MetricCardProps) => {
-  const isAlert = detail.status === 'FAIL';
-  const isWarning = detail.status === 'WARNING';
-  
-  const statusColor = isAlert ? 'text-rose-500' : isWarning ? 'text-amber-500' : 'text-emerald-400';
-  const borderColor = isAlert ? 'border-rose-500/40' : isWarning ? 'border-amber-500/40' : 'border-slate-800';
+function statusClass(status: MasterFilterMetricDetail['status']) {
+  if (status === 'PASS') return 'border-emerald-500/40 bg-emerald-500/5 text-emerald-300';
+  if (status === 'WARNING') return 'border-amber-500/40 bg-amber-500/5 text-amber-300';
+  return 'border-rose-500/40 bg-rose-500/5 text-rose-300';
+}
 
+function MetricCard({ detail, chartData, compact = false }: MetricCardProps) {
+  const tone = statusClass(detail.status);
   return (
-    <Card className={`flex flex-col gap-4 min-h-[280px] transition-all duration-300 border-2 ${borderColor} ${isAlert ? 'bg-rose-500/5 shadow-[0_0_20px_rgba(244,63,94,0.1)]' : ''}`}>
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2 text-slate-400">
-          <Icon className="h-4 w-4" />
-          <h3 className="text-xs font-bold uppercase tracking-widest">{detail.label}</h3>
+    <Card className={`border-2 ${tone} ${compact ? 'min-h-[190px]' : 'min-h-[260px]'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{detail.label}</p>
+          <p className="mt-2 font-mono text-2xl font-black text-white">
+            {detail.value}
+            {detail.unit && <span className="ml-1 text-xs text-slate-500">{detail.unit}</span>}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">기준: {detail.threshold}</p>
         </div>
-        <div className="text-right">
-          <div className={`text-xl ${isAlert ? 'font-black' : 'font-bold'} ${statusColor} tracking-tight`}>
-            {detail.value} <span className="text-xs opacity-60">/ {detail.threshold}</span>
-            <span className="ml-1 text-[10px] uppercase">{detail.unit}</span>
-          </div>
-          <div className="flex items-center justify-end gap-1 mt-0.5">
-            {detail.status === 'PASS' ? (
-              <ShieldCheck className="h-3 w-3 text-emerald-500" />
-            ) : (
-              <ShieldAlert className={`h-3 w-3 ${statusColor}`} />
-            )}
-            <span className={`text-[10px] font-bold uppercase tracking-tighter ${statusColor}`}>
-              {detail.status}
+        <div className="flex items-center gap-1 rounded-lg border border-current px-2 py-1 text-xs font-bold">
+          {detail.status === 'PASS' ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
+          {detail.status}
+        </div>
+      </div>
+
+      {typeof detail.score === 'number' && typeof detail.weight === 'number' && (
+        <div className="mt-4">
+          <div className="mb-1 flex justify-between text-xs text-slate-500">
+            <span>가중 점수</span>
+            <span>
+              {detail.score}/{detail.weight}
             </span>
           </div>
+          <div className="h-2 overflow-hidden rounded-lg bg-slate-800">
+            <div className="h-full bg-emerald-500" style={{ width: `${Math.min((detail.score / detail.weight) * 100, 100)}%` }} />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex-1 relative min-h-[100px]">
-        {chartData ? (
-          <div className="absolute inset-0 -mx-4 opacity-50">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id={`color-${detail.label}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={isAlert ? '#f43f5e' : '#10b981'} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={isAlert ? '#f43f5e' : '#10b981'} stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                {detail.label === 'Market Breadth' && (
-                  <ReferenceLine y={50} stroke="#f43f5e" strokeDasharray="3 3" strokeWidth={1} />
-                )}
-                {detail.label === 'Volatility (VIX)' && (
-                  <>
-                    <ReferenceLine y={15} stroke="#10b981" strokeDasharray="2 2" />
-                    <ReferenceLine y={20} stroke="#f43f5e" strokeDasharray="2 2" />
-                  </>
-                )}
-                <Area 
-                  type="monotone" 
-                  dataKey="close" 
-                  stroke={isAlert ? '#f43f5e' : '#10b981'} 
-                  fillOpacity={1} 
-                  fill={`url(#color-${detail.label})`}
-                  strokeWidth={2.5}
-                  isAnimationActive={false}
-                />
-                <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} reversed={detail.label === 'Volatility (VIX)'} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : isStepGauge ? (
-          <div className="flex gap-2 h-4 items-center mt-6">
-            {[1, 2, 3, 4, 5].map((step) => {
-              const isActive = Number(detail.value) >= step;
-              const isMax = step >= 4;
-              return (
-                <div 
-                  key={step} 
-                  className={`flex-1 h-3 rounded-sm transition-all duration-500 ${
-                    isActive 
-                      ? (isMax ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]' : 'bg-emerald-500') 
-                      : 'bg-slate-800'
-                  }`}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <div className={`mt-8 p-3 rounded-lg bg-slate-900/50 border ${borderColor} flex items-center gap-3`}>
-            <BarChart2 className={`h-8 w-8 ${statusColor}`} />
-            <div className="text-sm font-bold text-slate-200 uppercase tracking-widest">{detail.value}</div>
-          </div>
-        )}
-      </div>
+      {chartData && !compact && (
+        <div className="mt-4 h-24">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData}>
+              <Area type="monotone" dataKey="close" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} />
+              <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
-      <div className="mt-auto pt-3 border-t border-slate-800/50 space-y-2">
-        <div className="flex items-start gap-2">
-          <Info className="h-3 w-3 text-indigo-400 mt-0.5 shrink-0" />
-          <p className="text-[10px] text-slate-400 leading-normal">
-            <strong>판별 기준:</strong> {detail.description}
-          </p>
+      <div className="mt-4 border-t border-slate-800 pt-3">
+        <div className="flex items-start gap-2 text-xs leading-5 text-slate-400">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
+          <span>{detail.description}</span>
         </div>
-        <div className="flex justify-between items-center text-[9px] text-slate-600 font-mono uppercase tracking-tighter">
-          <span>{detail.source}</span>
-          <span className="opacity-50">Navigation Protocol v5.0</span>
-        </div>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-slate-600">{detail.source}</p>
       </div>
     </Card>
   );
-};
+}
 
 export default function MetricsGrid() {
   const { data, isLoading } = useMarket();
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="animate-pulse h-64 bg-slate-800/30 border-slate-700/50">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {[1, 2, 3, 4].map((item) => (
+          <Card key={item} className="h-64 animate-pulse border-slate-700/50 bg-slate-800/30">
             <div />
           </Card>
         ))}
@@ -150,42 +89,53 @@ export default function MetricsGrid() {
   }
 
   const { metrics } = data;
+  const p3Cards = [metrics.ftd, metrics.distribution, metrics.newHighLow, metrics.above200d, metrics.sectorRotation].filter(
+    (item): item is MasterFilterMetricDetail => Boolean(item)
+  );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* 1. Trend Alignment */}
-      <MetricCard 
-        detail={metrics.trend} 
-        icon={TrendingUp} 
-        chartData={metrics.spyHistory}
-      />
+    <div className="space-y-5">
+      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">P3 Market Filter</p>
+            <h2 className="mt-1 text-xl font-bold text-white">근거 기반 시장 점수판</h2>
+          </div>
+          <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? Math.round(metrics.score * 20)}/100</p>
+        </div>
+      </section>
 
-      {/* 2. Market Breadth */}
-      <MetricCard 
-        detail={metrics.breadth} 
-        icon={BarChart2} 
-        chartData={metrics.spyHistory?.map(d => ({ ...d, close: d.close > (metrics.ma200 || 0) ? 75 : 45 }))} 
-      />
-
-      {/* 3. Volatility Regime */}
-      <MetricCard 
-        detail={metrics.volatility} 
-        icon={Activity} 
-        chartData={metrics.vixHistory}
-      />
-
-      {/* 4. Liquidity & Leadership (Composite) */}
-      <div className="flex flex-col gap-4">
-        <MetricCard 
-          detail={metrics.liquidity} 
-          icon={AlertCircle} 
-          isStepGauge={true}
-        />
-        <MetricCard 
-          detail={metrics.leadership} 
-          icon={Users} 
-        />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <MetricCard detail={metrics.trend} chartData={metrics.spyHistory} />
+        <MetricCard detail={metrics.breadth} chartData={metrics.spyHistory} />
+        <MetricCard detail={metrics.volatility} chartData={metrics.vixHistory} />
+        <MetricCard detail={metrics.liquidity} />
       </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {p3Cards.map((detail) => (
+          <MetricCard key={detail.label} detail={detail} compact />
+        ))}
+        <MetricCard detail={metrics.leadership} compact />
+      </div>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+        <div className="mb-3 flex items-center gap-2 text-slate-300">
+          <TrendingUp className="h-4 w-4 text-emerald-300" />
+          <p className="text-sm font-bold">판정 사용법</p>
+        </div>
+        <div className="grid gap-3 text-sm leading-6 text-slate-400 md:grid-cols-3">
+          <p>
+            <strong className="text-emerald-300">GREEN</strong>: 돌파 후보를 적극 검토하되 피벗 근처 거래량과 손절폭을 확인합니다.
+          </p>
+          <p>
+            <strong className="text-amber-300">YELLOW</strong>: 신규 진입 크기를 줄이고 실패한 돌파는 빠르게 정리합니다.
+          </p>
+          <p>
+            <strong className="text-rose-300">RED</strong>: 현금 비중과 기존 포지션 방어를 우선합니다.
+          </p>
+        </div>
+      </section>
     </div>
   );
 }

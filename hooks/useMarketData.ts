@@ -6,6 +6,7 @@ interface MarketDataState {
   loading: boolean;
   error: string | null;
   analysis: MarketAnalysisResponse | null;
+  lastSuccessfulAt: string | null;
 }
 
 export function useMarketData() {
@@ -13,6 +14,7 @@ export function useMarketData() {
     loading: false,
     error: null,
     analysis: null,
+    lastSuccessfulAt: null,
   });
 
   const fetchMarketData = async (
@@ -24,32 +26,40 @@ export function useMarketData() {
     if (!ticker) return;
 
     setData((prev) => ({ ...prev, loading: true, error: null }));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 10_000);
 
     try {
       const response = await axios.get('/api/market-data', {
         params: { ticker, exchange, totalEquity, riskPercent },
+        signal: controller.signal,
       });
 
       setData({
         loading: false,
         error: null,
-        analysis: response.data,
+        analysis: response.data.data || response.data,
+        lastSuccessfulAt: new Date().toISOString(),
       });
     } catch (err: unknown) {
       const message = axios.isAxiosError(err)
-        ? err.response?.data?.message || err.response?.data?.error || err.message
+        ? err.code === 'ERR_CANCELED'
+          ? 'TIMEOUT: 10 seconds elapsed while loading market data.'
+          : err.response?.data?.message || err.response?.data?.error || err.message
         : err instanceof Error
           ? err.message
-          : '시장 데이터를 불러오지 못했습니다.';
+          : 'Failed to load market data.';
       setData((prev) => ({
         ...prev,
         loading: false,
         error: message,
       }));
+    } finally {
+      window.clearTimeout(timer);
     }
   };
 
-  const reset = () => setData({ loading: false, error: null, analysis: null });
+  const reset = () => setData((prev) => ({ loading: false, error: null, analysis: null, lastSuccessfulAt: prev.lastSuccessfulAt }));
 
   return { ...data, fetchMarketData, reset };
 }
