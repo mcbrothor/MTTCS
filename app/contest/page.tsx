@@ -5,6 +5,7 @@ import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { extractLlmSessionId } from '@/lib/contest';
 import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   ApiSuccess,
@@ -217,6 +218,7 @@ export default function ContestPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [llmSaveMessage, setLlmSaveMessage] = useState<string | null>(null);
   const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
 
   const market: ContestMarket = universe === 'KOSPI100' || universe === 'KOSDAQ100' ? 'KR' : 'US';
@@ -284,6 +286,7 @@ export default function ContestPage() {
   const activeCandidates = orderedCandidates(activeSession);
   const w1Summary = performanceSummary(activeCandidates, 'W1');
   const m1Summary = performanceSummary(activeCandidates, 'M1');
+  const pastedResultSessionId = useMemo(() => extractLlmSessionId(llmJson), [llmJson]);
 
   const toggleCandidateSelection = (ticker: string) => {
     setSelected((prev) => {
@@ -323,12 +326,19 @@ export default function ContestPage() {
   };
 
   const saveLlmResult = async () => {
-    if (!activeSession) return;
+    const pastedSessionId = pastedResultSessionId;
+    const targetSessionId = pastedSessionId || activeSession?.id;
+    if (!targetSessionId) {
+      setError('LLM 결과를 저장할 콘테스트 세션을 찾지 못했습니다. 결과 JSON에 session_id가 포함되어 있는지 확인해 주세요.');
+      setLlmSaveMessage('저장 실패: session_id 또는 활성 세션이 없습니다.');
+      return;
+    }
     setBusy(true);
     setError(null);
     setNotice(null);
+    setLlmSaveMessage('LLM 결과 저장 중...');
     try {
-      const response = await fetch(`/api/contest/sessions/${activeSession.id}/llm-result`, {
+      const response = await fetch(`/api/contest/sessions/${targetSessionId}/llm-result`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ llm_raw_response: llmJson, llm_provider: 'external' }),
@@ -336,10 +346,16 @@ export default function ContestPage() {
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
       setLlmJson('');
-      setNotice('LLM 분석 결과를 저장했습니다.');
+      const targetNote = pastedSessionId && activeSession?.id !== pastedSessionId
+        ? `붙여넣은 session_id(${pastedSessionId}) 기준으로 저장했습니다.`
+        : '현재 세션에 저장했습니다.';
+      setNotice(`LLM 분석 결과를 저장했습니다. ${targetNote}`);
+      setLlmSaveMessage(`저장 완료: ${result.data.candidates?.length || 0}개 후보의 LLM 순위와 분석을 반영했습니다.`);
       await loadSessions(result.data.id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'LLM 결과 저장에 실패했습니다.');
+      const message = err instanceof Error ? err.message : 'LLM 결과 저장에 실패했습니다.';
+      setError(message);
+      setLlmSaveMessage(`저장 실패: ${message}`);
     } finally {
       setBusy(false);
     }
@@ -587,9 +603,25 @@ export default function ContestPage() {
             placeholder='LLM 전체 리포트 또는 {"rankings":[...]} JSON을 붙여넣으세요.'
             className="mt-4 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 outline-none focus:border-emerald-400"
           />
-          <Button type="button" onClick={saveLlmResult} disabled={!activeSession || !llmJson.trim() || busy} className="mt-3 gap-2">
+          {pastedResultSessionId && activeSession?.id !== pastedResultSessionId && (
+            <p className="mt-2 text-xs text-amber-300">
+              붙여넣은 결과의 session_id가 현재 선택된 세션과 다릅니다. 저장 시 입력값의 session_id로 자동 저장합니다.
+            </p>
+          )}
+          <Button type="button" onClick={saveLlmResult} disabled={!llmJson.trim() || busy || (!activeSession && !pastedResultSessionId)} className="mt-3 gap-2">
             <Save className="h-4 w-4" /> LLM 분석 저장
           </Button>
+          {llmSaveMessage && (
+            <div className={`mt-3 rounded-lg border p-3 text-sm ${
+              llmSaveMessage.startsWith('저장 실패')
+                ? 'border-red-500/30 bg-red-500/10 text-red-100'
+                : llmSaveMessage.startsWith('저장 완료')
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                  : 'border-slate-700 bg-slate-900/60 text-slate-300'
+            }`}>
+              {llmSaveMessage}
+            </div>
+          )}
         </div>
       </section>
 

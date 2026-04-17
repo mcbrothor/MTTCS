@@ -225,6 +225,28 @@ export function extractJsonPayload(raw: string) {
   throw new Error('LLM response must include a valid JSON object or JSON code block.');
 }
 
+export function extractLlmSessionId(raw: string) {
+  try {
+    const parsed = extractJsonPayload(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const rootSessionId = (parsed as Record<string, unknown>).session_id;
+      if (typeof rootSessionId === 'string' && rootSessionId.trim()) return rootSessionId.trim();
+
+      const rankings = (parsed as Record<string, unknown>).rankings;
+      if (Array.isArray(rankings)) {
+        const sessionIds = Array.from(new Set(rankings
+          .map((item) => item && typeof item === 'object' ? (item as Record<string, unknown>).session_id : null)
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .map((value) => value.trim())));
+        if (sessionIds.length === 1) return sessionIds[0];
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 function normalizeExpected(expected: ExpectedCandidate[]) {
   return expected.map((candidate) => {
     if (typeof candidate === 'string') return { id: null, ticker: candidate.toUpperCase() };

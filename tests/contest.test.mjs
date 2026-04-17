@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   buildContestPrompt,
   calculateReturnPct,
+  extractLlmSessionId,
   isReviewDue,
   parseLlmRankings,
   reviewDueDate,
@@ -103,6 +104,16 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
   assert.equal(rankings[0].candidate_id, 'cand-meta');
   assert.deepEqual(rankings[0].scores, { technical: 91 });
   assert.equal(rankings[0].analysis.investment_thesis, 'best compounder');
+}
+
+{
+  const sessionId = extractLlmSessionId(JSON.stringify({
+    rankings: [
+      { session_id: 'session-from-paste', ticker: 'NVDA', rank: 1 },
+      { session_id: 'session-from-paste', ticker: 'META', rank: 2 },
+    ],
+  }));
+  assert.equal(sessionId, 'session-from-paste');
 }
 
 {
