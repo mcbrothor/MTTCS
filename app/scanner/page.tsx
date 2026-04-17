@@ -232,6 +232,7 @@ export default function ScannerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -439,12 +440,37 @@ export default function ScannerPage() {
           <div 
             key={result.ticker}
             onClick={() => result.status === 'done' && setSelectedResult(result)}
-            className={`cursor-pointer rounded-xl border p-4 transition-all hover:scale-[1.02] ${
+            className={`group relative cursor-pointer rounded-xl border p-4 transition-all hover:scale-[1.02] ${
               result.sepaStatus === 'PASS' 
                 ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50' 
                 : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
-            }`}
+            } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-950' : ''}`}
           >
+            {/* Selection Checkbox */}
+            {result.status === 'done' && (
+              <div 
+                className="absolute -left-2 -top-2 z-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedTickers(prev => {
+                    const next = new Set(prev);
+                    if (next.has(result.ticker)) next.delete(result.ticker);
+                    else if (next.size < 10) next.add(result.ticker);
+                    else alert('최대 10개까지만 선택할 수 있습니다.');
+                    return next;
+                  });
+                }}
+              >
+                <div className={`flex h-6 w-6 items-center justify-center rounded-full border shadow-lg transition-colors ${
+                  selectedTickers.has(result.ticker) 
+                    ? 'bg-emerald-500 border-emerald-400 text-white' 
+                    : 'bg-slate-800 border-slate-700 text-transparent group-hover:text-slate-500'
+                }`}>
+                  <Star className="h-3 w-3 fill-current" />
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="font-bold text-white">{result.ticker}</h3>
@@ -496,6 +522,38 @@ export default function ScannerPage() {
           </div>
         )}
       </div>
+
+      {/* Beauty Contest Floating Bar */}
+      {selectedTickers.size > 0 && (
+        <div className="fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 items-center gap-6 rounded-2xl border border-emerald-500/30 bg-slate-950/90 px-6 py-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-emerald-400">뷰티 콘테스트 후보</span>
+            <span className="text-lg font-bold text-white">{selectedTickers.size} / 10 종목</span>
+          </div>
+          
+          <div className="h-8 w-px bg-slate-800" />
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setSelectedTickers(new Set())}
+              className="text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              전체 해제
+            </button>
+            <Link 
+              href="/beauty-contest"
+              onClick={() => {
+                const candidates = results.filter(r => selectedTickers.has(r.ticker));
+                localStorage.setItem('mtn:contest-candidates', JSON.stringify(candidates));
+              }}
+            >
+              <Button icon={<ScanSearch className="h-4 w-4" />} className="bg-emerald-600 hover:bg-emerald-500">
+                프롬프트 생성하기
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       <VcpDrilldownModal 
         result={selectedResult} 
