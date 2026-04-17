@@ -4,10 +4,11 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
 import axios from 'axios';
-import { Star, Trash2, TrendingUp } from 'lucide-react';
+import { Star, Trash2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type {
   EntryTargets,
+  OHLCData,
   SepaEvidence,
   Trade,
   TradeExecution,
@@ -998,7 +999,7 @@ function StrategyDetail({ trade }: { trade: Trade }) {
                 현재가 {currency(trade.metrics?.currentPrice, trade.ticker)} 기준, 
                 만약 현재가에서 <span className="text-orange-300">-5%</span> 하락 시 
                 <span className="text-white ml-1">{currency((trade.metrics?.currentPrice || 0) * 0.95, trade.ticker)}</span>까지 스탑을 올리는 것을 고려하세요.
-                (Minervini: "Give back no more than half of your peak gain")
+                (Minervini: &quot;Give back no more than half of your peak gain&quot;)
               </p>
             </div>
           )}
@@ -1150,14 +1151,14 @@ function EditPanel({
 }
 
 function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; exchange: string; stopPrice: number | null }) {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<OHLCData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
       try {
-        const resp = await axios.get('/api/market-data', {
+        const resp = await axios.get<{ priceData: OHLCData[] }>('/api/market-data', {
           params: { ticker, exchange, includeFundamentals: 'false' },
         });
         if (!cancelled) {

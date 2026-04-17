@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import type { MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
+import type { DataSourceMeta, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 
 interface MarketContextValue {
   data: MasterFilterResponse | null;
@@ -17,6 +17,8 @@ const MarketContext = createContext<MarketContextValue>({
   data: null,
   isLoading: true,
   error: null,
+  market: 'US',
+  setMarket: () => {},
   bypassRisk: false,
   setBypassRisk: () => {},
 });
@@ -33,10 +35,25 @@ const createEmptyMetric = (label: string, threshold: string | number, unit: stri
 
 function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
   const updatedAt = new Date().toISOString();
+  const meta: DataSourceMeta = {
+    asOf: updatedAt,
+    source: 'System Fallback',
+    provider: 'MTN',
+    delay: 'UNKNOWN',
+    fallbackUsed: true,
+    warnings: ['Master filter data could not be loaded.'],
+  };
   return {
     state: 'YELLOW',
     market,
     metrics: {
+      trend: createEmptyMetric('Trend Alignment', 'PASS', ''),
+      breadth: createEmptyMetric('Market Breadth', 'PASS', ''),
+      liquidity: createEmptyMetric('Liquidity Flow', 'PASS', ''),
+      volatility: createEmptyMetric('Volatility Regime', 'PASS', ''),
+      leadership: createEmptyMetric('Leadership', 'PASS', ''),
+      score: 0,
+      meta,
       mainPrice: 0,
       ma50: 0,
       ma150: 0,

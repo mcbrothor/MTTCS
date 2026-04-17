@@ -3,7 +3,7 @@ import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/yahoo-api';
 import { generateMarketInsight } from '@/lib/ai/gemini';
 import type { MarketState, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 const US_MACRO_SYMBOLS = [
   '^VIX',

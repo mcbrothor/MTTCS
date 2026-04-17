@@ -12,7 +12,9 @@ declare module 'lucide-react' {
   export const Bot: LucideIcon;
   export const AlertCircle: LucideIcon;
   export const AlertTriangle: LucideIcon;
+  export const ArrowUpRight: LucideIcon;
   export const ChevronDown: LucideIcon;
+  export const CalendarDays: LucideIcon;
   export const Check: LucideIcon;
   export const CheckCircle2: LucideIcon;
   export const Clipboard: LucideIcon;
@@ -49,6 +51,7 @@ declare module 'lucide-react' {
   export const Trophy: LucideIcon;
   export const Users: LucideIcon;
   export const Volume2: LucideIcon;
+  export const Waves: LucideIcon;
   export const X: LucideIcon;
   export const XCircle: LucideIcon;
 }

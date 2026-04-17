@@ -1,23 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Play, ScanSearch, Square, Star, Trophy } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Play, ScanSearch, Square, Trophy } from 'lucide-react';
+import { motion } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
-import RiskModal from '@/components/ui/RiskModal';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
-import { useMarket } from '@/contexts/MarketContext';
 import type {
-  AssessmentStatus,
   MarketAnalysisResponse,
   ScannerConstituent,
   ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
-  VcpAnalysis,
 } from '@/types';
 
 const TOTAL_EQUITY_FOR_SCAN = '50000';
@@ -137,6 +133,12 @@ function round(value: number, digits = 2) {
   return Math.round(value * factor) / factor;
 }
 
+function scanConcurrencyFor(universe: ScannerUniverse) {
+  if (universe === 'KOSPI100') return KOSPI_SCAN_CONCURRENCY;
+  if (universe === 'KOSDAQ100') return KOSDAQ_SCAN_CONCURRENCY;
+  return SCAN_CONCURRENCY;
+}
+
 function initialResult(item: ScannerConstituent): ScannerResult {
   return {
     ...item,
@@ -151,6 +153,7 @@ function initialResult(item: ScannerConstituent): ScannerResult {
     bbSqueezeScore: null,
     pocketPivotScore: null,
     vcpDetails: null,
+    fundamentals: null,
     pivotPrice: null,
     recommendedEntry: null,
     distanceToPivotPct: null,
@@ -214,11 +217,12 @@ async function scanConstituent(item: ScannerConstituent, signal: AbortSignal): P
     bbSqueezeScore: analysis.vcpAnalysis.bbSqueezeScore,
     pocketPivotScore: analysis.vcpAnalysis.pocketPivotScore,
     vcpDetails: analysis.vcpAnalysis.details,
+    fundamentals: analysis.fundamentals,
     pivotPrice,
     distanceToPivotPct,
     recommendedEntry,
     analyzedAt: new Date().toISOString(),
-    breakoutVolumeStatus: null,
+    breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
     errorMessage: null,
   };
 }
@@ -234,6 +238,7 @@ export default function ScannerPage() {
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+  const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -272,15 +277,15 @@ export default function ScannerPage() {
     abortControllerRef.current = abortController;
 
     try {
-      const resp = await fetch(`/api/scanner-universe?universe=${universe}`, { signal: abortController.signal });
+      const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abortController.signal });
       if (!resp.ok) throw new Error(await parseFetchError(resp));
       
       const meta = await resp.json() as ScannerUniverseResponse;
-      const initialResults = meta.constituents.map(initialResult);
+      const initialResults = meta.items.map(initialResult);
       setResults(initialResults);
       setProgress({ current: 0, total: initialResults.length });
 
-      const concurrency = universe.startsWith('KOS') ? KOSPI_SCAN_CONCURRENCY : SCAN_CONCURRENCY;
+      const concurrency = scanConcurrencyFor(universe);
       const queue = [...initialResults];
       let completedCount = 0;
 
@@ -330,12 +335,40 @@ export default function ScannerPage() {
     setBusy(false);
   };
 
+  const addToWatchlist = async (item: ScannerResult) => {
+    if (isSavingWatchlist) return;
+
+    setIsSavingWatchlist(true);
+    try {
+      const response = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ticker: item.ticker,
+          exchange: item.exchange,
+          memo: `Scanner ${item.vcpGrade ?? 'unknown'} VCP / SEPA ${item.sepaStatus ?? 'unknown'}`,
+          tags: ['scanner', item.vcpGrade, item.sepaStatus].filter(Boolean),
+          priority: item.vcpGrade === 'strong' ? 2 : 1,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || '관심종목 저장에 실패했습니다.');
+      }
+    } catch (err) {
+      alert(getErrorMessage(err));
+    } finally {
+      setIsSavingWatchlist(false);
+    }
+  };
+
   const filteredResults = useMemo(() => {
     let list = [...results];
     
-    if (filterKey === 'sepa') list = list.filter(r => r.sepaStatus === 'PASS');
-    else if (filterKey === 'strong') list = list.filter(r => r.vcpGrade === 'Strong');
-    else if (filterKey === 'forming') list = list.filter(r => ['Strong', 'Forming'].includes(r.vcpGrade || ''));
+    if (filterKey === 'sepa') list = list.filter(r => r.sepaStatus === 'pass');
+    else if (filterKey === 'strong') list = list.filter(r => r.vcpGrade === 'strong');
+    else if (filterKey === 'forming') list = list.filter(r => r.vcpGrade === 'strong' || r.vcpGrade === 'forming');
     else if (filterKey === 'nearPivot') list = list.filter(r => r.distanceToPivotPct !== null && Math.abs(r.distanceToPivotPct) <= 3);
     else if (filterKey === 'error') list = list.filter(r => r.status === 'error');
 
@@ -347,8 +380,8 @@ export default function ScannerPage() {
         return da - db;
       }
       if (sortKey === 'sepa') {
-        if (a.sepaStatus === 'PASS' && b.sepaStatus !== 'PASS') return -1;
-        if (a.sepaStatus !== 'PASS' && b.sepaStatus === 'PASS') return 1;
+        if (a.sepaStatus === 'pass' && b.sepaStatus !== 'pass') return -1;
+        if (a.sepaStatus !== 'pass' && b.sepaStatus === 'pass') return 1;
         return (b.vcpScore || 0) - (a.vcpScore || 0);
       }
       return 0; // marketCap (original order)
@@ -446,7 +479,7 @@ export default function ScannerPage() {
             whileHover={{ scale: 1.02 }}
             onClick={() => result.status === 'done' && setSelectedResult(result)}
             className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
-              result.sepaStatus === 'PASS' 
+              result.sepaStatus === 'pass'
                 ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50' 
                 : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
             } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : ''}`}
@@ -484,7 +517,7 @@ export default function ScannerPage() {
               </div>
               <div className="text-right">
                 {result.status === 'done' ? (
-                  <span className={`text-xs font-bold ${result.vcpGrade === 'Strong' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  <span className={`text-xs font-bold ${result.vcpGrade === 'strong' ? 'text-emerald-400' : 'text-slate-400'}`}>
                     {result.vcpGrade} ({result.vcpScore}점)
                   </span>
                 ) : result.status === 'queued' ? (
@@ -501,8 +534,8 @@ export default function ScannerPage() {
               <div className="space-y-2">
                 <div className="flex justify-between text-[10px]">
                   <span className="text-slate-500">SEPA</span>
-                  <span className={result.sepaStatus === 'PASS' ? 'text-emerald-400' : 'text-slate-500 text-coral-red'}>
-                    {result.sepaStatus === 'PASS' ? 'SUCCESS' : 'FAIL'}
+                  <span className={result.sepaStatus === 'pass' ? 'text-emerald-400' : 'text-slate-500 text-coral-red'}>
+                    {result.sepaStatus === 'pass' ? 'SUCCESS' : 'FAIL'}
                   </span>
                 </div>
                 <div className="flex justify-between text-[10px]">
@@ -564,6 +597,8 @@ export default function ScannerPage() {
       <VcpDrilldownModal 
         result={selectedResult} 
         onClose={() => setSelectedResult(null)} 
+        onAddToWatchlist={addToWatchlist}
+        isSavingWatchlist={isSavingWatchlist}
       />
     </div>
   );

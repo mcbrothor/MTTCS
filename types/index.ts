@@ -262,6 +262,7 @@ export interface ScannerResult extends ScannerConstituent {
   bbSqueezeScore?: number | null;
   pocketPivotScore?: number | null;
   vcpDetails?: string[] | null;
+  fundamentals?: FundamentalSnapshot | null;
   pivotPrice: number | null;
   recommendedEntry: number | null;
   distanceToPivotPct: number | null;

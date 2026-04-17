@@ -41,7 +41,7 @@ export function generateBeautyContestPrompt(candidates: ScannerResult[]): string
     // 기술적 지표
     prompt += `[기술적 분석 (VCP/SEPA)]\n`;
     prompt += `  * VCP 등급: ${c.vcpGrade} (점수: ${c.vcpScore}/100)\n`;
-    prompt += `  * SEPA 상태: ${c.sepaStatus === 'PASS' ? '통과 (전형적인 주도주 정렬)' : '주의/미달'}\n`;
+    prompt += `  * SEPA 상태: ${c.sepaStatus === 'pass' ? '통과 (전형적인 주도주 정렬)' : '주의/미달'}\n`;
     prompt += `  * 피벗 거리: ${c.distanceToPivotPct !== null ? `${c.distanceToPivotPct}%` : '계산 중'}\n`;
     if (c.vcpDetails && c.vcpDetails.length > 0) {
       prompt += `  * VCP 상세 내역:\n    - ${c.vcpDetails.join('\n    - ')}\n`;

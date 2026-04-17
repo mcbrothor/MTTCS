@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Compass, Clipboard, ClipboardCheck, Sparkles, Trash2, Trophy, CheckCircle2 } from 'lucide-react';
+import { Compass, Clipboard, Sparkles, Trash2, Trophy, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import MarketBanner from '@/components/ui/MarketBanner';
@@ -15,15 +15,19 @@ export default function BeautyContestPage() {
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
+    let timeout: number | null = null;
     const raw = localStorage.getItem('mtn:contest-candidates');
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as ScannerResult[];
-        setCandidates(parsed);
+        timeout = window.setTimeout(() => setCandidates(parsed), 0);
       } catch (e) {
         console.error('Failed to parse candidates', e);
       }
     }
+    return () => {
+      if (timeout) window.clearTimeout(timeout);
+    };
   }, []);
 
   const handleGeneratePrompt = () => {
@@ -123,7 +127,7 @@ export default function BeautyContestPage() {
                 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <div className={`text-xs font-bold ${c.vcpGrade === 'Strong' ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    <div className={`text-xs font-bold ${c.vcpGrade === 'strong' ? 'text-emerald-400' : 'text-slate-400'}`}>
                       {c.vcpGrade}
                     </div>
                     <div className="text-[10px] text-slate-500">{c.vcpScore}점</div>
@@ -180,7 +184,7 @@ export default function BeautyContestPage() {
               ) : (
                 <div className="flex h-full flex-col items-center justify-center text-slate-600 gap-4 opacity-50">
                   <Clipboard className="h-12 w-12" />
-                  <p className="text-center">왼쪽의 '프롬프트 생성' 버튼을 누르면<br />최신 데이터가 포함된 전문 분석 지시문이 준비됩니다.</p>
+                  <p className="text-center">왼쪽의 &apos;프롬프트 생성&apos; 버튼을 누르면<br />최신 데이터가 포함된 전문 분석 지시문이 준비됩니다.</p>
                 </div>
               )}
             </div>
