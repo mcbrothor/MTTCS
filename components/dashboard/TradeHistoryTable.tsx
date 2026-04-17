@@ -447,14 +447,28 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                         <StatusBadge status={trade.status} />
                       </td>
                       <td className="px-4 py-3 text-right font-mono">
-                        {typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'}
+                        <div className="flex flex-col items-end">
+                          <span>{typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'}</span>
+                          {typeof metrics?.unrealizedR === 'number' && metrics.unrealizedR !== 0 && (
+                            <span className={`text-[10px] font-bold ${metrics.unrealizedR >= 0 ? 'text-emerald-400' : 'text-coral-red'}`}>
+                              {metrics.unrealizedR >= 0 ? '+' : ''}{metrics.unrealizedR.toFixed(2)}R (Live)
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono">{numberText(metrics?.netShares, '주')}</td>
                       <td className="px-4 py-3 text-right font-mono">{currency(metrics?.avgEntryPrice ?? trade.entry_price, trade.ticker)}</td>
                       <td className="px-4 py-3 text-right font-mono font-medium">
-                        <span className={(realizedPnL || 0) >= 0 ? 'text-emerald-500' : 'text-coral-red'}>
-                          {signedCurrency(realizedPnL, trade.ticker)}
-                        </span>
+                        <div className="flex flex-col items-end">
+                          <span className={(realizedPnL || 0) >= 0 ? 'text-emerald-500' : 'text-coral-red'}>
+                            {signedCurrency(realizedPnL, trade.ticker)}
+                          </span>
+                          {typeof metrics?.unrealizedPnL === 'number' && metrics.unrealizedPnL !== 0 && (
+                            <span className={`text-[10px] ${metrics.unrealizedPnL >= 0 ? 'text-emerald-400' : 'text-coral-red'}`}>
+                              ({signedCurrency(metrics.unrealizedPnL, trade.ticker)})
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         {trade.final_discipline !== null ? (
@@ -597,10 +611,18 @@ function ExecutionsPanel({
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <DetailMetric label="평균 진입가" value={currency(metrics?.avgEntryPrice, trade.ticker)} />
-        <DetailMetric label="평균 청산가" value={currency(metrics?.avgExitPrice, trade.ticker)} />
+        <DetailMetric label="현재가" value={currency(metrics?.currentPrice, trade.ticker)} highlight={!!metrics?.currentPrice} />
         <DetailMetric label="순보유" value={numberText(metrics?.netShares, '주')} />
-        <DetailMetric label="실현손익" value={signedCurrency(metrics?.realizedPnL, trade.ticker)} />
-        <DetailMetric label="현재 R" value={typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'} />
+        <DetailMetric 
+          label="미실현 손익" 
+          value={signedCurrency(metrics?.unrealizedPnL, trade.ticker)}
+          color={metrics?.unrealizedPnL && metrics.unrealizedPnL >= 0 ? 'emerald' : 'coral'}
+        />
+        <DetailMetric 
+          label="미실현 R" 
+          value={typeof metrics?.unrealizedR === 'number' ? `${metrics.unrealizedR.toFixed(2)}R` : '-'}
+          color={metrics?.unrealizedR && metrics.unrealizedR >= 0 ? 'emerald' : 'coral'}
+        />
       </div>
 
       <ExecutionForm trade={trade} busy={busy} onSave={onSave} />
@@ -891,15 +913,21 @@ function StrategyDetail({ trade }: { trade: Trade }) {
   const stops = getTrailingStops(trade.trailing_stops);
   const sepa = getSepaEvidence(trade.sepa_evidence);
   const riskPct = (getRiskPercent(trade) * 100).toFixed(1).replace('.0', '');
+  const metrics = trade.metrics;
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <DetailMetric label="총 자본" value={currency(trade.total_equity, trade.ticker)} />
         <DetailMetric label="허용 손실" value={`${riskPct}%`} />
         <DetailMetric label="ATR 참고" value={numberText(trade.atr_value)} />
-        <DetailMetric label="진입가" value={currency(trade.entry_price, trade.ticker)} />
-        <DetailMetric label="초기 손절가" value={currency(trade.stoploss_price, trade.ticker)} />
+        <DetailMetric label="진입가" value={currency(metrics?.avgEntryPrice ?? trade.entry_price, trade.ticker)} />
+        <DetailMetric 
+          label="현재가" 
+          value={currency(metrics?.currentPrice, trade.ticker)} 
+          highlight={!!metrics?.currentPrice}
+          color={metrics?.unrealizedPnL && metrics.unrealizedPnL >= 0 ? 'emerald' : 'coral'}
+        />
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -909,7 +937,7 @@ function StrategyDetail({ trade }: { trade: Trade }) {
 
       {targets && stops && (
         <div>
-          <h4 className="mb-2 text-sm font-bold text-white">진입 계획</h4>
+          <h4 className="mb-2 text-sm font-bold text-white">진입 및 스탑 계획</h4>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
@@ -917,24 +945,48 @@ function StrategyDetail({ trade }: { trade: Trade }) {
                   <th className="py-2">단계</th>
                   <th className="py-2 text-right">기준가</th>
                   <th className="py-2 text-right">수량</th>
-                  <th className="py-2 text-right">스탑</th>
+                  <th className="py-2 text-right">계획 스탑</th>
+                  <th className="py-2 text-right">현재가 대비</th>
                 </tr>
               </thead>
               <tbody>
                 {[targets.e1, targets.e2, targets.e3].map((leg, index) => {
                   const stop = index === 0 ? stops.initial : index === 1 ? stops.afterEntry2 : stops.afterEntry3;
+                  const currentPrice = trade.metrics?.currentPrice;
+                  const distToStop = currentPrice && stop ? ((stop - currentPrice) / currentPrice) * 100 : null;
+                  
                   return (
                     <tr key={leg.label} className="border-b border-slate-900">
                       <td className="py-2 font-medium text-white">{leg.label}</td>
                       <td className="py-2 text-right font-mono">{currency(leg.price, trade.ticker)}</td>
                       <td className="py-2 text-right font-mono">{leg.shares > 0 ? `${leg.shares.toLocaleString()}주` : '수동'}</td>
                       <td className="py-2 text-right font-mono text-orange-300">{currency(stop, trade.ticker)}</td>
+                      <td className="py-2 text-right font-mono">
+                        {distToStop !== null ? (
+                          <span className={distToStop > -2 ? 'text-coral-red font-bold' : 'text-slate-400'}>
+                            {distToStop.toFixed(1)}%
+                          </span>
+                        ) : '-'}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+          {trade.status === 'ACTIVE' && (
+            <div className="mt-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-3">
+              <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                <Star className="h-3 w-3 fill-current" /> 트레일링 스탑 가이드 (고가 대비 하락폭 예시)
+              </p>
+              <p className="mt-1 text-xs text-slate-400 leading-5">
+                현재가 {currency(trade.metrics?.currentPrice, trade.ticker)} 기준, 
+                만약 현재가에서 <span className="text-orange-300">-5%</span> 하락 시 
+                <span className="text-white ml-1">{currency((trade.metrics?.currentPrice || 0) * 0.95, trade.ticker)}</span>까지 스탑을 올리는 것을 고려하세요.
+                (Minervini: "Give back no more than half of your peak gain")
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -972,11 +1024,35 @@ function StrategyDetail({ trade }: { trade: Trade }) {
   );
 }
 
-function DetailMetric({ label, value }: { label: string; value: string }) {
+function DetailMetric({ 
+  label, 
+  value, 
+  highlight = false,
+  color = 'slate'
+}: { 
+  label: string; 
+  value: string;
+  highlight?: boolean;
+  color?: 'slate' | 'emerald' | 'coral' | 'sky';
+}) {
+  const colorClasses = {
+    slate: 'border-slate-800 bg-slate-950',
+    emerald: 'border-emerald-500/20 bg-emerald-500/5',
+    coral: 'border-coral-red/20 bg-coral-red/5',
+    sky: 'border-sky-500/20 bg-sky-500/5',
+  };
+
+  const textClasses = {
+    slate: 'text-white',
+    emerald: 'text-emerald-400',
+    coral: 'text-coral-red',
+    sky: 'text-sky-400',
+  };
+
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950 p-3">
+    <div className={`rounded-lg border p-3 transition-all ${colorClasses[color]} ${highlight ? 'ring-1 ring-emerald-500/30' : ''}`}>
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-mono font-bold text-white">{value}</p>
+      <p className={`mt-1 font-mono font-bold ${textClasses[color]}`}>{value}</p>
     </div>
   );
 }
@@ -1002,7 +1078,7 @@ function EditPanel({
           <span className="mb-1 block text-xs font-semibold text-slate-400">상태</span>
           <select
             value={draft.status}
-            onChange={(event) => onChange('status', event.target.value)}
+            onChange={(event) => onChange('status', event.target.value as TradeStatus)}
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
           >
             {statusOptions.map((status) => (

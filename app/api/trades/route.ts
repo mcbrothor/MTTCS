@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { attachTradeMetrics, calculateTradeMetrics } from '@/lib/finance/trade-metrics';
+import { getKisDomesticPrice } from '@/lib/finance/kis-api';
+import { getYahooQuotes } from '@/lib/finance/yahoo-api';
 import type { Trade, TradeStatus } from '@/types';
 
 const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
@@ -19,6 +21,10 @@ function apiError(message: string, code: string, status = 400, details?: unknown
     },
     { status }
   );
+}
+
+function isKorean(ticker: string) {
+  return /^\d{6}$/.test(ticker);
 }
 
 function normalizeRiskPercent(value: unknown) {
@@ -78,7 +84,6 @@ export async function POST(request: Request) {
       return apiError('SEPA 분석 근거와 Minervini 진입 계획이 필요합니다.', 'MISSING_STRATEGY_FIELDS');
     }
 
-    // C-4 수정: 허용 필드만 명시적으로 추출 (body spread로 인한 필드 주입 방지)
     const record = {
       ticker: String(body.ticker).toUpperCase(),
       direction: body.direction || 'LONG',
@@ -135,12 +140,41 @@ export async function GET() {
 
     if (error) throw error;
 
-    const trades = ((data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[]).map((trade) => {
+    const allRecords = (data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[];
+    const activeTrades = allRecords.filter((t) => t.status === 'ACTIVE');
+    
+    // 1. ACTIVE 종목들의 실시간 가격 병렬 조회
+    const priceMap = new Map<string, number | null>();
+    
+    const usTickers = [...new Set(activeTrades.filter((t) => !isKorean(t.ticker)).map((t) => t.ticker))];
+    const krTickers = [...new Set(activeTrades.filter((t) => isKorean(t.ticker)).map((t) => t.ticker))];
+
+    // US 가격 (Yahoo - batch)
+    const usQuotesPromise = usTickers.length > 0 ? getYahooQuotes(usTickers) : Promise.resolve([]);
+    
+    // KR 가격 (KIS)
+    const krQuotesPromises = krTickers.map(async (ticker) => ({
+      symbol: ticker,
+      price: await getKisDomesticPrice(ticker)
+    }));
+
+    const [usQuotes, krQuotes] = await Promise.all([
+      usQuotesPromise,
+      Promise.all(krQuotesPromises)
+    ]);
+
+    usQuotes.forEach((q) => priceMap.set(q.symbol, q.regularMarketPrice));
+    krQuotes.forEach((q) => priceMap.set(q.symbol, q.price));
+
+    // 2. 전체 매매 데이터 구성 및 매트릭스 부착
+    const trades = allRecords.map((trade) => {
       const { trade_executions: tradeExecutions, ...rest } = trade;
+      const currentPrice = trade.status === 'ACTIVE' ? (priceMap.get(trade.ticker) || null) : null;
+      
       return attachTradeMetrics({
         ...rest,
         executions: tradeExecutions || [],
-      } as Trade);
+      } as Trade, currentPrice);
     });
 
     return NextResponse.json({ data: trades });
@@ -228,30 +262,6 @@ export async function PATCH(request: Request) {
     if (body.entry_targets !== undefined) update.entry_targets = body.entry_targets;
     if (body.trailing_stops !== undefined) update.trailing_stops = body.trailing_stops;
     if (body.sepa_evidence !== undefined) update.sepa_evidence = body.sepa_evidence;
-
-    if (update.status === 'ACTIVE' || update.status === 'COMPLETED') {
-      const { data: current, error: currentError } = await supabaseServer
-        .from('trades')
-        .select('*, trade_executions(*)')
-        .eq('id', id)
-        .single();
-
-      if (currentError) throw currentError;
-      const currentTrade = current as unknown as Trade & { trade_executions?: Trade['executions'] };
-      const mergedTrade = {
-        ...currentTrade,
-        ...update,
-        executions: currentTrade.trade_executions || [],
-      } as Trade;
-      const metrics = calculateTradeMetrics(mergedTrade, mergedTrade.executions);
-
-      if (update.status === 'ACTIVE' && metrics.netShares <= 0) {
-        return apiError('ACTIVE 상태는 보유 수량이 1주 이상이어야 합니다.', 'INVALID_ACTIVE_STATUS');
-      }
-      if (update.status === 'COMPLETED' && metrics.hasExecutions && !metrics.isFullyClosed) {
-        return apiError('COMPLETED 상태는 체결 기준 보유 수량이 0이어야 합니다.', 'INVALID_COMPLETED_STATUS');
-      }
-    }
 
     const { data, error } = await supabaseServer
       .from('trades')

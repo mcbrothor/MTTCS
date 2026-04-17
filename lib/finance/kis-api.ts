@@ -267,6 +267,41 @@ export async function getMarketDailyPrice(
   return getOverseasDailyPrice(ticker, exchange, targetBars);
 }
 
+/** 국내 주식 현재가 시세를 조회합니다 (FHKST01010100) */
+export async function getKisDomesticPrice(ticker: string): Promise<number | null> {
+  try {
+    const token = await getKisToken();
+    const KIS_APP_KEY = kisAppKey();
+    const KIS_APP_SECRET = kisAppSecret();
+    const KIS_BASE_URL = kisBaseUrl();
+
+    const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price`, {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        authorization: `Bearer ${token}`,
+        appkey: KIS_APP_KEY,
+        appsecret: KIS_APP_SECRET,
+        tr_id: 'FHKST01010100',
+        custtype: 'P',
+      },
+      params: {
+        FID_COND_MRKT_DIV_CODE: 'J',
+        FID_INPUT_ISCD: ticker,
+      },
+    });
+
+    if (response.data.rt_cd !== '0') {
+      console.error(`KIS 현재가 조회 실패 (${ticker}):`, response.data.msg1);
+      return null;
+    }
+
+    return Number(response.data.output?.stck_prpr) || null;
+  } catch (error) {
+    console.error(`KIS API 호출 오류 (${ticker}):`, error);
+    return null;
+  }
+}
+
 function normalizeKisMarketCapRows(rows: KisMarketCapRow[], rankOffset = 0): KisMarketCapRankingRow[] {
   return rows
     .map((item, index) => {

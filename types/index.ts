@@ -1,4 +1,4 @@
-﻿export type TradeStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+export type TradeStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 export type Direction = 'LONG' | 'SHORT';
 export type AssessmentStatus = 'pass' | 'fail' | 'info' | 'warning';
 export type TradeExecutionSide = 'ENTRY' | 'EXIT';
@@ -82,6 +82,11 @@ export interface TradeMetrics {
   hasEntries: boolean;
   isFullyClosed: boolean;
   invalidExitShares: boolean;
+
+  // Real-time tracking fields
+  currentPrice: number | null;
+  unrealizedPnL: number | null;
+  unrealizedR: number | null;
 }
 
 export interface OHLCData {
@@ -171,7 +176,6 @@ export interface RiskPlan {
 
 // --- VCP (Volatility Contraction Pattern) ---
 
-/** Individual contraction segment. */
 export interface VcpContraction {
   peakDate: string;
   troughDate: string;
@@ -181,7 +185,6 @@ export interface VcpContraction {
   avgVolume: number;
 }
 
-/** VCP analysis result. */
 export interface VcpAnalysis {
   score: number;
   grade: 'strong' | 'forming' | 'weak' | 'none';
@@ -267,9 +270,7 @@ export interface ScannerResult extends ScannerConstituent {
   errorMessage: string | null;
 }
 
-// --- Watchlist ---
-
-export type WatchlistPriority = 0 | 1 | 2; // 0=normal, 1=high, 2=urgent
+export type WatchlistPriority = 0 | 1 | 2;
 
 export interface WatchlistItem {
   id: string;
@@ -281,9 +282,6 @@ export interface WatchlistItem {
   tags: string[];
   priority: WatchlistPriority;
 }
-
-
-// --- Master Filter (Top-down Risk Management) ---
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
 
@@ -311,16 +309,16 @@ export interface MasterFilterMetrics {
   above200d?: MasterFilterMetricDetail;
   sectorRotation?: MasterFilterMetricDetail;
   
-  score: number; // 0 - 5
-  p3Score?: number; // 0 - 100
+  score: number;
+  p3Score?: number;
   regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[];
   
-  // Source data for visualization and history.
-  spyPrice?: number;
+  meta: DataSourceMeta;
+  mainPrice?: number;
   ma50?: number;
   ma150?: number;
   ma200?: number;
-  spyHistory?: { date: string; close: number }[];
+  mainHistory?: { date: string; close: number }[];
   vixHistory?: { date: string; close: number }[];
   macroData?: Record<string, unknown>;
   updatedAt: string;
@@ -328,13 +326,12 @@ export interface MasterFilterMetrics {
 
 export interface MasterFilterResponse {
   state: MarketState;
+  market: ContestMarket;
   metrics: MasterFilterMetrics;
   insightLog: string;
   isAiGenerated: boolean;
   aiModelUsed?: string;
 }
-
-// --- Shared API contracts ---
 
 export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';
 
@@ -359,8 +356,6 @@ export interface ApiFailure {
   recoverable: boolean;
   lastSuccessfulAt?: string | null;
 }
-
-// --- Beauty Contest review loop ---
 
 export type ContestMarket = 'US' | 'KR';
 export type BeautyContestStatus = 'OPEN' | 'REVIEW_READY' | 'COMPLETED';
@@ -440,8 +435,6 @@ export interface ContestReview {
   user_review_note: string | null;
   error_message?: string | null;
 }
-
-// --- Portfolio and position risk ---
 
 export interface StopEvent {
   id: string;

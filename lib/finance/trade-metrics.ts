@@ -21,7 +21,8 @@ export function calculateTradeMetrics(
     | 'total_shares'
     | 'position_size'
   >,
-  executions: TradeExecution[] = []
+  executions: TradeExecution[] = [],
+  currentPrice: number | null = null
 ): TradeMetrics {
   const normalized = executions
     .filter((execution) => Number.isFinite(Number(execution.price)) && Number.isFinite(Number(execution.shares)))
@@ -64,6 +65,13 @@ export function calculateTradeMetrics(
   const openRisk =
     netShares > 0 && avgEntryPrice !== null && stopLoss !== null ? Math.max(avgEntryPrice - stopLoss, 0) * netShares : 0;
 
+  const unrealizedPnL =
+    netShares > 0 && avgEntryPrice !== null && currentPrice !== null
+      ? (currentPrice - avgEntryPrice) * netShares
+      : null;
+  const unrealizedR =
+    unrealizedPnL !== null && plannedRisk && plannedRisk > 0 ? unrealizedPnL / plannedRisk : null;
+
   return {
     entryShares: round(entryShares, 4),
     exitShares: round(exitShares, 4),
@@ -81,6 +89,11 @@ export function calculateTradeMetrics(
     hasEntries: entryShares > 0,
     isFullyClosed: entryShares > 0 && exitShares >= entryShares,
     invalidExitShares: exitShares > entryShares,
+
+    // Real-time fields
+    currentPrice,
+    unrealizedPnL: unrealizedPnL === null ? null : round(unrealizedPnL, 2),
+    unrealizedR: unrealizedR === null ? null : round(unrealizedR, 2),
   };
 }
 
@@ -91,11 +104,11 @@ export function deriveTradeStatus(currentStatus: TradeStatus, metrics: TradeMetr
   return 'ACTIVE';
 }
 
-export function attachTradeMetrics<T extends Trade>(trade: T): T {
+export function attachTradeMetrics<T extends Trade>(trade: T, currentPrice: number | null = null): T {
   const executions = trade.executions || [];
   return {
     ...trade,
     executions,
-    metrics: calculateTradeMetrics(trade, executions),
+    metrics: calculateTradeMetrics(trade, executions, currentPrice),
   };
 }

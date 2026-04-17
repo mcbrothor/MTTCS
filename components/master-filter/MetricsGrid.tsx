@@ -98,16 +98,21 @@ export default function MetricsGrid() {
       <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">P3 Market Filter</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+              {data.market === 'KR' ? '🇰🇷 KOSPI 200' : '🇺🇸 SPY'} Market Filter
+            </p>
             <h2 className="mt-1 text-xl font-bold text-white">근거 기반 시장 점수판</h2>
           </div>
-          <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? Math.round(metrics.score * 20)}/100</p>
+          <div className="text-right">
+            <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? 0}/100</p>
+            <p className="text-[10px] font-bold uppercase text-slate-500">Total P3 Confidence Score</p>
+          </div>
         </div>
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <MetricCard detail={metrics.trend} chartData={metrics.spyHistory} />
-        <MetricCard detail={metrics.breadth} chartData={metrics.spyHistory} />
+        <MetricCard detail={metrics.trend} chartData={metrics.mainHistory} />
+        <MetricCard detail={metrics.breadth} chartData={metrics.mainHistory} />
         <MetricCard detail={metrics.volatility} chartData={metrics.vixHistory} />
         <MetricCard detail={metrics.liquidity} />
       </div>

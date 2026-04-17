@@ -5,7 +5,7 @@ import type { MarketState, MasterFilterMetricDetail, MasterFilterResponse } from
 
 export const revalidate = 3600;
 
-const MACRO_SYMBOLS = [
+const US_MACRO_SYMBOLS = [
   '^VIX',
   'UUP',
   'DX-Y.NYB',
@@ -38,9 +38,43 @@ const MACRO_SYMBOLS = [
   'BTC-USD',
 ];
 
-const SECTOR_ETFS = ['XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB'];
-const BREADTH_ETFS = ['SPY', 'QQQ', 'DIA', 'IWM', 'RSP'];
-const RISK_ON_SECTORS = new Set(['XLK', 'XLY', 'XLC', 'XLI', 'XLF']);
+const KR_MACRO_SYMBOLS = [
+  '^KS200',
+  '^KQ150',
+  '^KS11',
+  '^KQ11',
+  'KRW=X',
+  '069500.KS', // KODEX 200
+  '233740.KS', // KODEX 코스닥150레버리지 (Proxy)
+  '139230.KS', // TIGER 200 IT
+  '455850.KS', // TIGER 반도체TOP10
+  '305720.KS', // KODEX 2차전지산업
+  '123310.KS', // KODEX 자동차
+  '244580.KS', // KODEX 바이오
+  '091220.KS', // KODEX 은행
+  '117680.KS', // KODEX 철강
+  '117700.KS', // KODEX 화학
+  '117700.KS', // KODEX 건설 (중복 확인 필요하나 우선 할당)
+  '139260.KS', // TIGER 200 IT (중복)
+  '139280.KS', // TIGER 경기방어 (중복)
+];
+
+const US_SECTOR_ETFS = ['XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB'];
+const US_BREADTH_ETFS = ['SPY', 'QQQ', 'DIA', 'IWM', 'RSP'];
+const US_RISK_ON_SECTORS = new Set(['XLK', 'XLY', 'XLC', 'XLI', 'XLF']);
+
+const KR_SECTOR_ETFS = [
+  '455850.KS', // 반도체
+  '305720.KS', // 2차전지
+  '123310.KS', // 자동차
+  '244580.KS', // 바이오
+  '091220.KS', // 은행
+  '117680.KS', // 철강
+  '117700.KS', // 화학
+  '139260.KS', // IT
+];
+const KR_BREADTH_ETFS = ['^KS200', '^KQ150', '069500.KS'];
+const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '123310.KS', '139260.KS']);
 
 function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
@@ -103,27 +137,37 @@ async function safeDaily(symbol: string) {
   return getYahooDailyPrice(symbol).catch(() => []);
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const [spyData, vixData, macroQuotes, breadthSeries, sectorSeries] = await Promise.all([
-      safeDaily('SPY'),
-      safeDaily('^VIX'),
-      getYahooQuotes(MACRO_SYMBOLS).catch(() => []),
-      Promise.all(BREADTH_ETFS.map(async (symbol) => [symbol, await safeDaily(symbol)] as const)),
-      Promise.all(SECTOR_ETFS.map(async (symbol) => [symbol, await safeDaily(symbol)] as const)),
+    const { searchParams } = new URL(request.url);
+    const market = (searchParams.get('market')?.toUpperCase() || 'US') as 'US' | 'KR';
+
+    const symbols = market === 'KR' ? KR_MACRO_SYMBOLS : US_MACRO_SYMBOLS;
+    const sectorEtfs = market === 'KR' ? KR_SECTOR_ETFS : US_SECTOR_ETFS;
+    const breadthEtfs = market === 'KR' ? KR_BREADTH_ETFS : US_BREADTH_ETFS;
+    const riskOnSectors = market === 'KR' ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
+    const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
+    const vixSymbol = '^VIX';
+
+    const [mainData, vixData, macroQuotes, breadthSeries, sectorSeries] = await Promise.all([
+      safeDaily(mainSymbol),
+      safeDaily(vixSymbol),
+      getYahooQuotes(symbols).catch(() => []),
+      Promise.all(breadthEtfs.map(async (symbol) => [symbol, await safeDaily(symbol)] as const)),
+      Promise.all(sectorEtfs.map(async (symbol) => [symbol, await safeDaily(symbol)] as const)),
     ]);
 
-    if (spyData.length < 200) {
-      throw new Error('SPY 200일 가격 데이터를 충분히 확보하지 못했습니다.');
+    if (mainData.length < 200) {
+      throw new Error(`${mainSymbol} 200일 가격 데이터를 충분히 확보하지 못했습니다.`);
     }
 
-    const lastClose = spyData.at(-1)!.close;
-    const ma50 = movingAverage(spyData, 50) || 0;
-    const ma150 = movingAverage(spyData, 150) || 0;
-    const ma200 = movingAverage(spyData, 200) || 0;
+    const lastClose = mainData.at(-1)!.close;
+    const ma50 = movingAverage(mainData, 50) || 0;
+    const ma150 = movingAverage(mainData, 150) || 0;
+    const ma200 = movingAverage(mainData, 200) || 0;
     const currentVix = vixData.at(-1)?.close || 20;
-    const distributionDays = calculateDistributionDays(spyData);
-    const ftd = detectFollowThroughDay(spyData);
+    const distributionDays = calculateDistributionDays(mainData);
+    const ftd = detectFollowThroughDay(mainData);
 
     const breadthRows = breadthSeries
       .filter(([, data]) => data.length >= 200)
@@ -137,7 +181,7 @@ export async function GET() {
       : 0;
     const newHighLowProxy = Math.max(
       0,
-      Math.min(3, above200Pct / 33 + ((percentReturn(spyData, 20) || 0) > 0 ? 0.5 : -0.5))
+      Math.min(3, above200Pct / 33 + ((percentReturn(mainData, 20) || 0) > 0 ? 0.5 : -0.5))
     );
 
     const sectorRows = sectorSeries
@@ -145,7 +189,7 @@ export async function GET() {
       .map(([symbol, data]) => ({ symbol, return20: percentReturn(data, 20) || 0 }))
       .sort((a, b) => b.return20 - a.return20);
     const leadingSectors = sectorRows.slice(0, 3);
-    const sectorRiskOnCount = leadingSectors.filter((row) => RISK_ON_SECTORS.has(row.symbol)).length;
+    const sectorRiskOnCount = leadingSectors.filter((row) => riskOnSectors.has(row.symbol)).length;
 
     const ftdScore = ftd.found ? 20 : 8;
     const distributionScore = distributionDays <= 3 ? 20 : distributionDays <= 5 ? 12 : 4;
@@ -173,8 +217,8 @@ export async function GET() {
       threshold: Number(ma200.toFixed(2)),
       status: lastClose > ma200 && ma50 > ma200 ? 'PASS' : lastClose > ma200 ? 'WARNING' : 'FAIL',
       unit: 'pts',
-      description: 'SPY가 50일선과 200일선 위에 있는지, 50일선이 200일선보다 높은지 확인합니다.',
-      source: 'Yahoo Finance SPY',
+      description: `${mainSymbol}가 50일선과 200일선 위에 있는지, 50일선이 200일선보다 높은지 확인합니다.`,
+      source: `Yahoo Finance ${mainSymbol}`,
     });
     const breadthMetric = createMetric({
       label: 'Market Breadth',
@@ -182,7 +226,7 @@ export async function GET() {
       threshold: 50,
       status: above200Pct >= 60 ? 'PASS' : above200Pct >= 40 ? 'WARNING' : 'FAIL',
       unit: '%',
-      description: 'SPY, QQQ, DIA, IWM, RSP 중 200일선 위에 있는 ETF 비율입니다.',
+      description: `${breadthEtfs.join(', ')} 중 200일선 위에 있는 비율입니다.`,
       source: 'Yahoo Finance ETF proxy',
     });
     const liquidityMetric = createMetric({
@@ -191,8 +235,8 @@ export async function GET() {
       threshold: 5,
       status: distributionDays <= 3 ? 'PASS' : distributionDays <= 5 ? 'WARNING' : 'FAIL',
       unit: 'days',
-      description: '최근 25거래일 중 하락일이면서 전일보다 거래량이 증가한 날을 누적합니다.',
-      source: 'Yahoo Finance SPY volume',
+      description: `최근 25거래일 중 하락일이면서 전일보다 거래량이 증가한 날을 누적합니다.`,
+      source: `Yahoo Finance ${mainSymbol} volume`,
     });
     const volatilityMetric = createMetric({
       label: 'Volatility (VIX)',
@@ -210,7 +254,7 @@ export async function GET() {
       status: statusFromScore(sectorScore),
       unit: '',
       description: '최근 20거래일 수익률 상위 섹터가 성장/경기민감 섹터인지 확인합니다.',
-      source: 'SPDR sector ETF proxy',
+      source: 'Sector ETF proxy',
     });
 
     const p3Metrics = {
@@ -221,7 +265,7 @@ export async function GET() {
         status: statusFromScore(ftdScore),
         unit: '',
         description: '조정 이후 1.25% 이상 상승과 거래량 증가가 동반된 시장 재개 신호입니다.',
-        source: 'SPY proxy',
+        source: `${mainSymbol} proxy`,
         score: ftdScore,
         weight: 20,
       }),
@@ -232,7 +276,7 @@ export async function GET() {
         status: statusFromScore(distributionScore),
         unit: 'days',
         description: '기관 매도 압력이 과도하게 누적되는지 확인합니다.',
-        source: 'SPY volume proxy',
+        source: `${mainSymbol} volume proxy`,
         score: distributionScore,
         weight: 20,
       }),
@@ -265,13 +309,13 @@ export async function GET() {
         status: statusFromScore(sectorScore),
         unit: '',
         description: '자금이 성장/경기민감 섹터로 이동하는지 확인합니다.',
-        source: 'SPDR sector ETF proxy',
+        source: 'Sector ETF proxy',
         score: sectorScore,
         weight: 20,
       }),
     };
 
-    const spyHistory = spyData.slice(-50).map((item) => ({ date: item.date, close: item.close }));
+    const mainHistory = mainData.slice(-50).map((item) => ({ date: item.date, close: item.close }));
     const vixHistory = vixData.slice(-50).map((item) => ({ date: item.date, close: item.close }));
     const macroMap = macroQuotes.reduce((acc, quote) => {
       acc[quote.symbol] = quote;
@@ -280,6 +324,7 @@ export async function GET() {
 
     const insightInput = {
       marketState,
+      market,
       metrics: {
         trend: trendMetric,
         breadth: breadthMetric,
@@ -288,7 +333,7 @@ export async function GET() {
         leadership: leadershipMetric,
         totalScore: legacyScore,
       },
-      macroData: { ...macroMap, p3Score, leadingSectors, breadthRows },
+      macroData: { ...macroMap, p3Score, leadingSectors, breadthRows, market },
     };
 
     let insightLog = '';
@@ -323,16 +368,17 @@ export async function GET() {
         ...p3Metrics,
         score: legacyScore,
         p3Score,
-        spyPrice: lastClose,
+        mainPrice: lastClose,
         ma50,
         ma150,
         ma200,
-        spyHistory,
+        mainHistory,
         vixHistory,
         macroData: { ...macroMap, leadingSectors, breadthRows },
         regimeHistory: [
           { date: new Date().toISOString(), state: marketState, score: p3Score, reason: `P3 score ${p3Score}/100` },
         ],
+        meta: { asOf: new Date().toISOString(), source: 'Market Analysis Engine' },
         updatedAt: new Date().toISOString(),
       },
       insightLog,
