@@ -16,17 +16,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (candidateError) throw candidateError;
     if (!candidates || candidates.length === 0) return apiError('Contest session has no candidates.', 'NOT_FOUND', 404);
 
-    const rankings = parseLlmRankings(raw, candidates.map((candidate) => candidate.ticker));
+    const rankings = parseLlmRankings(raw, candidates.map((candidate) => ({ id: candidate.id, ticker: candidate.ticker })));
     const idByTicker = new Map(candidates.map((candidate) => [String(candidate.ticker).toUpperCase(), candidate.id]));
+    const idByCandidateId = new Map(candidates.map((candidate) => [String(candidate.id), candidate.id]));
 
     for (const ranking of rankings) {
-      const candidateId = idByTicker.get(ranking.ticker);
+      const candidateId = ranking.candidate_id ? idByCandidateId.get(ranking.candidate_id) : idByTicker.get(ranking.ticker);
       if (!candidateId) continue;
       const { error: updateError } = await supabaseServer
         .from('contest_candidates')
         .update({
           llm_rank: ranking.rank,
           llm_comment: ranking.comment,
+          llm_scores: ranking.scores || {},
+          llm_analysis: ranking.analysis,
           updated_at: new Date().toISOString(),
         })
         .eq('id', candidateId);

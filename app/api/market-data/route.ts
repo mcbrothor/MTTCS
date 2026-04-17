@@ -4,25 +4,88 @@ import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-ap
 import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/calculations';
 import { analyzeVcp } from '@/lib/finance/vcp-engine';
-import { cacheGet, cacheSet, cacheKey } from '@/lib/cache';
-import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData } from '@/types';
+import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
+import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData, ProviderAttempt } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
 const DEFAULT_TOTAL_EQUITY = 50_000;
 const DEFAULT_RISK_PERCENT_INPUT = 1;
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '알 수 없는 오류';
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function apiError(message: string, code: string, status = 500, details?: unknown) {
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
+function getUpstreamStatus(error: unknown) {
+  const maybe = error as { response?: { status?: unknown }; status?: unknown };
+  const status = maybe.response?.status ?? maybe.status;
+  return typeof status === 'number' && Number.isFinite(status) ? status : null;
+}
+
+function isTransientError(error: unknown) {
+  const status = getUpstreamStatus(error);
+  if (status === 429) return true;
+  if (status !== null && status >= 500) return true;
+  const code = String((error as { code?: unknown }).code || '');
+  return code === 'ECONNABORTED' || code === 'ETIMEDOUT' || code === 'ECONNRESET';
+}
+
+function attempt(provider: string, stage: string, status: ProviderAttempt['status'], message: string, patch: Partial<ProviderAttempt> = {}): ProviderAttempt {
+  return {
+    provider,
+    stage,
+    status,
+    message,
+    upstreamStatus: null,
+    attemptedAt: new Date().toISOString(),
+    ...patch,
+  };
+}
+
+async function withRetry<T>(
+  provider: string,
+  stage: string,
+  attempts: ProviderAttempt[],
+  fn: () => Promise<T>,
+  maxAttempts = 2
+) {
+  let lastError: unknown;
+  for (let index = 1; index <= maxAttempts; index += 1) {
+    try {
+      const result = await fn();
+      attempts.push(attempt(provider, stage, 'success', `${provider} ${stage} succeeded on attempt ${index}.`));
+      return result;
+    } catch (error) {
+      lastError = error;
+      const upstreamStatus = getUpstreamStatus(error);
+      const retryable = isTransientError(error);
+      attempts.push(attempt(
+        provider,
+        stage,
+        'failed',
+        `${provider} ${stage} failed on attempt ${index}: ${getErrorMessage(error)}`,
+        { upstreamStatus }
+      ));
+
+      if (!retryable || index === maxAttempts) break;
+      await sleep(300 * index);
+    }
+  }
+
+  throw lastError;
+}
+
+function apiError(message: string, code: string, status = 500, details?: unknown, recoverable = status < 500) {
   return NextResponse.json(
     {
       message,
       code,
       details,
-      recoverable: status < 500,
+      recoverable,
     },
     { status }
   );
@@ -72,17 +135,23 @@ function getBenchmarkCandidates(exchange: string) {
   return ['SPY', 'QQQ'];
 }
 
-async function fetchBenchmarkData(exchange: string, warnings: string[]) {
+function isValidTicker(ticker: string, exchange: string) {
+  if (exchange === 'KOSPI' || exchange === 'KOSDAQ') return /^\d{6}$/.test(ticker);
+  return /^[A-Z][A-Z0-9.-]{0,14}$/.test(ticker);
+}
+
+async function fetchBenchmarkData(exchange: string, warnings: string[], attempts: ProviderAttempt[]) {
   const candidates = getBenchmarkCandidates(exchange);
   for (const ticker of candidates) {
     try {
-      const data = await getYahooDailyPrice(ticker);
+      const data = await withRetry('Yahoo Finance', `benchmark ${ticker}`, attempts, () => getYahooDailyPrice(ticker), 2);
       if (data.length > 0) {
         if (ticker !== candidates[0]) {
           warnings.push(`Primary RS benchmark ${candidates[0]} was unavailable; using ${ticker} fallback.`);
         }
         return { ticker, data };
       }
+      attempts.push(attempt('Yahoo Finance', `benchmark ${ticker}`, 'warning', `Benchmark ${ticker} returned no bars.`, { bars: 0 }));
     } catch (error: unknown) {
       warnings.push(`RS benchmark ${ticker} fetch failed: ${getErrorMessage(error)}.`);
     }
@@ -106,11 +175,11 @@ async function fetchFundamentals(ticker: string, exchange: string, warnings: str
   const merged = mergeFundamentals(yahooFundamentals, secFundamentals);
 
   if (!hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
-    warnings.push('Yahoo 기본적 데이터가 부족해 SEC EDGAR 공식 재무제표로 보완했습니다.');
+    warnings.push('Yahoo fundamentals were sparse; SEC EDGAR was used as official-statement fallback.');
   } else if (hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
-    warnings.push('Yahoo 기본적 데이터의 빈 항목을 SEC EDGAR 공식 재무제표로 보완했습니다.');
+    warnings.push('Yahoo fundamentals were merged with SEC EDGAR fields.');
   } else if (!merged) {
-    warnings.push('Yahoo와 SEC EDGAR에서도 충분한 기본적 데이터를 확보하지 못해 정보 항목으로 표시합니다.');
+    warnings.push('Fundamental data was not available from Yahoo or SEC EDGAR.');
   }
 
   return merged;
@@ -133,30 +202,38 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
   data: OHLCData[];
   providerUsed: string;
   warnings: string[];
+  providerAttempts: ProviderAttempt[];
 }> {
   const warnings: string[] = [];
+  const providerAttempts: ProviderAttempt[] = [];
   let kisData: OHLCData[] = [];
 
   try {
-    kisData = await getMarketDailyPrice(ticker, exchange, TARGET_KIS_BARS);
+    kisData = await withRetry('KIS', 'daily price', providerAttempts, () => getMarketDailyPrice(ticker, exchange, TARGET_KIS_BARS), 2);
+    const last = providerAttempts.at(-1);
+    if (last && last.provider === 'KIS') last.bars = kisData.length;
+
     if (kisData.length >= REQUIRED_SEPA_BARS) {
       return {
         data: kisData,
         providerUsed: `KIS (${kisData.length} daily bars)`,
         warnings,
+        providerAttempts,
       };
     }
 
-    warnings.push(
-      `KIS 일봉은 ${kisData.length}개만 확보했습니다. 52주/장기 이동평균 판정에는 ${REQUIRED_SEPA_BARS}개 이상이 필요해 Yahoo 보완을 시도합니다.`
-    );
+    warnings.push(`KIS returned only ${kisData.length} daily bars; Yahoo fallback will be tried for long moving-average and 52-week checks.`);
+    providerAttempts.push(attempt('KIS', 'daily price coverage', 'warning', `Only ${kisData.length} bars were available from KIS.`, { bars: kisData.length }));
   } catch (error: unknown) {
-    warnings.push(`KIS 조회 실패: ${getErrorMessage(error)}. Yahoo 보완을 시도합니다.`);
+    warnings.push(`KIS fetch failed: ${getErrorMessage(error)}. Yahoo fallback will be tried.`);
   }
 
   try {
     const yahooTicker = getYahooFormattedTicker(ticker, exchange);
-    const yahooData = await getYahooDailyPrice(yahooTicker);
+    const yahooData = await withRetry('Yahoo Finance', `daily price ${yahooTicker}`, providerAttempts, () => getYahooDailyPrice(yahooTicker), 2);
+    const last = providerAttempts.at(-1);
+    if (last && last.provider === 'Yahoo Finance') last.bars = yahooData.length;
+
     const data = chooseLongerData(kisData, yahooData);
     const providerUsed =
       data === yahooData
@@ -164,23 +241,22 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
         : `KIS partial (${kisData.length} daily bars)`;
 
     if (data.length < REQUIRED_SEPA_BARS) {
-      warnings.push(
-        `보완 후에도 일봉은 ${data.length}개입니다. 부족한 장기 지표는 저장 차단이 아닌 정보 항목으로 표시합니다.`
-      );
+      warnings.push(`Only ${data.length} daily bars were available after fallback; long-window SEPA checks can be less reliable.`);
     }
 
-    return { data, providerUsed, warnings };
+    return { data, providerUsed, warnings, providerAttempts };
   } catch (error: unknown) {
     if (kisData.length > 0) {
-      warnings.push(`Yahoo 보완 실패: ${getErrorMessage(error)}. KIS 부분 데이터로 분석합니다.`);
+      warnings.push(`Yahoo fallback failed: ${getErrorMessage(error)}. Analysis will use partial KIS data.`);
       return {
         data: kisData,
         providerUsed: `KIS partial (${kisData.length} daily bars)`,
         warnings,
+        providerAttempts,
       };
     }
 
-    throw error;
+    throw Object.assign(error instanceof Error ? error : new Error(getErrorMessage(error)), { providerAttempts });
   }
 }
 
@@ -197,16 +273,19 @@ export async function GET(request: Request) {
     return apiError('티커를 입력해 주세요.', 'MISSING_TICKER', 400);
   }
 
+  if (!isValidTicker(ticker, exchange)) {
+    return apiError('지원하지 않는 티커 형식입니다. 미국 종목은 GOOG/BRK-B 형식, 한국 종목은 6자리 코드를 사용해 주세요.', 'INVALID_TICKER', 400);
+  }
+
   if (!Number.isFinite(totalEquity) || totalEquity <= 0) {
     return apiError('총 자본은 0보다 큰 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
   }
 
   if (!Number.isFinite(riskPercentInput) || riskPercentInput <= 0 || riskPercentInput > 10) {
-    return apiError('허용 손실은 0보다 크고 10% 이하인 숫자여야 합니다.', 'INVALID_RISK_PERCENT', 400);
+    return apiError('허용 손실은 0보다 크고 10% 이하여야 합니다.', 'INVALID_RISK_PERCENT', 400);
   }
 
   try {
-    // I-3: 동일 티커 중복 호출 방지용 캐시
     const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = cacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
@@ -220,25 +299,22 @@ export async function GET(request: Request) {
           delay: 'EOD',
           fallbackUsed: cached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
           warnings: cached.warnings,
+          providerAttempts: cached.providerAttempts || [],
         },
       });
     }
 
-    const { data, providerUsed, warnings } = await fetchPriceData(ticker, exchange);
+    const { data, providerUsed, warnings, providerAttempts } = await fetchPriceData(ticker, exchange);
 
     const [benchmark, fundamentals] = await Promise.all([
-      fetchBenchmarkData(exchange, warnings),
+      fetchBenchmarkData(exchange, warnings, providerAttempts),
       includeFundamentals ? fetchFundamentals(ticker, exchange, warnings) : Promise.resolve(null),
     ]);
 
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
     const sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
-
-    // VCP 분석 — SEPA 필터 후 피벗/무효화 기준 정밀 분석
     const vcpAnalysis = analyzeVcp(data, entryPrice);
-
-    // Minervini식 기본 계획: VCP 피벗 진입, 패턴 무효화선 + 8% 손실 캡 기반 수량 산출
     const effectiveEntry = vcpAnalysis.recommendedEntry;
     const riskPlan = calculateMinerviniRiskPlan(
       totalEquity,
@@ -256,16 +332,19 @@ export async function GET(request: Request) {
       warnings.push('일부 보조 지표는 데이터 제공 상황에 따라 정보 항목으로 표시됩니다.');
     }
     if (vcpAnalysis.entrySource === 'RECENT_HIGH_FALLBACK') {
-      warnings.push('VCP 피벗이 확정되지 않아 최근 고점 참고가로 계획을 산출했습니다. 실제 진입 전 피벗과 거래량을 다시 확인하세요.');
+      warnings.push('VCP 피벗이 확정되지 않아 최근 고점을 참고가로 사용했습니다.');
     }
     if (vcpAnalysis.breakoutVolumeStatus === 'weak') {
-      warnings.push('피벗 위에 있으나 돌파 거래량이 충분히 강하지 않습니다. 추격 진입보다 확인을 우선하세요.');
+      warnings.push('돌파 거래량이 아직 충분히 강하지 않습니다.');
     }
+
+    providerAttempts.push(attempt('MTN Engine', 'SEPA/VCP calculation', 'success', 'SEPA, VCP and risk plan were calculated.'));
 
     const response: MarketAnalysisResponse = {
       ticker,
       exchange,
       providerUsed,
+      providerAttempts,
       priceData: data,
       sepaEvidence,
       riskPlan,
@@ -292,14 +371,20 @@ export async function GET(request: Request) {
         delay: 'EOD',
         fallbackUsed: warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
         warnings,
+        providerAttempts,
       },
     });
   } catch (error: unknown) {
+    const providerAttempts = (error as { providerAttempts?: ProviderAttempt[] }).providerAttempts || [];
+    const upstreamStatus = getUpstreamStatus(error);
+    const recoverable = isTransientError(error);
     console.error('Market Data API Error:', error);
     return apiError(
       getErrorMessage(error) || '시장 데이터를 불러오는 중 오류가 발생했습니다.',
       'MARKET_DATA_FETCH_FAILED',
-      500
+      upstreamStatus && upstreamStatus >= 500 ? 503 : 500,
+      { upstreamStatus, providerAttempts },
+      recoverable
     );
   }
 }

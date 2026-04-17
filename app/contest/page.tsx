@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
+import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   ApiSuccess,
   BeautyContestSession,
@@ -13,19 +14,29 @@ import type {
   ContestPromptCandidate,
   ContestReview,
   DataSourceMeta,
+  MasterFilterResponse,
+  RecommendationTier,
   ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
 } from '@/types';
 
 const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v2:';
+const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
+const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI100', 'KOSDAQ100'];
-const MISTAKE_TAGS = ['펀더멘탈 오판', '가짜 돌파', '매크로 무시', '추격 매수', '매도 지연', '놓친 주도주'];
+const MISTAKE_TAGS = ['시장 국면 무시', '가짜 돌파', '추격 매수', '매도 지연', '과도한 확신', '선정 기준 오류'];
 
 interface StoredScannerSnapshot {
   savedAt: string;
   universeMeta: ScannerUniverseResponse;
   results: ScannerResult[];
+}
+
+interface TransferSelection {
+  universe: ScannerUniverse;
+  tickers: string[];
+  savedAt: string;
 }
 
 interface ReviewDraft {
@@ -35,6 +46,18 @@ interface ReviewDraft {
 }
 
 type ReviewDrafts = Record<string, ReviewDraft>;
+type Horizon = 'W1' | 'M1';
+
+function parseUniverse(value: string | null): ScannerUniverse | null {
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
+  return null;
+}
+
+function getInitialUniverse() {
+  if (typeof window === 'undefined') return 'NASDAQ100';
+  const transfer = readTransferSelection();
+  return transfer?.universe || parseUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY)) || 'NASDAQ100';
+}
 
 function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
   try {
@@ -47,12 +70,27 @@ function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
   }
 }
 
+function readTransferSelection(): TransferSelection | null {
+  try {
+    const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as TransferSelection;
+    if (!parseUniverse(parsed.universe) || !Array.isArray(parsed.tickers)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCandidate {
   return {
     ticker: item.ticker,
     exchange: item.exchange,
     name: item.name || item.ticker,
     user_rank: rank,
+    recommendation_tier: item.recommendationTier,
+    recommendation_reason: item.recommendationReason,
+    exception_signals: item.exceptionSignals || [],
     rs_rating: null,
     sepa_status: item.sepaStatus,
     sepa_passed: item.sepaPassed,
@@ -69,6 +107,7 @@ function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCa
     price: item.currentPrice,
     price_as_of: item.priceAsOf,
     source: item.priceSource || 'MTN scanner',
+    provider_attempts: item.providerAttempts || [],
   };
 }
 
@@ -76,6 +115,16 @@ async function parseResponse<T>(response: Response) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
   return body as ApiSuccess<T>;
+}
+
+async function fetchMarketContext(market: ContestMarket): Promise<MasterFilterResponse | null> {
+  try {
+    const response = await fetch(`/api/master-filter?market=${market}`);
+    if (!response.ok) return null;
+    return await response.json() as MasterFilterResponse;
+  } catch {
+    return null;
+  }
 }
 
 function formatDate(value: string | null | undefined) {
@@ -95,6 +144,13 @@ function formatPrice(value: number | null | undefined, exchange?: string) {
   }).format(value);
 }
 
+function tierClass(tier?: RecommendationTier | null) {
+  if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  return 'border-slate-700 text-slate-300';
+}
+
 function reviewTone(review: ContestReview) {
   if (review.status === 'ERROR') return 'border-red-500/30 bg-red-500/10 text-red-100';
   if (review.status === 'UPDATED' || review.status === 'MANUAL') {
@@ -111,6 +167,43 @@ function orderedCandidates(session: BeautyContestSession | null) {
   );
 }
 
+function sortScannerPool(rows: ScannerResult[]) {
+  return [...rows]
+    .filter((item) => item.status === 'done')
+    .sort((a, b) =>
+      recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier)
+      || (b.vcpScore || 0) - (a.vcpScore || 0)
+      || Math.abs(a.distanceToPivotPct ?? 999) - Math.abs(b.distanceToPivotPct ?? 999)
+    );
+}
+
+function average(values: number[]) {
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+function reviewReturn(candidate: ContestCandidate, horizon: Horizon) {
+  const review = candidate.reviews?.find((item) => item.horizon === horizon);
+  if (!review || (review.status !== 'UPDATED' && review.status !== 'MANUAL')) return null;
+  return typeof review.return_pct === 'number' ? review.return_pct : null;
+}
+
+function performanceSummary(candidates: ContestCandidate[], horizon: Horizon) {
+  const selected = candidates.filter((candidate) => candidate.actual_invested).map((candidate) => reviewReturn(candidate, horizon)).filter((value): value is number => value !== null);
+  const unselected = candidates.filter((candidate) => !candidate.actual_invested).map((candidate) => reviewReturn(candidate, horizon)).filter((value): value is number => value !== null);
+  const selectedAvgReturn = average(selected);
+  const unselectedAvgReturn = average(unselected);
+  if (selectedAvgReturn === null || unselectedAvgReturn === null) {
+    return { status: 'PENDING' as const, selectedAvgReturn, unselectedAvgReturn, relativeReturn: null };
+  }
+  const relativeReturn = Math.round((selectedAvgReturn - unselectedAvgReturn) * 100) / 100;
+  return {
+    status: relativeReturn >= 0 ? 'PASS' as const : 'FAIL' as const,
+    selectedAvgReturn,
+    unselectedAvgReturn,
+    relativeReturn,
+  };
+}
+
 export default function ContestPage() {
   const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
   const [snapshot, setSnapshot] = useState<StoredScannerSnapshot | null>(null);
@@ -124,13 +217,32 @@ export default function ContestPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
 
   const market: ContestMarket = universe === 'KOSPI100' || universe === 'KOSDAQ100' ? 'KR' : 'US';
 
   const loadSnapshot = useCallback((nextUniverse: ScannerUniverse) => {
     const next = readSnapshot(nextUniverse);
     setSnapshot(next);
-    setSelected(next ? next.results.filter((item) => item.status === 'done').slice(0, 10).map((item) => item.ticker) : []);
+    if (!next) {
+      setSelected([]);
+      return;
+    }
+
+    const transfer = readTransferSelection();
+    const transferTickers = transfer?.universe === nextUniverse ? transfer.tickers : [];
+    const validTickers = new Set(next.results.map((item) => item.ticker));
+    const transferred = transferTickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10);
+    if (transferred.length > 0) {
+      setSelected(transferred);
+      return;
+    }
+
+    const defaultPool = sortScannerPool(next.results)
+      .filter((item) => isContestPoolTier(item.recommendationTier))
+      .slice(0, 10)
+      .map((item) => item.ticker);
+    setSelected(defaultPool);
   }, []);
 
   const loadSessions = useCallback(async (preferredSessionId?: string | null) => {
@@ -146,16 +258,18 @@ export default function ContestPage() {
   }, []);
 
   useEffect(() => {
-    loadSnapshot(universe);
+    const initial = getInitialUniverse();
+    setUniverse(initial);
+    loadSnapshot(initial);
     loadSessions().catch((err: unknown) => setError(err instanceof Error ? err.message : '콘테스트 목록을 불러오지 못했습니다.'));
-  }, [loadSessions, loadSnapshot, universe]);
+  }, [loadSessions, loadSnapshot]);
 
-  const rankedResults = useMemo(() => {
-    const rows = snapshot?.results || [];
-    return [...rows]
-      .filter((item) => item.status === 'done')
-      .sort((a, b) => (b.vcpScore || 0) - (a.vcpScore || 0));
-  }, [snapshot]);
+  useEffect(() => {
+    fetchMarketContext(market).then(setMarketContext);
+  }, [market]);
+
+  const rankedResults = useMemo(() => sortScannerPool(snapshot?.results || []), [snapshot]);
+  const candidatePool = useMemo(() => rankedResults.filter((item) => isContestPoolTier(item.recommendationTier)), [rankedResults]);
 
   const selectedCandidates = useMemo(() => {
     const byTicker = new Map(rankedResults.map((item) => [item.ticker, item]));
@@ -168,6 +282,8 @@ export default function ContestPage() {
   }, [rankedResults, selected]);
 
   const activeCandidates = orderedCandidates(activeSession);
+  const w1Summary = performanceSummary(activeCandidates, 'W1');
+  const m1Summary = performanceSummary(activeCandidates, 'M1');
 
   const toggleCandidateSelection = (ticker: string) => {
     setSelected((prev) => {
@@ -182,10 +298,17 @@ export default function ContestPage() {
     setError(null);
     setNotice(null);
     try {
+      const context = marketContext || await fetchMarketContext(market);
       const response = await fetch('/api/contest/sessions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ market, universe, candidates: selectedCandidates }),
+        body: JSON.stringify({
+          market,
+          universe,
+          candidates: selectedCandidates,
+          market_context: context,
+          candidate_pool_snapshot: candidatePool.map((item, index) => candidateFromResult(item, index + 1)),
+        }),
       });
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
@@ -213,7 +336,7 @@ export default function ContestPage() {
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
       setLlmJson('');
-      setNotice('LLM 순위를 저장했습니다.');
+      setNotice('LLM 분석 결과를 저장했습니다.');
       await loadSessions(result.data.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'LLM 결과 저장에 실패했습니다.');
@@ -228,6 +351,13 @@ export default function ContestPage() {
     setNotice('프롬프트를 클립보드에 복사했습니다.');
   };
 
+  const nextFinalPickRank = () => {
+    const ranks = activeCandidates
+      .filter((candidate) => candidate.actual_invested)
+      .map((candidate) => candidate.final_pick_rank || 0);
+    return Math.max(0, ...ranks) + 1;
+  };
+
   const updateCandidate = async (candidate: ContestCandidate, actualInvested: boolean) => {
     setBusyId(candidate.id);
     setError(null);
@@ -235,12 +365,15 @@ export default function ContestPage() {
       const response = await fetch(`/api/contest/candidates/${candidate.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ actual_invested: actualInvested }),
+        body: JSON.stringify({
+          actual_invested: actualInvested,
+          final_pick_rank: actualInvested ? candidate.final_pick_rank || nextFinalPickRank() : null,
+        }),
       });
       await parseResponse<ContestCandidate>(response);
       await loadSessions(activeSession?.id);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '투자 여부 저장에 실패했습니다.');
+      setError(err instanceof Error ? err.message : '최종 선정 여부 저장에 실패했습니다.');
     } finally {
       setBusyId(null);
     }
@@ -294,14 +427,40 @@ export default function ContestPage() {
     }
   };
 
+  const summaryCard = (horizon: Horizon, summary: ReturnType<typeof performanceSummary>) => {
+    const label = horizon === 'W1' ? '1주' : '1개월';
+    const tone = summary.status === 'PASS'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+      : summary.status === 'FAIL'
+        ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+        : 'border-slate-800 bg-slate-900/60 text-slate-300';
+    const verdict = summary.status === 'PASS' ? '선정 기준 유효' : summary.status === 'FAIL' ? '실패 / 반성 필요' : '판정 보류';
+    return (
+      <div className={`rounded-lg border p-4 ${tone}`}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold">{label} 성과 판정</p>
+            <p className="mt-1 text-xs opacity-80">{verdict}</p>
+          </div>
+          <BarChart3 className="h-5 w-5 opacity-80" />
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+          <span>선정 평균 {summary.selectedAvgReturn === null ? '-' : `${summary.selectedAvgReturn.toFixed(2)}%`}</span>
+          <span>미선정 평균 {summary.unselectedAvgReturn === null ? '-' : `${summary.unselectedAvgReturn.toFixed(2)}%`}</span>
+          <span>상대 {summary.relativeReturn === null ? '-' : `${summary.relativeReturn > 0 ? '+' : ''}${summary.relativeReturn.toFixed(2)}%`}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Beauty Contest</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">후보 10개 비교와 자동 복기</h1>
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Contest</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">스캐너 후보 비교와 성과 복기</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-            스캐너 결과에서 후보를 고르고, 외부 LLM 순위를 저장한 뒤 투자한 종목과 투자하지 않은 종목의 1주/1개월 결과를 비교합니다.
+            Recommended와 Partial 후보를 최대 10개까지 골라 외부 LLM에 분석시키고, 결과와 1주/1개월 상대 성과를 DB에 축적합니다.
           </p>
         </div>
         <DataSourceBadge meta={meta} />
@@ -317,8 +476,10 @@ export default function ContestPage() {
       <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white">1. 스캐너 스냅샷에서 후보 선택</h2>
-            <p className="mt-1 text-sm text-slate-400">Scanner 페이지에서 스캔한 최근 결과를 불러와 최대 10개 후보를 고릅니다.</p>
+            <h2 className="text-lg font-bold text-white">1. 스캐너 후보 풀에서 분석 대상 선택</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              스캐너의 Recommended/Partial 후보를 우선 불러옵니다. Low Priority도 수동 선택할 수 있습니다.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <select
@@ -340,15 +501,18 @@ export default function ContestPage() {
 
         {!snapshot ? (
           <div className="mt-5 rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400">
-            저장된 스캐너 결과가 없습니다. Scanner 페이지에서 {universe} 스캔을 먼저 실행하세요.
+            저장된 스캔 결과가 없습니다. 스캐너에서 {universe} 스캔을 먼저 실행해 주세요.
           </div>
         ) : (
           <>
-            <p className="mt-4 text-xs text-slate-500">
-              스냅샷 {new Date(snapshot.savedAt).toLocaleString('ko-KR')} | 선택 {selected.length}/10
-            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <span>스냅샷 {new Date(snapshot.savedAt).toLocaleString('ko-KR')}</span>
+              <span>후보 풀 {candidatePool.length}</span>
+              <span>선택 {selected.length}/10</span>
+              {marketContext && <span>마스터 필터 {marketContext.state} · P3 {marketContext.metrics.p3Score ?? '-'}/100</span>}
+            </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {rankedResults.slice(0, 30).map((item) => {
+              {rankedResults.slice(0, 40).map((item) => {
                 const checked = selected.includes(item.ticker);
                 return (
                   <button
@@ -364,15 +528,16 @@ export default function ContestPage() {
                         <p className="font-mono text-lg font-bold text-white">{item.ticker}</p>
                         <p className="mt-1 truncate text-sm text-slate-400">{item.name}</p>
                       </div>
-                      <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">
-                        VCP {item.vcpScore ?? '-'}
+                      <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${tierClass(item.recommendationTier)}`}>
+                        {item.recommendationTier}
                       </span>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-400">
-                      <span>SEPA {item.sepaStatus || '-'}</span>
+                      <span>SEPA 미충족 {item.sepaMissingCount ?? '-'}</span>
+                      <span>VCP {item.vcpScore ?? '-'}</span>
                       <span>피벗 {item.distanceToPivotPct ?? '-'}%</span>
-                      <span>{item.priceSource}</span>
                     </div>
+                    <p className="mt-2 line-clamp-2 text-xs text-slate-500">{item.recommendationReason}</p>
                   </button>
                 );
               })}
@@ -384,7 +549,9 @@ export default function ContestPage() {
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
           <h2 className="text-lg font-bold text-white">2. LLM 프롬프트 생성</h2>
-          <p className="mt-1 text-sm text-slate-400">저장하면 DB 세션과 1주/1개월 복기 항목이 함께 생성됩니다.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            세션 저장 후 후보 ID와 마스터 필터 컨텍스트가 포함된 한국어 프롬프트를 복사합니다.
+          </p>
           <Button type="button" onClick={createSession} disabled={busy || selectedCandidates.length === 0 || selectedCandidates.length > 10} className="mt-4 gap-2">
             {busy ? <LoadingSpinner size="sm" /> : <Trophy className="h-4 w-4" />}
             세션 저장 및 프롬프트 복사
@@ -393,7 +560,7 @@ export default function ContestPage() {
           {activeSession && (
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-200">활성 프롬프트</p>
+                <p className="text-sm font-semibold text-slate-200">생성 프롬프트</p>
                 <button type="button" onClick={copyPrompt} className="inline-flex items-center gap-1 text-xs text-emerald-300">
                   <Clipboard className="h-3.5 w-3.5" /> 복사
                 </button>
@@ -410,16 +577,18 @@ export default function ContestPage() {
 
         <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
           <h2 className="text-lg font-bold text-white">3. 외부 LLM 결과 등록</h2>
-          <p className="mt-1 text-sm text-slate-400">ChatGPT/Claude가 반환한 JSON만 붙여넣으세요.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            JSON만 붙여넣어도 되고, LLM 리포트 전문을 붙여넣어도 MTN이 JSON 코드블록 또는 객체를 추출합니다.
+          </p>
           <textarea
             value={llmJson}
             onChange={(event) => setLlmJson(event.target.value)}
             rows={12}
-            placeholder='{"rankings":[{"ticker":"NVDA","rank":1,"comment":"..." }]}'
+            placeholder='LLM 전체 리포트 또는 {"rankings":[...]} JSON을 붙여넣으세요.'
             className="mt-4 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 outline-none focus:border-emerald-400"
           />
           <Button type="button" onClick={saveLlmResult} disabled={!activeSession || !llmJson.trim() || busy} className="mt-3 gap-2">
-            <Save className="h-4 w-4" /> LLM 순위 저장
+            <Save className="h-4 w-4" /> LLM 분석 저장
           </Button>
         </div>
       </section>
@@ -460,10 +629,17 @@ export default function ContestPage() {
         <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">5. 투자 여부와 복기 대조</h2>
-              <p className="mt-1 text-sm text-slate-400">실제로 투자한 종목을 표시하고, cron이 채운 결과 또는 수동 가격으로 복기를 저장합니다.</p>
+              <h2 className="text-lg font-bold text-white">5. 최종 선정과 1주/1개월 성과 판정</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                실제 선정 종목 수에는 제한이 없습니다. 선택군 평균이 미선택군보다 낮으면 해당 사이클은 실패로 표시합니다.
+              </p>
             </div>
-            <p className="text-xs text-slate-500">투자 {activeCandidates.filter((item) => item.actual_invested).length} / 비투자 {activeCandidates.filter((item) => !item.actual_invested).length}</p>
+            <p className="text-xs text-slate-500">선정 {activeCandidates.filter((item) => item.actual_invested).length} / 미선정 {activeCandidates.filter((item) => !item.actual_invested).length}</p>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {summaryCard('W1', w1Summary)}
+            {summaryCard('M1', m1Summary)}
           </div>
 
           <div className="mt-5 space-y-4">
@@ -475,12 +651,17 @@ export default function ContestPage() {
                       <span className="font-mono text-xl font-bold text-white">{candidate.ticker}</span>
                       <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">사용자 #{candidate.user_rank}</span>
                       {candidate.llm_rank && <span className="rounded-lg border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300">LLM #{candidate.llm_rank}</span>}
+                      {candidate.final_pick_rank && <span className="rounded-lg border border-sky-500/30 px-2 py-1 text-xs text-sky-300">최종 #{candidate.final_pick_rank}</span>}
+                      {candidate.recommendation_tier && <span className={`rounded-lg border px-2 py-1 text-xs ${tierClass(candidate.recommendation_tier)}`}>{candidate.recommendation_tier}</span>}
                       <span className={`rounded-lg border px-2 py-1 text-xs ${candidate.actual_invested ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400'}`}>
-                        {candidate.actual_invested ? '투자함' : '비투자'}
+                        {candidate.actual_invested ? '선정' : '미선정'}
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-400">{candidate.name || candidate.exchange}</p>
                     {candidate.llm_comment && <p className="mt-2 text-sm leading-6 text-slate-300">{candidate.llm_comment}</p>}
+                    {typeof candidate.llm_analysis?.investment_thesis === 'string' && (
+                      <p className="mt-2 text-xs leading-5 text-slate-400">Thesis: {candidate.llm_analysis.investment_thesis}</p>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -488,7 +669,7 @@ export default function ContestPage() {
                     onClick={() => updateCandidate(candidate, !candidate.actual_invested)}
                     className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {busyId === candidate.id ? '저장 중...' : candidate.actual_invested ? '비투자로 변경' : '투자함 표시'}
+                    {busyId === candidate.id ? '저장 중...' : candidate.actual_invested ? '미선정으로 변경' : '최종 선정'}
                   </button>
                 </div>
 
@@ -549,7 +730,7 @@ export default function ContestPage() {
                           value={draft.user_review_note}
                           onChange={(event) => updateReviewDraft(review, { user_review_note: event.target.value })}
                           rows={3}
-                          placeholder="다음 매매를 위한 교훈"
+                          placeholder="다음 콘테스트를 위한 교훈"
                           className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
                         />
 

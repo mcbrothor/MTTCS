@@ -9,6 +9,7 @@ import {
 } from '../lib/contest.ts';
 
 const candidates = Array.from({ length: 3 }, (_, index) => ({
+  candidate_id: ['cand-nvda', 'cand-meta', 'cand-tsla'][index],
   ticker: ['NVDA', 'META', 'TSLA'][index],
   exchange: 'NAS',
   name: ['Nvidia', 'Meta', 'Tesla'][index],
@@ -32,9 +33,17 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
 }));
 
 {
-  const { payload, llmPrompt } = buildContestPrompt({ market: 'US', universe: 'NASDAQ100', candidates });
+  const { payload, llmPrompt } = buildContestPrompt({
+    market: 'US',
+    universe: 'NASDAQ100',
+    sessionId: 'session-1',
+    candidates,
+    marketContext: { state: 'YELLOW', market: 'US', metrics: { p3Score: 55 } },
+  });
   assert.equal(payload.length, 3);
-  assert.match(llmPrompt, /ONLY valid JSON/);
+  assert.match(llmPrompt, /JSON만 출력/);
+  assert.match(llmPrompt, /candidate_id/);
+  assert.match(llmPrompt, /마스터 필터/);
   assert.match(llmPrompt, /NVDA/);
 }
 
@@ -57,6 +66,43 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
     ['NVDA', 'META', 'TSLA']
   );
   assert.deepEqual(rankings.map((item) => item.ticker), ['META', 'NVDA', 'TSLA']);
+}
+
+{
+  const rankings = parseLlmRankings(
+    [
+      '리포트 전문입니다.',
+      '```json',
+      JSON.stringify({
+        rankings: [
+          {
+            candidate_id: 'cand-meta',
+            ticker: 'META',
+            rank: 1,
+            scores: { technical: 91 },
+            investment_thesis: 'best compounder',
+            technical_view: 'tight base',
+            fundamental_view: 'quality',
+            earnings_growth_view: 'accelerating',
+            moat_view: 'network',
+            market_context: 'fits YELLOW market',
+            risks: ['valuation'],
+            catalysts: ['AI'],
+            comment: 'best setup',
+          },
+          { candidate_id: 'cand-nvda', ticker: 'NVDA', rank: 2, comment: 'extended' },
+          { candidate_id: 'cand-tsla', ticker: 'TSLA', rank: 3, comment: 'watch' },
+        ],
+      }),
+      '```',
+      '끝',
+    ].join('\n'),
+    candidates.map((candidate) => ({ id: candidate.candidate_id, ticker: candidate.ticker }))
+  );
+
+  assert.equal(rankings[0].candidate_id, 'cand-meta');
+  assert.deepEqual(rankings[0].scores, { technical: 91 });
+  assert.equal(rankings[0].analysis.investment_thesis, 'best compounder');
 }
 
 {

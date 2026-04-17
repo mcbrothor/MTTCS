@@ -18,9 +18,9 @@ export default function Navbar() {
           <NavLink href="/" icon={<LayoutDashboard className="h-4 w-4" />} label="대시보드" />
           <NavLink href="/master-filter" icon={<Compass className="h-4 w-4 text-emerald-400" />} label="마스터 필터" />
           <NavLink href="/scanner" icon={<ScanSearch className="h-4 w-4 text-indigo-400" />} label="스캐너" />
+          <NavLink href="/contest" icon={<Trophy className="h-4 w-4 text-emerald-400" />} label="콘테스트" />
           <NavLink href="/plan" icon={<PlusCircle className="h-4 w-4 text-electric-blue" />} label="신규 계획" />
           <NavLink href="/watchlist" icon={<Star className="h-4 w-4 text-yellow-500" />} label="관심 종목" />
-          <NavLink href="/contest" icon={<Trophy className="h-4 w-4 text-emerald-400" />} label="콘테스트" />
           <NavLink href="/portfolio" icon={<Shield className="h-4 w-4 text-cyan-400" />} label="리스크" />
           <NavLink href="/guide" icon={<BookOpen className="h-4 w-4 text-amber-500" />} label="알고리즘" />
           <NavLink href="/history" icon={<History className="h-4 w-4" />} label="히스토리" />

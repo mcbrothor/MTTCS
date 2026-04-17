@@ -211,6 +211,7 @@ export interface MarketAnalysisResponse {
   ticker: string;
   exchange: string;
   providerUsed: string;
+  providerAttempts?: ProviderAttempt[];
   priceData: OHLCData[];
   sepaEvidence: SepaEvidence;
   riskPlan: RiskPlan;
@@ -225,8 +226,21 @@ export interface MarketAnalysisResponse {
   warnings: string[];
 }
 
+export type ProviderAttemptStatus = 'success' | 'warning' | 'failed';
+
+export interface ProviderAttempt {
+  provider: string;
+  stage: string;
+  status: ProviderAttemptStatus;
+  message: string;
+  bars?: number;
+  upstreamStatus?: number | null;
+  attemptedAt: string;
+}
+
 export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI100' | 'KOSDAQ100';
 export type ScannerStatus = 'queued' | 'running' | 'done' | 'error';
+export type RecommendationTier = 'Recommended' | 'Partial' | 'Low Priority' | 'Error';
 
 export interface ScannerConstituent {
   rank: number;
@@ -252,6 +266,11 @@ export interface ScannerUniverseResponse {
 
 export interface ScannerResult extends ScannerConstituent {
   status: ScannerStatus;
+  recommendationTier: RecommendationTier;
+  recommendationReason: string;
+  sepaMissingCount: number | null;
+  exceptionSignals: string[];
+  providerAttempts?: ProviderAttempt[];
   sepaStatus: AssessmentStatus | null;
   sepaPassed: number | null;
   sepaFailed: number | null;
@@ -364,10 +383,14 @@ export type ContestReviewHorizon = 'W1' | 'M1';
 export type ContestReviewStatus = 'PENDING' | 'UPDATED' | 'ERROR' | 'MANUAL';
 
 export interface ContestPromptCandidate {
+  candidate_id?: string;
   ticker: string;
   exchange: string;
   name: string;
   user_rank: number;
+  recommendation_tier?: RecommendationTier | null;
+  recommendation_reason?: string | null;
+  exception_signals?: string[];
   rs_rating: number | null;
   sepa_status: AssessmentStatus | null;
   sepa_passed: number | null;
@@ -384,6 +407,7 @@ export interface ContestPromptCandidate {
   price: number | null;
   price_as_of: string | null;
   source: string;
+  provider_attempts?: ProviderAttempt[];
 }
 
 export interface BeautyContestSession {
@@ -394,6 +418,10 @@ export interface BeautyContestSession {
   universe: ScannerUniverse | string;
   selected_at: string;
   prompt_payload: ContestPromptCandidate[];
+  prompt_version?: string | null;
+  response_schema_version?: string | null;
+  market_context?: Record<string, unknown> | null;
+  candidate_pool_snapshot?: unknown[] | null;
   llm_prompt: string;
   llm_raw_response: string | null;
   llm_provider: string | null;
@@ -412,6 +440,12 @@ export interface ContestCandidate {
   user_rank: number;
   llm_rank: number | null;
   llm_comment: string | null;
+  recommendation_tier?: RecommendationTier | null;
+  recommendation_reason?: string | null;
+  llm_scores?: Record<string, unknown> | null;
+  llm_analysis?: Record<string, unknown> | null;
+  final_pick_rank?: number | null;
+  final_pick_note?: string | null;
   actual_invested: boolean;
   linked_trade_id: string | null;
   entry_reference_price: number | null;

@@ -1,40 +1,12 @@
 import { getKisKospiMarketCapRanking } from '@/lib/finance/kis-api';
-import { asString, normalizeNasdaqRows, parseNumber } from './scanner-normalizers';
-import type { ScannerUniverse, ScannerUniverseResponse } from '@/types';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { normalizeNasdaqRows } from './scanner-normalizers';
+import { rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
+import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '@/types';
 
 type NasdaqRow = Record<string, unknown>;
-type KrxRow = Record<string, unknown>;
-type KospiRankingItem = {
-  ticker: string;
-  name: string;
-  marketCap: number | null;
-  currentPrice: number | null;
-  source: string;
-};
-
 type KoreaMarket = 'KOSPI' | 'KOSDAQ';
 
 export { normalizeNasdaqRows } from './scanner-normalizers';
-
-function krxValue(row: KrxRow, keys: string[]) {
-  for (const key of keys) {
-    const value = asString(row[key]);
-    if (value) return value;
-  }
-  return '';
-}
-
-function normalizeKrxRows(rows: KrxRow[]): { ticker: string; name: string; marketCap: number | null }[] {
-  return rows
-    .map((row) => ({
-      ticker: krxValue(row, ['ISU_SRT_CD', 'isuSrtCd', '종목코드', 'ISU_CD']).padStart(6, '0'),
-      name: krxValue(row, ['ISU_ABBRV', 'ISU_NM', 'isuAbbrv', '종목명']),
-      marketCap: parseNumber(row.MKT_CAP || row.MKTCAP || row['시가총액']),
-    }))
-    .filter((item) => /^\d{6}$/.test(item.ticker) && item.name);
-}
 
 function stripHtml(value: string) {
   return value
@@ -73,8 +45,8 @@ function decodeKoreanHtml(buffer: ArrayBuffer) {
   }
 }
 
-async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100): Promise<KospiRankingItem[]> {
-  const items: KospiRankingItem[] = [];
+async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100): Promise<KoreaRankingItem[]> {
+  const items: KoreaRankingItem[] = [];
   const sosok = market === 'KOSPI' ? '0' : '1';
 
   for (let page = 1; page <= 4 && items.length < limit; page += 1) {
@@ -105,7 +77,7 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
         name: stripHtml(link[2]),
         marketCap: marketCapHundredMillion === null ? null : marketCapHundredMillion * 100_000_000,
         currentPrice,
-        source: `Naver Finance ${market} market-cap fallback`,
+        source: `Naver Finance ${market} market-cap ranking`,
       });
 
       if (items.length >= limit) break;
@@ -125,7 +97,7 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
   });
 
   if (!response.ok) {
-    throw new Error(`StockAnalysis S&P 500 응답 오류 (${response.status})`);
+    throw new Error(`StockAnalysis S&P 500 response error (${response.status})`);
   }
 
   const html = await response.text();
@@ -161,7 +133,7 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
   if (items.length === 0) {
-    throw new Error('S&P 500 구성종목을 파싱하지 못했습니다.');
+    throw new Error('S&P 500 constituents could not be parsed.');
   }
 
   return {
@@ -169,9 +141,9 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
     label: 'S&P 500',
     asOf: new Date().toISOString(),
     source: 'StockAnalysis S&P 500 table',
-    delayNote: 'S&P 500 현재가와 시가총액은 StockAnalysis 표 기준이며 지연될 수 있습니다.',
+    delayNote: 'S&P 500 market-cap and price data can be delayed.',
     items,
-    warnings: items.length < 500 ? [`S&P 500 응답에서 ${items.length}개 종목만 확인되었습니다.`] : [],
+    warnings: items.length < 500 ? [`Only ${items.length} S&P 500 rows were parsed.`] : [],
   };
 }
 
@@ -185,7 +157,7 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
   });
 
   if (!response.ok) {
-    throw new Error(`Nasdaq 응답 오류 (${response.status})`);
+    throw new Error(`Nasdaq response error (${response.status})`);
   }
 
   const payload = await response.json() as {
@@ -201,7 +173,7 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
   const items = normalizeNasdaqRows(rows, priceAsOf);
 
   if (items.length === 0) {
-    throw new Error('Nasdaq 100 구성종목을 파싱하지 못했습니다.');
+    throw new Error('Nasdaq 100 constituents could not be parsed.');
   }
 
   return {
@@ -209,71 +181,38 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
     label: 'NASDAQ 100',
     asOf: new Date().toISOString(),
     source: 'Nasdaq official Nasdaq-100 list API',
-    delayNote: 'Nasdaq 현재가 데이터는 지연될 수 있습니다.',
+    delayNote: 'Nasdaq quote data can be delayed.',
     items,
-    warnings: items.length < 100 ? [`Nasdaq 응답에서 ${items.length}개 종목만 확인되었습니다.`] : [],
+    warnings: items.length < 100 ? [`Only ${items.length} Nasdaq rows were parsed.`] : [],
   };
 }
 
-async function fetchKrxKospi100Constituents(): Promise<{ items: { ticker: string; name: string; marketCap: number | null }[]; source: string }> {
-  const body = new URLSearchParams({
-    bld: 'dbms/MDC/STAT/standard/MDCSTAT00601',
-    locale: 'ko_KR',
-    indIdx: '1',
-    indIdx2: '028',
-    csvxls_isNo: 'false',
-  });
-
-  const response = await fetch('https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd', {
-    method: 'POST',
-    headers: {
-      accept: 'application/json, text/javascript, */*; q=0.01',
-      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      referer: 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC0301020506',
-      'user-agent': 'Mozilla/5.0',
-      'x-requested-with': 'XMLHttpRequest',
-    },
-    body,
-    next: { revalidate: DAY_MS / 1000 },
-  });
-
-  const text = await response.text();
-  if (!response.ok || text.includes('LOGOUT')) {
-    throw new Error('KRX 구성종목 API가 세션을 요구해 KIS fallback을 사용합니다.');
-  }
-
-  const payload = JSON.parse(text) as Record<string, unknown>;
-  const rows = (payload.output || payload.block1 || payload.data || []) as KrxRow[];
-  const items = normalizeKrxRows(Array.isArray(rows) ? rows : []);
-  if (items.length === 0) {
-    throw new Error('KRX KOSPI 100 구성종목을 파싱하지 못했습니다.');
-  }
-
-  return { items, source: 'KRX KOSPI 100 constituents' };
+function toKoreaConstituents(ranking: ReturnType<typeof rankKoreaMarketCapItems>, exchange: 'KOSPI' | 'KOSDAQ'): ScannerConstituent[] {
+  return ranking.map((item) => ({
+    rank: item.rank,
+    ticker: item.ticker,
+    exchange,
+    name: item.name,
+    marketCap: item.marketCap,
+    currency: 'KRW',
+    currentPrice: item.currentPrice,
+    priceAsOf: new Date().toISOString(),
+    priceSource: item.source,
+  }));
 }
 
 async function fetchKospi100(): Promise<ScannerUniverseResponse> {
   const warnings: string[] = [];
-  let krxItems: { ticker: string; name: string; marketCap: number | null }[] | null = null;
-  let source = 'KRX KOSPI 100 constituents + KIS market-cap ranking';
+  let ranking: KoreaRankingItem[] = [];
 
   try {
-    const krx = await fetchKrxKospi100Constituents();
-    krxItems = krx.items;
-    source = `${krx.source} + KIS market-cap ranking`;
+    ranking = (await getKisKospiMarketCapRanking(100)).map((item) => ({
+      ...item,
+      source: 'KIS KOSPI market-cap ranking',
+    }));
   } catch (error) {
-    warnings.push(error instanceof Error ? error.message : 'KRX 구성종목 조회 실패로 KIS fallback을 사용합니다.');
+    warnings.push(error instanceof Error ? `KIS market-cap ranking failed: ${error.message}` : 'KIS market-cap ranking failed.');
   }
-
-  let kisRanking: Awaited<ReturnType<typeof getKisKospiMarketCapRanking>> = [];
-
-  try {
-    kisRanking = await getKisKospiMarketCapRanking(100);
-  } catch (error) {
-    warnings.push(error instanceof Error ? `KIS 시가총액 순위 조회 실패: ${error.message}` : 'KIS 시가총액 순위 조회 실패');
-  }
-
-  let ranking: KospiRankingItem[] = kisRanking.map((item) => ({ ...item, source: 'KIS market-cap ranking' }));
 
   if (ranking.length < 100) {
     const naverRanking = await fetchNaverKoreaMarketCapRanking('KOSPI', 100);
@@ -281,93 +220,47 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
     for (const item of naverRanking) {
       if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, item);
     }
-    ranking = Array.from(byTicker.values())
-      .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-      .slice(0, 100);
-    warnings.push(`KIS 시가총액 순위가 ${kisRanking.length}개만 반환되어 Naver Finance 시가총액 페이지로 100개까지 보강했습니다.`);
+    ranking = Array.from(byTicker.values());
+    warnings.push(`KIS returned ${ranking.length} rows before fallback merge; Naver Finance was used to complete the top-100 list.`);
   }
 
-  const rankByTicker = new Map(ranking.map((item) => [item.ticker, item]));
-  const baseItems = krxItems && krxItems.length > 0
-    ? krxItems
-    : ranking.map((item) => ({ ticker: item.ticker, name: item.name, marketCap: item.marketCap }));
-
-  if (!krxItems) {
-    source = ranking.some((item) => item.source.includes('Naver'))
-      ? 'KIS market-cap ranking + Naver Finance market-cap fallback'
-      : 'KIS market-cap ranking fallback';
-    warnings.push('KRX 공식 구성종목을 확인하지 못해 KOSPI 시장 시가총액 상위 100개를 fallback으로 표시합니다.');
-  }
-
-  const items = baseItems
-    .map((item) => {
-      const ranked = rankByTicker.get(item.ticker);
-      return {
-        rank: 0,
-        ticker: item.ticker,
-        exchange: 'KOSPI',
-        name: item.name || ranked?.name || item.ticker,
-        marketCap: ranked?.marketCap ?? item.marketCap ?? null,
-        currency: 'KRW' as const,
-        currentPrice: ranked?.currentPrice ?? null,
-        priceAsOf: new Date().toISOString(),
-        priceSource: ranked?.source || 'KRX constituent list',
-      };
-    })
-    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-    .slice(0, 100)
-    .map((item, index) => ({ ...item, rank: index + 1 }));
+  const ranked = rankKoreaMarketCapItems(ranking, 100);
+  const items = toKoreaConstituents(ranked, 'KOSPI');
 
   if (items.length === 0) {
-    throw new Error('KOSPI 100 종목군을 불러오지 못했습니다.');
+    throw new Error('KOSPI market-cap top 100 could not be loaded.');
   }
 
   return {
     universe: 'KOSPI100',
-    label: krxItems ? 'KOSPI 100' : 'KOSPI 시가총액 상위 100',
+    label: 'KOSPI 시가총액 상위 100',
     asOf: new Date().toISOString(),
-    source,
-    delayNote: krxItems ? 'KRX 데이터는 공식적으로 약 20분 지연될 수 있습니다.' : 'KRX 공식 구성종목 조회가 막혀 KIS 시가총액 순위를 fallback으로 사용했습니다.',
+    source: items.some((item) => item.priceSource.includes('Naver'))
+      ? 'KIS KOSPI market-cap ranking + Naver Finance fallback'
+      : 'KIS KOSPI market-cap ranking',
+    delayNote: 'KOSPI 시가총액 순위와 현재가는 KIS/Naver 기준이며 지연될 수 있습니다.',
     items,
     warnings,
   };
 }
 
 async function fetchKosdaq100(): Promise<ScannerUniverseResponse> {
-  const warnings: string[] = ['KRX KOSDAQ 100 공식 구성종목 조회는 세션 제한이 있어 Naver Finance KOSDAQ 시가총액 상위 100개를 fallback으로 표시합니다.'];
   const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 100);
-
-  const items = ranking
-    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-    .slice(0, 100)
-    .map((item, index) => ({
-      rank: index + 1,
-      ticker: item.ticker,
-      exchange: 'KOSDAQ',
-      name: item.name,
-      marketCap: item.marketCap,
-      currency: 'KRW' as const,
-      currentPrice: item.currentPrice,
-      priceAsOf: new Date().toISOString(),
-      priceSource: item.source,
-    }));
+  const ranked = rankKoreaMarketCapItems(ranking, 100);
+  const items = toKoreaConstituents(ranked, 'KOSDAQ');
 
   if (items.length === 0) {
-    throw new Error('KOSDAQ 100 종목군을 불러오지 못했습니다.');
-  }
-
-  if (items.length < 100) {
-    warnings.push(`Naver Finance KOSDAQ 시가총액 페이지에서 ${items.length}개 종목만 확인되었습니다.`);
+    throw new Error('KOSDAQ market-cap top 100 could not be loaded.');
   }
 
   return {
     universe: 'KOSDAQ100',
     label: 'KOSDAQ 시가총액 상위 100',
     asOf: new Date().toISOString(),
-    source: 'Naver Finance KOSDAQ market-cap fallback',
-    delayNote: 'KOSDAQ 현재가와 시가총액은 Naver Finance 시가총액 페이지 기준이며 지연될 수 있습니다.',
+    source: 'Naver Finance KOSDAQ market-cap ranking',
+    delayNote: 'KOSDAQ 시가총액 순위와 현재가는 Naver Finance 기준이며 지연될 수 있습니다.',
     items,
-    warnings,
+    warnings: items.length < 100 ? [`Only ${items.length} KOSDAQ rows were parsed.`] : [],
   };
 }
 
@@ -376,5 +269,5 @@ export async function getScannerUniverse(universe: ScannerUniverse): Promise<Sca
   if (universe === 'SP500') return fetchStockAnalysisSp500();
   if (universe === 'KOSPI100') return fetchKospi100();
   if (universe === 'KOSDAQ100') return fetchKosdaq100();
-  throw new Error('지원하지 않는 종목군입니다.');
+  throw new Error('Unsupported scanner universe.');
 }

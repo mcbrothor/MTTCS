@@ -2,14 +2,17 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Play, ScanSearch, Square, Trophy } from 'lucide-react';
+import { CheckCircle2, Play, ScanSearch, Square } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
+import { evaluateScannerRecommendation, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   MarketAnalysisResponse,
+  ProviderAttempt,
+  RecommendationTier,
   ScannerConstituent,
   ScannerResult,
   ScannerUniverse,
@@ -24,6 +27,11 @@ const KOSDAQ_SCAN_CONCURRENCY = 2;
 const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v2:';
 const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
+const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
+
+type ViewMode = 'web' | 'app';
+type FilterKey = 'all' | 'recommended' | 'partial' | 'contestPool' | 'nearPivot' | 'volume' | 'error';
+type SortKey = 'marketCap' | 'recommendation' | 'vcpScore' | 'pivot' | 'sepa';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -34,41 +42,39 @@ interface StoredScannerSnapshot {
 const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }> = {
   NASDAQ100: {
     label: 'NASDAQ 100',
-    description: 'Nasdaq 공식 목록을 시가총액 기준으로 정렬하고 SEPA/VCP 후보를 빠르게 확인합니다.',
+    description: 'Nasdaq 100 대형 성장주를 시가총액 기준으로 불러와 SEPA/VCP 후보를 스캔합니다.',
   },
   SP500: {
     label: 'S&P 500',
-    description: 'S&P 500 대형주를 시가총액 기준으로 정렬하고 SEPA/VCP 후보를 확인합니다.',
+    description: 'S&P 500 전체에서 대형 주도주 후보를 비교합니다.',
   },
   KOSPI100: {
-    label: 'KOSPI 100',
-    description: 'KRX 공식 구성종목을 우선 확인하고, 세션 제한 시 KIS 시가총액 순위로 대체합니다.',
+    label: 'KOSPI 시총 상위 100',
+    description: 'KOSPI 전체 시가총액 상위 100개를 기준으로 국내 주도주 후보를 확인합니다.',
   },
   KOSDAQ100: {
-    label: 'KOSDAQ 100',
-    description: 'KOSDAQ 100 후보군을 시가총액 기준으로 정렬하고 국내 성장주 패턴을 확인합니다.',
+    label: 'KOSDAQ 시총 상위 100',
+    description: 'KOSDAQ 시가총액 상위 100개를 기준으로 성장주 후보를 확인합니다.',
   },
 };
 
-const FILTERS = [
+const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
-  { key: 'sepa', label: 'SEPA 통과' },
-  { key: 'strong', label: 'VCP Strong' },
-  { key: 'forming', label: 'Forming 이상' },
-  { key: 'nearPivot', label: '피벗 3% 이내' },
-  { key: 'volume', label: '거래량 확인' },
+  { key: 'recommended', label: 'Recommended' },
+  { key: 'partial', label: 'Partial' },
+  { key: 'contestPool', label: '콘테스트 풀' },
+  { key: 'nearPivot', label: '피벗 5% 이내' },
+  { key: 'volume', label: '거래량 신호' },
   { key: 'error', label: '오류' },
-] as const;
+];
 
-const SORTS = [
+const SORTS: { key: SortKey; label: string }[] = [
   { key: 'marketCap', label: '시가총액순' },
+  { key: 'recommendation', label: '추천 우선' },
   { key: 'vcpScore', label: 'VCP 점수순' },
   { key: 'pivot', label: '피벗 근접순' },
   { key: 'sepa', label: 'SEPA 우선' },
-] as const;
-
-type FilterKey = (typeof FILTERS)[number]['key'];
-type SortKey = (typeof SORTS)[number]['key'];
+];
 
 function scannerStorageKey(universe: ScannerUniverse) {
   return `${SCANNER_STORAGE_PREFIX}${universe}`;
@@ -79,6 +85,13 @@ function parseScannerUniverse(value: string | null): ScannerUniverse | null {
   return null;
 }
 
+function withRecommendation(result: ScannerResult): ScannerResult {
+  return {
+    ...result,
+    ...evaluateScannerRecommendation(result),
+  };
+}
+
 function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
   try {
     const raw = window.localStorage.getItem(scannerStorageKey(universe));
@@ -86,7 +99,10 @@ function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot |
 
     const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
     if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
-    return snapshot;
+    return {
+      ...snapshot,
+      results: snapshot.results.map((item) => withRecommendation(item)),
+    };
   } catch {
     return null;
   }
@@ -96,7 +112,7 @@ function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: Sc
   const snapshot: StoredScannerSnapshot = {
     savedAt,
     universeMeta,
-    results,
+    results: results.map((item) => withRecommendation(item)),
   };
   window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
@@ -143,6 +159,11 @@ function initialResult(item: ScannerConstituent): ScannerResult {
   return {
     ...item,
     status: 'queued',
+    recommendationTier: 'Low Priority',
+    recommendationReason: '스캔 대기 중입니다.',
+    sepaMissingCount: null,
+    exceptionSignals: [],
+    providerAttempts: [],
     sepaStatus: null,
     sepaPassed: null,
     sepaFailed: null,
@@ -169,10 +190,13 @@ function getErrorMessage(error: unknown) {
 
 async function parseFetchError(response: Response) {
   try {
-    const body = await response.json() as { message?: string; error?: string };
-    return body.message || body.error || `요청 실패 (${response.status})`;
+    const body = await response.json() as { message?: string; error?: string; details?: { providerAttempts?: ProviderAttempt[] } };
+    return {
+      message: body.message || body.error || `요청 실패 (${response.status})`,
+      providerAttempts: body.details?.providerAttempts || [],
+    };
   } catch {
-    return `요청 실패 (${response.status})`;
+    return { message: `요청 실패 (${response.status})`, providerAttempts: [] };
   }
 }
 
@@ -187,7 +211,10 @@ async function scanConstituent(item: ScannerConstituent, signal: AbortSignal): P
 
   const response = await fetch(`/api/market-data?${params.toString()}`, { signal });
   if (!response.ok) {
-    throw new Error(await parseFetchError(response));
+    const parsed = await parseFetchError(response);
+    const error = new Error(parsed.message) as Error & { providerAttempts?: ProviderAttempt[] };
+    error.providerAttempts = parsed.providerAttempts;
+    throw error;
   }
 
   const analysis = await response.json() as MarketAnalysisResponse;
@@ -202,11 +229,17 @@ async function scanConstituent(item: ScannerConstituent, signal: AbortSignal): P
       ? round(((currentPrice - recommendedEntry) / recommendedEntry) * 100)
       : null;
 
-  return {
+  return withRecommendation({
     ...item,
+    recommendationTier: 'Low Priority',
+    recommendationReason: '',
+    sepaMissingCount: null,
+    exceptionSignals: [],
     currentPrice,
     priceAsOf,
+    priceSource: analysis.providerUsed || item.priceSource,
     status: 'done',
+    providerAttempts: analysis.providerAttempts || [],
     sepaStatus: analysis.sepaEvidence.status,
     sepaPassed: analysis.sepaEvidence.summary.passed,
     sepaFailed: analysis.sepaEvidence.summary.failed,
@@ -224,7 +257,45 @@ async function scanConstituent(item: ScannerConstituent, signal: AbortSignal): P
     analyzedAt: new Date().toISOString(),
     breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
     errorMessage: null,
-  };
+  });
+}
+
+function formatMarketCap(value: number | null, currency: ScannerResult['currency']) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  if (currency === 'KRW') return `${Math.round(value / 100_000_000).toLocaleString('ko-KR')}억`;
+  if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
+  return `$${(value / 1_000_000_000).toFixed(1)}B`;
+}
+
+function formatPrice(value: number | null, currency: ScannerResult['currency']) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return new Intl.NumberFormat(currency === 'KRW' ? 'ko-KR' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: currency === 'KRW' ? 0 : 2,
+  }).format(value);
+}
+
+function tierClass(tier: RecommendationTier) {
+  if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  return 'border-slate-700 bg-slate-900 text-slate-300';
+}
+
+function sepaLabel(result: ScannerResult) {
+  if (result.status === 'error') return 'Error';
+  if (result.status !== 'done') return 'Pending';
+  if (result.sepaStatus === 'pass') return 'Pass';
+  if ((result.sepaMissingCount ?? 99) <= 2) return 'Partial';
+  return 'Weak';
+}
+
+function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<string>) {
+  window.localStorage.setItem(
+    CONTEST_SELECTION_STORAGE_KEY,
+    JSON.stringify({ universe, tickers: Array.from(selectedTickers), savedAt: new Date().toISOString() })
+  );
 }
 
 export default function ScannerPage() {
@@ -232,14 +303,16 @@ export default function ScannerPage() {
   const [results, setResults] = useState<ScannerResult[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [scanStage, setScanStage] = useState('대기 중');
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
+  const [viewMode, setViewMode] = useState<ViewMode>('web');
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -249,6 +322,7 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
+      setSelectedTickers(new Set(snapshot.results.filter((item) => isContestPoolTier(item.recommendationTier)).slice(0, 10).map((item) => item.ticker)));
     }
   }, []);
 
@@ -259,8 +333,10 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
+      setSelectedTickers(new Set(snapshot.results.filter((item) => isContestPoolTier(item.recommendationTier)).slice(0, 10).map((item) => item.ticker)));
     } else {
       setResults([]);
+      setSelectedTickers(new Set());
       setLastScannedAt(null);
     }
     localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, newUniverse);
@@ -268,22 +344,29 @@ export default function ScannerPage() {
 
   const startScan = async () => {
     if (busy || isScanning) return;
-    
+
     setBusy(true);
     setIsScanning(true);
     setProgress({ current: 0, total: 0 });
-    
+    setScanStage('유니버스 로딩 중');
+    setSelectedTickers(new Set());
+
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
     try {
       const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abortController.signal });
-      if (!resp.ok) throw new Error(await parseFetchError(resp));
-      
+      if (!resp.ok) {
+        const parsed = await parseFetchError(resp);
+        throw new Error(parsed.message);
+      }
+
       const meta = await resp.json() as ScannerUniverseResponse;
       const initialResults = meta.items.map(initialResult);
+      let latestResults = initialResults;
       setResults(initialResults);
       setProgress({ current: 0, total: initialResults.length });
+      setScanStage('KIS 가격 조회 → Yahoo fallback → 벤치마크 → SEPA/VCP 계산');
 
       const concurrency = scanConcurrencyFor(universe);
       const queue = [...initialResults];
@@ -294,16 +377,27 @@ export default function ScannerPage() {
           const item = queue.shift();
           if (!item) break;
 
+          latestResults = latestResults.map((row) => row.ticker === item.ticker ? { ...row, status: 'running' } : row);
+          setResults(latestResults);
+
           try {
             const result = await scanConstituent(item, abortController.signal);
-            setResults(prev => prev.map(r => r.ticker === result.ticker ? result : r));
+            latestResults = latestResults.map((row) => row.ticker === result.ticker ? result : row);
+            setResults(latestResults);
           } catch (err) {
             if (abortController.signal.aborted) break;
-            const errorMessage = getErrorMessage(err);
-            setResults(prev => prev.map(r => r.ticker === item.ticker ? { ...item, status: 'error', errorMessage } : r));
+            const providerAttempts = (err as { providerAttempts?: ProviderAttempt[] }).providerAttempts || [];
+            const errorResult = withRecommendation({
+              ...initialResult(item),
+              status: 'error',
+              providerAttempts,
+              errorMessage: getErrorMessage(err),
+            });
+            latestResults = latestResults.map((row) => row.ticker === item.ticker ? errorResult : row);
+            setResults(latestResults);
           } finally {
             completedCount += 1;
-            setProgress(prev => ({ ...prev, current: completedCount }));
+            setProgress({ current: completedCount, total: initialResults.length });
           }
         }
       });
@@ -311,12 +405,21 @@ export default function ScannerPage() {
       await Promise.all(workers);
 
       if (!abortController.signal.aborted) {
+        const normalized = latestResults.map((item) => withRecommendation(item));
+        const nextSelected = new Set(
+          [...normalized]
+            .filter((item) => isContestPoolTier(item.recommendationTier))
+            .sort((a, b) => recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0))
+            .slice(0, 10)
+            .map((item) => item.ticker)
+        );
         const now = new Date().toISOString();
+        setResults(normalized);
+        setSelectedTickers(nextSelected);
         setLastScannedAt(now);
-        setResults(prev => {
-          writeScannerSnapshot(meta, prev, now);
-          return prev;
-        });
+        setScanStage('스캔 완료');
+        writeScannerSnapshot(meta, normalized, now);
+        saveContestSelection(meta.universe, nextSelected);
       }
     } catch (err) {
       if (!abortController.signal.aborted) {
@@ -333,6 +436,7 @@ export default function ScannerPage() {
     abortControllerRef.current?.abort();
     setIsScanning(false);
     setBusy(false);
+    setScanStage('중단됨');
   };
 
   const addToWatchlist = async (item: ScannerResult) => {
@@ -346,9 +450,9 @@ export default function ScannerPage() {
         body: JSON.stringify({
           ticker: item.ticker,
           exchange: item.exchange,
-          memo: `Scanner ${item.vcpGrade ?? 'unknown'} VCP / SEPA ${item.sepaStatus ?? 'unknown'}`,
-          tags: ['scanner', item.vcpGrade, item.sepaStatus].filter(Boolean),
-          priority: item.vcpGrade === 'strong' ? 2 : 1,
+          memo: `Scanner ${item.recommendationTier} / ${item.vcpGrade ?? 'unknown'} VCP / SEPA ${item.sepaStatus ?? 'unknown'}`,
+          tags: ['scanner', item.recommendationTier, item.vcpGrade, item.sepaStatus].filter(Boolean),
+          priority: item.recommendationTier === 'Recommended' ? 2 : 1,
         }),
       });
 
@@ -363,16 +467,31 @@ export default function ScannerPage() {
     }
   };
 
+  const toggleSelected = (ticker: string) => {
+    setSelectedTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else if (next.size < 10) next.add(ticker);
+      else alert('콘테스트 분석 후보는 최대 10개까지 선택할 수 있습니다.');
+      saveContestSelection(universe, next);
+      return next;
+    });
+  };
+
   const filteredResults = useMemo(() => {
-    let list = [...results];
-    
-    if (filterKey === 'sepa') list = list.filter(r => r.sepaStatus === 'pass');
-    else if (filterKey === 'strong') list = list.filter(r => r.vcpGrade === 'strong');
-    else if (filterKey === 'forming') list = list.filter(r => r.vcpGrade === 'strong' || r.vcpGrade === 'forming');
-    else if (filterKey === 'nearPivot') list = list.filter(r => r.distanceToPivotPct !== null && Math.abs(r.distanceToPivotPct) <= 3);
-    else if (filterKey === 'error') list = list.filter(r => r.status === 'error');
+    let list = results.map((item) => withRecommendation(item));
+
+    if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
+    else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'Partial');
+    else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
+    else if (filterKey === 'nearPivot') list = list.filter((row) => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= 5);
+    else if (filterKey === 'volume') list = list.filter((row) => (row.volumeDryUpScore || 0) >= 65 || (row.pocketPivotScore || 0) >= 60 || row.breakoutVolumeStatus === 'confirmed');
+    else if (filterKey === 'error') list = list.filter((row) => row.status === 'error');
 
     list.sort((a, b) => {
+      if (sortKey === 'recommendation') {
+        return recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0);
+      }
       if (sortKey === 'vcpScore') return (b.vcpScore || 0) - (a.vcpScore || 0);
       if (sortKey === 'pivot') {
         const da = a.distanceToPivotPct === null ? 999 : Math.abs(a.distanceToPivotPct);
@@ -380,32 +499,196 @@ export default function ScannerPage() {
         return da - db;
       }
       if (sortKey === 'sepa') {
-        if (a.sepaStatus === 'pass' && b.sepaStatus !== 'pass') return -1;
-        if (a.sepaStatus !== 'pass' && b.sepaStatus === 'pass') return 1;
-        return (b.vcpScore || 0) - (a.vcpScore || 0);
+        const missingA = a.sepaMissingCount ?? 99;
+        const missingB = b.sepaMissingCount ?? 99;
+        return missingA - missingB || (b.vcpScore || 0) - (a.vcpScore || 0);
       }
-      return 0; // marketCap (original order)
+      return a.rank - b.rank;
     });
 
     return list;
   }, [results, filterKey, sortKey]);
 
+  const stats = useMemo(() => ({
+    recommended: results.filter((item) => item.recommendationTier === 'Recommended').length,
+    partial: results.filter((item) => item.recommendationTier === 'Partial').length,
+    errors: results.filter((item) => item.status === 'error').length,
+  }), [results]);
+
+  const selectionColumn = (result: ScannerResult) => (
+    <button
+      type="button"
+      disabled={result.status !== 'done'}
+      onClick={(event) => {
+        event.stopPropagation();
+        toggleSelected(result.ticker);
+      }}
+      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold transition-colors ${
+        selectedTickers.has(result.ticker)
+          ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+          : 'border-slate-700 text-slate-400 hover:border-slate-500'
+      } disabled:cursor-not-allowed disabled:opacity-40`}
+    >
+      <CheckCircle2 className="h-3.5 w-3.5" />
+      후보
+    </button>
+  );
+
+  const tierBadge = (result: ScannerResult) => (
+    <span className={`inline-flex rounded-lg border px-2 py-1 text-xs font-bold ${tierClass(result.recommendationTier)}`}>
+      {result.recommendationTier}
+    </span>
+  );
+
+  const renderTable = () => (
+    <div className="overflow-hidden rounded-lg border border-slate-800">
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-800 text-sm">
+          <thead className="bg-slate-950 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-3 py-3 text-left">순위</th>
+              <th className="px-3 py-3 text-left">종목</th>
+              <th className="px-3 py-3 text-right">시총</th>
+              <th className="px-3 py-3 text-right">현재가</th>
+              <th className="px-3 py-3 text-left">SEPA</th>
+              <th className="px-3 py-3 text-left">추천</th>
+              <th className="px-3 py-3 text-right">VCP</th>
+              <th className="px-3 py-3 text-right">피벗</th>
+              <th className="px-3 py-3 text-left">API</th>
+              <th className="px-3 py-3 text-left">상태</th>
+              <th className="px-3 py-3 text-center">후보</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+            {filteredResults.map((result) => (
+              <tr
+                key={result.ticker}
+                onClick={() => result.status === 'done' && setSelectedResult(result)}
+                className={`cursor-pointer transition-colors hover:bg-slate-900 ${selectedTickers.has(result.ticker) ? 'bg-emerald-500/5' : ''}`}
+              >
+                <td className="px-3 py-3 font-mono text-slate-400">{result.rank}</td>
+                <td className="px-3 py-3">
+                  <p className="font-mono font-bold text-white">{result.ticker}</p>
+                  <p className="max-w-[180px] truncate text-xs text-slate-500">{result.name}</p>
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency)}</td>
+                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency)}</td>
+                <td className="px-3 py-3">
+                  <span className="text-xs text-slate-300">{sepaLabel(result)}</span>
+                  {result.sepaMissingCount !== null && <p className="text-[10px] text-slate-500">미충족 {result.sepaMissingCount}</p>}
+                </td>
+                <td className="px-3 py-3">{tierBadge(result)}</td>
+                <td className="px-3 py-3 text-right font-mono text-slate-300">
+                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-slate-300">
+                  {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
+                </td>
+                <td className="max-w-[170px] px-3 py-3 text-xs text-slate-400">
+                  <span className="line-clamp-2">{result.priceSource || result.providerAttempts?.at(-1)?.provider || '-'}</span>
+                </td>
+                <td className="px-3 py-3 text-xs">
+                  {result.status === 'error' ? (
+                    <span className="text-rose-300">{result.errorMessage || '오류'}</span>
+                  ) : result.status === 'running' ? (
+                    <span className="text-emerald-300">분석 중</span>
+                  ) : result.status === 'done' ? (
+                    <span className="text-slate-300">완료</span>
+                  ) : (
+                    <span className="text-slate-500">대기</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-center">{selectionColumn(result)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderCards = () => (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {filteredResults.map((result) => (
+        <motion.div
+          key={result.ticker}
+          layout
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ scale: 1.02 }}
+          onClick={() => result.status === 'done' && setSelectedResult(result)}
+          className={`group relative cursor-pointer rounded-lg border p-4 transition-all ${
+            isContestPoolTier(result.recommendationTier)
+              ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50'
+              : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+          } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : ''}`}
+        >
+          {result.status === 'done' && (
+            <div className="absolute -left-2 -top-2 z-10">
+              {selectionColumn(result)}
+            </div>
+          )}
+
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-mono font-bold text-white">{result.ticker}</h3>
+              <p className="truncate text-xs text-slate-500">{result.name}</p>
+            </div>
+            {tierBadge(result)}
+          </div>
+
+          {result.status === 'done' && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-[10px]">
+                <span className="text-slate-500">SEPA</span>
+                <span className="text-slate-300">{sepaLabel(result)}</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-slate-500">VCP</span>
+                <span className="text-slate-300">{result.vcpGrade} ({result.vcpScore ?? '-'})</span>
+              </div>
+              <div className="flex justify-between text-[10px]">
+                <span className="text-slate-500">피벗 거리</span>
+                <span className={Math.abs(result.distanceToPivotPct || 0) <= 5 ? 'font-bold text-emerald-400' : 'text-slate-300'}>
+                  {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
+                </span>
+              </div>
+              <p className="line-clamp-2 text-[10px] text-slate-500">{result.recommendationReason}</p>
+            </div>
+          )}
+
+          {result.status === 'running' && (
+            <div className="flex items-center gap-2 text-xs text-emerald-300">
+              <LoadingSpinner className="h-3 w-3" /> KIS/Yahoo 데이터 분석 중
+            </div>
+          )}
+
+          {result.status === 'error' && (
+            <p className="truncate text-[10px] text-red-400">{result.errorMessage}</p>
+          )}
+        </motion.div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
       <MarketBanner />
-      
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
             <ScanSearch className="h-6 w-6 text-emerald-400" /> VCP 마스터 스캐너
           </h1>
-          <p className="mt-1 text-sm text-slate-400">시장의 고베타 주도주 후보군을 SEPA/VCP 필터로 전수 조사합니다.</p>
+          <p className="mt-1 text-sm text-slate-400">
+            SEPA/VCP 조건과 예외 신호를 함께 판단해 콘테스트 비교 후보를 만듭니다.
+          </p>
         </div>
-        
-        <div className="flex items-center gap-2">
-          <select 
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
             value={universe}
-            onChange={(e) => handleUniverseChange(e.target.value as ScannerUniverse)}
+            onChange={(event) => handleUniverseChange(event.target.value as ScannerUniverse)}
             disabled={isScanning}
             className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
           >
@@ -413,7 +696,24 @@ export default function ScannerPage() {
               <option key={key} value={key}>{label}</option>
             ))}
           </select>
-          
+
+          <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('web')}
+              className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold ${viewMode === 'web' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+            >
+              웹
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('app')}
+              className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold ${viewMode === 'app' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}
+            >
+              앱
+            </button>
+          </div>
+
           {isScanning ? (
             <Button variant="danger" onClick={stopScan} icon={<Square className="h-4 w-4" />}>중단</Button>
           ) : (
@@ -422,181 +722,114 @@ export default function ScannerPage() {
         </div>
       </div>
 
-      {isScanning && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-emerald-400">스캔 진행 중...</span>
-            <span className="text-sm text-slate-400">{progress.current} / {progress.total}</span>
+      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">{UNIVERSES[universe].label}</p>
+            <p className="mt-1 text-xs text-slate-400">{UNIVERSES[universe].description}</p>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-            <div 
-              className="h-full bg-emerald-500 transition-all duration-300" 
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            />
+          <div className="grid grid-cols-3 gap-2 text-center text-xs sm:flex sm:text-left">
+            <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-200">Recommended {stats.recommended}</span>
+            <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">Partial {stats.partial}</span>
+            <span className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-200">Error {stats.errors}</span>
           </div>
         </div>
-      )}
+
+        {isScanning && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-emerald-300">{scanStage}</span>
+              <span className="text-sm text-slate-400">{progress.current} / {progress.total}</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className="h-full bg-emerald-500 transition-all duration-300"
+                style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              데이터 흐름: 유니버스 API → KIS 가격 조회 → Yahoo fallback → 벤치마크 조회 → SEPA/VCP 계산
+            </p>
+          </div>
+        )}
+      </section>
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex flex-wrap gap-2">
-          {FILTERS.map(f => (
+          {FILTERS.map((filter) => (
             <button
-              key={f.key}
-              onClick={() => setFilterKey(f.key)}
+              key={filter.key}
+              onClick={() => setFilterKey(filter.key)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                filterKey === f.key ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                filterKey === filter.key ? 'bg-emerald-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
               }`}
             >
-              {f.label}
+              {filter.label}
             </button>
           ))}
         </div>
-        
+
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">정렬:</span>
           <select
             value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            onChange={(event) => setSortKey(event.target.value as SortKey)}
             className="bg-transparent text-xs text-slate-300 outline-none"
           >
-            {SORTS.map(s => (
-              <option key={s.key} value={s.key}>{s.label}</option>
+            {SORTS.map((sort) => (
+              <option key={sort.key} value={sort.key}>{sort.label}</option>
             ))}
           </select>
           {lastScannedAt && (
-            <span className="ml-4 text-xs text-slate-500">최근 스캔: {new Date(lastScannedAt).toLocaleString()}</span>
+            <span className="ml-4 text-xs text-slate-500">최근 스캔: {new Date(lastScannedAt).toLocaleString('ko-KR')}</span>
           )}
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {filteredResults.map(result => (
-          <motion.div 
-            key={result.ticker}
-            layout
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02 }}
-            onClick={() => result.status === 'done' && setSelectedResult(result)}
-            className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
-              result.sepaStatus === 'pass'
-                ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50' 
-                : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
-            } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : ''}`}
-          >
-            {/* Selection Checkbox */}
-            {result.status === 'done' && (
-              <div 
-                className="absolute -left-2 -top-2 z-10"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedTickers(prev => {
-                    const next = new Set(prev);
-                    if (next.has(result.ticker)) next.delete(result.ticker);
-                    else if (next.size < 10) next.add(result.ticker);
-                    else alert('최대 10개까지만 선택할 수 있습니다.');
-                    return next;
-                  });
-                }}
-              >
-                <div className={`flex items-center gap-1.5 rounded-full border px-2 py-1 shadow-lg transition-all ${
-                  selectedTickers.has(result.ticker) 
-                    ? 'bg-emerald-500 border-emerald-400 text-white scale-110' 
-                    : 'bg-slate-800 border-slate-700 text-slate-500 group-hover:scale-105'
-                }`}>
-                  <Trophy className={`h-3 w-3 ${selectedTickers.has(result.ticker) ? 'fill-current' : ''}`} />
-                  <span className="text-[9px] font-bold uppercase tracking-tighter">Contest</span>
-                </div>
-              </div>
-            )}
+      {viewMode === 'web' ? renderTable() : renderCards()}
 
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="font-bold text-white">{result.ticker}</h3>
-                <p className="text-xs text-slate-500">{result.name}</p>
-              </div>
-              <div className="text-right">
-                {result.status === 'done' ? (
-                  <span className={`text-xs font-bold ${result.vcpGrade === 'strong' ? 'text-emerald-400' : 'text-slate-400'}`}>
-                    {result.vcpGrade} ({result.vcpScore}점)
-                  </span>
-                ) : result.status === 'queued' ? (
-                  <span className="text-xs text-slate-600 italic">대기 중</span>
-                ) : result.status === 'error' ? (
-                  <span className="text-xs text-red-400">오류</span>
-                ) : (
-                  <LoadingSpinner className="h-3 w-3" />
-                )}
-              </div>
-            </div>
-            
-            {result.status === 'done' && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">SEPA</span>
-                  <span className={result.sepaStatus === 'pass' ? 'text-emerald-400' : 'text-slate-500 text-coral-red'}>
-                    {result.sepaStatus === 'pass' ? 'SUCCESS' : 'FAIL'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-slate-500">피벗 거리</span>
-                  <span className={Math.abs(result.distanceToPivotPct || 0) <= 3 ? 'text-emerald-400 font-bold' : 'text-slate-300'}>
-                    {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
-                  </span>
-                </div>
-              </div>
-            )}
-            
-            {result.status === 'error' && (
-              <p className="text-[10px] text-red-500/70 truncate">{result.errorMessage}</p>
-            )}
-          </motion.div>
-        ))}
-        
-        {results.length === 0 && !isScanning && (
-          <div className="col-span-full py-20 text-center">
-            <ScanSearch className="mx-auto h-12 w-12 text-slate-700 mb-4" />
-            <h3 className="text-slate-400 font-medium font-bold">스캔 결과가 없습니다.</h3>
-            <p className="text-slate-600 text-sm mt-1">상단의 스캔 시작 버튼을 눌러 시장 조사를 시작하세요.</p>
-          </div>
-        )}
-      </div>
+      {results.length === 0 && !isScanning && (
+        <div className="py-20 text-center">
+          <ScanSearch className="mx-auto mb-4 h-12 w-12 text-slate-700" />
+          <h3 className="font-bold text-slate-400">스캔 결과가 없습니다.</h3>
+          <p className="mt-1 text-sm text-slate-600">상단의 스캔 시작 버튼으로 시장 조사를 시작하세요.</p>
+        </div>
+      )}
 
-      {/* Beauty Contest Floating Bar */}
       {selectedTickers.size > 0 && (
-        <div className="fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 items-center gap-6 rounded-2xl border border-emerald-500/30 bg-slate-950/90 px-6 py-4 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4">
+        <div className="fixed bottom-8 left-1/2 z-50 flex -translate-x-1/2 items-center gap-6 rounded-lg border border-emerald-500/30 bg-slate-950/90 px-6 py-4 shadow-2xl backdrop-blur-xl">
           <div className="flex flex-col">
-            <span className="text-xs font-medium text-emerald-400">뷰티 콘테스트 후보</span>
+            <span className="text-xs font-medium text-emerald-400">콘테스트 분석 후보</span>
             <span className="text-lg font-bold text-white">{selectedTickers.size} / 10 종목</span>
           </div>
-          
+
           <div className="h-8 w-px bg-slate-800" />
-          
+
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setSelectedTickers(new Set())}
-              className="text-sm text-slate-400 hover:text-white transition-colors"
+            <button
+              onClick={() => {
+                setSelectedTickers(new Set());
+                saveContestSelection(universe, new Set());
+              }}
+              className="text-sm text-slate-400 transition-colors hover:text-white"
             >
               전체 해제
             </button>
-            <Link 
-              href="/beauty-contest"
-              onClick={() => {
-                const candidates = results.filter(r => selectedTickers.has(r.ticker));
-                localStorage.setItem('mtn:contest-candidates', JSON.stringify(candidates));
-              }}
+            <Link
+              href="/contest"
+              onClick={() => saveContestSelection(universe, selectedTickers)}
             >
               <Button icon={<ScanSearch className="h-4 w-4" />} className="bg-emerald-600 hover:bg-emerald-500">
-                프롬프트 생성하기
+                콘테스트로 이동
               </Button>
             </Link>
           </div>
         </div>
       )}
 
-      <VcpDrilldownModal 
-        result={selectedResult} 
-        onClose={() => setSelectedResult(null)} 
+      <VcpDrilldownModal
+        result={selectedResult}
+        onClose={() => setSelectedResult(null)}
         onAddToWatchlist={addToWatchlist}
         isSavingWatchlist={isSavingWatchlist}
       />
