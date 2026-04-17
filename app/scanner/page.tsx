@@ -8,7 +8,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
-import { evaluateScannerRecommendation, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
+import { evaluateScannerRecommendation, isAutoSelectedTier, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   MarketAnalysisResponse,
   ProviderAttempt,
@@ -298,6 +298,16 @@ function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<st
   );
 }
 
+function autoSelectedTickers(results: ScannerResult[]) {
+  return new Set(
+    [...results]
+      .filter((item) => isAutoSelectedTier(item.recommendationTier))
+      .sort((a, b) => recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0))
+      .slice(0, 10)
+      .map((item) => item.ticker)
+  );
+}
+
 export default function ScannerPage() {
   const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
   const [results, setResults] = useState<ScannerResult[]>([]);
@@ -322,7 +332,7 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(new Set(snapshot.results.filter((item) => isContestPoolTier(item.recommendationTier)).slice(0, 10).map((item) => item.ticker)));
+      setSelectedTickers(autoSelectedTickers(snapshot.results));
     }
   }, []);
 
@@ -333,7 +343,7 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(new Set(snapshot.results.filter((item) => isContestPoolTier(item.recommendationTier)).slice(0, 10).map((item) => item.ticker)));
+      setSelectedTickers(autoSelectedTickers(snapshot.results));
     } else {
       setResults([]);
       setSelectedTickers(new Set());
@@ -406,13 +416,7 @@ export default function ScannerPage() {
 
       if (!abortController.signal.aborted) {
         const normalized = latestResults.map((item) => withRecommendation(item));
-        const nextSelected = new Set(
-          [...normalized]
-            .filter((item) => isContestPoolTier(item.recommendationTier))
-            .sort((a, b) => recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0))
-            .slice(0, 10)
-            .map((item) => item.ticker)
-        );
+        const nextSelected = autoSelectedTickers(normalized);
         const now = new Date().toISOString();
         setResults(normalized);
         setSelectedTickers(nextSelected);

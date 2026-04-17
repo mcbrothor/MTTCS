@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { extractLlmSessionId } from '@/lib/contest';
-import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
+import { isAutoSelectedTier, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   ApiSuccess,
   BeautyContestSession,
@@ -241,7 +241,7 @@ export default function ContestPage() {
     }
 
     const defaultPool = sortScannerPool(next.results)
-      .filter((item) => isContestPoolTier(item.recommendationTier))
+      .filter((item) => isAutoSelectedTier(item.recommendationTier))
       .slice(0, 10)
       .map((item) => item.ticker);
     setSelected(defaultPool);

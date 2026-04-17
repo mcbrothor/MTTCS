@@ -34,6 +34,8 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
   const volumeDryUp = scoreAtLeast(result.volumeDryUpScore, 65);
   const breakoutVolume = result.breakoutVolumeStatus === 'confirmed' || result.breakoutVolumeStatus === 'pending';
+  const volumeOrPocketSignal = pocketPivot || volumeDryUp || breakoutVolume;
+  const actionableTechnicalSignal = strongVcp || (constructiveVcp && (tightPivot || volumeOrPocketSignal));
 
   const exceptionSignals = [
     strongVcp ? '강한 VCP 구조' : null,
@@ -43,7 +45,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     breakoutVolume ? '돌파 거래량 확인 필요' : null,
   ].filter((item): item is string => Boolean(item));
 
-  if (sepaPass && (strongVcp || nearActionablePivot || volumeDryUp || pocketPivot)) {
+  if (sepaPass && actionableTechnicalSignal) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'SEPA를 통과했고 VCP/피벗/거래량 중 핵심 신호가 확인됩니다.',
@@ -52,7 +54,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
-  if ((sepaMissingCount !== null && sepaMissingCount <= 1 && strongVcp && nearActionablePivot) || (sepaPass && constructiveVcp)) {
+  if ((sepaMissingCount !== null && sepaMissingCount <= 1 && strongVcp && nearActionablePivot) || (sepaPass && constructiveVcp && volumeOrPocketSignal)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'SEPA 통과에 준하는 구조이며 콘테스트 우선 비교 가치가 있습니다.',
@@ -61,7 +63,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
-  if ((sepaMissingCount !== null && sepaMissingCount <= 2 && (constructiveVcp || nearActionablePivot || exceptionSignals.length > 0)) || exceptionSignals.length >= 2) {
+  if ((sepaMissingCount !== null && sepaMissingCount <= 2 && (constructiveVcp || volumeOrPocketSignal)) || (strongVcp && exceptionSignals.length >= 2)) {
     return {
       recommendationTier: 'Partial',
       recommendationReason: '일부 SEPA 미달이 있지만 모멘텀/VCP/피벗 신호 때문에 예외 비교 가치가 있습니다.',
@@ -80,6 +82,10 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
 export function isContestPoolTier(tier: RecommendationTier | null | undefined) {
   return tier === 'Recommended' || tier === 'Partial';
+}
+
+export function isAutoSelectedTier(tier: RecommendationTier | null | undefined) {
+  return tier === 'Recommended';
 }
 
 export function recommendationSortValue(tier: RecommendationTier | null | undefined) {

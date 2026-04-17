@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { normalizeNasdaqRows } from '../lib/finance/scanner-normalizers.ts';
 import { rankKoreaMarketCapItems } from '../lib/finance/korea-market-cap-ranking.ts';
-import { evaluateScannerRecommendation } from '../lib/scanner-recommendation.ts';
+import { evaluateScannerRecommendation, isAutoSelectedTier } from '../lib/scanner-recommendation.ts';
 
 console.log('=== Scanner Universe Tests ===\n');
 
@@ -65,6 +65,24 @@ console.log('=== Scanner Universe Tests ===\n');
   assert.equal(recommendation.recommendationTier, 'Partial');
   assert.ok(recommendation.exceptionSignals.length > 0);
   console.log('✅ SEPA 일부 미달 후보도 예외 신호가 있으면 Partial로 분류한다');
+}
+
+{
+  const weakNearPivot = evaluateScannerRecommendation({
+    status: 'done',
+    sepaStatus: 'fail',
+    sepaFailed: 2,
+    vcpGrade: 'weak',
+    vcpScore: 32,
+    distanceToPivotPct: 2.4,
+    pocketPivotScore: 0,
+    volumeDryUpScore: 0,
+  });
+
+  assert.equal(weakNearPivot.recommendationTier, 'Low Priority');
+  assert.equal(isAutoSelectedTier('Recommended'), true);
+  assert.equal(isAutoSelectedTier('Partial'), false);
+  console.log('OK weak VCP plus near pivot alone is not Partial or auto-selected');
 }
 
 console.log('\n=== All Scanner Universe Tests Passed ===');
