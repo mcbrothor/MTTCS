@@ -15,6 +15,7 @@ import type {
   TradeStatus,
   TrailingStops,
 } from '@/types';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface TradeHistoryTableProps {
   trades: Trade[];
@@ -914,9 +915,22 @@ function StrategyDetail({ trade }: { trade: Trade }) {
   const sepa = getSepaEvidence(trade.sepa_evidence);
   const riskPct = (getRiskPercent(trade) * 100).toFixed(1).replace('.0', '');
   const metrics = trade.metrics;
+  const exchange = isKorean(trade.ticker) ? 'KOSPI' : 'NAS';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Price History Chart */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h4 className="text-sm font-bold text-white flex items-center gap-2">
+            주가 추이 리서치 <span className="text-[10px] font-normal text-slate-500">(최근 200거래일)</span>
+          </h4>
+        </div>
+        <div className="h-[250px] w-full">
+          <HistoryChart ticker={trade.ticker} exchange={exchange} stopPrice={trade.stoploss_price} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <DetailMetric label="총 자본" value={currency(trade.total_equity, trade.ticker)} />
         <DetailMetric label="허용 손실" value={`${riskPct}%`} />
@@ -1131,6 +1145,99 @@ function EditPanel({
         <ActionButton onClick={onSave} disabled={busy}>{busy ? '저장 중...' : '저장'}</ActionButton>
       </div>
     </div>
+  );
+}
+
+function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; exchange: string; stopPrice: number | null }) {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchData = async () => {
+      try {
+        const resp = await axios.get('/api/market-data', {
+          params: { ticker, exchange, includeFundamentals: 'false' },
+        });
+        if (!cancelled) {
+          setData(resp.data.priceData);
+        }
+      } catch (err) {
+        console.error('Failed to fetch chart data', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchData();
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker, exchange]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-slate-500">
+        데이터를 불러오는 중...
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-xs text-slate-600 italic">
+        차트 데이터를 표시할 수 없습니다.
+      </div>
+    );
+  }
+
+  const minPrice = Math.min(...data.map(d => d.close)) * 0.95;
+  const maxPrice = Math.max(...data.map(d => d.close)) * 1.05;
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+        <defs>
+          <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+        <XAxis 
+          dataKey="date" 
+          hide 
+        />
+        <YAxis 
+          domain={[minPrice, maxPrice]} 
+          orientation="right"
+          tickSize={0}
+          axisLine={false}
+          tick={{ fontSize: 10, fill: '#64748b' }}
+        />
+        <Tooltip
+          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+          itemStyle={{ color: '#10b981', fontSize: '12px' }}
+          labelStyle={{ color: '#64748b', fontSize: '10px' }}
+          labelFormatter={(label) => `날짜: ${label}`}
+        />
+        <Area
+          type="monotone"
+          dataKey="close"
+          stroke="#10b981"
+          strokeWidth={2}
+          fillOpacity={1}
+          fill="url(#colorPrice)"
+          animationDuration={1000}
+        />
+        {stopPrice && (
+          <path
+            d={`M 0 ${stopPrice} L 1000 ${stopPrice}`} // This is a simplified placeholder for reference line
+            stroke="#ef4444"
+            strokeDasharray="5 5"
+          />
+        )}
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 

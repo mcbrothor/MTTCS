@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, Play, ScanSearch, Square, Star } from 'lucide-react';
+import { ExternalLink, Play, ScanSearch, Square, Star, Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
@@ -437,14 +438,18 @@ export default function ScannerPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filteredResults.map(result => (
-          <div 
+          <motion.div 
             key={result.ticker}
+            layout
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.02 }}
             onClick={() => result.status === 'done' && setSelectedResult(result)}
-            className={`group relative cursor-pointer rounded-xl border p-4 transition-all hover:scale-[1.02] ${
+            className={`group relative cursor-pointer rounded-xl border p-4 transition-all ${
               result.sepaStatus === 'PASS' 
                 ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50' 
                 : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
-            } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-950' : ''}`}
+            } ${selectedTickers.has(result.ticker) ? 'ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)]' : ''}`}
           >
             {/* Selection Checkbox */}
             {result.status === 'done' && (
@@ -461,12 +466,13 @@ export default function ScannerPage() {
                   });
                 }}
               >
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full border shadow-lg transition-colors ${
+                <div className={`flex items-center gap-1.5 rounded-full border px-2 py-1 shadow-lg transition-all ${
                   selectedTickers.has(result.ticker) 
-                    ? 'bg-emerald-500 border-emerald-400 text-white' 
-                    : 'bg-slate-800 border-slate-700 text-transparent group-hover:text-slate-500'
+                    ? 'bg-emerald-500 border-emerald-400 text-white scale-110' 
+                    : 'bg-slate-800 border-slate-700 text-slate-500 group-hover:scale-105'
                 }`}>
-                  <Star className="h-3 w-3 fill-current" />
+                  <Trophy className={`h-3 w-3 ${selectedTickers.has(result.ticker) ? 'fill-current' : ''}`} />
+                  <span className="text-[9px] font-bold uppercase tracking-tighter">Contest</span>
                 </div>
               </div>
             )}
@@ -511,7 +517,7 @@ export default function ScannerPage() {
             {result.status === 'error' && (
               <p className="text-[10px] text-red-500/70 truncate">{result.errorMessage}</p>
             )}
-          </div>
+          </motion.div>
         ))}
         
         {results.length === 0 && !isScanning && (

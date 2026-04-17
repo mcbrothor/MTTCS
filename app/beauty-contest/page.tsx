@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Clipboard, ClipboardCheck, Sparkles, Trash2, Trophy } from 'lucide-react';
+import { ChevronLeft, Clipboard, ClipboardCheck, Sparkles, Trash2, Trophy, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import MarketBanner from '@/components/ui/MarketBanner';
 import { ScannerResult } from '@/types';
@@ -11,7 +12,7 @@ import { generateBeautyContestPrompt } from '@/lib/ai/prompt-generator';
 export default function BeautyContestPage() {
   const [candidates, setCandidates] = useState<ScannerResult[]>([]);
   const [prompt, setPrompt] = useState<string>('');
-  const [copied, setCopied] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem('mtn:contest-candidates');
@@ -34,8 +35,8 @@ export default function BeautyContestPage() {
     if (!prompt) return;
     try {
       await navigator.clipboard.writeText(prompt);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
     } catch (err) {
       console.error('Failed to copy', err);
     }
@@ -48,8 +49,23 @@ export default function BeautyContestPage() {
   };
 
   return (
-    <div className="container mx-auto space-y-8 px-4 py-8 max-w-6xl">
+    <div className="container mx-auto space-y-8 px-4 py-8 max-w-6xl relative">
       <MarketBanner />
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-8 left-1/2 z-[100] flex items-center gap-3 rounded-full border border-emerald-500/30 bg-slate-900 px-6 py-3 shadow-[0_0_30px_rgba(16,185,129,0.2)] backdrop-blur-xl"
+          >
+            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+            <span className="text-sm font-bold text-white tracking-tight">프롬프트가 클립보드에 성공적으로 복사되었습니다!</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -86,8 +102,12 @@ export default function BeautyContestPage() {
 
           <div className="space-y-3">
             {candidates.map((c) => (
-              <div 
+              <motion.div 
                 key={c.ticker}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.01 }}
                 className="group relative flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 p-4 hover:border-slate-700 transition-all"
               >
                 <div className="flex flex-col">
@@ -109,7 +129,7 @@ export default function BeautyContestPage() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-              </div>
+              </motion.div>
             ))}
 
             {candidates.length === 0 && (
@@ -125,7 +145,10 @@ export default function BeautyContestPage() {
 
         {/* Right: Generated Prompt */}
         <div className="lg:col-span-8">
-          <div className="flex flex-col h-full min-h-[500px] rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden shadow-2xl">
+          <motion.div 
+            layout
+            className="flex flex-col h-full min-h-[500px] rounded-2xl border border-slate-800 bg-slate-900/30 overflow-hidden shadow-2xl"
+          >
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/50 px-6 py-4">
               <div className="flex items-center gap-3">
                 <Sparkles className="h-5 w-5 text-emerald-400" />
@@ -140,8 +163,8 @@ export default function BeautyContestPage() {
                     : 'text-slate-600 bg-slate-900/50 cursor-not-allowed'
                 }`}
               >
-                {copied ? <ClipboardCheck className="h-4 w-4 text-emerald-400" /> : <Clipboard className="h-4 w-4" />}
-                {copied ? '복사됨!' : '프롬프트 복사'}
+                <Clipboard className={`h-4 w-4 ${showToast ? 'text-emerald-400' : ''}`} />
+                {showToast ? '복사 완료' : '프롬프트 복사'}
               </button>
             </div>
 
@@ -161,7 +184,7 @@ export default function BeautyContestPage() {
                 이 프롬프트는 <strong>제공된 주가 데이터, VCP 분석 결과, 펀더멘탈 지표</strong>를 체계적으로 요약하여 외부 LLM이 가장 정확한 주도주 판별을 수행하도록 설계되었습니다. 복사 후 <strong>Gemini 1.5 Pro, Claude 3.5 Sonnet, GPT-4o</strong> 등에 붙여넣으세요.
               </p>
             </div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>
