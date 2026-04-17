@@ -5,16 +5,16 @@ import { Activity, BarChart3, BookOpen, Compass, History, LayoutDashboard, PlusC
 export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-mono text-lg font-bold text-emerald-500 transition-colors hover:text-emerald-400">
           <Activity className="h-6 w-6" />
           <span>
             MTN
-            <span className="ml-2 hidden text-sm font-normal text-slate-400 lg:inline">Mantori&apos;s Trading Navigator</span>
+            <span className="ml-2 hidden text-xs font-normal text-slate-500 xl:inline">Mantori&apos;s Trading Navigator</span>
           </span>
         </Link>
 
-        <div className="flex min-w-0 items-center justify-end gap-3 overflow-x-auto sm:gap-6">
+        <div className="flex min-w-0 items-center justify-end gap-2.5 overflow-x-auto sm:gap-4 md:gap-5 scrollbar-hide py-1">
           <NavLink href="/" icon={<LayoutDashboard className="h-4 w-4" />} label="대시보드" />
           <NavLink href="/master-filter" icon={<Compass className="h-4 w-4 text-emerald-400" />} label="마스터 필터" />
           <NavLink href="/scanner" icon={<ScanSearch className="h-4 w-4 text-indigo-400" />} label="스캐너" />
@@ -35,7 +35,7 @@ function NavLink({ href, icon, label }: { href: string; icon: ReactNode; label: 
   return (
     <Link href={href} className="flex shrink-0 items-center gap-2 text-sm font-medium text-slate-300 transition-colors hover:text-white">
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className="hidden md:inline">{label}</span>
     </Link>
   );
 }

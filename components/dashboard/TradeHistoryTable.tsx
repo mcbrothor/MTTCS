@@ -4,7 +4,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
 import axios from 'axios';
-import { Star, Trash2 } from 'lucide-react';
+import { Star, Trash2, TrendingUp } from 'lucide-react';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type {
   EntryTargets,
   SepaEvidence,
@@ -15,7 +16,7 @@ import type {
   TradeStatus,
   TrailingStops,
 } from '@/types';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 interface TradeHistoryTableProps {
   trades: Trade[];
@@ -1176,8 +1177,9 @@ function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; exchang
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-xs text-slate-500">
-        데이터를 불러오는 중...
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-slate-500">
+        <LoadingSpinner className="h-6 w-6" />
+        <span className="animate-pulse">시장 데이터를 페칭 중...</span>
       </div>
     );
   }
@@ -1227,13 +1229,20 @@ function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; exchang
           strokeWidth={2}
           fillOpacity={1}
           fill="url(#colorPrice)"
-          animationDuration={1000}
+          animationDuration={1500}
         />
         {stopPrice && (
-          <path
-            d={`M 0 ${stopPrice} L 1000 ${stopPrice}`} // This is a simplified placeholder for reference line
+          <ReferenceLine
+            y={stopPrice}
             stroke="#ef4444"
             strokeDasharray="5 5"
+            label={{ 
+              value: `손절가 ${stopPrice.toLocaleString()}`, 
+              position: 'right', 
+              fill: '#ef4444', 
+              fontSize: 10,
+              fontWeight: 'bold'
+            }}
           />
         )}
       </AreaChart>

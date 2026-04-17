@@ -56,13 +56,19 @@ export default function BeautyContestPage() {
       <AnimatePresence>
         {showToast && (
           <motion.div 
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            initial={{ opacity: 0, y: -40, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-8 left-1/2 z-[100] flex items-center gap-3 rounded-full border border-emerald-500/30 bg-slate-900 px-6 py-3 shadow-[0_0_30px_rgba(16,185,129,0.2)] backdrop-blur-xl"
+            exit={{ opacity: 0, y: -40, x: '-50%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+            className="fixed top-12 left-1/2 z-[9999] flex items-center gap-3 rounded-2xl border border-emerald-500 bg-slate-900/95 px-8 py-4 shadow-[0_20px_50px_rgba(16,185,129,0.4)] backdrop-blur-2xl"
           >
-            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-            <span className="text-sm font-bold text-white tracking-tight">프롬프트가 클립보드에 성공적으로 복사되었습니다!</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white tracking-tight">클립보드 복사 완료</span>
+              <span className="text-[10px] text-emerald-400/80">LLM 분석을 위한 준비가 끝났습니다.</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

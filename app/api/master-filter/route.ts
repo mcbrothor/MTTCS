@@ -359,6 +359,7 @@ export async function GET(request: Request) {
 
     const responseData: MasterFilterResponse = {
       state: marketState,
+      market: market,
       metrics: {
         trend: trendMetric,
         breadth: breadthMetric,
@@ -378,7 +379,14 @@ export async function GET(request: Request) {
         regimeHistory: [
           { date: new Date().toISOString(), state: marketState, score: p3Score, reason: `P3 score ${p3Score}/100` },
         ],
-        meta: { asOf: new Date().toISOString(), source: 'Market Analysis Engine' },
+        meta: { 
+          asOf: new Date().toISOString(), 
+          source: 'Market Analysis Engine',
+          provider: 'MTN Aggregator',
+          delay: 'EOD',
+          fallbackUsed: false,
+          warnings: []
+        },
         updatedAt: new Date().toISOString(),
       },
       insightLog,
