@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Clipboard, ClipboardCheck, Sparkles, Trash2, Trophy, CheckCircle2 } from 'lucide-react';
+import { Compass, Clipboard, ClipboardCheck, Sparkles, Trash2, Trophy, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import MarketBanner from '@/components/ui/MarketBanner';
@@ -77,7 +77,7 @@ export default function BeautyContestPage() {
         <div className="flex items-center gap-4">
           <Link href="/scanner">
             <button className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all">
-              <ChevronLeft className="h-5 w-5" />
+              <Compass className="h-5 w-5" />
             </button>
           </Link>
           <div>
