@@ -31,6 +31,12 @@ export default function Navbar() {
           {navItems.map((item) => (
             <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />
           ))}
+          <form action="/api/auth/logout" method="post" className="shrink-0">
+            <button type="submit" className="flex items-center gap-2 text-sm font-medium text-slate-400 transition-colors hover:text-white">
+              <Activity className="h-4 w-4" />
+              <span className="hidden md:inline">로그아웃</span>
+            </button>
+          </form>
         </div>
       </div>
     </nav>

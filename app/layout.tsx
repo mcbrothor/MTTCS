@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import Navbar from '@/components/layout/Navbar';
-import NavigatorWarningSystem from '@/components/master-filter/NavigatorWarningSystem';
+import AppShell from '@/components/layout/AppShell';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -19,8 +18,6 @@ export const metadata: Metadata = {
   description: 'SEPA, VCP pivot entries, pattern invalidation risk, and disciplined trade tracking workflow.',
 };
 
-import { MarketProvider } from '@/contexts/MarketContext';
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,11 +26,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased dark`}>
       <body className="flex min-h-full flex-col font-sans">
-        <MarketProvider>
-          <Navbar />
-          <NavigatorWarningSystem />
-          <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
-        </MarketProvider>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

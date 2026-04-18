@@ -128,7 +128,12 @@ BEGIN
     IF NOT EXISTS (
       SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = tbl AND policyname = 'Service role full access'
     ) THEN
-      EXECUTE format('CREATE POLICY "Service role full access" ON public.%I FOR ALL USING (true) WITH CHECK (true)', tbl);
+      EXECUTE format(
+        'CREATE POLICY "Service role full access" ON public.%I FOR ALL TO service_role USING (auth.role() = %L) WITH CHECK (auth.role() = %L)',
+        tbl,
+        'service_role',
+        'service_role'
+      );
     END IF;
   END LOOP;
 END

@@ -28,7 +28,9 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE tablename = 'watchlist' AND policyname = 'Service role full access'
   ) THEN
     CREATE POLICY "Service role full access" ON public.watchlist
-      FOR ALL USING (true) WITH CHECK (true);
+      FOR ALL TO service_role
+      USING (auth.role() = 'service_role')
+      WITH CHECK (auth.role() = 'service_role');
   END IF;
 END
 $$;
