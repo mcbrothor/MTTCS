@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { normalizeNasdaqRows } from '../lib/finance/scanner-normalizers.ts';
 import { rankKoreaMarketCapItems } from '../lib/finance/korea-market-cap-ranking.ts';
-import { evaluateScannerRecommendation, isAutoSelectedTier } from '../lib/scanner-recommendation.ts';
+import { evaluateScannerRecommendation, getVolumeSignalTier, isAutoSelectedTier } from '../lib/scanner-recommendation.ts';
 
 console.log('=== Scanner Universe Tests ===\n');
 
@@ -83,6 +83,15 @@ console.log('=== Scanner Universe Tests ===\n');
   assert.equal(isAutoSelectedTier('Recommended'), true);
   assert.equal(isAutoSelectedTier('Partial'), false);
   console.log('OK weak VCP plus near pivot alone is not Partial or auto-selected');
+}
+
+{
+  assert.equal(getVolumeSignalTier({ volumeDryUpScore: 66, pocketPivotScore: 10, breakoutVolumeStatus: 'weak' }), 'Strong');
+  assert.equal(getVolumeSignalTier({ volumeDryUpScore: 51, pocketPivotScore: 10, breakoutVolumeStatus: 'weak' }), 'Watch');
+  assert.equal(getVolumeSignalTier({ volumeDryUpScore: 20, pocketPivotScore: 30, breakoutVolumeStatus: 'pending' }), 'Watch');
+  assert.equal(getVolumeSignalTier({ volumeDryUpScore: 20, pocketPivotScore: 30, breakoutVolumeStatus: 'weak' }), 'Weak');
+  assert.equal(getVolumeSignalTier({}), 'Unknown');
+  console.log('OK volume signal tiers classify Strong, Watch, Weak, and Unknown');
 }
 
 console.log('\n=== All Scanner Universe Tests Passed ===');

@@ -52,7 +52,7 @@ export default function DashboardPage() {
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Dashboard</p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">대시보드</h1>
-          <p className="mt-3 text-sm text-slate-400">MTN v4.0 매매 성과와 규칙 준수율을 추적합니다.</p>
+          <p className="mt-3 text-sm text-slate-400">MTN 매매 성과와 규칙 준수율을 추적합니다.</p>
         </div>
 
         <div className="flex rounded-lg bg-slate-800 p-1">
@@ -90,10 +90,11 @@ export default function DashboardPage() {
 
       <EquityCurve data={equityCurve} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <DisciplineChart highDiscipline={highDiscipline} lowDiscipline={lowDiscipline} />
+      <DisciplineChart highDiscipline={highDiscipline} lowDiscipline={lowDiscipline} />
+
+      <section className="min-h-[560px]">
         <TradeHistoryTable trades={trades} limit={10} title={`${market === 'US' ? '미국' : '한국'} 주식 최근 매매`} />
-      </div>
+      </section>
     </div>
   );
 }

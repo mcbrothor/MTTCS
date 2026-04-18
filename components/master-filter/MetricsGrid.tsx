@@ -1,14 +1,15 @@
 'use client';
 
 import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
-import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
+import { Area, AreaChart, Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
-import type { MasterFilterMetricDetail } from '@/types';
+import type { MasterFilterMetricDetail, MasterFilterMetrics } from '@/types';
 
 interface MetricCardProps {
   detail: MasterFilterMetricDetail;
   chartData?: { date: string; close: number }[];
+  movingAverageData?: NonNullable<MasterFilterMetrics['movingAverageHistory']>;
   compact?: boolean;
 }
 
@@ -18,7 +19,7 @@ function statusClass(status: MasterFilterMetricDetail['status']) {
   return 'border-rose-500/40 bg-rose-500/5 text-rose-300';
 }
 
-function MetricCard({ detail, chartData, compact = false }: MetricCardProps) {
+function MetricCard({ detail, chartData, movingAverageData, compact = false }: MetricCardProps) {
   const tone = statusClass(detail.status);
   return (
     <Card className={`border-2 ${tone} ${compact ? 'min-h-[190px]' : 'min-h-[260px]'}`}>
@@ -41,9 +42,7 @@ function MetricCard({ detail, chartData, compact = false }: MetricCardProps) {
         <div className="mt-4">
           <div className="mb-1 flex justify-between text-xs text-slate-500">
             <span>가중 점수</span>
-            <span>
-              {detail.score}/{detail.weight}
-            </span>
+            <span>{detail.score}/{detail.weight}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-lg bg-slate-800">
             <div className="h-full bg-emerald-500" style={{ width: `${Math.min((detail.score / detail.weight) * 100, 100)}%` }} />
@@ -51,7 +50,27 @@ function MetricCard({ detail, chartData, compact = false }: MetricCardProps) {
         </div>
       )}
 
-      {chartData && !compact && (
+      {movingAverageData && !compact && (
+        <div className="mt-4 h-24">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={movingAverageData}>
+              <Line type="monotone" dataKey="ma50" name="50일선" stroke="#10b981" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <Line type="monotone" dataKey="ma200" name="200일선" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
+              <Tooltip
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                labelStyle={{ color: '#94a3b8', fontSize: 11 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="mt-1 flex gap-3 text-[10px] text-slate-500">
+            <span className="text-emerald-300">50일선</span>
+            <span className="text-sky-300">200일선</span>
+          </div>
+        </div>
+      )}
+
+      {chartData && !movingAverageData && !compact && (
         <div className="mt-4 h-24">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
@@ -70,6 +89,49 @@ function MetricCard({ detail, chartData, compact = false }: MetricCardProps) {
         <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-slate-600">{detail.source}</p>
       </div>
     </Card>
+  );
+}
+
+function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRows']> }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-slate-300">
+        <TrendingUp className="h-4 w-4 text-emerald-300" />
+        <p className="text-sm font-bold">전체 섹터 로테이션</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
+          <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="py-2 pr-3">순위</th>
+              <th className="py-2 pr-3">섹터</th>
+              <th className="py-2 pr-3">심볼</th>
+              <th className="py-2 pr-3 text-right">20일 수익률</th>
+              <th className="py-2 pr-3">성격</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.symbol} className="border-b border-slate-900">
+                <td className="py-2 pr-3 font-mono text-slate-400">{row.rank}</td>
+                <td className="py-2 pr-3 font-semibold text-white">{row.name}</td>
+                <td className="py-2 pr-3 font-mono">{row.symbol}</td>
+                <td className={`py-2 pr-3 text-right font-mono ${row.return20 >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {row.return20 > 0 ? '+' : ''}{row.return20.toFixed(2)}%
+                </td>
+                <td className="py-2 pr-3">
+                  <span className={`rounded-lg border px-2 py-1 text-xs ${row.riskOn ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-400'}`}>
+                    {row.riskOn ? 'Risk-on' : 'Defensive/Neutral'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -99,9 +161,9 @@ export default function MetricsGrid() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-              {data.market === 'KR' ? '🇰🇷 KOSPI 200' : '🇺🇸 SPY'} Market Filter
+              {data.market === 'KR' ? 'KOSPI 200' : 'SPY'} Market Filter
             </p>
-            <h2 className="mt-1 text-xl font-bold text-white">근거 기반 시장 점수판</h2>
+            <h2 className="mt-1 text-xl font-bold text-white">근거 기반 시장 점수</h2>
           </div>
           <div className="text-right">
             <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? 0}/100</p>
@@ -111,7 +173,7 @@ export default function MetricsGrid() {
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <MetricCard detail={metrics.trend} chartData={metrics.mainHistory} />
+        <MetricCard detail={metrics.trend} movingAverageData={metrics.movingAverageHistory} />
         <MetricCard detail={metrics.breadth} chartData={metrics.mainHistory} />
         <MetricCard detail={metrics.volatility} chartData={metrics.vixHistory} />
         <MetricCard detail={metrics.liquidity} />
@@ -124,21 +186,17 @@ export default function MetricsGrid() {
         <MetricCard detail={metrics.leadership} compact />
       </div>
 
+      <SectorTable rows={metrics.sectorRows || []} />
+
       <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
         <div className="mb-3 flex items-center gap-2 text-slate-300">
           <TrendingUp className="h-4 w-4 text-emerald-300" />
           <p className="text-sm font-bold">판정 사용법</p>
         </div>
         <div className="grid gap-3 text-sm leading-6 text-slate-400 md:grid-cols-3">
-          <p>
-            <strong className="text-emerald-300">GREEN</strong>: 돌파 후보를 적극 검토하되 피벗 근처 거래량과 손절폭을 확인합니다.
-          </p>
-          <p>
-            <strong className="text-amber-300">YELLOW</strong>: 신규 진입 크기를 줄이고 실패한 돌파는 빠르게 정리합니다.
-          </p>
-          <p>
-            <strong className="text-rose-300">RED</strong>: 현금 비중과 기존 포지션 방어를 우선합니다.
-          </p>
+          <p><strong className="text-emerald-300">GREEN</strong>: 돌파 후보를 적극 검토하되 피벗 근처 거래량을 확인합니다.</p>
+          <p><strong className="text-amber-300">YELLOW</strong>: 신규 진입 크기를 줄이고 실패 돌파는 빠르게 정리합니다.</p>
+          <p><strong className="text-rose-300">RED</strong>: 현금 비중과 기존 포지션 방어를 우선합니다.</p>
         </div>
       </section>
     </div>

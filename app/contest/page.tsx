@@ -209,6 +209,7 @@ export default function ContestPage() {
   const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
   const [snapshot, setSnapshot] = useState<StoredScannerSnapshot | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [transferInfo, setTransferInfo] = useState<TransferSelection | null>(null);
   const [sessions, setSessions] = useState<BeautyContestSession[]>([]);
   const [activeSession, setActiveSession] = useState<BeautyContestSession | null>(null);
   const [llmJson, setLlmJson] = useState('');
@@ -228,6 +229,7 @@ export default function ContestPage() {
     setSnapshot(next);
     if (!next) {
       setSelected([]);
+      setTransferInfo(null);
       return;
     }
 
@@ -237,8 +239,10 @@ export default function ContestPage() {
     const transferred = transferTickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10);
     if (transferred.length > 0) {
       setSelected(transferred);
+      setTransferInfo({ universe: nextUniverse, tickers: transferred, savedAt: transfer?.savedAt || new Date().toISOString() });
       return;
     }
+    setTransferInfo(null);
 
     const defaultPool = sortScannerPool(next.results)
       .filter((item) => isAutoSelectedTier(item.recommendationTier))
@@ -287,6 +291,20 @@ export default function ContestPage() {
   const w1Summary = performanceSummary(activeCandidates, 'W1');
   const m1Summary = performanceSummary(activeCandidates, 'M1');
   const pastedResultSessionId = useMemo(() => extractLlmSessionId(llmJson), [llmJson]);
+  const finalPicks = useMemo(() => activeCandidates
+    .filter((candidate) => candidate.actual_invested)
+    .sort((a, b) => (a.final_pick_rank || 99) - (b.final_pick_rank || 99) || a.user_rank - b.user_rank), [activeCandidates]);
+
+  const basePriceFor = (candidate: ContestCandidate) => {
+    const reviewBase = candidate.reviews?.find((review) => review.base_price !== null && review.base_price !== undefined);
+    return reviewBase?.base_price ?? candidate.entry_reference_price ?? null;
+  };
+
+  const baseSourceFor = (candidate: ContestCandidate) => {
+    const reviewBase = candidate.reviews?.find((review) => review.base_price !== null && review.base_price !== undefined);
+    const snapshot = candidate.snapshot as Partial<ContestPromptCandidate> | null;
+    return reviewBase?.price_source || snapshot?.source || 'Contest base price';
+  };
 
   const toggleCandidateSelection = (ticker: string) => {
     setSelected((prev) => {
@@ -522,6 +540,11 @@ export default function ContestPage() {
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              {transferInfo && (
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-200">
+                  스캐너 전달 후보 {transferInfo.tickers.length}개 · {new Date(transferInfo.savedAt).toLocaleString('ko-KR')}
+                </span>
+              )}
               <span>스냅샷 {new Date(snapshot.savedAt).toLocaleString('ko-KR')}</span>
               <span>후보 풀 {candidatePool.length}</span>
               <span>선택 {selected.length}/10</span>
@@ -661,7 +684,59 @@ export default function ContestPage() {
         <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">5. 최종 선정과 1주/1개월 성과 판정</h2>
+              <h2 className="text-lg font-bold text-white">5. 선정 종목 요약</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                콘테스트에서 최종 선택한 종목과 선정일 기준 종가를 먼저 확인합니다.
+              </p>
+            </div>
+            <span className="text-xs text-slate-500">최종 선택 {finalPicks.length}개</span>
+          </div>
+
+          {finalPicks.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-400">
+              아직 최종 선택된 종목이 없습니다. 아래 후보 목록에서 실제 투자 대상으로 표시하면 이 영역에 누적됩니다.
+            </div>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
+                <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="py-3 pr-3">최종 순위</th>
+                    <th className="py-3 pr-3">종목</th>
+                    <th className="py-3 pr-3">선정일</th>
+                    <th className="py-3 pr-3 text-right">선정일 기준 종가</th>
+                    <th className="py-3 pr-3">가격 출처</th>
+                    <th className="py-3 pr-3">LLM 순위</th>
+                    <th className="py-3">코멘트</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {finalPicks.map((candidate) => (
+                    <tr key={candidate.id} className="border-b border-slate-800">
+                      <td className="py-3 pr-3 font-mono text-emerald-300">#{candidate.final_pick_rank || '-'}</td>
+                      <td className="py-3 pr-3">
+                        <p className="font-mono font-bold text-white">{candidate.ticker}</p>
+                        <p className="text-xs text-slate-500">{candidate.name || candidate.exchange}</p>
+                      </td>
+                      <td className="py-3 pr-3 text-slate-400">{formatDate(activeSession.selected_at)}</td>
+                      <td className="py-3 pr-3 text-right font-mono text-slate-200">{formatPrice(basePriceFor(candidate), candidate.exchange)}</td>
+                      <td className="py-3 pr-3 text-xs text-slate-500">{baseSourceFor(candidate)}</td>
+                      <td className="py-3 pr-3 font-mono text-slate-300">{candidate.llm_rank ? `#${candidate.llm_rank}` : '-'}</td>
+                      <td className="py-3 text-xs text-slate-400">{candidate.llm_comment || candidate.final_pick_note || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeSession && (
+        <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">6. 최종 선정과 1주/1개월 성과 판정</h2>
               <p className="mt-1 text-sm text-slate-400">
                 실제 선정 종목 수에는 제한이 없습니다. 선택군 평균이 미선택군보다 낮으면 해당 사이클은 실패로 표시합니다.
               </p>

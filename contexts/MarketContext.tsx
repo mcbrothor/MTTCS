@@ -43,6 +43,7 @@ function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
     fallbackUsed: true,
     warnings: ['Master filter data could not be loaded.'],
   };
+
   return {
     state: 'YELLOW',
     market,
@@ -60,10 +61,17 @@ function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
       ma200: 0,
       mainHistory: [],
       vixHistory: [],
+      movingAverageHistory: [],
+      sectorRows: [],
+      ftdReason: '마스터 필터 API 응답이 없어 Follow-Through Day를 확인하지 못했습니다.',
       updatedAt,
     },
-    insightLog: '마스터 필터 데이터를 불러오지 못했습니다. 안전을 위해 신규 진입을 보수적으로 판단하세요.',
+    insightLog: '마스터 필터 데이터를 불러오지 못했습니다. 안전을 위해 신규 진입은 보수적으로 판단하세요.',
     isAiGenerated: false,
+    aiProviderUsed: 'rules',
+    aiModelUsed: 'system-fallback',
+    aiFallbackChain: [{ provider: 'rules', model: 'system-fallback', status: 'success' }],
+    aiErrorSummary: '브라우저가 마스터 필터 API 응답을 받지 못해 로컬 fallback 데이터를 표시합니다.',
   };
 }
 
@@ -89,7 +97,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
         }
         const result = (await response.json()) as MasterFilterResponse;
         if (mounted) {
-          setData({ ...result, market }); // API 응답에 market이 없더라도 강제 설정 (API 수정 완료됨)
+          setData({ ...result, market });
           setError(null);
         }
       } catch (err) {

@@ -61,6 +61,19 @@ run('calculates partial exit realized pnl from weighted average entry', () => {
   assert.equal(metrics.rMultiple, 0.64);
 });
 
+run('recalculates remaining average entry after partial exit and later add', () => {
+  const metrics = calculateTradeMetrics(baseTrade, [
+    execution({ price: 100, shares: 100, executed_at: '2026-01-01T00:00:00.000Z' }),
+    execution({ side: 'EXIT', price: 110, shares: 80, leg_label: 'MANUAL', executed_at: '2026-01-02T00:00:00.000Z' }),
+    execution({ price: 130, shares: 20, leg_label: 'E2', executed_at: '2026-01-03T00:00:00.000Z' }),
+  ]);
+
+  assert.equal(metrics.netShares, 40);
+  assert.equal(metrics.avgEntryPrice, 115);
+  assert.equal(metrics.historicalAvgEntryPrice, 105);
+  assert.equal(metrics.realizedPnL, 800);
+});
+
 run('marks fully closed trade completed and computes final r multiple', () => {
   const metrics = calculateTradeMetrics(baseTrade, [
     execution({ price: 100, shares: 125, fees: 1 }),

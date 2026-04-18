@@ -1,259 +1,175 @@
 import Card from '@/components/ui/Card';
-import { Activity, BarChart2, CheckCircle2, Crosshair, ScanSearch, Shield, TrendingDown, TrendingUp, Volume2 } from 'lucide-react';
+import { Activity, BarChart2, Bot, CheckCircle2, Crosshair, ScanSearch, Trophy, Volume2 } from 'lucide-react';
 
-const sepaRules = [
-  { rule: '현재가 > 50일/150일/200일 이동평균', desc: '주가가 주요 이동평균 위에서 움직이는 강한 상승 추세 종목만 후보로 둡니다.' },
-  { rule: '50일선 > 150일선 > 200일선', desc: '단기 추세가 중장기 추세보다 강한 정배열 상태를 확인합니다.' },
-  { rule: '200일선 최소 1개월 상승', desc: '장기 하락 추세에서 반등하는 종목이 아니라, 이미 방향이 위로 바뀐 종목을 우선합니다.' },
-  { rule: '52주 고점 대비 25% 이내', desc: '강한 주도주는 대개 고점 근처에서 쉬며 다음 상승을 준비합니다.' },
-  { rule: 'RS 프록시 >= 70점', desc: 'SPY 대비 6개월 초과수익률로 계산한 상대강도 대체 지표입니다.' },
-  { rule: '20일 평균 거래대금 >= $10M', desc: '체결과 슬리피지 리스크가 큰 저유동성 종목을 걸러냅니다.' },
-  { rule: 'EPS/매출/ROE/부채', desc: '기본적 분석은 참고 정보로 표시합니다. 강한 실적과 가격 행동이 함께 있는 후보를 더 우선합니다.' },
-];
-
-const vcpLayers = [
-  {
-    icon: TrendingDown,
-    title: '수축 패턴',
-    weight: '35%',
-    color: 'text-emerald-400',
-    details: [
-      '상승 후 고점과 저점이 여러 번 만들어지는 베이스를 찾습니다.',
-      '각 수축의 깊이가 이전보다 얕아질수록 매도 압력이 줄어든 것으로 봅니다.',
-      '마지막 수축이 10% 안팎으로 타이트하면 피벗 품질을 높게 평가합니다.',
-    ],
-  },
-  {
-    icon: Volume2,
-    title: '거래량 건조화',
-    weight: '25%',
-    color: 'text-amber-400',
-    details: [
-      '수축이 진행될수록 평균 거래량이 줄어드는지 확인합니다.',
-      '최종 수축 구간 거래량이 50일 평균보다 크게 낮으면 공급 소진 가능성을 높게 봅니다.',
-      '돌파 당일에는 피벗 위 가격과 거래량 증가가 함께 나타나는지 확인합니다.',
-    ],
-  },
-  {
-    icon: BarChart2,
-    title: '변동성 수축',
-    weight: '20%',
-    color: 'text-sky-400',
-    details: [
-      '볼린저 밴드 너비가 최근 범위의 하위권으로 좁아졌는지 봅니다.',
-      '가격 변동폭이 줄수록 다음 방향성 움직임의 에너지가 축적된 것으로 해석합니다.',
-      '이 지표는 보조 확인용이며, 피벗과 거래량 판단을 대체하지 않습니다.',
-    ],
-  },
-  {
-    icon: Activity,
-    title: 'Pocket Pivot',
-    weight: '20%',
-    color: 'text-fuchsia-400',
-    details: [
-      '상승일 거래량이 최근 하락일 거래량을 압도하는지 감지합니다.',
-      '10일 이동평균 근처에서 나타나면 기관 매집 단서로 해석합니다.',
-      '피벗 전후에 여러 번 나타나면 수요 우위 근거가 강해집니다.',
-    ],
-  },
-];
-
-const flow = [
-  { step: '1', label: '스캐너', desc: '종목군 후보 압축', color: 'border-emerald-500 text-emerald-400' },
-  { step: '2', label: 'SEPA 필터', desc: '강한 상승 추세 선별', color: 'border-sky-500 text-sky-400' },
-  { step: '3', label: 'VCP 피벗', desc: '최종 수축 고점 확인', color: 'border-cyan-500 text-cyan-400' },
-  { step: '4', label: '무효화선', desc: '최종 수축 저점 확인', color: 'border-orange-500 text-orange-400' },
-  { step: '5', label: '수량 계산', desc: '1% 리스크와 8% 캡 적용', color: 'border-amber-500 text-amber-400' },
-  { step: '6', label: '체결/복기', desc: '계획 준수와 R 추적', color: 'border-rose-500 text-rose-400' },
+const masterFilterRows = [
+  ['P3 점수', 'FTD, Distribution Pressure, NH/NL Proxy, Above 200D, Sector Rotation을 100점으로 합산합니다.'],
+  ['시장 상태', '75점 이상 GREEN, 50점 이상 YELLOW, 그 외 RED입니다. RED여도 후보 비교는 가능하지만 포지션 크기와 손절을 보수적으로 봅니다.'],
+  ['Trend Alignment', '가격 차트가 아니라 50일/200일 이동평균선 두 개를 비교합니다. 현재가 > 200일선, 현재가 > 50일선, 50일선 > 200일선을 함께 봅니다.'],
+  ['VIX', '20 미만 PASS, 20 이상 25 미만 WARNING, 25 이상 FAIL입니다.'],
+  ['Follow-Through Day', '조정 저점 이후 4거래일차부터 상승률과 거래량 증가가 함께 나왔는지 확인하고, 미확인 시 원인을 표시합니다.'],
+  ['Sector Rotation', '전체 섹터 ETF를 20일 수익률순으로 보여주고, 성장/경기민감 섹터가 상위권인지 확인합니다.'],
 ];
 
 const scannerRows = [
-  { item: 'NASDAQ 100', source: 'Nasdaq 공식 목록 API', use: '미국 대형 성장주 후보를 시가총액순으로 보고 SEPA/VCP를 빠르게 점검합니다.' },
-  { item: 'S&P 500', source: 'StockAnalysis S&P 500 표', use: '미국 대형주 전체를 시가총액순으로 넓게 훑고 후보를 압축합니다.' },
-  { item: 'KOSPI 100', source: 'KRX 구성종목 우선, KIS/Naver 시가총액 fallback', use: '공식 구성종목 확인을 우선하되, 가격과 일봉 분석은 KIS 데이터를 사용합니다.' },
-  { item: 'KOSDAQ 100', source: 'Naver Finance KOSDAQ 시가총액 fallback', use: '국내 성장주 후보군을 같은 SEPA/VCP 기준으로 빠르게 점검합니다.' },
-  { item: '현재가 기준', source: '종목군 원천 또는 최근 일봉', use: '테이블의 현재가에는 기준 시각을 함께 표시해 지연 데이터인지 확인합니다.' },
-  { item: '스캔 기록', source: '브라우저 저장', use: '새 스캔 버튼을 누르기 전까지 마지막 스캔 날짜와 결과를 유지합니다.' },
+  ['Recommended', 'SEPA 통과 + 강한 VCP 또는 VCP 형성 + 피벗/거래량 신호가 동반된 후보입니다.'],
+  ['Partial', 'SEPA 미충족이 2개 이하이거나, 일부 미달에도 VCP 형성/거래량 신호/예외 모멘텀이 있어 비교 가치가 있는 후보입니다.'],
+  ['Low Priority', '조건 미달이 많아 우선순위는 낮지만 사용자가 수동으로 콘테스트에 보낼 수 있습니다.'],
+  ['Error', '외부 API 오류, 심볼 오류, 데이터 부족 등으로 분석이 완료되지 않은 상태입니다.'],
+  ['거래량 Strong', '거래량 건조화 65점 이상, 포켓 피벗 60점 이상, 또는 돌파 거래량 confirmed입니다.'],
+  ['거래량 Watch', '거래량 건조화 50점 이상, 포켓 피벗 40점 이상, 또는 돌파 거래량 pending입니다.'],
 ];
+
+const contestRows = [
+  ['후보 전달', '스캐너에서 사용자가 직접 체크한 selectedTickers만 콘테스트 전달 저장소에 기록합니다. 전달 후보가 없을 때만 Recommended fallback을 사용합니다.'],
+  ['분석 세션', '최대 10개 후보, 스캐너 스냅샷, 마스터 필터 상태, 기준가, 기준일, 데이터 출처를 DB에 저장합니다.'],
+  ['외부 LLM', 'Gemini/GPT/Claude 등에 한국어 프롬프트를 복사하고, 결과는 JSON만 또는 전체 리포트 전문을 붙여넣을 수 있습니다.'],
+  ['JSON 매핑', 'session_id, candidate_id, ticker, rank, scores, thesis, 기술/펀더멘털/실적/해자/시장/리스크/촉매/comment를 저장합니다.'],
+  ['최종 선택', 'actual_invested와 final_pick_rank로 표시합니다. 후보 10개 중 몇 개든 실제 투자 대상으로 선택할 수 있습니다.'],
+  ['성과 복기', '1주/1개월 기준가와 리뷰가로 선택군 평균 수익률과 미선택군 평균 수익률을 비교합니다. 상대 수익률이 음수면 실패/반성 필요입니다.'],
+];
+
+const tradeRows = [
+  ['평균 진입가', '체결 시간순 평균 원가 방식입니다. 매수는 보유 원가와 수량을 늘리고, 매도는 당시 평균 단가 기준으로 원가와 수량을 줄입니다.'],
+  ['실현손익', '매도 시점의 평균 단가 기준으로 계산하고, 수수료는 손익 계산에 반영합니다.'],
+  ['historicalAvgEntryPrice', '완전 청산 이후에도 참고할 수 있도록 전체 진입 체결 기준 평균가를 별도로 유지합니다.'],
+];
+
+function InfoTable({ rows }: { rows: string[][] }) {
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
+        <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
+          <tr>
+            <th className="py-3 pr-4">항목</th>
+            <th className="py-3">판단 로직</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([item, description]) => (
+            <tr key={item} className="border-b border-slate-800">
+              <td className="py-3 pr-4 font-semibold text-white">{item}</td>
+              <td className="py-3 leading-6 text-slate-400">{description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function GuidePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">Minervini 전략 가이드</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 알고리즘 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          Mantori&apos;s Trading Navigator(MTN)은 종목군 스캐너로 후보를 압축한 뒤 Mark Minervini의 SEPA와 VCP 관점을 기준으로 피벗 진입가, 패턴 무효화선, 수량, 체결 복기를 연결합니다.
+          현재 MTN은 마스터 필터로 시장 환경을 읽고, 스캐너로 SEPA/VCP/거래량 후보를 정리한 뒤, 콘테스트에서 외부 LLM 비교와 성과 복기를 누적합니다.
         </p>
       </div>
 
       <Card>
-        <h2 className="text-xl font-bold text-white">전략 실행 흐름</h2>
-        <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:gap-0">
-          {flow.map((item, index) => (
-            <div key={item.step} className="flex items-center gap-3 md:flex-1 md:flex-col md:gap-1">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-full border-2 font-mono text-sm font-bold ${item.color}`}>
-                {item.step}
-              </div>
-              <div className="md:text-center">
-                <p className={`text-sm font-semibold ${item.color}`}>{item.label}</p>
-                <p className="text-xs text-slate-500">{item.desc}</p>
-              </div>
-              {index < flow.length - 1 && <div className="hidden md:block md:flex-1 md:border-t md:border-dashed md:border-slate-700" />}
+        <div className="flex items-center gap-3">
+          <Activity className="h-6 w-6 text-emerald-400" />
+          <h2 className="text-xl font-bold text-white">전체 프로세스</h2>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-5">
+          {[
+            ['1', '마스터 필터', '시장 국면과 리스크 확인'],
+            ['2', '스캐너', 'SEPA/VCP/거래량 후보 탐색'],
+            ['3', '콘테스트', '최대 10개 후보 비교 세션 생성'],
+            ['4', 'LLM 결과 저장', 'JSON 추출 후 DB화'],
+            ['5', '성과 복기', '1주/1개월 상대 성과 평가'],
+          ].map(([step, title, desc]) => (
+            <div key={step} className="rounded-lg border border-slate-700 bg-slate-950/50 p-4">
+              <p className="font-mono text-lg font-bold text-emerald-300">{step}</p>
+              <p className="mt-2 text-sm font-semibold text-white">{title}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{desc}</p>
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <BarChart2 className="h-6 w-6 text-sky-400" />
+          <h2 className="text-xl font-bold text-white">P3 마스터 필터</h2>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          마스터 필터는 후보를 강제로 제외하는 게 아니라 시장 리스크 문맥을 제공합니다. RED일수록 진입 비중, 손절, 보유 기간 판단을 더 보수적으로 둡니다.
+        </p>
+        <InfoTable rows={masterFilterRows} />
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <Bot className="h-6 w-6 text-indigo-400" />
+          <h2 className="text-xl font-bold text-white">Centaur LLM 로그</h2>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Centaur 로그는 Gemini 3.1 Flash-Lite를 primary로 호출하고, 실패 원인을 fallback chain에 남깁니다. 이후 Gemini fallback model, Groq
+          <span className="font-mono text-slate-200"> openai/gpt-oss-120b</span>, Cerebras
+          <span className="font-mono text-slate-200"> qwen-3-235b-a22b-instruct-2507</span>, rule-based 순서로 대체합니다.
+        </p>
       </Card>
 
       <Card>
         <div className="flex items-center gap-3">
           <ScanSearch className="h-6 w-6 text-emerald-400" />
-          <h2 className="text-xl font-bold text-white">종목군 스캐너</h2>
+          <h2 className="text-xl font-bold text-white">스캐너 추천 등급</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          대시보드 다음 단계에서 NASDAQ 100, S&P 500, KOSPI 100, KOSDAQ 100을 별도 서브 메뉴로 확인합니다. 전체 종목을 먼저 훑고, 조건이 좋은 종목만 신규 계획으로 넘깁니다.
+          스캐너는 웹 표 모드를 기본으로 사용하며, 앱 카드 모드와 동일한 상세 팝업을 공유합니다. KOSPI100은 KOSPI 전체 시가총액 상위 100개 기준입니다.
         </p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
-            <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="py-3">항목</th>
-                <th className="py-3">데이터 기준</th>
-                <th className="py-3">사용 방식</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scannerRows.map((row) => (
-                <tr key={row.item} className="border-b border-slate-800">
-                  <td className="py-3 font-medium text-white">{row.item}</td>
-                  <td className="py-3 text-slate-300">{row.source}</td>
-                  <td className="py-3 text-slate-400">{row.use}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <InfoTable rows={scannerRows} />
       </Card>
 
       <Card>
         <div className="flex items-center gap-3">
-          <TrendingUp className="h-6 w-6 text-emerald-400" />
-          <h2 className="text-xl font-bold text-white">SEPA 스크리닝</h2>
+          <Volume2 className="h-6 w-6 text-amber-400" />
+          <h2 className="text-xl font-bold text-white">거래량 신호</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          먼저 강한 추세와 상대강도를 확인합니다. 약한 종목에서 싼 가격을 찾기보다, 이미 시장을 이기는 종목이 건설적인 베이스를 만드는지 봅니다.
+          거래량은 VCP 품질 판단의 핵심입니다. 메인 테이블에서 Strong/Watch/Weak/Unknown을 표시하고, 거래량 건조화, 포켓 피벗, 돌파 거래량으로 필터링합니다.
         </p>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {sepaRules.map((item, index) => (
-            <div key={item.rule} className="rounded-lg border border-slate-700 bg-slate-950/50 p-4">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-400">
-                  {index + 1}
-                </span>
-                <p className="text-sm font-semibold text-white">{item.rule}</p>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-slate-400">{item.desc}</p>
-            </div>
-          ))}
-        </div>
       </Card>
 
       <Card>
         <div className="flex items-center gap-3">
-          <Crosshair className="h-6 w-6 text-sky-400" />
-          <h2 className="text-xl font-bold text-white">VCP 피벗 진입</h2>
+          <Trophy className="h-6 w-6 text-emerald-400" />
+          <h2 className="text-xl font-bold text-white">콘테스트와 외부 LLM JSON</h2>
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          기본 진입가는 임의의 기간 돌파가가 아니라 최종 수축 고점인 VCP 피벗입니다. 피벗을 넘어서며 거래량이 붙을 때 수요 우위를 확인합니다.
-        </p>
-        <div className="mt-5 space-y-4">
-          {vcpLayers.map((layer) => {
-            const Icon = layer.icon;
-            return (
-              <div key={layer.title} className="rounded-lg border border-slate-700 bg-slate-950/50 p-4">
-                <div className="flex items-center gap-3">
-                  <Icon className={`h-5 w-5 ${layer.color}`} />
-                  <h3 className={`text-sm font-bold ${layer.color}`}>{layer.title}</h3>
-                  <span className="ml-auto rounded-full bg-slate-800 px-2.5 py-0.5 text-xs font-mono text-slate-400">
-                    가중치 {layer.weight}
-                  </span>
-                </div>
-                <ul className="mt-3 space-y-1.5">
-                  {layer.details.map((detail) => (
-                    <li key={detail} className="flex items-start gap-2 text-xs leading-5 text-slate-400">
-                      <span className={`mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-current ${layer.color}`} />
-                      {detail}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
+        <InfoTable rows={contestRows} />
       </Card>
 
       <Card>
         <div className="flex items-center gap-3">
-          <Shield className="h-6 w-6 text-amber-400" />
-          <h2 className="text-xl font-bold text-white">리스크 계산</h2>
+          <Crosshair className="h-6 w-6 text-cyan-400" />
+          <h2 className="text-xl font-bold text-white">SEPA/VCP 진입 해석</h2>
         </div>
-        <div className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
-          <p>기본 허용 손실은 총 자본의 1%입니다. 사용자가 입력한 손실 한도 안에서 수량을 계산합니다.</p>
-          <p>초기 손절가는 최종 수축 저점과 진입가 대비 8% 손실 캡 중 더 가까운 가격을 사용합니다.</p>
-          <p>ATR은 변동성 참고값으로만 표시하며, 기본 손절가나 추가진입가를 고정 ATR 간격으로 만들지 않습니다.</p>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-              <p className="text-xs font-semibold text-slate-300">최대 허용 손실</p>
-              <p className="mt-1 font-mono text-sm text-white">총 자본 x 허용 손실 %</p>
-            </div>
-            <div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-              <p className="text-xs font-semibold text-slate-300">초기 손절가</p>
-              <p className="mt-1 font-mono text-sm text-white">max(무효화선, 진입가 x 0.92)</p>
-            </div>
-            <div className="rounded-lg border border-slate-700 bg-slate-950/50 p-3">
-              <p className="text-xs font-semibold text-slate-300">총 수량</p>
-              <p className="mt-1 font-mono text-sm text-white">허용 손실 / 주당 위험</p>
-            </div>
-          </div>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          SEPA는 강한 추세의 기본 체력, VCP는 피벗 전 수축과 공급 소진을 봅니다. Partial 후보는 완벽한 SEPA가 아니어도 최근 모멘텀, 뉴스 변화,
+          거래량 신호가 있으면 비교 대상으로 남길 수 있습니다.
+        </p>
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <Activity className="h-6 w-6 text-fuchsia-400" />
+          <h2 className="text-xl font-bold text-white">매매 지표와 평균 진입가</h2>
         </div>
+        <InfoTable rows={tradeRows} />
       </Card>
 
       <Card>
         <div className="flex items-center gap-3">
           <CheckCircle2 className="h-6 w-6 text-rose-400" />
-          <h2 className="text-xl font-bold text-white">체결과 복기</h2>
+          <h2 className="text-xl font-bold text-white">복기 기준</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          계획 저장 후 실제 진입과 청산을 체결 이벤트로 기록합니다. 평균 진입가, 실현손익, R-Multiple, 계획 실행률은 자동 계산됩니다.
+          콘테스트 후 선택한 종목 평균 수익률이 미선택 후보 평균 수익률보다 낮으면 해당 사이클은 실패/반성 필요로 표시합니다. 목적은 매번 후보 선정 기준을
+          더 날카롭게 만드는 것입니다.
         </p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left text-sm text-slate-300">
-            <thead className="border-b border-slate-700 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="py-3">항목</th>
-                <th className="py-3">입력 방식</th>
-                <th className="py-3">확인할 점</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-800">
-                <td className="py-3 font-medium text-white">진입 체결</td>
-                <td className="py-3">가격, 수량, 날짜</td>
-                <td className="py-3 text-slate-400">피벗 돌파와 거래량 확인 후 기록합니다.</td>
-              </tr>
-              <tr className="border-b border-slate-800">
-                <td className="py-3 font-medium text-white">청산 체결</td>
-                <td className="py-3">부분청산 또는 전량청산</td>
-                <td className="py-3 text-slate-400">순보유 수량과 실현손익이 자동 갱신됩니다.</td>
-              </tr>
-              <tr className="border-b border-slate-800">
-                <td className="py-3 font-medium text-white">복기</td>
-                <td className="py-3">실수 태그, 규율 점수, 개선 액션</td>
-                <td className="py-3 text-slate-400">다음 매매에서 고칠 행동 1가지를 남깁니다.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
       </Card>
     </div>
   );

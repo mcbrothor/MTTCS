@@ -70,6 +70,7 @@ export interface TradeMetrics {
   exitShares: number;
   netShares: number;
   avgEntryPrice: number | null;
+  historicalAvgEntryPrice?: number | null;
   avgExitPrice: number | null;
   realizedPnL: number | null;
   fees: number;
@@ -304,6 +305,14 @@ export interface WatchlistItem {
 }
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
+export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules';
+
+export interface AiFallbackAttempt {
+  provider: string;
+  model: string;
+  status: 'success' | 'failed' | 'skipped';
+  message?: string;
+}
 
 export interface MasterFilterMetricDetail {
   value: number | string | null;
@@ -339,7 +348,10 @@ export interface MasterFilterMetrics {
   ma150?: number;
   ma200?: number;
   mainHistory?: { date: string; close: number }[];
+  movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[];
   vixHistory?: { date: string; close: number }[];
+  sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[];
+  ftdReason?: string | null;
   macroData?: Record<string, unknown>;
   updatedAt: string;
 }
@@ -350,7 +362,10 @@ export interface MasterFilterResponse {
   metrics: MasterFilterMetrics;
   insightLog: string;
   isAiGenerated: boolean;
+  aiProviderUsed?: AiInsightProvider;
   aiModelUsed?: string;
+  aiFallbackChain?: AiFallbackAttempt[];
+  aiErrorSummary?: string | null;
 }
 
 export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';

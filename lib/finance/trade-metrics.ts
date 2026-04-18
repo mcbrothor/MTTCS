@@ -26,34 +26,64 @@ export function calculateTradeMetrics(
 ): TradeMetrics {
   const normalized = executions
     .filter((execution) => Number.isFinite(Number(execution.price)) && Number.isFinite(Number(execution.shares)))
-    .map((execution) => ({
+    .map((execution, orderIndex) => ({
       ...execution,
+      orderIndex,
       price: Number(execution.price),
       shares: Number(execution.shares),
       fees: Number(execution.fees || 0),
     }));
 
-  const entries = normalized.filter((execution) => execution.side === 'ENTRY');
-  const exits = normalized.filter((execution) => execution.side === 'EXIT');
+  const orderedExecutions = [...normalized].sort((a, b) => {
+    const executedDiff = new Date(a.executed_at).getTime() - new Date(b.executed_at).getTime();
+    if (executedDiff !== 0) return executedDiff;
+    const createdDiff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (createdDiff !== 0) return createdDiff;
+    return a.orderIndex - b.orderIndex;
+  });
+  const entries = orderedExecutions.filter((execution) => execution.side === 'ENTRY');
+  const exits = orderedExecutions.filter((execution) => execution.side === 'EXIT');
   const entryShares = entries.reduce((sum, execution) => sum + execution.shares, 0);
   const exitShares = exits.reduce((sum, execution) => sum + execution.shares, 0);
   const entryValue = entries.reduce((sum, execution) => sum + execution.price * execution.shares, 0);
   const exitValue = exits.reduce((sum, execution) => sum + execution.price * execution.shares, 0);
   const fees = normalized.reduce((sum, execution) => sum + execution.fees, 0);
   const hasExecutions = normalized.length > 0;
-  const avgEntryPrice = entryShares > 0 ? entryValue / entryShares : finiteNumber(trade.entry_price);
+  const historicalAvgEntryPrice = entryShares > 0 ? entryValue / entryShares : finiteNumber(trade.entry_price);
   const avgExitPrice = exitShares > 0 ? exitValue / exitShares : finiteNumber(trade.exit_price);
-  const netShares = Math.max(entryShares - exitShares, 0);
   const plannedRisk = finiteNumber(trade.planned_risk);
   const plannedShares = finiteNumber(trade.total_shares ?? trade.position_size);
   const plannedEntry = finiteNumber(trade.entry_price);
   const stopLoss = finiteNumber(trade.stoploss_price);
 
-  const realizedPnL = hasExecutions
-    ? exitShares > 0 && avgEntryPrice !== null
-      ? exitValue - avgEntryPrice * exitShares - fees
-      : -fees
-    : finiteNumber(trade.result_amount);
+  let runningShares = 0;
+  let runningCost = 0;
+  let realizedGross = 0;
+  let invalidExitShares = false;
+
+  for (const execution of orderedExecutions) {
+    if (execution.side === 'ENTRY') {
+      runningShares += execution.shares;
+      runningCost += execution.price * execution.shares;
+      continue;
+    }
+
+    const avgCost = runningShares > 0 ? runningCost / runningShares : historicalAvgEntryPrice;
+    const closedShares = Math.min(execution.shares, runningShares);
+    if (execution.shares > runningShares) invalidExitShares = true;
+    if (closedShares > 0 && avgCost !== null) {
+      realizedGross += (execution.price - avgCost) * closedShares;
+      runningCost = Math.max(0, runningCost - avgCost * closedShares);
+      runningShares = Math.max(0, runningShares - closedShares);
+    }
+  }
+
+  const netShares = runningShares;
+  const avgEntryPrice = netShares > 0
+    ? runningCost / netShares
+    : historicalAvgEntryPrice;
+
+  const realizedPnL = hasExecutions ? realizedGross - fees : finiteNumber(trade.result_amount);
 
   const rMultiple = realizedPnL !== null && plannedRisk && plannedRisk > 0 ? realizedPnL / plannedRisk : null;
   const entrySlippagePct =
@@ -77,6 +107,7 @@ export function calculateTradeMetrics(
     exitShares: round(exitShares, 4),
     netShares: round(netShares, 4),
     avgEntryPrice: avgEntryPrice === null ? null : round(avgEntryPrice, 4),
+    historicalAvgEntryPrice: historicalAvgEntryPrice === null ? null : round(historicalAvgEntryPrice, 4),
     avgExitPrice: avgExitPrice === null ? null : round(avgExitPrice, 4),
     realizedPnL: realizedPnL === null ? null : round(realizedPnL, 2),
     fees: round(fees, 2),
@@ -88,7 +119,7 @@ export function calculateTradeMetrics(
     hasExecutions,
     hasEntries: entryShares > 0,
     isFullyClosed: entryShares > 0 && exitShares >= entryShares,
-    invalidExitShares: exitShares > entryShares,
+    invalidExitShares: invalidExitShares || exitShares > entryShares,
 
     // Real-time fields
     currentPrice,

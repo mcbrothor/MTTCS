@@ -8,7 +8,13 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
-import { evaluateScannerRecommendation, isAutoSelectedTier, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
+import {
+  evaluateScannerRecommendation,
+  getVolumeSignalTier,
+  isContestPoolTier,
+  recommendationSortValue,
+  type VolumeSignalTier,
+} from '@/lib/scanner-recommendation';
 import type {
   MarketAnalysisResponse,
   ProviderAttempt,
@@ -30,7 +36,18 @@ const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 
 type ViewMode = 'web' | 'app';
-type FilterKey = 'all' | 'recommended' | 'partial' | 'contestPool' | 'nearPivot' | 'volume' | 'error';
+type FilterKey =
+  | 'all'
+  | 'recommended'
+  | 'partial'
+  | 'contestPool'
+  | 'nearPivot'
+  | 'volume'
+  | 'volumeStrong'
+  | 'pocketPivot'
+  | 'volumeDryUp'
+  | 'breakoutVolume'
+  | 'error';
 type SortKey = 'marketCap' | 'recommendation' | 'vcpScore' | 'pivot' | 'sepa';
 
 interface StoredScannerSnapshot {
@@ -65,6 +82,29 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'contestPool', label: '콘테스트 풀' },
   { key: 'nearPivot', label: '피벗 5% 이내' },
   { key: 'volume', label: '거래량 신호' },
+  { key: 'error', label: '오류' },
+];
+
+const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
+  ...FILTERS.map((filter) => ({
+    key: filter.key,
+    label:
+      filter.key === 'all'
+        ? '전체'
+        : filter.key === 'contestPool'
+          ? '콘테스트 풀'
+          : filter.key === 'nearPivot'
+            ? '피벗 5% 이내'
+            : filter.key === 'volume'
+              ? '거래량 Watch+'
+              : filter.key === 'error'
+                ? '오류'
+                : filter.label,
+  })),
+  { key: 'volumeStrong', label: '거래량 Strong' },
+  { key: 'pocketPivot', label: '포켓 피벗' },
+  { key: 'volumeDryUp', label: '거래량 건조화' },
+  { key: 'breakoutVolume', label: '돌파 거래량' },
   { key: 'error', label: '오류' },
 ];
 
@@ -298,14 +338,31 @@ function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<st
   );
 }
 
-function autoSelectedTickers(results: ScannerResult[]) {
-  return new Set(
-    [...results]
-      .filter((item) => isAutoSelectedTier(item.recommendationTier))
-      .sort((a, b) => recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0))
-      .slice(0, 10)
-      .map((item) => item.ticker)
-  );
+function readContestSelection(universe: ScannerUniverse, results: ScannerResult[]) {
+  try {
+    const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw) as { universe?: ScannerUniverse; tickers?: string[] };
+    if (parsed.universe !== universe || !Array.isArray(parsed.tickers)) return new Set<string>();
+    const validTickers = new Set(results.map((item) => item.ticker));
+    return new Set(parsed.tickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function volumeSignalClass(tier: VolumeSignalTier) {
+  if (tier === 'Strong') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Watch') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Weak') return 'border-slate-700 bg-slate-900 text-slate-300';
+  return 'border-slate-800 bg-slate-950 text-slate-500';
+}
+
+function volumeSignalDetail(result: ScannerResult) {
+  const dryUp = result.volumeDryUpScore ?? '-';
+  const pocket = result.pocketPivotScore ?? '-';
+  const breakout = result.breakoutVolumeStatus || 'unknown';
+  return `DU ${dryUp} / PP ${pocket} / ${breakout}`;
 }
 
 export default function ScannerPage() {
@@ -332,7 +389,7 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(autoSelectedTickers(snapshot.results));
+      setSelectedTickers(readContestSelection(initial, snapshot.results));
     }
   }, []);
 
@@ -343,7 +400,7 @@ export default function ScannerPage() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(autoSelectedTickers(snapshot.results));
+      setSelectedTickers(readContestSelection(newUniverse, snapshot.results));
     } else {
       setResults([]);
       setSelectedTickers(new Set());
@@ -416,7 +473,7 @@ export default function ScannerPage() {
 
       if (!abortController.signal.aborted) {
         const normalized = latestResults.map((item) => withRecommendation(item));
-        const nextSelected = autoSelectedTickers(normalized);
+        const nextSelected = new Set<string>();
         const now = new Date().toISOString();
         setResults(normalized);
         setSelectedTickers(nextSelected);
@@ -489,7 +546,11 @@ export default function ScannerPage() {
     else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'Partial');
     else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
     else if (filterKey === 'nearPivot') list = list.filter((row) => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= 5);
-    else if (filterKey === 'volume') list = list.filter((row) => (row.volumeDryUpScore || 0) >= 65 || (row.pocketPivotScore || 0) >= 60 || row.breakoutVolumeStatus === 'confirmed');
+    else if (filterKey === 'volume') list = list.filter((row) => ['Strong', 'Watch'].includes(getVolumeSignalTier(row)));
+    else if (filterKey === 'volumeStrong') list = list.filter((row) => getVolumeSignalTier(row) === 'Strong');
+    else if (filterKey === 'pocketPivot') list = list.filter((row) => (row.pocketPivotScore || 0) >= 40);
+    else if (filterKey === 'volumeDryUp') list = list.filter((row) => (row.volumeDryUpScore || 0) >= 50);
+    else if (filterKey === 'breakoutVolume') list = list.filter((row) => row.breakoutVolumeStatus === 'confirmed' || row.breakoutVolumeStatus === 'pending');
     else if (filterKey === 'error') list = list.filter((row) => row.status === 'error');
 
     list.sort((a, b) => {
@@ -557,6 +618,7 @@ export default function ScannerPage() {
               <th className="px-3 py-3 text-left">SEPA</th>
               <th className="px-3 py-3 text-left">추천</th>
               <th className="px-3 py-3 text-right">VCP</th>
+              <th className="px-3 py-3 text-left">거래량 신호</th>
               <th className="px-3 py-3 text-right">피벗</th>
               <th className="px-3 py-3 text-left">API</th>
               <th className="px-3 py-3 text-left">상태</th>
@@ -584,6 +646,12 @@ export default function ScannerPage() {
                 <td className="px-3 py-3">{tierBadge(result)}</td>
                 <td className="px-3 py-3 text-right font-mono text-slate-300">
                   {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
+                </td>
+                <td className="px-3 py-3">
+                  <span className={`inline-flex rounded-lg border px-2 py-1 text-xs font-bold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
+                    {getVolumeSignalTier(result)}
+                  </span>
+                  <p className="mt-1 whitespace-nowrap text-[10px] text-slate-500">{volumeSignalDetail(result)}</p>
                 </td>
                 <td className="px-3 py-3 text-right font-mono text-slate-300">
                   {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
@@ -650,6 +718,12 @@ export default function ScannerPage() {
               <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">VCP</span>
                 <span className="text-slate-300">{result.vcpGrade} ({result.vcpScore ?? '-'})</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[10px]">
+                <span className="text-slate-500">거래량</span>
+                <span className={`rounded-lg border px-2 py-0.5 font-semibold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
+                  {getVolumeSignalTier(result)}
+                </span>
               </div>
               <div className="flex justify-between text-[10px]">
                 <span className="text-slate-500">피벗 거리</span>
@@ -760,7 +834,7 @@ export default function ScannerPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex flex-wrap gap-2">
-          {FILTERS.map((filter) => (
+          {SCANNER_FILTERS.map((filter) => (
             <button
               key={filter.key}
               onClick={() => setFilterKey(filter.key)}

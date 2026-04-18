@@ -1,5 +1,7 @@
 import type { RecommendationTier, ScannerResult } from '@/types';
 
+export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
+
 export interface ScannerRecommendation {
   recommendationTier: RecommendationTier;
   recommendationReason: string;
@@ -13,6 +15,33 @@ function nearPivot(distanceToPivotPct: number | null | undefined, maxAbs = 5) {
 
 function scoreAtLeast(value: number | null | undefined, threshold: number) {
   return typeof value === 'number' && Number.isFinite(value) && value >= threshold;
+}
+
+export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSignalTier {
+  if (result.status === 'error') return 'Unknown';
+  const hasAnyVolumeData =
+    typeof result.volumeDryUpScore === 'number' ||
+    typeof result.pocketPivotScore === 'number' ||
+    typeof result.breakoutVolumeStatus === 'string';
+  if (!hasAnyVolumeData) return 'Unknown';
+
+  if (
+    scoreAtLeast(result.volumeDryUpScore, 65) ||
+    scoreAtLeast(result.pocketPivotScore, 60) ||
+    result.breakoutVolumeStatus === 'confirmed'
+  ) {
+    return 'Strong';
+  }
+
+  if (
+    scoreAtLeast(result.volumeDryUpScore, 50) ||
+    scoreAtLeast(result.pocketPivotScore, 40) ||
+    result.breakoutVolumeStatus === 'pending'
+  ) {
+    return 'Watch';
+  }
+
+  return 'Weak';
 }
 
 export function evaluateScannerRecommendation(result: Partial<ScannerResult>): ScannerRecommendation {
