@@ -11,7 +11,7 @@
  * 시스템은 보조 지표로만 제시하며, 최종 판단은 사용자가 합니다.
  */
 
-import type { OHLCData, VcpAnalysis, VcpContraction } from '@/types';
+import type { HighTightFlagAnalysis, OHLCData, VcpAnalysis, VcpContraction } from '@/types';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
@@ -31,6 +31,12 @@ const WEIGHT_CONTRACTION = 0.35;
 const WEIGHT_VOLUME_DRY_UP = 0.25;
 const WEIGHT_BB_SQUEEZE = 0.20;
 const WEIGHT_POCKET_PIVOT = 0.20;
+const HTF_MIN_BASE_DAYS = 15;
+const HTF_MAX_BASE_DAYS = 25;
+const HTF_MIN_DRAWDOWN = 10;
+const HTF_MAX_DRAWDOWN = 20;
+const HTF_MAX_VOLUME_RATIO = 0.5;
+const HTF_TIGHT_RANGE_PCT = 6;
 
 // =============================================
 // 1. 로컬 극값(Peak/Trough) 감지
@@ -447,11 +453,102 @@ function detectBaseLength(data: OHLCData[]): number {
   return clamp(baseLength, 0, MAX_BASE_DAYS);
 }
 
+function movingAverage(data: OHLCData[], period: number): number | null {
+  if (data.length < period) return null;
+  const slice = data.slice(-period);
+  return round(slice.reduce((sum, item) => sum + item.close, 0) / slice.length);
+}
+
+function percentReturn(data: OHLCData[], lookback: number): number | null {
+  if (data.length < lookback + 1) return null;
+  const start = data[data.length - lookback - 1]?.close;
+  const end = data.at(-1)?.close;
+  if (!start || !end) return null;
+  return round(((end - start) / start) * 100);
+}
+
+function low52WeekAdvance(data: OHLCData[]): number | null {
+  const recent = data.slice(-252);
+  const current = data.at(-1)?.close;
+  if (recent.length < 20 || !current) return null;
+  const low = Math.min(...recent.map((item) => item.low));
+  return low > 0 ? round(((current - low) / low) * 100) : null;
+}
+
+function momentumProfile(data: OHLCData[]) {
+  const latest = data.at(-1);
+  const ma50 = movingAverage(data, 50);
+  const eightWeekReturnPct = percentReturn(data, 40);
+  const distanceFromMa50Pct = latest && ma50 ? round(((latest.close - ma50) / ma50) * 100) : null;
+  const low52WeekAdvancePct = low52WeekAdvance(data);
+  const momentumBranch =
+    (eightWeekReturnPct !== null && eightWeekReturnPct >= 100) ||
+    (distanceFromMa50Pct !== null && distanceFromMa50Pct >= 20)
+      ? 'EXTENDED' as const
+      : 'STANDARD' as const;
+
+  return { eightWeekReturnPct, distanceFromMa50Pct, low52WeekAdvancePct, momentumBranch };
+}
+
+function analyzeHighTightFlag(data: OHLCData[], entryReference: number): HighTightFlagAnalysis | null {
+  if (data.length < 50) return null;
+  const recent = data.slice(-HTF_MAX_BASE_DAYS);
+  let highIndex = 0;
+  let baseHigh = 0;
+  for (let index = 0; index < recent.length; index += 1) {
+    if (recent[index].high > baseHigh) {
+      baseHigh = recent[index].high;
+      highIndex = index;
+    }
+  }
+
+  const baseDays = recent.length - highIndex;
+  const baseSlice = recent.slice(highIndex);
+  if (baseSlice.length === 0) return null;
+
+  const baseLow = Math.min(...baseSlice.map((item) => item.low));
+  const maxDrawdownPct = baseHigh > 0 ? round(((baseHigh - baseLow) / baseHigh) * 100) : null;
+  const avg50Volume = data.slice(-50).reduce((sum, item) => sum + item.volume, 0) / 50;
+  const rightSide = data.slice(-5);
+  const avgRightVolume = rightSide.reduce((sum, item) => sum + item.volume, 0) / Math.max(rightSide.length, 1);
+  const rightSideVolumeRatio = avg50Volume > 0 ? round(avgRightVolume / avg50Volume, 2) : null;
+  const avgRangePct = rightSide.length > 0
+    ? rightSide.reduce((sum, item) => sum + ((item.high - item.low) / item.close) * 100, 0) / rightSide.length
+    : 100;
+  const tightnessScore = avgRangePct <= HTF_TIGHT_RANGE_PCT ? 100 : clamp(round(100 - (avgRangePct - HTF_TIGHT_RANGE_PCT) * 12), 0, 100);
+
+  const baseDaysOk = baseDays >= HTF_MIN_BASE_DAYS && baseDays <= HTF_MAX_BASE_DAYS;
+  const drawdownOk = maxDrawdownPct !== null && maxDrawdownPct >= HTF_MIN_DRAWDOWN && maxDrawdownPct <= HTF_MAX_DRAWDOWN;
+  const volumeDryUpOk = rightSideVolumeRatio !== null && rightSideVolumeRatio <= HTF_MAX_VOLUME_RATIO;
+  const passed = baseDaysOk && drawdownOk && volumeDryUpOk;
+  const stopPrice = round(Math.max(baseLow, entryReference * 0.93));
+
+  return {
+    passed,
+    baseDays,
+    maxDrawdownPct,
+    rightSideVolumeRatio,
+    tightnessScore,
+    baseHigh: round(baseHigh),
+    baseLow: round(baseLow),
+    stopPrice,
+    stopPlan: [
+      `Initial stop: max(base low ${round(baseLow)}, 7% cap ${round(entryReference * 0.93)}) = ${stopPrice}.`,
+      'At +5%, move stop to breakeven.',
+      'At +10%, trail with MA10 or the recent 10-day low.',
+    ],
+  };
+}
+
 // =============================================
 // VCP 종합 분석 메인 함수
 // =============================================
 
-export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis {
+export function analyzeVcp(
+  data: OHLCData[],
+  breakoutPrice: number,
+  options: { rsRating?: number | null } = {}
+): VcpAnalysis {
   const allDetails: string[] = [];
 
   // 최소 데이터 체크
@@ -475,10 +572,17 @@ export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis
       bbWidth: null,
       bbWidthPercentile: null,
       baseLength: 0,
+      baseType: null,
+      momentumBranch: 'STANDARD',
+      eightWeekReturnPct: null,
+      distanceFromMa50Pct: null,
+      low52WeekAdvancePct: null,
+      highTightFlag: null,
       details: ['데이터 부족으로 VCP 분석을 수행할 수 없습니다.'],
     };
   }
 
+  const momentum = momentumProfile(data);
   const baseLength = detectBaseLength(data);
   // 베이스 기간 내 데이터로 분석 (최소 20일 보장)
   const analysisWindow = Math.max(MIN_BASE_DAYS, Math.min(baseLength + 20, data.length));
@@ -535,27 +639,78 @@ export function analyzeVcp(data: OHLCData[], breakoutPrice: number): VcpAnalysis
   else if (score >= 25) grade = 'weak';
   else grade = 'none';
 
-  allDetails.unshift(`VCP 종합 스코어: ${score}점 (${gradeLabel(grade)})`);
+  const highTightFlag = momentum.momentumBranch === 'EXTENDED'
+    ? analyzeHighTightFlag(data, recommendedEntry)
+    : null;
+  const standardBaseType = grade === 'strong' || grade === 'forming' ? 'Standard_VCP' as const : null;
+  let finalScore = score;
+  let finalGrade = grade;
+  let finalBaseType: VcpAnalysis['baseType'] = standardBaseType;
+  let finalPivotPrice = pivotPrice;
+  let finalInvalidationPrice = invalidationPrice;
+  let finalRecommendedEntry = recommendedEntry;
+  let finalEntrySource = entrySource;
+
+  allDetails.push(
+    `Momentum branch: ${momentum.momentumBranch} (8-week return ${momentum.eightWeekReturnPct ?? 'n/a'}%, MA50 distance ${momentum.distanceFromMa50Pct ?? 'n/a'}%, 52-week low advance ${momentum.low52WeekAdvancePct ?? 'n/a'}%).`
+  );
+
+  if (highTightFlag) {
+    allDetails.push(
+      `High Tight Flag check: base ${highTightFlag.baseDays}d, drawdown ${highTightFlag.maxDrawdownPct ?? 'n/a'}%, right-side volume ${highTightFlag.rightSideVolumeRatio ?? 'n/a'}x 50-day avg, tightness ${highTightFlag.tightnessScore}/100.`
+    );
+    if (options.rsRating !== null && options.rsRating !== undefined) {
+      allDetails.push(`HTF context RS rating: ${options.rsRating}. RS 90+ is required for Recommended tier, but volume dry-up is still mandatory.`);
+    }
+  }
+
+  if (highTightFlag?.passed) {
+    const htfScore = clamp(round(
+      45 +
+      (highTightFlag.tightnessScore * 0.25) +
+      (volumeDryUpScore * 0.2) +
+      (pocketPivotScore * 0.1),
+      0
+    ), 50, 95);
+    finalScore = Math.max(score, htfScore);
+    finalGrade = finalScore >= 70 ? 'strong' : 'forming';
+    finalBaseType = 'High_Tight_Flag';
+    finalPivotPrice = highTightFlag.baseHigh;
+    finalInvalidationPrice = highTightFlag.baseLow;
+    finalRecommendedEntry = highTightFlag.baseHigh;
+    finalEntrySource = 'HIGH_TIGHT_FLAG';
+    allDetails.push('High Tight Flag passed: shallow base plus mandatory right-side volume dry-up were detected.');
+  } else if (momentum.momentumBranch === 'EXTENDED') {
+    allDetails.push('Extended momentum was detected, but High Tight Flag did not pass because base duration, drawdown, or volume dry-up was insufficient.');
+  }
+
+  allDetails.unshift(`VCP composite score: ${finalScore} (${gradeLabel(finalGrade)})`);
 
   return {
-    score,
-    grade,
+    score: finalScore,
+    grade: finalGrade,
     contractions,
     contractionScore,
     volumeDryUpScore,
     bbSqueezeScore,
     pocketPivotScore,
-    pivotPrice,
-    invalidationPrice,
+    pivotPrice: finalPivotPrice,
+    invalidationPrice: finalInvalidationPrice,
     breakoutPrice,
-    recommendedEntry,
-    entrySource,
+    recommendedEntry: finalRecommendedEntry,
+    entrySource: finalEntrySource,
     breakoutVolumeRatio,
     breakoutVolumeStatus,
     pocketPivots,
     bbWidth,
     bbWidthPercentile,
     baseLength,
+    baseType: finalBaseType,
+    momentumBranch: momentum.momentumBranch,
+    eightWeekReturnPct: momentum.eightWeekReturnPct,
+    distanceFromMa50Pct: momentum.distanceFromMa50Pct,
+    low52WeekAdvancePct: momentum.low52WeekAdvancePct,
+    highTightFlag,
     details: allDetails,
   };
 }

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,6 +9,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import {
+  applyUniverseRsRankings,
   evaluateScannerRecommendation,
   getVolumeSignalTier,
   isContestPoolTier,
@@ -47,8 +48,9 @@ type FilterKey =
   | 'pocketPivot'
   | 'volumeDryUp'
   | 'breakoutVolume'
+  | 'rs90'
   | 'error';
-type SortKey = 'marketCap' | 'recommendation' | 'vcpScore' | 'pivot' | 'sepa';
+type SortKey = 'marketCap' | 'recommendation' | 'vcpScore' | 'pivot' | 'sepa' | 'rs';
 
 interface StoredScannerSnapshot {
   savedAt: string;
@@ -105,6 +107,7 @@ const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'pocketPivot', label: '포켓 피벗' },
   { key: 'volumeDryUp', label: '거래량 건조화' },
   { key: 'breakoutVolume', label: '돌파 거래량' },
+  { key: 'rs90', label: 'RS 90+' },
   { key: 'error', label: '오류' },
 ];
 
@@ -114,6 +117,7 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: 'vcpScore', label: 'VCP 점수순' },
   { key: 'pivot', label: '피벗 근접순' },
   { key: 'sepa', label: 'SEPA 우선' },
+  { key: 'rs', label: 'RS 우선' },
 ];
 
 function scannerStorageKey(universe: ScannerUniverse) {
@@ -141,7 +145,7 @@ function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot |
     if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
     return {
       ...snapshot,
-      results: snapshot.results.map((item) => withRecommendation(item)),
+      results: applyUniverseRsRankings(snapshot.results).map((item) => withRecommendation(item)),
     };
   } catch {
     return null;
@@ -152,7 +156,7 @@ function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: Sc
   const snapshot: StoredScannerSnapshot = {
     savedAt,
     universeMeta,
-    results: results.map((item) => withRecommendation(item)),
+    results: applyUniverseRsRankings(results).map((item) => withRecommendation(item)),
   };
   window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
@@ -219,6 +223,28 @@ function initialResult(item: ScannerConstituent): ScannerResult {
     recommendedEntry: null,
     distanceToPivotPct: null,
     breakoutVolumeStatus: null,
+    baseType: null,
+    momentumBranch: null,
+    eightWeekReturnPct: null,
+    distanceFromMa50Pct: null,
+    low52WeekAdvancePct: null,
+    highTightFlag: null,
+    rsRating: null,
+    internalRsRating: null,
+    externalRsRating: null,
+    rsRank: null,
+    rsUniverseSize: null,
+    rsPercentile: null,
+    weightedMomentumScore: null,
+    benchmarkRelativeScore: null,
+    rsLineNewHigh: null,
+    rsLineNearHigh: null,
+    tennisBallCount: null,
+    tennisBallScore: null,
+    return3m: null,
+    return6m: null,
+    return9m: null,
+    return12m: null,
     analyzedAt: null,
     errorMessage: null,
   };
@@ -294,6 +320,28 @@ async function scanConstituent(item: ScannerConstituent, signal: AbortSignal): P
     pivotPrice,
     distanceToPivotPct,
     recommendedEntry,
+    baseType: analysis.vcpAnalysis.baseType,
+    momentumBranch: analysis.vcpAnalysis.momentumBranch,
+    eightWeekReturnPct: analysis.vcpAnalysis.eightWeekReturnPct,
+    distanceFromMa50Pct: analysis.vcpAnalysis.distanceFromMa50Pct,
+    low52WeekAdvancePct: analysis.vcpAnalysis.low52WeekAdvancePct,
+    highTightFlag: analysis.vcpAnalysis.highTightFlag,
+    rsRating: analysis.sepaEvidence.metrics.rsRating,
+    internalRsRating: analysis.sepaEvidence.metrics.internalRsRating ?? null,
+    externalRsRating: analysis.sepaEvidence.metrics.externalRsRating ?? null,
+    rsRank: analysis.sepaEvidence.metrics.rsRank ?? null,
+    rsUniverseSize: analysis.sepaEvidence.metrics.rsUniverseSize ?? null,
+    rsPercentile: analysis.sepaEvidence.metrics.rsPercentile ?? null,
+    weightedMomentumScore: analysis.sepaEvidence.metrics.weightedMomentumScore ?? null,
+    benchmarkRelativeScore: analysis.sepaEvidence.metrics.benchmarkRelativeScore ?? null,
+    rsLineNewHigh: analysis.sepaEvidence.metrics.rsLineNewHigh ?? null,
+    rsLineNearHigh: analysis.sepaEvidence.metrics.rsLineNearHigh ?? null,
+    tennisBallCount: analysis.sepaEvidence.metrics.tennisBallCount ?? null,
+    tennisBallScore: analysis.sepaEvidence.metrics.tennisBallScore ?? null,
+    return3m: analysis.sepaEvidence.metrics.return3m ?? null,
+    return6m: analysis.sepaEvidence.metrics.return6m ?? null,
+    return9m: analysis.sepaEvidence.metrics.return9m ?? null,
+    return12m: analysis.sepaEvidence.metrics.return12m ?? null,
     analyzedAt: new Date().toISOString(),
     breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
     errorMessage: null,
@@ -331,6 +379,18 @@ function sepaLabel(result: ScannerResult) {
   return 'Weak';
 }
 
+function baseTypeLabel(result: ScannerResult) {
+  if (result.baseType === 'High_Tight_Flag') return 'HTF';
+  if (result.baseType === 'Standard_VCP') return 'Standard';
+  if (result.momentumBranch === 'EXTENDED') return 'Extended';
+  return '-';
+}
+
+function formatRs(result: ScannerResult) {
+  if (typeof result.rsRating !== 'number') return '-';
+  const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
+  return `${result.rsRating}${rank}`;
+}
 function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<string>) {
   window.localStorage.setItem(
     CONTEST_SELECTION_STORAGE_KEY,
@@ -472,7 +532,7 @@ export default function ScannerPage() {
       await Promise.all(workers);
 
       if (!abortController.signal.aborted) {
-        const normalized = latestResults.map((item) => withRecommendation(item));
+        const normalized = applyUniverseRsRankings(latestResults).map((item) => withRecommendation(item));
         const nextSelected = new Set<string>();
         const now = new Date().toISOString();
         setResults(normalized);
@@ -511,8 +571,8 @@ export default function ScannerPage() {
         body: JSON.stringify({
           ticker: item.ticker,
           exchange: item.exchange,
-          memo: `Scanner ${item.recommendationTier} / ${item.vcpGrade ?? 'unknown'} VCP / SEPA ${item.sepaStatus ?? 'unknown'}`,
-          tags: ['scanner', item.recommendationTier, item.vcpGrade, item.sepaStatus].filter(Boolean),
+          memo: `Scanner ${item.recommendationTier} / ${item.baseType ?? item.vcpGrade ?? 'unknown'} / RS ${item.rsRating ?? 'n/a'} / SEPA ${item.sepaStatus ?? 'unknown'}`,
+          tags: ['scanner', item.recommendationTier, item.baseType, item.vcpGrade, item.sepaStatus, item.rsRating ? `RS${item.rsRating}` : null].filter(Boolean),
           priority: item.recommendationTier === 'Recommended' ? 2 : 1,
         }),
       });
@@ -551,6 +611,7 @@ export default function ScannerPage() {
     else if (filterKey === 'pocketPivot') list = list.filter((row) => (row.pocketPivotScore || 0) >= 40);
     else if (filterKey === 'volumeDryUp') list = list.filter((row) => (row.volumeDryUpScore || 0) >= 50);
     else if (filterKey === 'breakoutVolume') list = list.filter((row) => row.breakoutVolumeStatus === 'confirmed' || row.breakoutVolumeStatus === 'pending');
+    else if (filterKey === 'rs90') list = list.filter((row) => (row.rsRating || 0) >= 90);
     else if (filterKey === 'error') list = list.filter((row) => row.status === 'error');
 
     list.sort((a, b) => {
@@ -568,6 +629,7 @@ export default function ScannerPage() {
         const missingB = b.sepaMissingCount ?? 99;
         return missingA - missingB || (b.vcpScore || 0) - (a.vcpScore || 0);
       }
+      if (sortKey === 'rs') return (b.rsRating || 0) - (a.rsRating || 0) || (b.weightedMomentumScore || 0) - (a.weightedMomentumScore || 0);
       return a.rank - b.rank;
     });
 
@@ -618,7 +680,7 @@ export default function ScannerPage() {
               <th className="px-3 py-3 text-left">SEPA</th>
               <th className="px-3 py-3 text-left">추천</th>
               <th className="px-3 py-3 text-right">VCP</th>
-              <th className="px-3 py-3 text-left">거래량 신호</th>
+                            <th className="px-3 py-3 text-right">RS</th>`r`n              <th className="px-3 py-3 text-left">Base</th>`r`n              <th className="px-3 py-3 text-left">거래량 신호</th>
               <th className="px-3 py-3 text-right">피벗</th>
               <th className="px-3 py-3 text-left">API</th>
               <th className="px-3 py-3 text-left">상태</th>
@@ -647,7 +709,7 @@ export default function ScannerPage() {
                 <td className="px-3 py-3 text-right font-mono text-slate-300">
                   {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
                 </td>
-                <td className="px-3 py-3">
+                                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatRs(result)}</td>`r`n                <td className="px-3 py-3 text-xs text-slate-300">{baseTypeLabel(result)}</td>`r`n                <td className="px-3 py-3">
                   <span className={`inline-flex rounded-lg border px-2 py-1 text-xs font-bold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
                     {getVolumeSignalTier(result)}
                   </span>
@@ -719,7 +781,7 @@ export default function ScannerPage() {
                 <span className="text-slate-500">VCP</span>
                 <span className="text-slate-300">{result.vcpGrade} ({result.vcpScore ?? '-'})</span>
               </div>
-              <div className="flex items-center justify-between gap-3 text-[10px]">
+                            <div className="flex justify-between text-[10px]">`r`n                <span className="text-slate-500">RS / Base</span>`r`n                <span className="text-slate-300">{formatRs(result)} / {baseTypeLabel(result)}</span>`r`n              </div>`r`n              <div className="flex items-center justify-between gap-3 text-[10px]">
                 <span className="text-slate-500">거래량</span>
                 <span className={`rounded-lg border px-2 py-0.5 font-semibold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
                   {getVolumeSignalTier(result)}
@@ -914,3 +976,8 @@ export default function ScannerPage() {
     </div>
   );
 }
+
+
+
+
+

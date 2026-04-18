@@ -1,4 +1,4 @@
-import type { RecommendationTier, ScannerResult } from '@/types';
+﻿import type { RecommendationTier, ScannerResult } from '@/types';
 
 export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
 
@@ -44,11 +44,45 @@ export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSigna
   return 'Weak';
 }
 
+export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult[] {
+  const analyzable = results
+    .filter((item) => item.status === 'done' && scoreAtLeast(item.weightedMomentumScore, -9999))
+    .sort((a, b) => (b.weightedMomentumScore ?? -9999) - (a.weightedMomentumScore ?? -9999));
+  const universeSize = analyzable.length;
+  const rankByTicker = new Map<string, { rank: number; rating: number; percentile: number }>();
+
+  analyzable.forEach((item, index) => {
+    const rank = index + 1;
+    const rating = universeSize <= 1
+      ? 50
+      : Math.round(99 - ((rank - 1) / (universeSize - 1)) * 98);
+    const percentile = universeSize <= 1
+      ? 50
+      : Math.round((1 - ((rank - 1) / (universeSize - 1))) * 100);
+    rankByTicker.set(item.ticker, { rank, rating, percentile });
+  });
+
+  return results.map((item) => {
+    const ranked = rankByTicker.get(item.ticker);
+    if (!ranked) return item;
+    const externalRsRating = item.externalRsRating ?? null;
+    const internalRsRating = ranked.rating;
+    return {
+      ...item,
+      internalRsRating,
+      rsRating: externalRsRating ?? internalRsRating ?? item.benchmarkRelativeScore ?? null,
+      rsRank: ranked.rank,
+      rsUniverseSize: universeSize,
+      rsPercentile: ranked.percentile,
+    };
+  });
+}
+
 export function evaluateScannerRecommendation(result: Partial<ScannerResult>): ScannerRecommendation {
   if (result.status === 'error') {
     return {
       recommendationTier: 'Error',
-      recommendationReason: result.errorMessage || '데이터 조회 또는 분석이 완료되지 않았습니다.',
+      recommendationReason: result.errorMessage || 'Data fetch or analysis did not complete.',
       sepaMissingCount: result.sepaFailed ?? null,
       exceptionSignals: [],
     };
@@ -63,39 +97,57 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
   const volumeDryUp = scoreAtLeast(result.volumeDryUpScore, 65);
   const breakoutVolume = result.breakoutVolumeStatus === 'confirmed' || result.breakoutVolumeStatus === 'pending';
-  const volumeOrPocketSignal = pocketPivot || volumeDryUp || breakoutVolume;
-  const actionableTechnicalSignal = strongVcp || (constructiveVcp && (tightPivot || volumeOrPocketSignal));
+  const volumeTier = getVolumeSignalTier(result);
+  const volumeWatch = volumeTier === 'Strong' || volumeTier === 'Watch';
+  const volumeStrong = volumeTier === 'Strong';
+  const rs90 = scoreAtLeast(result.rsRating, 90);
+  const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
+  const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
+  const standardVcp = result.baseType === 'Standard_VCP' || (!result.baseType && constructiveVcp);
 
   const exceptionSignals = [
-    strongVcp ? '강한 VCP 구조' : null,
-    tightPivot ? '피벗 3% 이내' : nearActionablePivot ? '피벗 5% 이내' : null,
-    pocketPivot ? '포켓 피벗 신호' : null,
-    volumeDryUp ? '거래량 건조' : null,
-    breakoutVolume ? '돌파 거래량 확인 필요' : null,
+    strongVcp ? 'Strong VCP' : null,
+    result.baseType ? `Base ${result.baseType}` : null,
+    tightPivot ? 'Pivot within 3%' : nearActionablePivot ? 'Pivot within 5%' : null,
+    pocketPivot ? 'Pocket pivot' : null,
+    volumeDryUp ? 'Volume dry-up' : null,
+    breakoutVolume ? 'Breakout volume watch' : null,
+    rs90 ? 'RS 90+' : null,
+    rsLineHigh ? 'RS Line high/near high' : null,
+    (result.tennisBallCount || 0) >= 2 ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  if (sepaPass && actionableTechnicalSignal) {
+  if (sepaPass && standardVcp && constructiveVcp && volumeWatch) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA를 통과했고 VCP/피벗/거래량 중 핵심 신호가 확인됩니다.',
+      recommendationReason: 'SEPA passed with constructive Standard VCP and at least Watch-level volume evidence.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if ((sepaMissingCount !== null && sepaMissingCount <= 1 && strongVcp && nearActionablePivot) || (sepaPass && constructiveVcp && volumeOrPocketSignal)) {
+  if (htfPassed && rs90 && rsLineHigh && volumeStrong) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA 통과에 준하는 구조이며 콘테스트 우선 비교 가치가 있습니다.',
+      recommendationReason: 'High Tight Flag passed with RS 90+, RS Line high/near high, and Strong volume evidence.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if ((sepaMissingCount !== null && sepaMissingCount <= 2 && (constructiveVcp || volumeOrPocketSignal)) || (strongVcp && exceptionSignals.length >= 2)) {
+  if (sepaMissingCount !== null && sepaMissingCount <= 2 && htfPassed && volumeWatch) {
     return {
       recommendationTier: 'Partial',
-      recommendationReason: '일부 SEPA 미달이 있지만 모멘텀/VCP/피벗 신호 때문에 예외 비교 가치가 있습니다.',
+      recommendationReason: 'Some SEPA items are missing, but HTF base quality and volume digestion justify contest review.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  if (rs90 && (result.tennisBallCount || 0) >= 2 && volumeWatch) {
+    return {
+      recommendationTier: 'Partial',
+      recommendationReason: 'RS 90+ and repeated tennis-ball action justify review, but RS alone is not enough for Recommended.',
       sepaMissingCount,
       exceptionSignals,
     };
@@ -103,7 +155,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
   return {
     recommendationTier: 'Low Priority',
-    recommendationReason: '현재는 핵심 조건 충족도가 낮아 우선 후보는 아니지만 수동 비교는 가능합니다.',
+    recommendationReason: 'Current SEPA/VCP/RS/volume evidence is not enough for contest priority, but manual selection remains available.',
     sepaMissingCount,
     exceptionSignals,
   };

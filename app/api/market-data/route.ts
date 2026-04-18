@@ -314,7 +314,7 @@ export async function GET(request: Request) {
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
     const sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
-    const vcpAnalysis = analyzeVcp(data, entryPrice);
+    const vcpAnalysis = analyzeVcp(data, entryPrice, { rsRating: sepaEvidence.metrics.rsRating });
     const effectiveEntry = vcpAnalysis.recommendedEntry;
     const riskPlan = calculateMinerviniRiskPlan(
       totalEquity,
@@ -322,7 +322,11 @@ export async function GET(request: Request) {
       atr,
       riskPercent,
       vcpAnalysis.invalidationPrice,
-      data
+      data,
+      {
+        strategy: vcpAnalysis.baseType === 'High_Tight_Flag' ? 'HIGH_TIGHT_FLAG' : 'MINERVINI_VCP',
+        highTightFlag: vcpAnalysis.highTightFlag,
+      }
     );
 
     if (data.length < REQUIRED_SEPA_BARS) {

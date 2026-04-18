@@ -154,6 +154,45 @@ function generateVcpPattern() {
   return data;
 }
 
+function generateHighTightFlagPattern() {
+  const data = [];
+  const baseDate = new Date('2024-01-02');
+  let price = 40;
+
+  for (let day = 0; day < 55; day++) {
+    const date = new Date(baseDate);
+    date.setDate(date.getDate() + day);
+    price *= 1.035;
+    data.push({
+      date: date.toISOString().slice(0, 10),
+      open: price * 0.99,
+      high: price * 1.015,
+      low: price * 0.985,
+      close: price,
+      volume: 2000000,
+    });
+  }
+
+  const peak = price * 1.2;
+  for (let day = 55; day < 80; day++) {
+    const index = day - 55;
+    const date = new Date(baseDate);
+    date.setDate(date.getDate() + day);
+    const pullback = index < 10 ? index * 0.012 : 0.12 - ((index - 10) * 0.001);
+    const close = peak * (1 - Math.min(0.14, pullback));
+    data.push({
+      date: date.toISOString().slice(0, 10),
+      open: close * 0.995,
+      high: index === 0 ? peak : close * 1.02,
+      low: close * 0.99,
+      close,
+      volume: index >= 20 ? 700000 : 1200000,
+    });
+  }
+
+  return data;
+}
+
 // ========== 테스트 시작 ==========
 
 console.log('=== VCP Engine Tests ===\n');
@@ -226,7 +265,7 @@ console.log('=== VCP Engine Tests ===\n');
 {
   const data = generateVcpPattern();
   const result = analyzeVcp(data, 150);
-  assert.ok(result.details.some((d) => d.includes('스코어')), 'VCP 스코어 정보 포함');
+  assert.ok(result.details.some((d) => d.includes('score') || d.includes('스코어')), 'VCP score information included');
   console.log(`✅ Test 6: 판정 근거 ${result.details.length}건 생성됨`);
 }
 
@@ -237,6 +276,18 @@ console.log('=== VCP Engine Tests ===\n');
   assert.equal(result.score, 0, '15일 데이터 → 스코어 0');
   assert.ok(result.details.some((d) => d.includes('부족')), '데이터 부족 메시지 포함');
   console.log('✅ Test 7: 짧은 데이터(15일) → 안전 기본값 반환');
+}
+
+{
+  const data = generateHighTightFlagPattern();
+  const breakoutPrice = Math.max(...data.slice(-25).map((d) => d.high));
+  const result = analyzeVcp(data, breakoutPrice, { rsRating: 95 });
+  assert.equal(result.momentumBranch, 'EXTENDED');
+  assert.equal(result.baseType, 'High_Tight_Flag');
+  assert.equal(result.highTightFlag?.passed, true);
+  assert.equal(result.entrySource, 'HIGH_TIGHT_FLAG');
+  assert.ok(result.highTightFlag.stopPrice <= result.recommendedEntry);
+  console.log('✅ Test 8: Extended momentum + shallow dry-up base → High Tight Flag tagged');
 }
 
 console.log('\n=== All VCP Engine Tests Passed ===');

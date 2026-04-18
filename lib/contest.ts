@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ContestCandidate,
   ContestMarket,
   ContestPromptCandidate,
@@ -10,7 +10,7 @@ import type {
 } from '@/types';
 
 const MAX_CANDIDATES = 10;
-export const CONTEST_PROMPT_VERSION = 'mtn-contest-ko-v2';
+export const CONTEST_PROMPT_VERSION = 'mtn-contest-ko-v3-rs-htf';
 export const CONTEST_RESPONSE_SCHEMA_VERSION = 'mtn-contest-json-v2';
 
 export interface ContestSessionInput {
@@ -138,6 +138,10 @@ export function buildContestPrompt(input: ContestSessionInput) {
       rank_1_meaning: '가장 우선 비교할 돌파/주도주 후보',
       compare_axes: [
         '기술적 구조와 VCP 품질',
+        'Base_Type: Standard_VCP와 High_Tight_Flag는 리스크 가정과 손절 기준을 분리해 비교',
+        'RS Proxy: 동일 유니버스 순위, 3/6/9/12개월 가중 모멘텀, RS Line 신고가/근접 여부',
+        '테니스 공 액션: 시장 하락일에 덜 빠지거나 상승 마감한 방어력',
+        'HTF 후보는 거래량 건조화와 타이트 손절 조건을 반드시 별도 평가',
         'SEPA 조건 충족도와 예외 신호',
         '최근 매출과 이익 성장',
         '펀더멘털 품질과 재무 안정성',
@@ -156,6 +160,8 @@ export function buildContestPrompt(input: ContestSessionInput) {
     '아래 payload의 후보들은 SEPA/VCP 스캐너에서 나온 종목입니다. Recommended와 Partial은 시스템이 비교 가치가 있다고 본 후보입니다.',
     '내부 뉴스 API는 제공되지 않으므로, 최근 뉴스와 애널리스트 판단 변화는 당신이 접근 가능한 웹/지식 기반으로 보완해 주세요.',
     '마스터 필터가 RED이면 후보를 배제하지 말고, 포지션 크기와 손절 조건을 더 보수적으로 평가하세요.',
+    'payload의 rs_rating, rs_rank, weighted_momentum_score, rs_line_new_high, tennis_ball_count, base_type, momentum_branch, high_tight_flag를 반드시 기술적 평가에 반영하세요.',
+    'High_Tight_Flag는 강한 주도주의 예외 패턴입니다. 거래량 건조화가 없거나 stopPlan이 불리하면 순위를 낮추세요.',
     '최종 응답은 JSON만 출력하세요. 설명 문장, markdown, 코드블록을 붙이지 마세요.',
     '모든 후보가 정확히 한 번씩 등장해야 하며 rank는 1부터 N까지 중복 없이 부여해야 합니다.',
     '필수 매핑 필드인 session_id, candidate_id, ticker를 그대로 유지하세요.',
@@ -369,3 +375,6 @@ export function summarizeContestReview(candidates: (ContestCandidate & { reviews
 export function normalizeReviewStatus(value: unknown): ContestReviewStatus {
   return value === 'UPDATED' || value === 'ERROR' || value === 'MANUAL' || value === 'PENDING' ? value : 'PENDING';
 }
+
+
+

@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+﻿import assert from 'node:assert/strict';
 import { normalizeNasdaqRows } from '../lib/finance/scanner-normalizers.ts';
 import { rankKoreaMarketCapItems } from '../lib/finance/korea-market-cap-ranking.ts';
 import { evaluateScannerRecommendation, getVolumeSignalTier, isAutoSelectedTier } from '../lib/scanner-recommendation.ts';
@@ -60,6 +60,8 @@ console.log('=== Scanner Universe Tests ===\n');
     vcpScore: 62,
     distanceToPivotPct: 2.4,
     pocketPivotScore: 65,
+    rsRating: 95,
+    tennisBallCount: 2,
   });
 
   assert.equal(recommendation.recommendationTier, 'Partial');
@@ -95,3 +97,4 @@ console.log('=== Scanner Universe Tests ===\n');
 }
 
 console.log('\n=== All Scanner Universe Tests Passed ===');
+

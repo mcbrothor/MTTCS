@@ -2,6 +2,7 @@ import type {
   AssessmentStatus,
   EntryTargets,
   FundamentalSnapshot,
+  HighTightFlagAnalysis,
   OHLCData,
   RiskPlan,
   SepaCriterion,
@@ -10,7 +11,6 @@ import type {
 } from '@/types';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const DEFAULT_MINERVINI_RISK_PERCENT = 0.01;
 const MINERVINI_MAX_LOSS_PCT = 0.08;
 const ADD_ON_CANDIDATE_PCTS = [0.02, 0.04] as const;
@@ -26,6 +26,82 @@ function percentReturn(data: OHLCData[], lookback: number) {
   const end = data.at(-1)?.close;
   if (!start || !end) return null;
   return round(((end - start) / start) * 100);
+}
+
+function dateMap(data: OHLCData[]) {
+  return new Map(data.map((item) => [item.date, item]));
+}
+
+function calculateLocalRsMetrics(data: OHLCData[], benchmarkData?: OHLCData[]) {
+  const return3m = percentReturn(data, 63);
+  const return6m = percentReturn(data, 126);
+  const return9m = percentReturn(data, 189);
+  const return12m = percentReturn(data, 252);
+  const legs = [
+    { value: return3m, weight: 0.4 },
+    { value: return6m, weight: 0.3 },
+    { value: return9m, weight: 0.2 },
+    { value: return12m, weight: 0.1 },
+  ].filter((leg): leg is { value: number; weight: number } => typeof leg.value === 'number');
+  const weightTotal = legs.reduce((sum, leg) => sum + leg.weight, 0);
+  const weightedMomentumScore = weightTotal > 0
+    ? round(legs.reduce((sum, leg) => sum + leg.value * leg.weight, 0) / weightTotal)
+    : null;
+
+  const stockReturn26Week = return6m;
+  const benchmarkReturn26Week = benchmarkData ? percentReturn(benchmarkData, 126) : null;
+  const benchmarkRelativeScore = stockReturn26Week !== null && benchmarkReturn26Week !== null
+    ? round(Math.min(Math.max(50 + (stockReturn26Week - benchmarkReturn26Week) * 1.5, 1), 99), 0)
+    : null;
+
+  let rsLineNewHigh: boolean | null = null;
+  let rsLineNearHigh: boolean | null = null;
+  let tennisBallCount = 0;
+  if (benchmarkData && benchmarkData.length > 0) {
+    const benchmarkByDate = dateMap(benchmarkData);
+    const matched = data
+      .map((item) => {
+        const benchmark = benchmarkByDate.get(item.date);
+        if (!benchmark || benchmark.close <= 0) return null;
+        return item.close / benchmark.close;
+      })
+      .filter((value): value is number => typeof value === 'number');
+    const recent = matched.slice(-252);
+    const current = recent.at(-1);
+    if (current && recent.length >= 20) {
+      const high = Math.max(...recent);
+      rsLineNewHigh = current >= high;
+      rsLineNearHigh = current >= high * 0.98;
+    }
+
+    const recentBars = data.slice(-61);
+    for (let index = 1; index < recentBars.length; index += 1) {
+      const currentBar = recentBars[index];
+      const previousBar = recentBars[index - 1];
+      const benchmarkIndex = benchmarkData.findIndex((item) => item.date === currentBar.date);
+      const benchmarkCurrent = benchmarkIndex >= 0 ? benchmarkData[benchmarkIndex] : null;
+      const benchmarkPrevious = benchmarkIndex > 0 ? benchmarkData[benchmarkIndex - 1] : null;
+      if (!benchmarkCurrent || !benchmarkPrevious || previousBar.close <= 0 || benchmarkPrevious.close <= 0) continue;
+      const stockReturn = ((currentBar.close - previousBar.close) / previousBar.close) * 100;
+      const benchmarkReturn = ((benchmarkCurrent.close - benchmarkPrevious.close) / benchmarkPrevious.close) * 100;
+      if (benchmarkReturn <= -1 && (stockReturn >= 0 || stockReturn > benchmarkReturn)) tennisBallCount += 1;
+    }
+  }
+
+  return {
+    return3m,
+    return6m,
+    return9m,
+    return12m,
+    weightedMomentumScore,
+    stockReturn26Week,
+    benchmarkReturn26Week,
+    benchmarkRelativeScore,
+    rsLineNewHigh,
+    rsLineNearHigh,
+    tennisBallCount,
+    tennisBallScore: Math.min(100, tennisBallCount * 20),
+  };
 }
 
 export function calculateMovingAverage(data: OHLCData[], period: number): number | null {
@@ -136,18 +212,40 @@ function chooseMinerviniStop(
   };
 }
 
+function chooseHighTightFlagStop(entryPrice: number, highTightFlag: HighTightFlagAnalysis) {
+  const cappedStop = round(entryPrice * 0.93);
+  const baseLowStop = highTightFlag.baseLow > 0 && highTightFlag.baseLow < entryPrice
+    ? round(highTightFlag.baseLow)
+    : null;
+  const stopLossPrice = Math.max(baseLowStop ?? 0, cappedStop);
+  return {
+    stopLossPrice,
+    stopSource: baseLowStop !== null && stopLossPrice === baseLowStop ? 'HTF_BASE_LOW' as const : 'HTF_MAX_LOSS_CAP' as const,
+    invalidationPrice: baseLowStop,
+  };
+}
+
 export function calculateMinerviniRiskPlan(
   totalEquity: number,
   entryPrice: number,
   atr: number,
   riskPercent: number = DEFAULT_MINERVINI_RISK_PERCENT,
   invalidationPrice?: number | null,
-  data?: OHLCData[]
+  data?: OHLCData[],
+  options: {
+    strategy?: RiskPlan['strategy'];
+    highTightFlag?: HighTightFlagAnalysis | null;
+  } = {}
 ): RiskPlan {
+  const useHighTightFlag = options.strategy === 'HIGH_TIGHT_FLAG' && options.highTightFlag?.passed;
   const stop = entryPrice > 0
-    ? chooseMinerviniStop(entryPrice, invalidationPrice, data)
+    ? useHighTightFlag
+      ? chooseHighTightFlagStop(entryPrice, options.highTightFlag!)
+      : chooseMinerviniStop(entryPrice, invalidationPrice, data)
     : { stopLossPrice: 0, stopSource: 'MAX_LOSS_CAP' as const, invalidationPrice: null };
   const position = calculatePositionSize(totalEquity, entryPrice, stop.stopLossPrice, riskPercent);
+  const recent10Low = data && data.length > 0 ? recentSwingLow(data, 10) : null;
+  const ma10 = data && data.length >= 10 ? calculateMovingAverage(data, 10) : null;
 
   const entryTargets: EntryTargets = {
     e1: { label: '피벗 돌파 진입', price: round(entryPrice), shares: position.shares },
@@ -158,8 +256,16 @@ export function calculateMinerviniRiskPlan(
   const trailingStops: TrailingStops = {
     initial: position.stopLossPrice,
     afterEntry2: round(entryPrice),
-    afterEntry3: round(entryTargets.e2.price),
+    afterEntry3: useHighTightFlag
+      ? round(Math.max(entryPrice, recent10Low || 0, ma10 || 0))
+      : round(entryTargets.e2.price),
   };
+  const riskNotes = useHighTightFlag
+    ? [
+        'High Tight Flag uses a tighter initial stop: max(base low, 7% loss cap).',
+        'Move to breakeven around +5%; after +10%, trail with the higher of MA10 or recent 10-day low.',
+      ]
+    : ['Standard VCP uses pattern invalidation with an 8% max-loss cap.'];
 
   return {
     totalEquity,
@@ -172,11 +278,12 @@ export function calculateMinerviniRiskPlan(
     totalShares: position.shares,
     entryTargets,
     trailingStops,
-    strategy: 'MINERVINI_VCP',
-    riskModel: 'PATTERN_INVALIDATION',
+    strategy: useHighTightFlag ? 'HIGH_TIGHT_FLAG' : 'MINERVINI_VCP',
+    riskModel: useHighTightFlag ? 'HIGH_TIGHT_FLAG_TIGHT_STOP' : 'PATTERN_INVALIDATION',
     stopSource: stop.stopSource,
-    maxLossPct: MINERVINI_MAX_LOSS_PCT,
+    maxLossPct: useHighTightFlag ? 0.07 : MINERVINI_MAX_LOSS_PCT,
     invalidationPrice: stop.invalidationPrice,
+    riskNotes,
   };
 }
 
@@ -215,16 +322,13 @@ function evaluableCriterion(
 }
 
 function calculateRsProxy(data: OHLCData[], benchmarkData?: OHLCData[]) {
-  const stockReturn = percentReturn(data, 126);
-  const benchmarkReturn = benchmarkData ? percentReturn(benchmarkData, 126) : null;
-
-  if (stockReturn === null || benchmarkReturn === null) {
-    return { stockReturn, benchmarkReturn, rsScore: null };
-  }
-
-  const outperformance = stockReturn - benchmarkReturn;
-  const rsScore = round(clamp(50 + outperformance * 1.5, 1, 99), 0);
-  return { stockReturn, benchmarkReturn, rsScore };
+  const rs = calculateLocalRsMetrics(data, benchmarkData);
+  return {
+    ...rs,
+    stockReturn: rs.stockReturn26Week,
+    benchmarkReturn: rs.benchmarkReturn26Week,
+    rsScore: rs.benchmarkRelativeScore,
+  };
 }
 
 /**
@@ -442,6 +546,21 @@ export function analyzeSepa(
       distanceFromHigh52WeekPct,
       avgDollarVolume20: avgDollarVolume || null,
       rsRating: rs.rsScore,
+      internalRsRating: null,
+      externalRsRating: null,
+      rsRank: null,
+      rsUniverseSize: null,
+      rsPercentile: null,
+      weightedMomentumScore: rs.weightedMomentumScore,
+      benchmarkRelativeScore: rs.benchmarkRelativeScore,
+      rsLineNewHigh: rs.rsLineNewHigh,
+      rsLineNearHigh: rs.rsLineNearHigh,
+      tennisBallCount: rs.tennisBallCount,
+      tennisBallScore: rs.tennisBallScore,
+      return3m: rs.return3m,
+      return6m: rs.return6m,
+      return9m: rs.return9m,
+      return12m: rs.return12m,
       benchmarkReturn26Week: rs.benchmarkReturn,
       stockReturn26Week: rs.stockReturn,
     },

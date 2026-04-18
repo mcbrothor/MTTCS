@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
@@ -92,7 +92,28 @@ function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCa
     recommendation_tier: item.recommendationTier,
     recommendation_reason: item.recommendationReason,
     exception_signals: item.exceptionSignals || [],
-    rs_rating: null,
+    rs_rating: item.rsRating ?? null,
+    internal_rs_rating: item.internalRsRating ?? null,
+    external_rs_rating: item.externalRsRating ?? null,
+    rs_rank: item.rsRank ?? null,
+    rs_universe_size: item.rsUniverseSize ?? null,
+    rs_percentile: item.rsPercentile ?? null,
+    weighted_momentum_score: item.weightedMomentumScore ?? null,
+    benchmark_relative_score: item.benchmarkRelativeScore ?? null,
+    rs_line_new_high: item.rsLineNewHigh ?? null,
+    rs_line_near_high: item.rsLineNearHigh ?? null,
+    tennis_ball_count: item.tennisBallCount ?? null,
+    tennis_ball_score: item.tennisBallScore ?? null,
+    return_3m: item.return3m ?? null,
+    return_6m: item.return6m ?? null,
+    return_9m: item.return9m ?? null,
+    return_12m: item.return12m ?? null,
+    base_type: item.baseType ?? null,
+    momentum_branch: item.momentumBranch ?? null,
+    eight_week_return_pct: item.eightWeekReturnPct ?? null,
+    distance_from_ma50_pct: item.distanceFromMa50Pct ?? null,
+    low_52_week_advance_pct: item.low52WeekAdvancePct ?? null,
+    high_tight_flag: item.highTightFlag ?? null,
     sepa_status: item.sepaStatus,
     sepa_passed: item.sepaPassed,
     sepa_failed: item.sepaFailed,
@@ -863,3 +884,4 @@ export default function ContestPage() {
     </div>
   );
 }
+

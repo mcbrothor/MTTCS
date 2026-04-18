@@ -126,6 +126,21 @@ export interface SepaEvidence {
     distanceFromHigh52WeekPct: number | null;
     avgDollarVolume20: number | null;
     rsRating: number | null;
+    internalRsRating?: number | null;
+    externalRsRating?: number | null;
+    rsRank?: number | null;
+    rsUniverseSize?: number | null;
+    rsPercentile?: number | null;
+    weightedMomentumScore?: number | null;
+    benchmarkRelativeScore?: number | null;
+    rsLineNewHigh?: boolean | null;
+    rsLineNearHigh?: boolean | null;
+    tennisBallCount?: number | null;
+    tennisBallScore?: number | null;
+    return3m?: number | null;
+    return6m?: number | null;
+    return9m?: number | null;
+    return12m?: number | null;
     benchmarkReturn26Week: number | null;
     stockReturn26Week: number | null;
   };
@@ -168,11 +183,12 @@ export interface RiskPlan {
   totalShares: number;
   entryTargets: EntryTargets;
   trailingStops: TrailingStops;
-  strategy?: 'MINERVINI_VCP';
-  riskModel?: 'PATTERN_INVALIDATION';
-  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK';
+  strategy?: 'MINERVINI_VCP' | 'HIGH_TIGHT_FLAG';
+  riskModel?: 'PATTERN_INVALIDATION' | 'HIGH_TIGHT_FLAG_TIGHT_STOP';
+  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK' | 'HTF_BASE_LOW' | 'HTF_MAX_LOSS_CAP';
   maxLossPct?: number;
   invalidationPrice?: number | null;
+  riskNotes?: string[];
 }
 
 // --- VCP (Volatility Contraction Pattern) ---
@@ -184,6 +200,21 @@ export interface VcpContraction {
   troughPrice: number;
   depthPct: number;
   avgVolume: number;
+}
+
+export type BaseType = 'Standard_VCP' | 'High_Tight_Flag';
+export type MomentumBranch = 'STANDARD' | 'EXTENDED';
+
+export interface HighTightFlagAnalysis {
+  passed: boolean;
+  baseDays: number;
+  maxDrawdownPct: number | null;
+  rightSideVolumeRatio: number | null;
+  tightnessScore: number;
+  baseHigh: number;
+  baseLow: number;
+  stopPrice: number;
+  stopPlan: string[];
 }
 
 export interface VcpAnalysis {
@@ -198,13 +229,19 @@ export interface VcpAnalysis {
   invalidationPrice: number | null;
   breakoutPrice: number;
   recommendedEntry: number;
-  entrySource: 'VCP_PIVOT' | 'RECENT_HIGH_FALLBACK';
+  entrySource: 'VCP_PIVOT' | 'RECENT_HIGH_FALLBACK' | 'HIGH_TIGHT_FLAG';
   breakoutVolumeRatio: number | null;
   breakoutVolumeStatus: 'confirmed' | 'pending' | 'weak' | 'unknown';
   pocketPivots: { date: string; close: number; volume: number }[];
   bbWidth: number | null;
   bbWidthPercentile: number | null;
   baseLength: number;
+  baseType: BaseType | null;
+  momentumBranch: MomentumBranch;
+  eightWeekReturnPct: number | null;
+  distanceFromMa50Pct: number | null;
+  low52WeekAdvancePct: number | null;
+  highTightFlag: HighTightFlagAnalysis | null;
   details: string[];
 }
 
@@ -287,6 +324,28 @@ export interface ScannerResult extends ScannerConstituent {
   recommendedEntry: number | null;
   distanceToPivotPct: number | null;
   breakoutVolumeStatus: VcpAnalysis['breakoutVolumeStatus'] | null;
+  baseType: BaseType | null;
+  momentumBranch: MomentumBranch | null;
+  eightWeekReturnPct?: number | null;
+  distanceFromMa50Pct?: number | null;
+  low52WeekAdvancePct?: number | null;
+  highTightFlag?: HighTightFlagAnalysis | null;
+  rsRating?: number | null;
+  internalRsRating?: number | null;
+  externalRsRating?: number | null;
+  rsRank?: number | null;
+  rsUniverseSize?: number | null;
+  rsPercentile?: number | null;
+  weightedMomentumScore?: number | null;
+  benchmarkRelativeScore?: number | null;
+  rsLineNewHigh?: boolean | null;
+  rsLineNearHigh?: boolean | null;
+  tennisBallCount?: number | null;
+  tennisBallScore?: number | null;
+  return3m?: number | null;
+  return6m?: number | null;
+  return9m?: number | null;
+  return12m?: number | null;
   analyzedAt: string | null;
   errorMessage: string | null;
 }
@@ -421,6 +480,27 @@ export interface ContestPromptCandidate {
   recommendation_reason?: string | null;
   exception_signals?: string[];
   rs_rating: number | null;
+  internal_rs_rating?: number | null;
+  external_rs_rating?: number | null;
+  rs_rank?: number | null;
+  rs_universe_size?: number | null;
+  rs_percentile?: number | null;
+  weighted_momentum_score?: number | null;
+  benchmark_relative_score?: number | null;
+  rs_line_new_high?: boolean | null;
+  rs_line_near_high?: boolean | null;
+  tennis_ball_count?: number | null;
+  tennis_ball_score?: number | null;
+  return_3m?: number | null;
+  return_6m?: number | null;
+  return_9m?: number | null;
+  return_12m?: number | null;
+  base_type?: BaseType | null;
+  momentum_branch?: MomentumBranch | null;
+  eight_week_return_pct?: number | null;
+  distance_from_ma50_pct?: number | null;
+  low_52_week_advance_pct?: number | null;
+  high_tight_flag?: HighTightFlagAnalysis | null;
   sepa_status: AssessmentStatus | null;
   sepa_passed: number | null;
   sepa_failed: number | null;
