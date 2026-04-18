@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { AUTH_COOKIE_NAME, createSessionToken, getSessionMaxAgeSeconds } from '@/lib/auth/session';
+import { AUTH_COOKIE_NAME, createSessionToken, getSessionMaxAgeSeconds, isAuthEnabled } from '@/lib/auth/session';
 import { apiError } from '@/lib/api/response';
 
 function credentialsConfigured() {
@@ -7,6 +7,10 @@ function credentialsConfigured() {
 }
 
 export async function POST(request: Request) {
+  if (!isAuthEnabled()) {
+    return NextResponse.json({ ok: true, authEnabled: false });
+  }
+
   if (!credentialsConfigured()) {
     return apiError('Login credentials are not configured.', 'AUTH_NOT_CONFIGURED', 500);
   }

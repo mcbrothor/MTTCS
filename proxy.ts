@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { AUTH_COOKIE_NAME, verifySessionToken } from '@/lib/auth/session';
+import { AUTH_COOKIE_NAME, isAuthEnabled, verifySessionToken } from '@/lib/auth/session';
 
 const PUBLIC_PATHS = [
   '/login',
@@ -19,6 +19,14 @@ function isPublicPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (!isAuthEnabled()) {
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+    return NextResponse.next();
+  }
+
   const session = await verifySessionToken(request.cookies.get(AUTH_COOKIE_NAME)?.value);
 
   if (pathname === '/login' && session) {

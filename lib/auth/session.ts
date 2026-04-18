@@ -44,6 +44,10 @@ export function getSessionMaxAgeSeconds() {
   return SESSION_TTL_SECONDS;
 }
 
+export function isAuthEnabled() {
+  return process.env.MTN_AUTH_ENABLED?.toLowerCase() !== 'false';
+}
+
 export async function createSessionToken(username: string) {
   const secret = getAuthSecret();
   if (!secret) throw new Error('MTN_AUTH_SECRET is not configured.');
