@@ -71,6 +71,17 @@ function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
     aiProviderUsed: 'rules',
     aiModelUsed: 'system-fallback',
     aiFallbackChain: [{ provider: 'rules', model: 'system-fallback', status: 'success' }],
+    aiModelInsights: [{
+      id: '99-rules-system-fallback',
+      provider: 'rules',
+      label: 'rules',
+      model: 'system-fallback',
+      status: 'success',
+      text: '마스터 필터 데이터를 불러오지 못했습니다. 안전을 위해 신규 진입은 보수적으로 판단하세요.',
+      selected: true,
+      priority: 99,
+      generatedAt: updatedAt,
+    }],
     aiErrorSummary: '브라우저가 마스터 필터 API 응답을 받지 못해 로컬 fallback 데이터를 표시합니다.',
   };
 }

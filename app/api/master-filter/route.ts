@@ -448,6 +448,7 @@ export async function GET(request: Request) {
       aiProviderUsed: insight.providerUsed,
       aiModelUsed: insight.modelUsed,
       aiFallbackChain: insight.fallbackChain,
+      aiModelInsights: insight.modelInsights,
       aiErrorSummary: insight.errorSummary,
     };
 

@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { AiFallbackAttempt, AiInsightProvider, MasterFilterMetricDetail } from '@/types';
+import type { AiFallbackAttempt, AiInsightProvider, AiModelInsight, MasterFilterMetricDetail } from '@/types';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
@@ -30,6 +30,7 @@ export interface MarketInsightResult {
   providerUsed: AiInsightProvider;
   modelUsed: string;
   fallbackChain: AiFallbackAttempt[];
+  modelInsights: AiModelInsight[];
   errorSummary: string | null;
 }
 
@@ -161,104 +162,128 @@ function ruleBasedInsight(input: MarketAnalysisInput) {
   return byState[input.marketState as keyof typeof byState] || byState.YELLOW;
 }
 
-async function tryGemini(
+function makeInsightId(provider: string, model: string, priority: number) {
+  return `${priority}-${provider}-${model}`.replace(/[^a-zA-Z0-9._-]/g, '-');
+}
+
+function attemptToInsight(input: {
+  provider: AiInsightProvider;
+  label: string;
+  model: string;
+  status: AiModelInsight['status'];
+  priority: number;
+  text?: string;
+  message?: string;
+}): AiModelInsight {
+  return {
+    id: makeInsightId(input.label, input.model, input.priority),
+    provider: input.provider,
+    label: input.label,
+    model: input.model,
+    status: input.status,
+    text: input.text,
+    message: input.message,
+    selected: false,
+    priority: input.priority,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function collectGemini(
   model: string,
   prompt: string,
   chain: AiFallbackAttempt[],
-  label = 'gemini'
-): Promise<MarketInsightResult | null> {
+  label: string,
+  priority: number
+): Promise<AiModelInsight> {
   if (!GEMINI_API_KEY) {
-    chain.push({ provider: label, model, status: 'skipped', message: 'GEMINI_API_KEY is not configured.' });
-    return null;
+    const message = 'GEMINI_API_KEY is not configured.';
+    chain.push({ provider: label, model, status: 'skipped', message });
+    return attemptToInsight({ provider: 'gemini', label, model, status: 'skipped', message, priority });
   }
 
   try {
     const text = await callGeminiModel(model, prompt);
     chain.push({ provider: label, model, status: 'success' });
-    return {
-      text,
-      isAiGenerated: true,
-      providerUsed: 'gemini',
-      modelUsed: model,
-      fallbackChain: chain,
-      errorSummary: null,
-    };
+    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', text, priority });
   } catch (error: unknown) {
-    chain.push({ provider: label, model, status: 'failed', message: compactMessage(error) });
-    return null;
+    const message = compactMessage(error);
+    chain.push({ provider: label, model, status: 'failed', message });
+    return attemptToInsight({ provider: 'gemini', label, model, status: 'failed', message, priority });
   }
 }
 
-async function tryGroq(prompt: string, chain: AiFallbackAttempt[]): Promise<MarketInsightResult | null> {
+async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!GROQ_API_KEY) {
-    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'skipped', message: 'GROQ_API_KEY is not configured.' });
-    return null;
+    const message = 'GROQ_API_KEY is not configured.';
+    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'skipped', message });
+    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'skipped', message, priority });
   }
 
   try {
     const text = await callGroqModel(GROQ_MODEL, prompt);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
-    return {
-      text,
-      isAiGenerated: true,
-      providerUsed: 'groq',
-      modelUsed: GROQ_MODEL,
-      fallbackChain: chain,
-      errorSummary: null,
-    };
+    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', text, priority });
   } catch (error: unknown) {
-    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'failed', message: compactMessage(error) });
-    return null;
+    const message = compactMessage(error);
+    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'failed', message });
+    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'failed', message, priority });
   }
 }
 
-async function tryCerebras(prompt: string, chain: AiFallbackAttempt[]): Promise<MarketInsightResult | null> {
+async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!CEREBRAS_API_KEY) {
-    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message: 'CEREBRAS_API_KEY is not configured.' });
-    return null;
+    const message = 'CEREBRAS_API_KEY is not configured.';
+    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message });
+    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message, priority });
   }
 
   try {
     const text = await callCerebrasModel(CEREBRAS_MODEL, prompt);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
-    return {
-      text,
-      isAiGenerated: true,
-      providerUsed: 'cerebras',
-      modelUsed: CEREBRAS_MODEL,
-      fallbackChain: chain,
-      errorSummary: null,
-    };
+    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', text, priority });
   } catch (error: unknown) {
-    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message: compactMessage(error) });
-    return null;
+    const message = compactMessage(error);
+    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message });
+    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message, priority });
   }
 }
 
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
   const chain: AiFallbackAttempt[] = [];
+  const modelInsights: AiModelInsight[] = [];
 
-  const primary = await tryGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary');
-  if (primary) return primary;
+  modelInsights.push(await collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 1));
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    const fallback = await tryGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback');
-    if (fallback) return fallback;
+    modelInsights.push(await collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 2));
   } else {
-    chain.push({
-      provider: 'gemini-fallback',
-      model: GEMINI_FALLBACK_MODEL || '(not configured)',
-      status: 'skipped',
-      message: 'GEMINI_FALLBACK_MODEL is not configured.',
-    });
+    const model = GEMINI_FALLBACK_MODEL || '(not configured)';
+    const message = 'GEMINI_FALLBACK_MODEL is not configured.';
+    chain.push({ provider: 'gemini-fallback', model, status: 'skipped', message });
+    modelInsights.push(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 2 }));
   }
 
-  const groq = await tryGroq(prompt, chain);
-  if (groq) return groq;
+  modelInsights.push(await collectGroq(prompt, chain, 3));
+  modelInsights.push(await collectCerebras(prompt, chain, 4));
 
-  const cerebras = await tryCerebras(prompt, chain);
-  if (cerebras) return cerebras;
+  const selected = modelInsights
+    .filter((item) => item.status === 'success' && item.text)
+    .sort((a, b) => a.priority - b.priority)[0];
+
+  if (selected) {
+    const selectedInsights = modelInsights.map((item) => ({ ...item, selected: item.id === selected.id }));
+    return {
+      text: selected.text || '',
+      isAiGenerated: true,
+      providerUsed: selected.provider,
+      modelUsed: selected.model,
+      fallbackChain: chain,
+      modelInsights: selectedInsights,
+      errorSummary: null,
+    };
+  }
 
   const failedMessages = chain
     .filter((item) => item.status === 'failed')
@@ -266,12 +291,21 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     .join(' | ');
 
   chain.push({ provider: 'rules', model: 'mtn-rule-based', status: 'success' });
-  return {
+  const ruleInsight = attemptToInsight({
+    provider: 'rules',
+    label: 'rules',
+    model: 'mtn-rule-based',
+    status: 'success',
     text: ruleBasedInsight(input),
+    priority: 99,
+  });
+  return {
+    text: ruleInsight.text || '',
     isAiGenerated: false,
     providerUsed: 'rules',
     modelUsed: 'mtn-rule-based',
     fallbackChain: chain,
+    modelInsights: [...modelInsights, { ...ruleInsight, selected: true }],
     errorSummary: failedMessages || 'No LLM provider was configured.',
   };
 }

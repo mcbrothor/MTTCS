@@ -314,6 +314,19 @@ export interface AiFallbackAttempt {
   message?: string;
 }
 
+export interface AiModelInsight {
+  id: string;
+  provider: AiInsightProvider;
+  label: string;
+  model: string;
+  status: 'success' | 'failed' | 'skipped';
+  text?: string;
+  message?: string;
+  selected: boolean;
+  priority: number;
+  generatedAt: string;
+}
+
 export interface MasterFilterMetricDetail {
   value: number | string | null;
   threshold: number | string;
@@ -365,6 +378,7 @@ export interface MasterFilterResponse {
   aiProviderUsed?: AiInsightProvider;
   aiModelUsed?: string;
   aiFallbackChain?: AiFallbackAttempt[];
+  aiModelInsights?: AiModelInsight[];
   aiErrorSummary?: string | null;
 }
 
