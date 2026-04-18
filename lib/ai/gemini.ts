@@ -10,6 +10,7 @@ const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completio
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-2507';
 const CEREBRAS_CHAT_COMPLETIONS_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || 9000);
 
 export interface MarketAnalysisInput {
   marketState: string;
@@ -35,6 +36,15 @@ export interface MarketInsightResult {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = MODEL_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms.`)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 function compactMessage(value: unknown, max = 500) {
   const message = value instanceof Error ? value.message : String(value);
@@ -203,7 +213,7 @@ async function collectGemini(
   }
 
   try {
-    const text = await callGeminiModel(model, prompt);
+    const text = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`);
     chain.push({ provider: label, model, status: 'success' });
     return attemptToInsight({ provider: 'gemini', label, model, status: 'success', text, priority });
   } catch (error: unknown) {
@@ -221,7 +231,7 @@ async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority:
   }
 
   try {
-    const text = await callGroqModel(GROQ_MODEL, prompt);
+    const text = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
     return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', text, priority });
   } catch (error: unknown) {
@@ -239,7 +249,7 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
   }
 
   try {
-    const text = await callCerebrasModel(CEREBRAS_MODEL, prompt);
+    const text = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
     return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', text, priority });
   } catch (error: unknown) {
@@ -252,21 +262,24 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
   const chain: AiFallbackAttempt[] = [];
-  const modelInsights: AiModelInsight[] = [];
-
-  modelInsights.push(await collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 1));
+  const tasks: Promise<AiModelInsight>[] = [
+    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 1),
+    collectGroq(prompt, chain, 3),
+    collectCerebras(prompt, chain, 4),
+  ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    modelInsights.push(await collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 2));
+    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 2));
   } else {
     const model = GEMINI_FALLBACK_MODEL || '(not configured)';
     const message = 'GEMINI_FALLBACK_MODEL is not configured.';
     chain.push({ provider: 'gemini-fallback', model, status: 'skipped', message });
-    modelInsights.push(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 2 }));
+    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 2 })));
   }
 
-  modelInsights.push(await collectGroq(prompt, chain, 3));
-  modelInsights.push(await collectCerebras(prompt, chain, 4));
+  const modelInsights = (await Promise.all(tasks)).sort((a, b) => a.priority - b.priority);
+  const priorityByProvider = new Map(modelInsights.map((item) => [item.label, item.priority]));
+  chain.sort((a, b) => (priorityByProvider.get(a.provider) || 99) - (priorityByProvider.get(b.provider) || 99));
 
   const selected = modelInsights
     .filter((item) => item.status === 'success' && item.text)
