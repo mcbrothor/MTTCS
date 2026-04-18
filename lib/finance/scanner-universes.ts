@@ -206,22 +206,26 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
   let ranking: KoreaRankingItem[] = [];
 
   try {
-    ranking = (await getKisKospiMarketCapRanking(100)).map((item) => ({
-      ...item,
-      source: 'KIS KOSPI market-cap ranking',
-    }));
+    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 100);
   } catch (error) {
-    warnings.push(error instanceof Error ? `KIS market-cap ranking failed: ${error.message}` : 'KIS market-cap ranking failed.');
+    warnings.push(error instanceof Error ? `Naver Finance market-cap ranking failed: ${error.message}` : 'Naver Finance market-cap ranking failed.');
   }
 
   if (ranking.length < 100) {
-    const naverRanking = await fetchNaverKoreaMarketCapRanking('KOSPI', 100);
-    const byTicker = new Map(ranking.map((item) => [item.ticker, item]));
-    for (const item of naverRanking) {
-      if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, item);
+    try {
+      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item) => ({
+        ...item,
+        source: 'KIS KOSPI market-cap ranking fallback',
+      }));
+      const byTicker = new Map(ranking.map((item) => [item.ticker, item]));
+      for (const item of kisRanking) {
+        if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, item);
+      }
+      ranking = Array.from(byTicker.values());
+      warnings.push(`Naver returned ${byTicker.size} merged rows; KIS was used only to fill missing KOSPI market-cap rows.`);
+    } catch (error) {
+      warnings.push(error instanceof Error ? `KIS market-cap ranking fallback failed: ${error.message}` : 'KIS market-cap ranking fallback failed.');
     }
-    ranking = Array.from(byTicker.values());
-    warnings.push(`KIS returned ${ranking.length} rows before fallback merge; Naver Finance was used to complete the top-100 list.`);
   }
 
   const ranked = rankKoreaMarketCapItems(ranking, 100);
@@ -235,10 +239,10 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
     universe: 'KOSPI100',
     label: 'KOSPI 시가총액 상위 100',
     asOf: new Date().toISOString(),
-    source: items.some((item) => item.priceSource.includes('Naver'))
-      ? 'KIS KOSPI market-cap ranking + Naver Finance fallback'
-      : 'KIS KOSPI market-cap ranking',
-    delayNote: 'KOSPI 시가총액 순위와 현재가는 KIS/Naver 기준이며 지연될 수 있습니다.',
+    source: items.some((item) => item.priceSource.includes('KIS'))
+      ? 'Naver Finance KOSPI market-cap ranking + KIS fallback'
+      : 'Naver Finance KOSPI market-cap ranking',
+    delayNote: 'KOSPI 시가총액 순위와 현재가는 Naver Finance 기준이며 지연될 수 있습니다.',
     items,
     warnings,
   };

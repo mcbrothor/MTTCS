@@ -11,16 +11,19 @@ const masterFilterRows = [
 ];
 
 const scannerRows = [
-  ['Recommended', 'SEPA 통과 + 강한 VCP 또는 VCP 형성 + 피벗/거래량 신호가 동반된 후보입니다.'],
-  ['Partial', 'SEPA 미충족이 2개 이하이거나, 일부 미달에도 VCP 형성/거래량 신호/예외 모멘텀이 있어 비교 가치가 있는 후보입니다.'],
+  ['Recommended', 'SEPA 통과 + 표준 VCP 형성 + 거래량 Watch 이상, 또는 High Tight Flag 통과 + RS 90+ + RS Line 신고가/근접 + 거래량 Strong 후보입니다.'],
+  ['Partial', 'SEPA 미충족이 2개 이하이면서 HTF/거래량 소화가 있거나, RS 90+와 테니스 공 액션 2회 이상으로 예외 검토 가치가 있는 후보입니다.'],
   ['Low Priority', '조건 미달이 많아 우선순위는 낮지만 사용자가 수동으로 콘테스트에 보낼 수 있습니다.'],
   ['Error', '외부 API 오류, 심볼 오류, 데이터 부족 등으로 분석이 완료되지 않은 상태입니다.'],
   ['거래량 Strong', '거래량 건조화 65점 이상, 포켓 피벗 60점 이상, 또는 돌파 거래량 confirmed입니다.'],
   ['거래량 Watch', '거래량 건조화 50점 이상, 포켓 피벗 40점 이상, 또는 돌파 거래량 pending입니다.'],
+  ['RS Proxy', '동일 스캔 유니버스 안에서 3/6/9/12개월 가중 모멘텀을 순위화해 1~99 점수로 환산합니다. 공식 IBD RS가 들어오면 외부 RS를 우선합니다.'],
+  ['Base Type', '일반 추세 종목은 표준 VCP, 8주 100% 이상 급등 또는 50일선 이격 20% 이상인 종목은 High Tight Flag/얕은 베이스를 별도 태깅합니다.'],
+  ['테니스 공 액션', '최근 60거래일 중 벤치마크가 1% 이상 하락한 날에 종목이 상승 마감하거나 덜 하락한 횟수입니다.'],
 ];
 
 const contestRows = [
-  ['후보 전달', '스캐너에서 사용자가 직접 체크한 selectedTickers만 콘테스트 전달 저장소에 기록합니다. 전달 후보가 없을 때만 Recommended fallback을 사용합니다.'],
+  ['후보 전달', '스캐너에서 사용자가 직접 체크한 selectedTickers만 콘테스트 전달 저장소에 기록합니다. 콘테스트 화면도 전달 후보만 표시하며 자동 Recommended 선택은 사용하지 않습니다.'],
   ['분석 세션', '최대 10개 후보, 스캐너 스냅샷, 마스터 필터 상태, 기준가, 기준일, 데이터 출처를 DB에 저장합니다.'],
   ['외부 LLM', 'Gemini/GPT/Claude 등에 한국어 프롬프트를 복사하고, 결과는 JSON만 또는 전체 리포트 전문을 붙여넣을 수 있습니다.'],
   ['JSON 매핑', 'session_id, candidate_id, ticker, rank, scores, thesis, 기술/펀더멘털/실적/해자/시장/리스크/촉매/comment를 저장합니다.'],
@@ -64,7 +67,7 @@ export default function GuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 알고리즘 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          현재 MTN은 마스터 필터로 시장 환경을 읽고, 스캐너로 SEPA/VCP/거래량 후보를 정리한 뒤, 콘테스트에서 외부 LLM 비교와 성과 복기를 누적합니다.
+          현재 MTN은 마스터 필터로 시장 환경을 읽고, 스캐너로 SEPA/VCP/RS/거래량과 High Tight Flag 예외 패턴을 정리한 뒤, 콘테스트에서 사용자가 체크한 후보만 외부 LLM 비교와 성과 복기로 누적합니다.
         </p>
       </div>
 
@@ -76,7 +79,7 @@ export default function GuidePage() {
         <div className="mt-5 grid gap-3 md:grid-cols-5">
           {[
             ['1', '마스터 필터', '시장 국면과 리스크 확인'],
-            ['2', '스캐너', 'SEPA/VCP/거래량 후보 탐색'],
+            ['2', '스캐너', 'SEPA/VCP/RS/HTF 후보 탐색'],
             ['3', '콘테스트', '최대 10개 후보 비교 세션 생성'],
             ['4', 'LLM 결과 저장', 'JSON 추출 후 DB화'],
             ['5', '성과 복기', '1주/1개월 상대 성과 평가'],
@@ -119,7 +122,7 @@ export default function GuidePage() {
           <h2 className="text-xl font-bold text-white">스캐너 추천 등급</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          스캐너는 웹 표 모드를 기본으로 사용하며, 앱 카드 모드와 동일한 상세 팝업을 공유합니다. KOSPI100은 KOSPI 전체 시가총액 상위 100개 기준입니다.
+          스캐너는 웹 표 모드를 기본으로 사용하며, 앱 카드 모드와 동일한 상세 팝업을 공유합니다. KOSPI100은 KIS 샘플/오류 순위에 흔들리지 않도록 Naver Finance KOSPI 시가총액 상위 100개를 우선 기준으로 사용합니다.
         </p>
         <InfoTable rows={scannerRows} />
       </Card>

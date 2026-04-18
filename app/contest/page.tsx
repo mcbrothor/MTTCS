@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { extractLlmSessionId } from '@/lib/contest';
-import { isAutoSelectedTier, isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
+import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   ApiSuccess,
   BeautyContestSession,
@@ -22,7 +22,7 @@ import type {
   ScannerUniverseResponse,
 } from '@/types';
 
-const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v2:';
+const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI100', 'KOSDAQ100'];
@@ -264,12 +264,7 @@ export default function ContestPage() {
       return;
     }
     setTransferInfo(null);
-
-    const defaultPool = sortScannerPool(next.results)
-      .filter((item) => isAutoSelectedTier(item.recommendationTier))
-      .slice(0, 10)
-      .map((item) => item.ticker);
-    setSelected(defaultPool);
+    setSelected([]);
   }, []);
 
   const loadSessions = useCallback(async (preferredSessionId?: string | null) => {
@@ -297,6 +292,11 @@ export default function ContestPage() {
 
   const rankedResults = useMemo(() => sortScannerPool(snapshot?.results || []), [snapshot]);
   const candidatePool = useMemo(() => rankedResults.filter((item) => isContestPoolTier(item.recommendationTier)), [rankedResults]);
+  const visibleSelectionRows = useMemo(() => {
+    if (!transferInfo || transferInfo.tickers.length === 0) return [];
+    const transferred = new Set(transferInfo.tickers);
+    return rankedResults.filter((item) => transferred.has(item.ticker));
+  }, [rankedResults, transferInfo]);
 
   const selectedCandidates = useMemo(() => {
     const byTicker = new Map(rankedResults.map((item) => [item.ticker, item]));
@@ -567,12 +567,12 @@ export default function ContestPage() {
                 </span>
               )}
               <span>스냅샷 {new Date(snapshot.savedAt).toLocaleString('ko-KR')}</span>
-              <span>후보 풀 {candidatePool.length}</span>
+              <span>스캐너 풀 {candidatePool.length}</span>
               <span>선택 {selected.length}/10</span>
               {marketContext && <span>마스터 필터 {marketContext.state} · P3 {marketContext.metrics.p3Score ?? '-'}/100</span>}
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {rankedResults.slice(0, 40).map((item) => {
+              {visibleSelectionRows.map((item) => {
                 const checked = selected.includes(item.ticker);
                 return (
                   <button
@@ -602,6 +602,11 @@ export default function ContestPage() {
                 );
               })}
             </div>
+            {visibleSelectionRows.length === 0 && (
+              <div className="mt-5 rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400">
+                스캐너에서 후보로 체크한 종목만 이 화면에 표시됩니다. 스캐너에서 후보를 선택한 뒤 콘테스트로 이동해 주세요.
+              </div>
+            )}
           </>
         )}
       </section>
@@ -884,4 +889,3 @@ export default function ContestPage() {
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -31,7 +31,7 @@ const RISK_PERCENT_FOR_SCAN = '1';
 const SCAN_CONCURRENCY = 4;
 const KOSPI_SCAN_CONCURRENCY = 2;
 const KOSDAQ_SCAN_CONCURRENCY = 2;
-const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v2:';
+const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
@@ -108,7 +108,6 @@ const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'volumeDryUp', label: '거래량 건조화' },
   { key: 'breakoutVolume', label: '돌파 거래량' },
   { key: 'rs90', label: 'RS 90+' },
-  { key: 'error', label: '오류' },
 ];
 
 const SORTS: { key: SortKey; label: string }[] = [
@@ -669,78 +668,83 @@ export default function ScannerPage() {
 
   const renderTable = () => (
     <div className="overflow-hidden rounded-lg border border-slate-800">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-800 text-sm">
-          <thead className="bg-slate-950 text-xs uppercase tracking-wide text-slate-500">
-            <tr>
-              <th className="px-3 py-3 text-left">순위</th>
-              <th className="px-3 py-3 text-left">종목</th>
-              <th className="px-3 py-3 text-right">시총</th>
-              <th className="px-3 py-3 text-right">현재가</th>
-              <th className="px-3 py-3 text-left">SEPA</th>
-              <th className="px-3 py-3 text-left">추천</th>
-              <th className="px-3 py-3 text-right">VCP</th>
-                            <th className="px-3 py-3 text-right">RS</th>`r`n              <th className="px-3 py-3 text-left">Base</th>`r`n              <th className="px-3 py-3 text-left">거래량 신호</th>
-              <th className="px-3 py-3 text-right">피벗</th>
-              <th className="px-3 py-3 text-left">API</th>
-              <th className="px-3 py-3 text-left">상태</th>
-              <th className="px-3 py-3 text-center">후보</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800 bg-slate-950/40">
-            {filteredResults.map((result) => (
+      <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
+        <colgroup>
+          <col className="w-[4%]" />
+          <col className="w-[18%]" />
+          <col className="w-[9%]" />
+          <col className="w-[9%]" />
+          <col className="w-[8%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
+          <col className="w-[7%]" />
+          <col className="w-[6%]" />
+          <col className="w-[5%]" />
+        </colgroup>
+        <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-2 py-3 text-left">#</th>
+            <th className="px-2 py-3 text-left">종목</th>
+            <th className="px-2 py-3 text-right">시총</th>
+            <th className="px-2 py-3 text-right">현재가</th>
+            <th className="px-2 py-3 text-left">SEPA</th>
+            <th className="px-2 py-3 text-left">추천 등급</th>
+            <th className="px-2 py-3 text-left">상대강도/패턴</th>
+            <th className="px-2 py-3 text-left">거래량</th>
+            <th className="px-2 py-3 text-right">피벗</th>
+            <th className="px-2 py-3 text-left">데이터</th>
+            <th className="px-2 py-3 text-center">후보</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+          {filteredResults.map((result) => {
+            const volumeTier = getVolumeSignalTier(result);
+            return (
               <tr
                 key={result.ticker}
                 onClick={() => result.status === 'done' && setSelectedResult(result)}
                 className={`cursor-pointer transition-colors hover:bg-slate-900 ${selectedTickers.has(result.ticker) ? 'bg-emerald-500/5' : ''}`}
               >
-                <td className="px-3 py-3 font-mono text-slate-400">{result.rank}</td>
-                <td className="px-3 py-3">
-                  <p className="font-mono font-bold text-white">{result.ticker}</p>
-                  <p className="max-w-[180px] truncate text-xs text-slate-500">{result.name}</p>
+                <td className="px-2 py-3 font-mono text-slate-400">{result.rank}</td>
+                <td className="px-2 py-3">
+                  <p className="truncate font-mono font-bold text-white">{result.ticker}</p>
+                  <p className="truncate text-[11px] text-slate-500">{result.name}</p>
                 </td>
-                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency)}</td>
-                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency)}</td>
-                <td className="px-3 py-3">
-                  <span className="text-xs text-slate-300">{sepaLabel(result)}</span>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency)}</td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency)}</td>
+                <td className="px-2 py-3">
+                  <span className="text-slate-300">{sepaLabel(result)}</span>
                   {result.sepaMissingCount !== null && <p className="text-[10px] text-slate-500">미충족 {result.sepaMissingCount}</p>}
                 </td>
-                <td className="px-3 py-3">{tierBadge(result)}</td>
-                <td className="px-3 py-3 text-right font-mono text-slate-300">
-                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
+                <td className="px-2 py-3">{tierBadge(result)}</td>
+                <td className="px-2 py-3">
+                  <p className="font-mono text-slate-200">RS {formatRs(result)}</p>
+                  <p className="mt-1 truncate text-[10px] text-slate-500">{baseTypeLabel(result)} · VCP {result.vcpScore ?? '-'}</p>
                 </td>
-                                <td className="px-3 py-3 text-right font-mono text-slate-300">{formatRs(result)}</td>`r`n                <td className="px-3 py-3 text-xs text-slate-300">{baseTypeLabel(result)}</td>`r`n                <td className="px-3 py-3">
-                  <span className={`inline-flex rounded-lg border px-2 py-1 text-xs font-bold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
-                    {getVolumeSignalTier(result)}
+                <td className="px-2 py-3">
+                  <span className={`inline-flex rounded-lg border px-2 py-1 text-[11px] font-bold ${volumeSignalClass(volumeTier)}`}>
+                    {volumeTier}
                   </span>
-                  <p className="mt-1 whitespace-nowrap text-[10px] text-slate-500">{volumeSignalDetail(result)}</p>
+                  <p className="mt-1 truncate text-[10px] text-slate-500">{volumeSignalDetail(result)}</p>
                 </td>
-                <td className="px-3 py-3 text-right font-mono text-slate-300">
+                <td className="px-2 py-3 text-right font-mono text-slate-300">
                   {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
                 </td>
-                <td className="max-w-[170px] px-3 py-3 text-xs text-slate-400">
-                  <span className="line-clamp-2">{result.priceSource || result.providerAttempts?.at(-1)?.provider || '-'}</span>
+                <td className="px-2 py-3 text-[10px] text-slate-400">
+                  <p className="truncate">{result.priceSource || result.providerAttempts?.at(-1)?.provider || '-'}</p>
+                  <p className={result.status === 'error' ? 'truncate text-rose-300' : result.status === 'running' ? 'text-emerald-300' : 'text-slate-500'}>
+                    {result.status === 'error' ? result.errorMessage || '오류' : result.status === 'running' ? '분석 중' : result.status === 'done' ? '완료' : '대기'}
+                  </p>
                 </td>
-                <td className="px-3 py-3 text-xs">
-                  {result.status === 'error' ? (
-                    <span className="text-rose-300">{result.errorMessage || '오류'}</span>
-                  ) : result.status === 'running' ? (
-                    <span className="text-emerald-300">분석 중</span>
-                  ) : result.status === 'done' ? (
-                    <span className="text-slate-300">완료</span>
-                  ) : (
-                    <span className="text-slate-500">대기</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-center">{selectionColumn(result)}</td>
+                <td className="px-2 py-3 text-center">{selectionColumn(result)}</td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
-
   const renderCards = () => (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {filteredResults.map((result) => (
@@ -781,7 +785,11 @@ export default function ScannerPage() {
                 <span className="text-slate-500">VCP</span>
                 <span className="text-slate-300">{result.vcpGrade} ({result.vcpScore ?? '-'})</span>
               </div>
-                            <div className="flex justify-between text-[10px]">`r`n                <span className="text-slate-500">RS / Base</span>`r`n                <span className="text-slate-300">{formatRs(result)} / {baseTypeLabel(result)}</span>`r`n              </div>`r`n              <div className="flex items-center justify-between gap-3 text-[10px]">
+                            <div className="flex justify-between text-[10px]">
+                <span className="text-slate-500">RS / Base</span>
+                <span className="text-slate-300">{formatRs(result)} / {baseTypeLabel(result)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[10px]">
                 <span className="text-slate-500">거래량</span>
                 <span className={`rounded-lg border px-2 py-0.5 font-semibold ${volumeSignalClass(getVolumeSignalTier(result))}`}>
                   {getVolumeSignalTier(result)}
@@ -976,8 +984,3 @@ export default function ScannerPage() {
     </div>
   );
 }
-
-
-
-
-
