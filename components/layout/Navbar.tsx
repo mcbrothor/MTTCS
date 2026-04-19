@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Activity, BarChart3, BookOpen, Compass, History, LayoutDashboard, PlusCircle, ScanSearch, Shield, Star, Trophy } from 'lucide-react';
+import { Activity, BarChart3, BookOpen, Compass, Globe, History, LayoutDashboard, PlusCircle, ScanSearch, Shield, Star, Trophy } from 'lucide-react';
 
 const navItems = [
   { href: '/', icon: <LayoutDashboard className="h-4 w-4" />, label: '대시보드' },
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/guide', icon: <BookOpen className="h-4 w-4 text-amber-500" />, label: '알고리즘' },
   { href: '/history', icon: <History className="h-4 w-4" />, label: '매매 복기' },
   { href: '/macro', icon: <BarChart3 className="h-4 w-4 text-purple-400" />, label: '매크로' },
+  { href: '/links', icon: <Globe className="h-4 w-4 text-sky-400" />, label: '링크 허브' },
 ];
 
 export default function Navbar() {

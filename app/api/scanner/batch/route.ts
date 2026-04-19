@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         url.searchParams.set('exchange', item.exchange);
         url.searchParams.set('totalEquity', String(totalEquity));
         url.searchParams.set('riskPercent', String(riskPercent));
-        url.searchParams.set('includeFundamentals', 'false');
+        url.searchParams.set('includeFundamentals', 'true');
 
         // Next.js API 핸들러 직접 호출 (HTTP 오버헤드 없음)
         const mockReq = new Request(url);

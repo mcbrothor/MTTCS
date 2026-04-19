@@ -135,7 +135,7 @@ export function evaluateCanslim(
       return fail('M_REDUCED', '시장 REDUCED + RS 부족',
         `REDUCED 상태에서는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 종목만 스캔 가능 (현재: ${rs})`);
     }
-    warnings.push('M_REDUCED_ACTIVE');
+    warnings.push('시장 하락 경고 구간: RS 90+ 종목 위주로 보수적인 접근이 필요합니다.');
   }
 
   // ══════════════════════════════════════════════════════════
@@ -157,7 +157,7 @@ export function evaluateCanslim(
   } else {
     addDetail('C', '분기 EPS 성장률', 'INFO', null, `≥ ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`,
       '데이터가 확보되지 않아 판정할 수 없습니다.');
-    warnings.push('C_EPS_NO_DATA');
+    warnings.push('분기 EPS 데이터가 부족하여 일부 판정이 제한될 수 있습니다.');
   }
 
   // 매출 성장률 검증
@@ -175,7 +175,7 @@ export function evaluateCanslim(
   } else {
     addDetail('C', '분기 매출 성장률', 'INFO', null, `≥ ${CANSLIM_CRITERIA.MIN_CURRENT_SALES_GROWTH}%`,
       '데이터가 확보되지 않아 판정할 수 없습니다.');
-    warnings.push('C_SALES_NO_DATA');
+    warnings.push('분기 매출 데이터가 부족하여 명확한 성장성 판정이 어렵습니다.');
   }
 
   // 연속 성장 분기 검증 (v2.0 추가)
@@ -197,14 +197,14 @@ export function evaluateCanslim(
     addDetail('C', '3분기 연속 성장', 'INFO',
       `${validQtrs.length}개 분기 확보`, `3개 분기 필요`,
       '충분한 분기 데이터가 없어 연속 성장 검증을 스킵합니다.');
-    warnings.push('C_CONSECUTIVE_PARTIAL');
+    warnings.push('최근 3분기 연속 성장을 검증하기 위한 데이터가 충분하지 않습니다.');
   }
 
   // EPS 가속화 검증 (v2.0 추가 — 탈락이 아닌 confidence 감점)
   if (stock.currentQtrEpsGrowth !== null && stock.priorQtrEpsGrowth !== null) {
     if (stock.currentQtrEpsGrowth < stock.priorQtrEpsGrowth) {
       confidence = 'MEDIUM';
-      warnings.push('EPS_DECELERATING');
+      warnings.push('성장률 둔화 감지: 현재 분기 성장률이 직전 분기보다 낮습니다.');
       addDetail('C', 'EPS 가속화', 'WARNING',
         `${stock.currentQtrEpsGrowth}% vs 직전 ${stock.priorQtrEpsGrowth}%`,
         '현재 분기 ≥ 직전 분기',
@@ -244,7 +244,7 @@ export function evaluateCanslim(
   } else {
     addDetail('A', 'ROE', 'INFO', null, `≥ ${CANSLIM_CRITERIA.MIN_ROE}%`,
       'ROE 데이터가 확보되지 않았습니다.');
-    warnings.push('A_ROE_NO_DATA');
+    warnings.push('ROE(자기자본이익률) 데이터가 확보되지 않았습니다.');
   }
 
   // 연도별 독립 검증 (v2.0 변경)
@@ -266,7 +266,7 @@ export function evaluateCanslim(
     addDetail('A', '연도별 EPS 성장', 'INFO',
       `${validYears.length}개 연도 확보`, '3개 연도 필요',
       '충분한 연간 데이터가 없어 연도별 독립 검증을 스킵합니다.');
-    warnings.push('A_ANNUAL_PARTIAL');
+    warnings.push('연간 EPS 데이터가 부족하여 연도별 독립 검증을 스킵했습니다.');
   }
 
   // ══════════════════════════════════════════════════════════
@@ -284,14 +284,14 @@ export function evaluateCanslim(
   }
 
   if (nStatus === 'TOO_LATE') {
-    warnings.push('N_EXTENDED');
+    warnings.push('주가가 피벗 대비 +10% 이상 이격되어 추격 매수 위험이 높습니다.');
     confidence = 'LOW';
     addDetail('N', '피벗 대비 위치', 'WARNING',
       `피벗 대비 ${stock.pivotPoint ? round((stock.currentPrice / stock.pivotPoint - 1) * 100) : '?'}% 초과`,
       '피벗 +10% 이내',
       '추격 매수 금지 구간입니다.');
   } else if (nStatus === 'EXTENDED') {
-    warnings.push('N_WATCH');
+    warnings.push('주가가 피벗 대비 +5%~10% 구간에 있어 추격 매수에 주의해야 합니다.');
     addDetail('N', '피벗 대비 위치', 'WARNING',
       `피벗 대비 ${stock.pivotPoint ? round((stock.currentPrice / stock.pivotPoint - 1) * 100) : '?'}% 초과`,
       '피벗 +5% 이내',
@@ -332,7 +332,7 @@ export function evaluateCanslim(
   // Float 크기 판정 (감점 요소)
   if (stock.floatShares !== null) {
     if (stock.floatShares > CANSLIM_CRITERIA.LARGE_FLOAT_THRESHOLD) {
-      warnings.push('S_LARGE_FLOAT');
+      warnings.push('유통 주식수가 많아 주가 탄력이 다소 무거울 수 있는 대형주입니다.');
       if (confidence === 'HIGH') confidence = 'MEDIUM';
       addDetail('S', '유통 주식 수', 'WARNING',
         `${(stock.floatShares / 1_000_000).toFixed(0)}M주`, `≤ ${CANSLIM_CRITERIA.LARGE_FLOAT_THRESHOLD / 1_000_000}M주`,
@@ -346,7 +346,7 @@ export function evaluateCanslim(
 
   // 자사주 매입 (긍정 신호)
   if (stock.sharesBuyback === true) {
-    warnings.push('S_BUYBACK_POSITIVE');
+    warnings.push('자사주 매입 이력이 포착되어 주식 공급 감소 효과가 기대됩니다.');
     addDetail('S', '자사주 매입', 'PASS', '매입 확인',
       '공급 축소 신호', '자사주 매입으로 유통 주식 수가 줄어들고 있습니다.');
   }
@@ -365,7 +365,7 @@ export function evaluateCanslim(
     }
 
     if (stock.rsRating >= CANSLIM_CRITERIA.PREFERRED_RS_RATING) {
-      warnings.push('L_RS_ELITE');
+      warnings.push('상대강도가 매우 우수한 주도주형(Elite) RS 등급입니다.');
       addDetail('L', '상대강도 RS', 'PASS',
         stock.rsRating, `≥ ${CANSLIM_CRITERIA.PREFERRED_RS_RATING} (엘리트)`,
         'RS 90+ 엘리트 종목입니다.');
@@ -377,7 +377,7 @@ export function evaluateCanslim(
   } else {
     addDetail('L', '상대강도 RS', 'INFO', null, `≥ ${CANSLIM_CRITERIA.MIN_RS_RATING}`,
       'RS 데이터가 확보되지 않았습니다.');
-    warnings.push('L_RS_NO_DATA');
+    warnings.push('시장 대비 상대강도(RS) 데이터가 부족하여 판정이 유예되었습니다.');
   }
 
   // ══════════════════════════════════════════════════════════
@@ -404,19 +404,19 @@ export function evaluateCanslim(
   } else {
     addDetail('I', '보유 기관 수', 'INFO', null, `≥ ${CANSLIM_CRITERIA.MIN_INSTITUTIONAL_HOLDERS}개`,
       '기관 보유 데이터가 확보되지 않았습니다.');
-    warnings.push('I_NO_DATA');
+    warnings.push('기관 보유 현황 데이터가 확보되지 않아 수급 분석이 불완전할 수 있습니다.');
   }
 
   // 기관 과밀집 경고 (v2.0 추가)
   if (stock.institutionalOwnershipPct !== null) {
     if (stock.institutionalOwnershipPct > CANSLIM_CRITERIA.MAX_INSTITUTIONAL_OWNERSHIP_PCT) {
-      warnings.push('I_OVER_OWNED');
+      warnings.push('기관 보유 비중 과다: 잠재적인 대량 매도 물량 출회 가능성에 유의하십시오.');
       if (confidence === 'HIGH') confidence = 'MEDIUM';
       addDetail('I', '기관 보유 비율', 'WARNING',
         `${stock.institutionalOwnershipPct}%`, `≤ ${CANSLIM_CRITERIA.MAX_INSTITUTIONAL_OWNERSHIP_PCT}%`,
         '기관 과밀집 — 매도 압력 위험이 있습니다.');
     } else if (stock.institutionalOwnershipPct < CANSLIM_CRITERIA.MIN_INSTITUTIONAL_OWNERSHIP_PCT) {
-      warnings.push('I_LOW_INTEREST');
+      warnings.push('기관 관심 부족: 아직 메이저 기관들의 수급이 충분히 유입되지 않은 상태입니다.');
       addDetail('I', '기관 보유 비율', 'WARNING',
         `${stock.institutionalOwnershipPct}%`, `≥ ${CANSLIM_CRITERIA.MIN_INSTITUTIONAL_OWNERSHIP_PCT}%`,
         '기관 관심이 부족합니다.');

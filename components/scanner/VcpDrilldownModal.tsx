@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ArrowUpRight, CalendarDays, ExternalLink, Info, Star, TrendingUp, Waves, X, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarDays, ExternalLink, Info, Star, TrendingUp, Waves, X, CheckCircle2, XCircle, BarChart3, AlertTriangle } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
 import type { ScannerResult } from '@/types';
@@ -131,6 +131,7 @@ export default function VcpDrilldownModal({
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           className="relative w-full max-w-3xl overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl"
         >
+          {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 p-6">
             <div>
               <div className="flex flex-wrap items-center gap-3">
@@ -154,6 +155,7 @@ export default function VcpDrilldownModal({
           </div>
 
           <div className="max-h-[70vh] space-y-8 overflow-y-auto p-6">
+            {/* Quick Stats */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <StatItem label="VCP 점수" value={`${result.vcpScore ?? 0}`} highlight />
               <StatItem label="피벗 이격" value={pct(result.distanceToPivotPct)} />
@@ -198,18 +200,54 @@ export default function VcpDrilldownModal({
                 <span>Fundamental Analysis (DART/EDGAR Integrated)</span>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <FundamentalCard label="분기 EPS 성장률" value={pct(result.fundamentals?.epsGrowthPct)} status={result.fundamentals?.epsGrowthPct && result.fundamentals.epsGrowthPct >= 25 ? 'strong' : 'neutral'} />
-                <FundamentalCard label="분기 매출 성장률" value={pct(result.fundamentals?.revenueGrowthPct)} status={result.fundamentals?.revenueGrowthPct && result.fundamentals.revenueGrowthPct >= 20 ? 'strong' : 'neutral'} />
-                <FundamentalCard label="자기자본이익률 (ROE)" value={pct(result.fundamentals?.roePct)} status={result.fundamentals?.roePct && result.fundamentals.roePct >= 17 ? 'strong' : 'neutral'} />
-                <FundamentalCard label="부채비율" value={pct(result.fundamentals?.debtToEquityPct)} status="neutral" />
-                <FundamentalCard label="기관 보유 비율" value={pct(result.fundamentals?.institutionalOwnershipPct)} status="neutral" />
-                <FundamentalCard label="업종/섹터" value={result.fundamentals?.sector || '-'} status="neutral" />
+                {result.fundamentals ? (
+                  <>
+                    <FundamentalCard label="분기 EPS 성장률" value={pct(result.fundamentals.epsGrowthPct)} status={result.fundamentals.epsGrowthPct && result.fundamentals.epsGrowthPct >= 25 ? 'strong' : 'neutral'} />
+                    <FundamentalCard label="분기 매출 성장률" value={pct(result.fundamentals.revenueGrowthPct)} status={result.fundamentals.revenueGrowthPct && result.fundamentals.revenueGrowthPct >= 20 ? 'strong' : 'neutral'} />
+                    <FundamentalCard label="자기자본이익률 (ROE)" value={pct(result.fundamentals.roePct)} status={result.fundamentals.roePct && result.fundamentals.roePct >= 17 ? 'strong' : 'neutral'} />
+                    <FundamentalCard label="부채비율" value={pct(result.fundamentals.debtToEquityPct)} status="neutral" />
+                    <FundamentalCard 
+                      label="기관 보유" 
+                      value={result.fundamentals.institutionalOwnershipPct != null ? `${result.fundamentals.institutionalOwnershipPct.toFixed(1)}%` : 'N/A'} 
+                      status={(result.fundamentals.institutionalOwnershipPct ?? 0) > 30 ? 'strong' : 'neutral'} 
+                    />
+                    <FundamentalCard label="업종/섹터" value={result.fundamentals.sector || '-'} status="neutral" />
+                  </>
+                ) : (
+                  <div className="col-span-full rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-center">
+                    <p className="text-xs text-amber-200/70">
+                      펀더멘털 정보를 가져오지 못했습니다. (DART/EDGAR 연동 확인 필요)
+                    </p>
+                  </div>
+                )}
               </div>
               {result.fundamentals?.source && (
                 <p className="mt-3 text-[10px] text-slate-500 italic text-right">Source: {result.fundamentals.source}</p>
               )}
             </section>
 
+            {/* 데이터 품질 경고 (v2.1 추가) */}
+            {(result.dataWarnings?.length > 0 || (result as any).rsDataQuality === 'PARTIAL') && (
+              <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs font-bold text-amber-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span>데이터 품질 경고 및 참고</span>
+                </div>
+                <ul className="space-y-1.5 text-xs text-amber-200/60">
+                  {(result as any).rsDataQuality === 'PARTIAL' && (
+                    <li>• 상장 1년 미만 또는 거래 이력 부족으로 RS(상대강도)가 부정확할 수 있습니다.</li>
+                  )}
+                  {result.dataWarnings?.map((warning: string, i: number) => (
+                    <li key={i}>• {warning}</li>
+                  ))}
+                  {!result.fundamentals && (
+                    <li>• 재무 데이터가 누락되었습니다. 실적 발표 시즌에는 데이터 지연이 발생할 수 있습니다.</li>
+                  )}
+                </ul>
+              </section>
+            )}
+
+            {/* Key Technical Information */}
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <InfoTile label="RS 순위" value={result.rsRank && result.rsUniverseSize ? `${result.rsRank}/${result.rsUniverseSize}` : '-'} />
               <InfoTile label="가중 모멘텀" value={pct(result.weightedMomentumScore)} />
@@ -221,6 +259,7 @@ export default function VcpDrilldownModal({
               <InfoTile label="모멘텀 분기" value={translateMomentumBranch(result.momentumBranch)} />
             </section>
 
+            {/* High Tight Flag details if applicable */}
             {result.highTightFlag && (
               <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
                 <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-300">
@@ -241,6 +280,7 @@ export default function VcpDrilldownModal({
               </section>
             )}
 
+            {/* VCP Technical Metrics */}
             <section className="space-y-4">
               <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500">기술 점수</h4>
               <div className="grid gap-5">
@@ -266,6 +306,7 @@ export default function VcpDrilldownModal({
               </div>
             </section>
 
+            {/* Analysis Logs */}
             <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
               <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-300">
                 <Activity className="h-4 w-4 text-emerald-400" />
@@ -281,6 +322,7 @@ export default function VcpDrilldownModal({
               </ul>
             </section>
 
+            {/* Metadata Section */}
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-500">
@@ -299,6 +341,7 @@ export default function VcpDrilldownModal({
                 <div className="space-y-1 text-xs text-slate-500">
                   <p>분석 시각: {result.analyzedAt ? new Date(result.analyzedAt).toLocaleString('ko-KR') : '-'}</p>
                   <p>가격 출처: {result.priceSource || '-'}</p>
+                  <p>RS 품질: {(result as any).rsDataQuality === 'FULL' ? '정상 (1년+)' : (result as any).rsDataQuality === 'PARTIAL' ? '부분 (신규주)' : '확인불가'}</p>
                   <p className="flex items-center gap-1">
                     <Info className="h-3 w-3" />
                     RS는 공식 IBD/MarketSmith 등급이 아니라 MTN 내부 Proxy입니다.
@@ -308,6 +351,7 @@ export default function VcpDrilldownModal({
             </section>
           </div>
 
+          {/* Action Footer */}
           <div className="flex flex-col gap-3 border-t border-slate-800 bg-slate-900/80 p-6 sm:flex-row">
             <Link
               href={`/plan?ticker=${encodeURIComponent(result.ticker)}&exchange=${encodeURIComponent(result.exchange)}`}

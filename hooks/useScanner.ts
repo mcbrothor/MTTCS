@@ -292,6 +292,7 @@ function initialResult(item: ScannerConstituent): ScannerResult {
     return12m: null,
     analyzedAt: null,
     errorMessage: null,
+    dataWarnings: [],
   };
 }
 
@@ -327,6 +328,7 @@ function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analysis: Ma
     ...item,
     recommendationTier: 'Low Priority',
     recommendationReason: '',
+    dataWarnings: analysis.warnings || [],
     sepaMissingCount: null,
     exceptionSignals: [],
     currentPrice,

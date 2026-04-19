@@ -340,6 +340,17 @@ export interface ScannerConstituent {
   priceSource: string;
 }
 
+export interface InvestmentResource {
+  id: string;
+  user_id: string;
+  title: string;
+  url: string;
+  category: string;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ScannerUniverseResponse {
   universe: ScannerUniverse;
   label: string;
@@ -403,6 +414,7 @@ export interface ScannerResult extends ScannerConstituent {
   return12m?: number | null;
   analyzedAt: string | null;
   errorMessage: string | null;
+  dataWarnings: string[];
 }
 
 export type WatchlistPriority = 0 | 1 | 2;

@@ -40,31 +40,42 @@ if (!isNextProductionBuild) {
 const authOpts = { persistSession: false, autoRefreshToken: false } as const;
 
 /**
- * supabaseAdmin: Service Role Key 기반 (RLS 우회).
- * Service Role Key가 없으면 null.
+ * [수정됨] supabaseAdmin: Service Role Key 기반 (RLS 우회 - 서버/배치 전용).
+ * 절대 클라이언트에 노출해서는 안 되며, 환경변수가 없으면 강제로 에러를 발생시킵니다.
  */
-export const supabaseAdmin: SupabaseClient | null =
-  url && serviceRoleKey
-    ? createClient(url, serviceRoleKey, { auth: authOpts })
-    : null;
+export const supabaseAdmin: SupabaseClient = createClient(
+  url || 'http://127.0.0.1:54321',
+  serviceRoleKey || 'MISSING_SERVICE_ROLE_KEY',
+  { auth: authOpts }
+);
 
 /**
- * supabaseServer: 서버 API Route에서 사용하는 기본 클라이언트.
+ * [수정됨] supabaseAnon: RLS가 적용되는 일반 서버 클라이언트.
+ * 사용자 컨텍스트를 유지해야 하거나 권한 우회가 필요 없을 때 사용합니다.
  *
- * 우선순위:
- * 1. Service Role Key가 있으면 → RLS 우회 (기존 동작과 동일)
- * 2. Service Role Key가 없으면 → Anon Key fallback (RLS 적용)
- *
- * [하위호환 유지]: 기존 코드 15곳에서 `supabaseServer`를 import하므로,
- * null이 되지 않도록 anon key fallback을 유지합니다.
- * 향후 각 호출부를 supabaseAdmin / supabaseAnon으로 개별 이관할 예정입니다.
  */
-const key = serviceRoleKey || anonKey;
-
-export const supabaseServer: SupabaseClient = createClient(
+export const supabaseAnon: SupabaseClient = createClient(
   url || 'http://127.0.0.1:54321',
-  key || 'local-build-placeholder-key',
+  anonKey || 'MISSING_ANON_KEY',
   { auth: authOpts }
+);
+
+/**
+ * [사용 중단 경고] 하위 호환성을 위해 남겨둠. 가급적 용도에 맞게 supabaseAdmin 또는 supabaseAnon을 사용하세요.
+ */
+export const supabaseServer: SupabaseClient = new Proxy(
+  serviceRoleKey ? supabaseAdmin : supabaseAnon,
+  {
+    get(target, prop) {
+      // Anti-Gravity를 위한 기술 부채 추적용 경고 로그
+      if (typeof prop === 'string' && prop !== 'then') {
+        console.warn(
+          `[MTN Tech Debt] supabaseServer 사용 감지됨. 향후 supabaseAnon 또는 getSupabaseAdmin()으로 교체하세요.`
+        );
+      }
+      return Reflect.get(target, prop);
+    }
+  }
 );
 
 /**
@@ -78,10 +89,9 @@ export const isServiceRoleActive = Boolean(serviceRoleKey);
  * 없으면 에러를 던져 "조용한 실패"를 방지합니다.
  */
 export function getSupabaseAdmin(): SupabaseClient {
-  if (!supabaseAdmin) {
+  if (!serviceRoleKey) {
     throw new Error(
-      '[MTN] Supabase Admin(Service Role) 클라이언트를 생성할 수 없습니다. ' +
-      'SUPABASE_SERVICE_ROLE_KEY 환경변수를 확인하세요.'
+      '[MTN] SUPABASE_SERVICE_ROLE_KEY가 누락되었습니다. 관리자 권한 작업을 수행할 수 없습니다.'
     );
   }
   return supabaseAdmin;

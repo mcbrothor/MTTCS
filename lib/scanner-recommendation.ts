@@ -26,7 +26,7 @@ export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSigna
   if (!hasAnyVolumeData) return 'Unknown';
 
   if (
-    scoreAtLeast(result.volumeDryUpScore, 65) ||
+    scoreAtLeast(result.volumeDryUpScore, 60) ||
     scoreAtLeast(result.pocketPivotScore, 60) ||
     result.breakoutVolumeStatus === 'confirmed'
   ) {
@@ -34,7 +34,7 @@ export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSigna
   }
 
   if (
-    scoreAtLeast(result.volumeDryUpScore, 50) ||
+    scoreAtLeast(result.volumeDryUpScore, 40) ||
     scoreAtLeast(result.pocketPivotScore, 40) ||
     result.breakoutVolumeStatus === 'pending'
   ) {
@@ -100,6 +100,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const volumeTier = getVolumeSignalTier(result);
   const volumeWatch = volumeTier === 'Strong' || volumeTier === 'Watch';
   const volumeStrong = volumeTier === 'Strong';
+  const rs85 = scoreAtLeast(result.rsRating, 85);
   const rs90 = scoreAtLeast(result.rsRating, 90);
   const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
@@ -126,10 +127,10 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
-  if (htfPassed && rs90 && rsLineHigh && volumeStrong) {
+  if (htfPassed && rs85 && rsLineHigh && volumeStrong) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'High Tight Flag passed with RS 90+, RS Line high/near high, and Strong volume evidence.',
+      recommendationReason: 'High Tight Flag passed with RS 85+, RS Line high/near high, and Strong volume evidence.',
       sepaMissingCount,
       exceptionSignals,
     };
@@ -139,6 +140,24 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     return {
       recommendationTier: 'Partial',
       recommendationReason: 'Some SEPA items are missing, but HTF base quality and volume digestion justify contest review.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  if (sepaMissingCount !== null && sepaMissingCount <= 2 && constructiveVcp && volumeWatch) {
+    return {
+      recommendationTier: 'Partial',
+      recommendationReason: 'Technically strong base (score 55+) with minor SEPA misses, justifying close watch.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  if (rs85 && constructiveVcp && volumeWatch) {
+    return {
+      recommendationTier: 'Partial',
+      recommendationReason: 'RS 85+ leader in constructive formation, justifying contest review.',
       sepaMissingCount,
       exceptionSignals,
     };

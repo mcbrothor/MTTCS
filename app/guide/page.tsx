@@ -11,12 +11,12 @@ const masterFilterRows = [
 ];
 
 const scannerRows = [
-  ['Recommended', 'SEPA 통과 + Standard VCP 형성/강세 + 거래량 Watch 이상, 또는 High Tight Flag 통과 + RS 90+ + RS Line 신고가/근접 + 거래량 Strong 후보입니다.'],
-  ['Partial', 'SEPA 미충족이 2개 이하이면서 HTF/거래량 소화가 있거나, RS 90+와 테니스 공 액션 2회 이상 등 예외 검토 가치가 있는 후보입니다.'],
+  ['Recommended', 'SEPA 통과 + Standard VCP 형성/강세 + 거래량 Watch 이상, 또는 High Tight Flag 통과 + RS 85+ + RS Line 신고가/근접 + 거래량 Strong 후보입니다.'],
+  ['Partial', 'SEPA 미충족 2개 이하이면서 HTF/건설적 VCP(55점+) 형성이 있거나, RS 85+ 주도주 및 테니스 공 액션 2회 이상 등 예외 검토 가치가 있는 후보입니다.'],
   ['Low Priority', '조건 미달 항목이 많아 시스템 우선순위는 낮지만, 사용자가 수동으로 콘테스트에 보낼 수 있습니다.'],
   ['Error', '외부 API 오류, 심볼 오류, 데이터 부족 등으로 분석이 완료되지 않은 상태입니다.'],
-  ['거래량 Strong', '거래량 건조화 65점 이상, 포켓 피벗 60점 이상, 또는 돌파 거래량 confirmed입니다.'],
-  ['거래량 Watch', '거래량 건조화 50점 이상, 포켓 피벗 40점 이상, 또는 돌파 거래량 pending입니다.'],
+  ['거래량 Strong', '거래량 건조화 60점 이상, 포켓 피벗 60점 이상, 또는 돌파 거래량 confirmed입니다.'],
+  ['거래량 Watch', '거래량 건조화 40점 이상, 포켓 피벗 40점 이상, 또는 돌파 거래량 pending입니다.'],
   ['Base Type', '일반 추세 후보는 Standard_VCP, 8주 100% 이상 급등 또는 50일선 이격 20% 이상 후보는 High_Tight_Flag를 별도 검사합니다.'],
   ['테니스 공 액션', '최근 60거래일 중 벤치마크가 1% 이상 하락한 날에 종목이 상승 마감했거나 덜 하락한 횟수입니다.'],
 ];
@@ -36,6 +36,7 @@ const theoryRows = [
   ['모멘텀 효과', 'Jegadeesh & Titman의 모멘텀 연구처럼 최근 강한 종목이 일정 기간 상대 우위를 이어가는 경향을 참고합니다.'],
   ['Mansfield 상대강도', 'Stan Weinstein식 시장 대비 상대성과 해석을 참고해 종목이 자기 벤치마크를 실제로 이기는지 확인합니다.'],
   ['거래량/수급', 'Wyckoff식 공급 소진 관점과 포켓 피벗/돌파 거래량 개념을 참고해 가격 상승의 질을 보조 판단합니다.'],
+  ['펀더멘털 통합', 'DART(KR) 및 EDGAR(US) 데이터를 배치 API를 통해 직접 연동하여 EPS 성장, 매출, ROE, 기관 보유 비중을 판별에 활용합니다.'],
   ['리스크 관리', 'Standard VCP는 패턴 무효화와 8% 손절 cap을, HTF는 베이스 저점/7% cap, +5% breakeven, +10% trailing stop을 더 엄격하게 봅니다.'],
 ];
 
