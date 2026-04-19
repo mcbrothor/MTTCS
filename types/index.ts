@@ -670,3 +670,162 @@ export interface PortfolioRiskSummary {
   sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[];
   warnings: string[];
 }
+
+// --- CAN SLIM 스캐너 모듈 ---
+
+/**
+ * 베이스 패턴 유형
+ * - VCP는 기존 VCP 엔진과 공유
+ * - CUP_WITH_HANDLE, DOUBLE_BOTTOM, FLAT_BASE는 CAN SLIM 전용 패턴 감지 알고리즘 사용
+ */
+export type CanslimBasePatternType =
+  | 'CUP_WITH_HANDLE'
+  | 'DOUBLE_BOTTOM'
+  | 'FLAT_BASE'
+  | 'VCP'
+  | 'UNKNOWN';
+
+/** 베이스 패턴 감지 결과 — 수치 기반 분석 후 사용자 육안 확인 필수 */
+export interface BasePattern {
+  type: CanslimBasePatternType;
+  pivotPoint: number;
+  weeksForming: number;
+  depthPct: number;
+  isValid: boolean;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+/**
+ * CAN SLIM 평가에 필요한 종목 데이터 (디자인 문서 §2.1)
+ *
+ * 왜 기존 ScannerResult와 분리하는가?
+ * - CAN SLIM은 펀더멘털 중심(EPS, ROE, 기관) 데이터 구조가 필요함
+ * - VCP 스캐너는 기술적 분석(가격 패턴) 중심
+ * - 두 시스템은 RS Rating, MA 등 공통 메트릭만 공유
+ */
+export interface CanslimStockData {
+  symbol: string;
+  market: MarketCode;
+
+  // ── C: Current Quarterly Earnings ──────────────────────────
+  currentQtrEpsGrowth: number | null;       // 최근 분기 EPS 성장률 (%)
+  priorQtrEpsGrowth: number | null;         // 직전 분기 EPS 성장률 — 가속화 검증용
+  epsGrowthLast3Qtrs: (number | null)[];    // [가장최근, 직전, 2분기전] — 연속 성장 검증
+  currentQtrSalesGrowth: number | null;     // 최근 분기 매출 성장률 (%)
+
+  // ── A: Annual Earnings Growth ──────────────────────────────
+  annualEpsGrowthEachYear: (number | null)[]; // [올해, 1년전, 2년전] — 각 연도 독립 검증
+  hadNegativeEpsInLast3Yr: boolean | null;    // 3년 내 적자 이력 여부
+  roe: number | null;                         // 자기자본이익률 (%)
+
+  // ── N: New High / Base Pattern ─────────────────────────────
+  currentPrice: number;
+  price52WeekHigh: number;
+  pivotPoint: number | null;               // 베이스 피벗 포인트 가격
+  weeksBuildingBase: number | null;        // 베이스 형성 기간 (주)
+  detectedBasePattern: CanslimBasePatternType | null;
+
+  // ── S: Supply & Demand ─────────────────────────────────────
+  dailyVolume: number;
+  avgVolume50: number;                     // 50일 평균 거래량
+  floatShares: number | null;              // 유통 주식 수
+  sharesBuyback: boolean | null;           // 최근 분기 자사주 매입 여부
+
+  // ── L: Leader ──────────────────────────────────────────────
+  rsRating: number | null;                 // 1~99 (MTN RS 모듈 연동)
+  mansfieldRsFlag: boolean | null;         // 지수 아웃퍼폼 여부
+
+  // ── I: Institutional Sponsorship ───────────────────────────
+  institutionalSponsorshipTrend: 'INCREASING' | 'FLAT' | 'DECREASING' | null;
+  institutionalOwnershipPct: number | null; // 기관 보유 비율 (%)
+  numInstitutionalHolders: number | null;   // 보유 기관 수
+}
+
+/**
+ * 매크로 시장 데이터 — M(시장 방향성) 조건 평가용
+ * 기존 MasterFilter의 분배일/FTD 데이터와 연동
+ */
+export interface CanslimMacroMarketData {
+  actionLevel: MacroActionLevel;
+  distributionDayCount: number;   // 최근 5주 내 분배일 수
+  followThroughDay: boolean;      // 바닥 확인 신호 (FTD) 발생 여부
+  lastFTDDate: string | null;     // 가장 최근 FTD 날짜
+}
+
+/** N 조건 평가 결과 — 피벗 대비 현재가 위치 */
+export type CanslimNStatus = 'VALID' | 'EXTENDED' | 'TOO_LATE' | 'INVALID';
+
+/** CAN SLIM 7 Pillar 필터링 결과 */
+export interface CanslimResult {
+  pass: boolean;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  failedPillar: string | null;       // 탈락 원인 pillar (예: 'C_EPS', 'M', 'A_ROE')
+  warnings: string[];                // 경고 플래그 (탈락은 아니나 주의)
+  nStatus: CanslimNStatus;
+  stopLossPrice: number | null;      // 매수 기준가 × 0.92 (7~8% 손절)
+  pillarDetails: CanslimPillarDetail[]; // 각 Pillar 평가 상세
+}
+
+/** 개별 Pillar 평가 상세 — UI 드릴다운 표시용 */
+export interface CanslimPillarDetail {
+  pillar: string;                    // C, A, N, S, L, I, M
+  label: string;                     // 사람이 읽을 수 있는 설명
+  status: 'PASS' | 'FAIL' | 'WARNING' | 'INFO';
+  value: string | number | null;     // 실제 값
+  threshold: string;                 // 기준값
+  description: string;               // 상세 설명
+}
+
+/**
+ * CAN SLIM + VCP 이중 스크리너 비교 티어 (디자인 문서 §4)
+ * - TIER_1: 양쪽 모두 통과 — 최강 주도주 후보
+ * - WATCHLIST: CAN SLIM만 통과 — 패턴 완성 대기
+ * - SHORT_TERM: VCP만 통과 — 단기 트레이딩 후보
+ * - EXCLUDED: 양쪽 모두 탈락
+ */
+export type DualScreenerTier = 'TIER_1' | 'WATCHLIST' | 'SHORT_TERM' | 'EXCLUDED';
+
+/** CAN SLIM 스캐너 결과 — UI 테이블 표시용 */
+export interface CanslimScannerResult {
+  // 기본 종목 정보
+  ticker: string;
+  exchange: string;
+  name: string;
+  market: MarketCode;
+  currentPrice: number | null;
+  marketCap: number | null;
+  currency: 'USD' | 'KRW';
+
+  // CAN SLIM 결과
+  canslimResult: CanslimResult;
+
+  // 베이스 패턴
+  basePattern: BasePattern | null;
+
+  // VCP 크로스 레퍼런스
+  vcpGrade: VcpAnalysis['grade'] | null;
+  vcpScore: number | null;
+
+  // 이중 검증 티어
+  dualTier: DualScreenerTier;
+
+  // RS 메트릭
+  rsRating: number | null;
+  mansfieldRsFlag: boolean | null;
+
+  // 상태 관리
+  status: ScannerStatus;
+  analyzedAt: string | null;
+  errorMessage: string | null;
+  dataWarnings: string[];              // DATA_PARTIAL, DATA_STALE 등
+}
+
+/**
+ * [추후 업그레이드 계획] I 조건 기관 보유 데이터 강화
+ *
+ * 현재: Yahoo institutionOwnership 모듈 (부분 데이터)
+ * 추후:
+ * - 미국시장: SEC 13F 공시 API 연동 (분기별 기관 보유 내역)
+ * - 국내시장: DART 분기보고서 기관 보유 API 연동
+ * - 별도 Cron 배치 → Supabase institution_holdings 테이블에 저장
+ */
