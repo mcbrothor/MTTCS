@@ -116,7 +116,7 @@ export function StrategyDetail({ trade }: { trade: Trade }) {
             <span className="rounded-lg border border-sky-500/30 px-2 py-1 text-sky-300">정보 {sepa.summary.info}</span>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
-            {sepa.criteria.map((item: any) => (
+            {sepa.criteria.map((item: { id: string; name: string; status: string; detail?: string }) => (
               <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium text-white">{item.label}</p>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth/session';
 import type { WatchlistPriority } from '@/types';
 
 function getErrorMessage(error: unknown) {
@@ -47,10 +48,13 @@ export async function POST(request: Request) {
       ? (Number(body.priority) as WatchlistPriority)
       : 0;
 
+    const session = await getServerSession();
+    const systemId = session?.systemId || null;
+
     const { data, error } = await supabaseServer
       .from('watchlist')
       .upsert(
-        [{ ticker, exchange, memo, tags, priority, updated_at: new Date().toISOString() }],
+        [{ ticker, exchange, memo, tags, priority, user_id: systemId, updated_at: new Date().toISOString() }],
         { onConflict: 'ticker' }
       )
       .select()

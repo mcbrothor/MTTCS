@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth/session';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
 import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
 import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
@@ -115,6 +116,11 @@ export async function POST(request: Request) {
       review_action: nullableText(body.review_action, 500),
       updated_at: new Date().toISOString(),
     };
+
+    const session = await getServerSession();
+    if (session) {
+      (record as Record<string, unknown>).user_id = session.systemId;
+    }
 
     const { data, error } = await supabaseServer
       .from('trades')

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import { getServerSession } from '@/lib/auth/session';
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
@@ -41,8 +42,8 @@ export async function POST(request: Request) {
     const category = String(body.category || 'ETC').trim();
     const display_order = typeof body.display_order === 'number' ? body.display_order : 0;
 
-    const { data: userData, error: authError } = await supabaseServer.auth.getUser();
-    if (authError || !userData.user) {
+    const session = await getServerSession();
+    if (!session) {
       return apiError('인증이 필요합니다.', 'UNAUTHORIZED', 401);
     }
 
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
       .from('investment_resources')
       .insert([
         {
-          user_id: userData.user.id,
+          user_id: session.systemId,
           title,
           url,
           category,

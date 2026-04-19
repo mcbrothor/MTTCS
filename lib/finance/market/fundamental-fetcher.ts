@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { getYahooFundamentals } from '../providers/yahoo-api';
 import { getDartCorpCode, getDartFinancialData, type FundamentalMetrics } from '../providers/dart-api';
 import { getSecFundamentals } from '../providers/sec-edgar-api';

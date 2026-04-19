@@ -41,7 +41,6 @@ import type {
 const SCAN_CONCURRENCY = 3;
 const KR_SCAN_CONCURRENCY = 2;
 const STORAGE_PREFIX = 'mtn:canslim-snapshot:v1:';
-const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 
 type ViewMode = 'web' | 'app';
 type FilterKey = 'all' | 'pass' | 'fail' | 'tier1' | 'watchlist' | 'short_term' | 'high_confidence' | 'warnings';

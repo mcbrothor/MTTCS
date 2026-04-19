@@ -136,7 +136,7 @@ function ExecutionForm({ trade, busy, onSave }: { trade: Trade; busy: boolean; o
           <span className="mb-1 block text-xs font-semibold text-slate-400">종류</span>
           <select
             value={draft.side}
-            onChange={(e) => setDraft({ ...draft, side: e.target.value as any, leg_label: e.target.value === 'EXIT' ? 'MANUAL' : 'E1' })}
+            onChange={(e) => setDraft({ ...draft, side: e.target.value as 'ENTRY' | 'EXIT', leg_label: e.target.value === 'EXIT' ? 'MANUAL' : 'E1' })}
             className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${draft.side === 'ENTRY' ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' : 'border-sky-500/50 bg-sky-500/10 text-sky-300'}`}
           >
             <option value="ENTRY">매수</option>

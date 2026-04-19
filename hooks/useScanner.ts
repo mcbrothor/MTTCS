@@ -1,18 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { get, set } from 'idb-keyval';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useContestSelection } from './useContestSelection';
 import {
   evaluateScannerRecommendation,
   getVolumeSignalTier,
   isContestPoolTier,
   recommendationSortValue,
-  type VolumeSignalTier,
 } from '@/lib/scanner-recommendation';
 import type {
   MarketAnalysisResponse,
   ProviderAttempt,
-  RecommendationTier,
   ScannerConstituent,
   ScannerResult,
   ScannerUniverse,
@@ -23,13 +22,9 @@ import type {
 
 const TOTAL_EQUITY_FOR_SCAN = '50000';
 const RISK_PERCENT_FOR_SCAN = '1';
-const SCAN_CONCURRENCY = 4;
-const KOSPI_SCAN_CONCURRENCY = 2;
-const KOSDAQ_SCAN_CONCURRENCY = 2;
 const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
-const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 
 export type ViewMode = 'web' | 'app';
 export type FilterKey =
@@ -75,15 +70,6 @@ export const UNIVERSES: Record<ScannerUniverse, { label: string; description: st
   },
 };
 
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: '전체' },
-  { key: 'recommended', label: 'Recommended' },
-  { key: 'partial', label: 'Partial' },
-  { key: 'contestPool', label: '콘테스트 풀' },
-  { key: 'nearPivot', label: '피벗 5% 이내' },
-  { key: 'volume', label: '거래량 신호' },
-  { key: 'error', label: '오류' },
-];
 
 export const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -122,29 +108,29 @@ function withRecommendation(result: ScannerResult): ScannerResult {
   };
 }
 
-function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
+async function readScannerSnapshot(universe: ScannerUniverse): Promise<StoredScannerSnapshot | null> {
   try {
-    const raw = window.localStorage.getItem(scannerStorageKey(universe));
+    const raw = await get(scannerStorageKey(universe));
     if (!raw) return null;
 
-    const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
+    const snapshot = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
     return {
       ...snapshot,
-      results: snapshot.results.map((item) => withRecommendation(item)),
+      results: snapshot.results.map((item: ScannerResult) => withRecommendation(item)),
     };
   } catch {
     return null;
   }
 }
 
-function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: ScannerResult[], savedAt: string) {
+async function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: ScannerResult[], savedAt: string) {
   const snapshot: StoredScannerSnapshot = {
     savedAt,
     universeMeta,
     results: results.map((item) => withRecommendation(item)),
   };
-  window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
+  await set(scannerStorageKey(universeMeta.universe), snapshot);
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
   window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, universeMeta.universe);
 }
@@ -157,7 +143,7 @@ function uniqueUniverses(items: (ScannerUniverse | null)[]) {
   return items.filter((item, index): item is ScannerUniverse => Boolean(item) && items.indexOf(item) === index);
 }
 
-function getInitialRestoredUniverse() {
+async function getInitialRestoredUniverse() {
   if (typeof window === 'undefined') return 'NASDAQ100';
   const latestScannedUniverse = readStoredUniverse(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
   const lastSelectedUniverse = readStoredUniverse(LAST_UNIVERSE_STORAGE_KEY);
@@ -170,8 +156,11 @@ function getInitialRestoredUniverse() {
     'KOSDAQ100',
   ]);
 
-  const universeWithSnapshot = candidates.find((candidate) => readScannerSnapshot(candidate));
-  return universeWithSnapshot ?? lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
+  for (const candidate of candidates) {
+    const snap = await readScannerSnapshot(candidate);
+    if (snap) return candidate;
+  }
+  return lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
 }
 
 function round(value: number, digits = 2) {
@@ -236,11 +225,6 @@ async function loadScannerMetrics(universe: ScannerUniverse, rows: ScannerResult
   }
 }
 
-function scanConcurrencyFor(universe: ScannerUniverse) {
-  if (universe === 'KOSPI100') return KOSPI_SCAN_CONCURRENCY;
-  if (universe === 'KOSDAQ100') return KOSDAQ_SCAN_CONCURRENCY;
-  return SCAN_CONCURRENCY;
-}
 
 function initialResult(item: ScannerConstituent): ScannerResult {
   return {
@@ -380,68 +364,23 @@ function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analysis: Ma
   });
 }
 
-function formatMarketCap(value: number | null, currency: ScannerResult['currency']) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  if (currency === 'KRW') return `${Math.round(value / 100_000_000).toLocaleString('ko-KR')}억`;
-  if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
-  return `$${(value / 1_000_000_000).toFixed(1)}B`;
-}
 
-function formatPrice(value: number | null, currency: ScannerResult['currency']) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  return new Intl.NumberFormat(currency === 'KRW' ? 'ko-KR' : 'en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: currency === 'KRW' ? 0 : 2,
-  }).format(value);
-}
 
-function tierClass(tier: RecommendationTier) {
-  if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
-  if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
-  if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
-  return 'border-slate-700 bg-slate-900 text-slate-300';
-}
 
-function sepaLabel(result: ScannerResult) {
-  if (result.status === 'error') return 'Error';
-  if (result.status !== 'done') return 'Pending';
-  if (result.sepaStatus === 'pass') return 'Pass';
-  if ((result.sepaMissingCount ?? 99) <= 2) return 'Partial';
-  return 'Weak';
-}
 
-function baseTypeLabel(result: ScannerResult) {
-  if (result.baseType === 'High_Tight_Flag') return 'HTF';
-  if (result.baseType === 'Standard_VCP') return 'Standard';
-  if (result.momentumBranch === 'EXTENDED') return 'Extended';
-  return '-';
-}
 
-function formatRs(result: ScannerResult) {
-  if (typeof result.rsRating !== 'number') return '-';
-  const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
-  return `${result.rsRating}${rank}`;
-}
 // Moved to useContestSelection.ts
 
 
-function volumeSignalClass(tier: VolumeSignalTier) {
-  if (tier === 'Strong') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
-  if (tier === 'Watch') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
-  if (tier === 'Weak') return 'border-slate-700 bg-slate-900 text-slate-300';
-  return 'border-slate-800 bg-slate-950 text-slate-500';
-}
 
-function volumeSignalDetail(result: ScannerResult) {
-  const dryUp = result.volumeDryUpScore ?? '-';
-  const pocket = result.pocketPivotScore ?? '-';
-  const breakout = result.breakoutVolumeStatus || 'unknown';
-  return `DU ${dryUp} / PP ${pocket} / ${breakout}`;
-}
 
 export function useScanner() {
-  const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
+  const [universe, setUniverse] = useState<ScannerUniverse>(() => {
+    if (typeof window === 'undefined') return 'NASDAQ100';
+    return (window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY) as ScannerUniverse) || 
+           (window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY) as ScannerUniverse) || 
+           'NASDAQ100';
+  });
   const [results, setResults] = useState<ScannerResult[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -460,24 +399,32 @@ export function useScanner() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const initial = getInitialRestoredUniverse();
-    setUniverse(initial);
-    const snapshot = readScannerSnapshot(initial);
-    if (snapshot) {
-      setResults(snapshot.results);
-      setLastScannedAt(snapshot.savedAt);
-      // Selected tickers now synced globally via useContestSelection
-      loadScannerMetrics(initial, snapshot.results).then((merged) => {
-        setResults(merged.results);
-        setMacroTrend(merged.macroTrend);
-      });
-    }
+    let active = true;
+    const init = async () => {
+      const initial = await getInitialRestoredUniverse();
+      if (!active) return;
+      setUniverse(initial);
+      const snapshot = await readScannerSnapshot(initial);
+      if (!active) return;
+      if (snapshot) {
+        setResults(snapshot.results);
+        setLastScannedAt(snapshot.savedAt);
+        // Selected tickers now synced globally via useContestSelection
+        loadScannerMetrics(initial, snapshot.results).then((merged) => {
+          if (!active) return;
+          setResults(merged.results);
+          setMacroTrend(merged.macroTrend);
+        });
+      }
+    };
+    init();
+    return () => { active = false; };
   }, []);
 
-  const handleUniverseChange = (newUniverse: ScannerUniverse) => {
+  const handleUniverseChange = async (newUniverse: ScannerUniverse) => {
     if (isScanning) return;
     setUniverse(newUniverse);
-    const snapshot = readScannerSnapshot(newUniverse);
+    const snapshot = await readScannerSnapshot(newUniverse);
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
@@ -598,8 +545,7 @@ export function useScanner() {
         const merged = await loadScannerMetrics(meta.universe, latestResults);
         const normalized = merged.results.map((item) => withRecommendation(item));
         setMacroTrend(merged.macroTrend);
-        const nextSelected = new Set<string>();
-        const now = new Date().toISOString();
+                const now = new Date().toISOString();
         setResults(normalized);
         setLastScannedAt(now);
         setScanStage('스캔 완료');

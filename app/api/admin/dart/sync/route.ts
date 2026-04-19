@@ -44,7 +44,7 @@ export async function GET(req: Request) {
     // 3. 압축 해제 및 XML 파싱
     const zip = new AdmZip(Buffer.from(response.data));
     const zipEntries = zip.getEntries();
-    const xmlEntry = zipEntries.find((entry: any) => entry.entryName === 'CORPCODE.xml');
+    const xmlEntry = zipEntries.find((entry: { entryName: string }) => entry.entryName === 'CORPCODE.xml');
 
     if (!xmlEntry) {
       throw new Error('CORPCODE.xml not found in DART ZIP');
@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     const xmlData = xmlEntry.getData().toString('utf-8');
     const parser = new XMLParser();
     const jsonObj = parser.parse(xmlData);
-    const rawList = jsonObj.result.list as any[];
+    const rawList = jsonObj.result.list as Record<string, unknown>[];
 
     // 4. 대상 종목만 필터링
     console.log('[DART-SYNC] Filtering and preparing data for Supabase...');
@@ -90,7 +90,7 @@ export async function GET(req: Request) {
       matched_count: upsertData.length
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[DART-SYNC] Error:', error);
     return NextResponse.json({ 
       success: false, 

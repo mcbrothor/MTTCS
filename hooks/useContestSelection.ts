@@ -72,13 +72,13 @@ export function useContestSelection() {
 
   // 커스텀 이벤트 감지 (같은 탭 내 동기화)
   useEffect(() => {
-    const handleCustomSync = (e: any) => {
+    const handleCustomSync = (e: CustomEvent<string[]>) => {
       if (e.detail && Array.isArray(e.detail)) {
         setSelectedTickers(new Set(e.detail));
       }
     };
-    window.addEventListener('mtn:selection:sync', handleCustomSync);
-    return () => window.removeEventListener('mtn:selection:sync', handleCustomSync);
+    window.addEventListener('mtn:selection:sync', handleCustomSync as EventListener);
+    return () => window.removeEventListener('mtn:selection:sync', handleCustomSync as EventListener);
   }, []);
 
   const clearSelection = useCallback(() => {

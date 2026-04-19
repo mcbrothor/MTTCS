@@ -227,14 +227,14 @@ export default function VcpDrilldownModal({
             </section>
 
             {/* 데이터 품질 경고 (v2.1 추가) */}
-            {(result.dataWarnings?.length > 0 || (result as any).rsDataQuality === 'PARTIAL') && (
+            {(result.dataWarnings?.length > 0 || (result as ScannerResult & {rsDataQuality?: string}).rsDataQuality === 'PARTIAL') && (
               <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                 <div className="mb-2 flex items-center gap-2 text-xs font-bold text-amber-400">
                   <AlertTriangle className="h-4 w-4" />
                   <span>데이터 품질 경고 및 참고</span>
                 </div>
                 <ul className="space-y-1.5 text-xs text-amber-200/60">
-                  {(result as any).rsDataQuality === 'PARTIAL' && (
+                  {(result as ScannerResult & {rsDataQuality?: string}).rsDataQuality === 'PARTIAL' && (
                     <li>• 상장 1년 미만 또는 거래 이력 부족으로 RS(상대강도)가 부정확할 수 있습니다.</li>
                   )}
                   {result.dataWarnings?.map((warning: string, i: number) => (
@@ -341,7 +341,7 @@ export default function VcpDrilldownModal({
                 <div className="space-y-1 text-xs text-slate-500">
                   <p>분석 시각: {result.analyzedAt ? new Date(result.analyzedAt).toLocaleString('ko-KR') : '-'}</p>
                   <p>가격 출처: {result.priceSource || '-'}</p>
-                  <p>RS 품질: {(result as any).rsDataQuality === 'FULL' ? '정상 (1년+)' : (result as any).rsDataQuality === 'PARTIAL' ? '부분 (신규주)' : '확인불가'}</p>
+                  <p>RS 품질: {(result as ScannerResult & {rsDataQuality?: string}).rsDataQuality === 'FULL' ? '정상 (1년+)' : (result as ScannerResult & {rsDataQuality?: string}).rsDataQuality === 'PARTIAL' ? '부분 (신규주)' : '확인불가'}</p>
                   <p className="flex items-center gap-1">
                     <Info className="h-3 w-3" />
                     RS는 공식 IBD/MarketSmith 등급이 아니라 MTN 내부 Proxy입니다.

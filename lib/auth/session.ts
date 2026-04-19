@@ -1,3 +1,5 @@
+import { cookies } from 'next/headers';
+
 export const AUTH_COOKIE_NAME = 'mtn_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
 
@@ -78,4 +80,29 @@ export async function verifySessionToken(token?: string | null) {
   } catch {
     return null;
   }
+}
+
+/**
+ * 시스템 관리자 고정 ID (Supabase Auth 사용 안 함에 따른 고정 식별자)
+ */
+export const SYSTEM_ADMIN_ID = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Next.js 서버 사이드(API, Server Action) 전용 세션 검증 헬퍼
+ */
+export async function getServerSession() {
+  if (!isAuthEnabled()) {
+    return { sub: 'admin', systemId: SYSTEM_ADMIN_ID };
+  }
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+  const payload = await verifySessionToken(token);
+
+  if (!payload) return null;
+  
+  return {
+    ...payload,
+    systemId: SYSTEM_ADMIN_ID
+  };
 }

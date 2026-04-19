@@ -1,23 +1,13 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Star } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
 import axios from 'axios';
-import { Star, Trash2 } from 'lucide-react';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type {
-  EntryTargets,
-  OHLCData,
-  SepaEvidence,
-  Trade,
-  TradeExecution,
-  TradeExecutionSide,
-  TradeLegLabel,
-  TradeStatus,
-  TrailingStops,
 } from '@/types';
-import { EditPanel, ExecutionsPanel, ReviewPanel, StrategyDetail, EditDraft, ExecutionDraft, ReviewDraft, currency, numberText, signedCurrency, toInput, toNumberOrNull, isKorean, dateInputValue, statusOptions, getRiskPercent } from './panels';
+import { EditPanel, ExecutionsPanel, ReviewPanel, StrategyDetail, EditDraft, ExecutionDraft, ReviewDraft, currency, numberText, signedCurrency, toInput, toNumberOrNull, isKorean, getRiskPercent } from './panels';
 
 type DetailTab = 'plan' | 'executions' | 'review';
 type SecurityNameMap = Record<string, string | null>;
@@ -489,4 +479,4 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     </button>
   );
 }
-
+
