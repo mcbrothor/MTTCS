@@ -641,6 +641,21 @@ export default function ScannerPage() {
     errors: results.filter((item) => item.status === 'error').length,
   }), [results]);
 
+  const dataSourceSummary = useMemo(() => {
+    const sources = Array.from(new Set(
+      results
+        .map((item) => item.priceSource || item.providerAttempts?.findLast((attempt) => attempt.status === 'success')?.provider)
+        .filter((source): source is string => Boolean(source))
+    ));
+
+    if (sources.length === 0) {
+      return universe === 'KOSPI100' || universe === 'KOSDAQ100'
+        ? '유니버스: Naver Finance 시가총액 순위 · 가격/분석: KIS → Yahoo fallback'
+        : '유니버스: 공식/공개 구성종목 API · 가격/분석: KIS → Yahoo fallback';
+    }
+
+    return sources.slice(0, 4).join(' · ') + (sources.length > 4 ? ` 외 ${sources.length - 4}개` : '');
+  }, [results, universe]);
   const selectionColumn = (result: ScannerResult) => (
     <button
       type="button"
@@ -671,16 +686,17 @@ export default function ScannerPage() {
       <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
         <colgroup>
           <col className="w-[4%]" />
-          <col className="w-[18%]" />
-          <col className="w-[9%]" />
-          <col className="w-[9%]" />
+          <col className="w-[17%]" />
           <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[7%]" />
+          <col className="w-[9%]" />
+          <col className="w-[6%]" />
+          <col className="w-[9%]" />
+          <col className="w-[9%]" />
           <col className="w-[10%]" />
-          <col className="w-[12%]" />
-          <col className="w-[12%]" />
           <col className="w-[7%]" />
           <col className="w-[6%]" />
-          <col className="w-[5%]" />
         </colgroup>
         <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
           <tr>
@@ -690,10 +706,11 @@ export default function ScannerPage() {
             <th className="px-2 py-3 text-right">현재가</th>
             <th className="px-2 py-3 text-left">SEPA</th>
             <th className="px-2 py-3 text-left">추천 등급</th>
-            <th className="px-2 py-3 text-left">상대강도/패턴</th>
+            <th className="px-2 py-3 text-right">VCP</th>
+            <th className="px-2 py-3 text-left">상대강도</th>
+            <th className="px-2 py-3 text-left">패턴</th>
             <th className="px-2 py-3 text-left">거래량</th>
             <th className="px-2 py-3 text-right">피벗</th>
-            <th className="px-2 py-3 text-left">데이터</th>
             <th className="px-2 py-3 text-center">후보</th>
           </tr>
         </thead>
@@ -718,9 +735,13 @@ export default function ScannerPage() {
                   {result.sepaMissingCount !== null && <p className="text-[10px] text-slate-500">미충족 {result.sepaMissingCount}</p>}
                 </td>
                 <td className="px-2 py-3">{tierBadge(result)}</td>
-                <td className="px-2 py-3">
-                  <p className="font-mono text-slate-200">RS {formatRs(result)}</p>
-                  <p className="mt-1 truncate text-[10px] text-slate-500">{baseTypeLabel(result)} · VCP {result.vcpScore ?? '-'}</p>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">
+                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
+                </td>
+                <td className="px-2 py-3 font-mono text-slate-200">{formatRs(result)}</td>
+                <td className="px-2 py-3 text-[11px] text-slate-300">
+                  <p className="truncate">{baseTypeLabel(result)}</p>
+                  {result.momentumBranch === 'EXTENDED' && <p className="text-[10px] text-amber-300">확장</p>}
                 </td>
                 <td className="px-2 py-3">
                   <span className={`inline-flex rounded-lg border px-2 py-1 text-[11px] font-bold ${volumeSignalClass(volumeTier)}`}>
@@ -731,12 +752,7 @@ export default function ScannerPage() {
                 <td className="px-2 py-3 text-right font-mono text-slate-300">
                   {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
                 </td>
-                <td className="px-2 py-3 text-[10px] text-slate-400">
-                  <p className="truncate">{result.priceSource || result.providerAttempts?.at(-1)?.provider || '-'}</p>
-                  <p className={result.status === 'error' ? 'truncate text-rose-300' : result.status === 'running' ? 'text-emerald-300' : 'text-slate-500'}>
-                    {result.status === 'error' ? result.errorMessage || '오류' : result.status === 'running' ? '분석 중' : result.status === 'done' ? '완료' : '대기'}
-                  </p>
-                </td>
+
                 <td className="px-2 py-3 text-center">{selectionColumn(result)}</td>
               </tr>
             );
@@ -881,6 +897,10 @@ export default function ScannerPage() {
             <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-amber-200">Partial {stats.partial}</span>
             <span className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-rose-200">Error {stats.errors}</span>
           </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs text-slate-400">
+          <span className="font-semibold text-slate-200">데이터 원천</span>
+          <span className="ml-2">{dataSourceSummary}</span>
         </div>
 
         {isScanning && (

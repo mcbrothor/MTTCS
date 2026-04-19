@@ -22,6 +22,14 @@ const scannerRows = [
   ['테니스 공 액션', '최근 60거래일 중 벤치마크가 1% 이상 하락한 날에 종목이 상승 마감하거나 덜 하락한 횟수입니다.'],
 ];
 
+const scoreTheoryRows = [
+  ['상대강도 RS', '미너비니/오닐식 주도주 선별 철학과 학술적 모멘텀 효과를 참고합니다. 동일 유니버스 안에서 3/6/9/12개월 수익률을 최근 구간에 더 높은 가중치로 합산한 뒤 순위화합니다.'],
+  ['모멘텀 효과', 'Jegadeesh & Titman의 중기 모멘텀 연구처럼 최근 강한 종목이 일정 기간 상대 우위를 이어갈 수 있다는 경험적 현상을 참고합니다. MTN은 이 논리를 RS Proxy와 테니스 공 액션에 반영합니다.'],
+  ['VCP/HTF', '미너비니의 Volatility Contraction Pattern과 High Tight Flag 개념을 참고합니다. 가격 변동폭이 줄고 거래량이 마르는 과정을 공급 소진과 기관 매집 가능성의 흔적으로 해석합니다.'],
+  ['거래량 신호', '가격-거래량 분석과 Wyckoff식 수급 해석을 참고합니다. 거래량 건조화는 매도 물량 감소, 포켓 피벗과 돌파 거래량은 수요 우위 가능성으로 점수화합니다.'],
+  ['이동평균/추세', '추세추종과 이동평균 필터의 실무적 사용을 참고합니다. 현재가, 50일선, 200일선의 정렬은 장기 추세와 중기 탄력의 기본 체력으로 봅니다.'],
+  ['리스크 관리', '손절과 포지션 사이징은 고정 손실 한도, 패턴 무효화, R multiple 개념을 참고합니다. HTF는 변동성이 큰 예외 패턴이므로 더 타이트한 손절과 breakeven 전환을 제안합니다.'],
+];
 const contestRows = [
   ['후보 전달', '스캐너에서 사용자가 직접 체크한 selectedTickers만 콘테스트 전달 저장소에 기록합니다. 콘테스트 화면도 전달 후보만 표시하며 자동 Recommended 선택은 사용하지 않습니다.'],
   ['분석 세션', '최대 10개 후보, 스캐너 스냅샷, 마스터 필터 상태, 기준가, 기준일, 데이터 출처를 DB에 저장합니다.'],
@@ -127,6 +135,16 @@ export default function GuidePage() {
         <InfoTable rows={scannerRows} />
       </Card>
 
+      <Card>
+        <div className="flex items-center gap-3">
+          <BarChart2 className="h-6 w-6 text-violet-400" />
+          <h2 className="text-xl font-bold text-white">점수 산출 참고 이론</h2>
+        </div>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          MTN 점수는 특정 논문이나 IBD/MarketSmith의 비공개 산식을 그대로 복제한 값이 아닙니다. 미너비니식 주도주 선별, 모멘텀 이상현상, 가격-거래량 수급 해석, 추세추종 리스크 관리를 MTN 내부 Proxy로 구현한 판단 보조 지표입니다.
+        </p>
+        <InfoTable rows={scoreTheoryRows} />
+      </Card>
       <Card>
         <div className="flex items-center gap-3">
           <Volume2 className="h-6 w-6 text-amber-400" />
