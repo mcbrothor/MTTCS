@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { validateCronRequest } from '@/lib/contest-cron';
-import { finalizeRsMetrics, runRsMetricsChunk } from '@/lib/finance/stock-metrics';
+import { finalizeRsMetrics, runRsMetricsChunk } from '@/lib/finance/market/stock-metrics';
 import type { MarketCode } from '@/types';
 
 function parseMarket(value: string | null): MarketCode[] | null {

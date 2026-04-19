@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
-import { calculateTradeMetrics, deriveTradeStatus } from '@/lib/finance/trade-metrics';
+import { calculateTradeMetrics, deriveTradeStatus } from '@/lib/finance/core/trade-metrics';
 import type { Trade, TradeExecution, TradeExecutionSide, TradeLegLabel } from '@/types';
 
 const VALID_SIDES: TradeExecutionSide[] = ['ENTRY', 'EXIT'];

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, XCircle, AlertTriangle, Info, Shield, TrendingUp, BarChart3 } from 'lucide-react';
 import type { CanslimScannerResult, CanslimPillarDetail } from '@/types';
-import { dualTierLabel } from '@/lib/finance/canslim-engine';
+import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 
 interface Props {
   result: CanslimScannerResult;

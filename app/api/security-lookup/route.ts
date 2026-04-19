@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
-import { getYahooSecurityProfile } from '@/lib/finance/yahoo-api';
+import { getYahooSecurityProfile } from '@/lib/finance/providers/yahoo-api';
 
 interface SecurityLookupResponse {
   ticker: string;

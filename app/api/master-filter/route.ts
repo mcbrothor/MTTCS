@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
-import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/yahoo-api';
+import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { MarketState, MasterFilterMetricDetail, MasterFilterResponse, OHLCData } from '@/types';
 
 export const dynamic = 'force-dynamic';

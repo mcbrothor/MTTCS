@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
-import { attachTradeMetrics } from '@/lib/finance/trade-metrics';
-import { getKisDomesticPrice } from '@/lib/finance/kis-api';
-import { getYahooQuotes } from '@/lib/finance/yahoo-api';
+import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
+import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
+import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { Trade, TradeStatus } from '@/types';
 
 const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];

@@ -9,7 +9,7 @@ import type {
   SepaEvidence,
   TrailingStops,
 } from '@/types';
-import { calculateRsMetrics } from './rs-proxy.ts';
+import { calculateRsMetrics } from '@/lib/finance/market/rs-proxy';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const DEFAULT_MINERVINI_RISK_PERCENT = 0.01;

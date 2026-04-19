@@ -1,5 +1,5 @@
 import { supabaseServer } from '@/lib/supabase/server';
-import { getMarketDailyPrice } from '@/lib/finance/kis-api';
+import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { calculateReturnPct, isReviewDue, summarizeContestReview } from '@/lib/contest';
 import { sendTelegramMessage } from '@/lib/telegram';
 import type { ContestMarket, ContestReview } from '@/types';

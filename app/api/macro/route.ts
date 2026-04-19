@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getYahooQuotes, type YahooQuote } from '@/lib/finance/yahoo-api';
+import { getYahooQuotes, type YahooQuote } from '@/lib/finance/providers/yahoo-api';
 
 const MACRO_SYMBOLS = [
   'UVXY', '^VIX', 'UUP', 'KRE', // 위험 & 유동성 (UVXY or ^VIX 로 가져옴)

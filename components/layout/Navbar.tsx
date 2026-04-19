@@ -6,7 +6,6 @@ const navItems = [
   { href: '/', icon: <LayoutDashboard className="h-4 w-4" />, label: '대시보드' },
   { href: '/master-filter', icon: <Compass className="h-4 w-4 text-emerald-400" />, label: '마스터 필터' },
   { href: '/scanner', icon: <ScanSearch className="h-4 w-4 text-indigo-400" />, label: '스캐너' },
-  { href: '/canslim', icon: <ScanSearch className="h-4 w-4 text-rose-400" />, label: 'CAN SLIM' },
   { href: '/contest', icon: <Trophy className="h-4 w-4 text-emerald-400" />, label: '콘테스트' },
   { href: '/plan', icon: <PlusCircle className="h-4 w-4 text-electric-blue" />, label: '신규 계획' },
   { href: '/watchlist', icon: <Star className="h-4 w-4 text-yellow-500" />, label: '관심종목' },

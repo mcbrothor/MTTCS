@@ -126,6 +126,13 @@ export interface SepaEvidence {
     distanceFromHigh52WeekPct: number | null;
     avgDollarVolume20: number | null;
     rsRating: number | null;
+    /**
+     * RS Rating의 출처를 명시합니다.
+     * - 'UNIVERSE': stock_metrics 테이블에서 유니버스 전체 순위 기반 (미너비니 의도에 부합)
+     * - 'BENCHMARK_PROXY': SPY 대비 6개월 초과수익률로 추정 (Fallback — 참고용)
+     * - null: RS를 계산할 수 없었음
+     */
+    rsSource?: 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
     internalRsRating?: number | null;
     externalRsRating?: number | null;
     rsRank?: number | null;
@@ -411,103 +418,33 @@ export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
 export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules';
 
 export interface AiFallbackAttempt {
-  provider: string;
-  model: string;
-  status: 'success' | 'failed' | 'skipped';
-  message?: string;
+  provider: string; model: string; status: 'success' | 'failed' | 'skipped'; message?: string;
 }
 
 export interface AiModelInsight {
-  id: string;
-  provider: AiInsightProvider;
-  label: string;
-  model: string;
-  status: 'success' | 'failed' | 'skipped';
-  text?: string;
-  message?: string;
-  selected: boolean;
-  priority: number;
-  generatedAt: string;
+  id: string; provider: AiInsightProvider; label: string; model: string; status: 'success' | 'failed' | 'skipped'; text?: string; message?: string; selected: boolean; priority: number; generatedAt: string;
 }
 
 export interface MasterFilterMetricDetail {
-  value: number | string | null;
-  threshold: number | string;
-  status: 'PASS' | 'FAIL' | 'WARNING';
-  label: string;
-  unit: string;
-  description: string;
-  source: string;
-  score?: number;
-  weight?: number;
+  value: number | string | null; threshold: number | string; status: 'PASS' | 'FAIL' | 'WARNING'; label: string; unit: string; description: string; source: string; score?: number; weight?: number;
 }
 
 export interface MasterFilterMetrics {
-  trend: MasterFilterMetricDetail;
-  breadth: MasterFilterMetricDetail;
-  liquidity: MasterFilterMetricDetail;
-  volatility: MasterFilterMetricDetail;
-  leadership: MasterFilterMetricDetail;
-  ftd?: MasterFilterMetricDetail;
-  distribution?: MasterFilterMetricDetail;
-  newHighLow?: MasterFilterMetricDetail;
-  above200d?: MasterFilterMetricDetail;
-  sectorRotation?: MasterFilterMetricDetail;
-  
-  score: number;
-  p3Score?: number;
-  regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[];
-  
-  meta: DataSourceMeta;
-  mainPrice?: number;
-  ma50?: number;
-  ma150?: number;
-  ma200?: number;
-  mainHistory?: { date: string; close: number }[];
-  movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[];
-  vixHistory?: { date: string; close: number }[];
-  sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[];
-  ftdReason?: string | null;
-  macroData?: Record<string, unknown>;
-  updatedAt: string;
+  trend: MasterFilterMetricDetail; breadth: MasterFilterMetricDetail; liquidity: MasterFilterMetricDetail; volatility: MasterFilterMetricDetail; leadership: MasterFilterMetricDetail; ftd?: MasterFilterMetricDetail; distribution?: MasterFilterMetricDetail; newHighLow?: MasterFilterMetricDetail; above200d?: MasterFilterMetricDetail; sectorRotation?: MasterFilterMetricDetail; score: number; p3Score?: number; regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[]; meta: DataSourceMeta; mainPrice?: number; ma50?: number; ma150?: number; ma200?: number; mainHistory?: { date: string; close: number }[]; movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[]; vixHistory?: { date: string; close: number }[]; sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[]; ftdReason?: string | null; macroData?: Record<string, unknown>; updatedAt: string;
 }
 
 export interface MasterFilterResponse {
-  state: MarketState;
-  market: ContestMarket;
-  metrics: MasterFilterMetrics;
-  insightLog: string;
-  isAiGenerated: boolean;
-  aiProviderUsed?: AiInsightProvider;
-  aiModelUsed?: string;
-  aiFallbackChain?: AiFallbackAttempt[];
-  aiModelInsights?: AiModelInsight[];
-  aiErrorSummary?: string | null;
+  state: MarketState; market: ContestMarket; metrics: MasterFilterMetrics; insightLog: string; isAiGenerated: boolean; aiProviderUsed?: AiInsightProvider; aiModelUsed?: string; aiFallbackChain?: AiFallbackAttempt[]; aiModelInsights?: AiModelInsight[]; aiErrorSummary?: string | null;
 }
 
 export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';
 
 export interface DataSourceMeta {
-  asOf: string;
-  source: string;
-  provider: string;
-  delay: 'REALTIME' | 'DELAYED_15M' | 'EOD' | 'UNKNOWN';
-  fallbackUsed: boolean;
-  warnings: string[];
+  asOf: string; source: string; provider: string; delay: 'REALTIME' | 'DELAYED_15M' | 'EOD' | 'UNKNOWN'; fallbackUsed: boolean; warnings: string[];
 }
 
-export interface ApiSuccess<T> {
-  data: T;
-  meta: DataSourceMeta;
-}
-
-export interface ApiFailure {
-  message: string;
-  code: ApiErrorCode | string;
-  details?: unknown;
-  recoverable: boolean;
-  lastSuccessfulAt?: string | null;
-}
+export interface ApiSuccess<T> { data: T; meta: DataSourceMeta; }
+export interface ApiFailure { message: string; code: ApiErrorCode | string; details?: unknown; recoverable: boolean; lastSuccessfulAt?: string | null; }
 
 export type ContestMarket = 'US' | 'KR';
 export type BeautyContestStatus = 'OPEN' | 'REVIEW_READY' | 'COMPLETED';
@@ -515,177 +452,42 @@ export type ContestReviewHorizon = 'W1' | 'M1';
 export type ContestReviewStatus = 'PENDING' | 'UPDATED' | 'ERROR' | 'MANUAL';
 
 export interface ContestPromptCandidate {
-  candidate_id?: string;
-  ticker: string;
-  exchange: string;
-  name: string;
-  user_rank: number;
-  recommendation_tier?: RecommendationTier | null;
-  recommendation_reason?: string | null;
-  exception_signals?: string[];
-  rs_rating: number | null;
-  internal_rs_rating?: number | null;
-  external_rs_rating?: number | null;
-  rs_rank?: number | null;
-  rs_universe_size?: number | null;
-  rs_percentile?: number | null;
-  weighted_momentum_score?: number | null;
-  ibd_proxy_score?: number | null;
-  mansfield_rs_flag?: boolean | null;
-  mansfield_rs_score?: number | null;
-  rs_data_quality?: DataQuality | null;
-  macro_action_level?: MacroActionLevel | null;
-  benchmark_relative_score?: number | null;
-  rs_line_new_high?: boolean | null;
-  rs_line_near_high?: boolean | null;
-  tennis_ball_count?: number | null;
-  tennis_ball_score?: number | null;
-  return_3m?: number | null;
-  return_6m?: number | null;
-  return_9m?: number | null;
-  return_12m?: number | null;
-  base_type?: BaseType | null;
-  momentum_branch?: MomentumBranch | null;
-  eight_week_return_pct?: number | null;
-  distance_from_ma50_pct?: number | null;
-  low_52_week_advance_pct?: number | null;
-  high_tight_flag?: HighTightFlagAnalysis | null;
-  sepa_status: AssessmentStatus | null;
-  sepa_passed: number | null;
-  sepa_failed: number | null;
-  vcp_status: VcpAnalysis['grade'] | null;
-  vcp_score: number | null;
-  contraction_score: number | null;
-  volume_dry_up_score: number | null;
-  bb_squeeze_score: number | null;
-  pocket_pivot_score: number | null;
-  pivot_price: number | null;
-  distance_to_pivot_pct: number | null;
-  avg_dollar_volume: number | null;
-  price: number | null;
-  price_as_of: string | null;
-  source: string;
-  provider_attempts?: ProviderAttempt[];
+  candidate_id?: string; ticker: string; exchange: string; name: string; user_rank: number; recommendation_tier?: RecommendationTier | null; recommendation_reason?: string | null; exception_signals?: string[]; rs_rating: number | null; internal_rs_rating?: number | null; external_rs_rating?: number | null; rs_rank?: number | null; rs_universe_size?: number | null; rs_percentile?: number | null; weighted_momentum_score?: number | null; ibd_proxy_score?: number | null; mansfield_rs_flag?: boolean | null; mansfield_rs_score?: number | null; rs_data_quality?: DataQuality | null; macro_action_level?: MacroActionLevel | null; benchmark_relative_score?: number | null; rs_line_new_high?: boolean | null; rs_line_near_high?: boolean | null; tennis_ball_count?: number | null; tennis_ball_score?: number | null; return_3m?: number | null; return_6m?: number | null; return_9m?: number | null; return_12m?: number | null; base_type?: BaseType | null; momentum_branch?: MomentumBranch | null; eight_week_return_pct?: number | null; distance_from_ma50_pct?: number | null; low_52_week_advance_pct?: number | null; high_tight_flag?: HighTightFlagAnalysis | null; sepa_status: AssessmentStatus | null; sepa_passed: number | null; sepa_failed: number | null; vcp_status: VcpAnalysis['grade'] | null; vcp_score: number | null; contraction_score: number | null; volume_dry_up_score: number | null; bb_squeeze_score: number | null; pocket_pivot_score: number | null; pivot_price: number | null; distance_to_pivot_pct: number | null; avg_dollar_volume: number | null; price: number | null; price_as_of: string | null; source: string; provider_attempts?: ProviderAttempt[];
 }
 
 export interface BeautyContestSession {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  market: ContestMarket;
-  universe: ScannerUniverse | string;
-  selected_at: string;
-  prompt_payload: ContestPromptCandidate[];
-  prompt_version?: string | null;
-  response_schema_version?: string | null;
-  market_context?: Record<string, unknown> | null;
-  candidate_pool_snapshot?: unknown[] | null;
-  llm_prompt: string;
-  llm_raw_response: string | null;
-  llm_provider: string | null;
-  status: BeautyContestStatus;
-  candidates?: ContestCandidate[];
+  id: string; created_at: string; updated_at: string; market: ContestMarket; universe: ScannerUniverse | string; selected_at: string; prompt_payload: ContestPromptCandidate[]; prompt_version?: string | null; response_schema_version?: string | null; market_context?: Record<string, unknown> | null; candidate_pool_snapshot?: unknown[] | null; llm_prompt: string; llm_raw_response: string | null; llm_provider: string | null; status: BeautyContestStatus; candidates?: ContestCandidate[];
 }
 
 export interface ContestCandidate {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  session_id: string;
-  ticker: string;
-  exchange: string;
-  name: string | null;
-  user_rank: number;
-  llm_rank: number | null;
-  llm_comment: string | null;
-  recommendation_tier?: RecommendationTier | null;
-  recommendation_reason?: string | null;
-  llm_scores?: Record<string, unknown> | null;
-  llm_analysis?: Record<string, unknown> | null;
-  final_pick_rank?: number | null;
-  final_pick_note?: string | null;
-  actual_invested: boolean;
-  linked_trade_id: string | null;
-  entry_reference_price: number | null;
-  snapshot: ContestPromptCandidate | Record<string, unknown> | null;
-  reviews?: ContestReview[];
+  id: string; created_at: string; updated_at: string; session_id: string; ticker: string; exchange: string; name: string | null; user_rank: number; llm_rank: number | null; llm_comment: string | null; recommendation_tier?: RecommendationTier | null; recommendation_reason?: string | null; llm_scores?: Record<string, unknown> | null; llm_analysis?: Record<string, unknown> | null; final_pick_rank?: number | null; final_pick_note?: string | null; actual_invested: boolean; linked_trade_id: string | null; entry_reference_price: number | null; snapshot: ContestPromptCandidate | Record<string, unknown> | null; reviews?: ContestReview[];
 }
 
 export interface ContestReview {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  candidate_id: string;
-  horizon: ContestReviewHorizon;
-  due_date: string;
-  base_price: number | null;
-  review_price: number | null;
-  return_pct: number | null;
-  price_as_of: string | null;
-  price_source: string | null;
-  status: ContestReviewStatus;
-  mistake_tags: string[];
-  user_review_note: string | null;
-  error_message?: string | null;
+  id: string; created_at: string; updated_at: string; candidate_id: string; horizon: ContestReviewHorizon; due_date: string; base_price: number | null; review_price: number | null; return_pct: number | null; price_as_of: string | null; price_source: string | null; status: ContestReviewStatus; mistake_tags: string[]; user_review_note: string | null; error_message?: string | null;
 }
 
 export interface StopEvent {
-  id: string;
-  trade_id: string;
-  created_at: string;
-  stop_price: number;
-  reason: string;
-  source: 'INITIAL' | 'TEN_WEEK_MA' | 'HIGH_WATERMARK' | 'MANUAL' | 'PYRAMID';
+  id: string; trade_id: string; created_at: string; stop_price: number; reason: string; source: 'INITIAL' | 'TEN_WEEK_MA' | 'HIGH_WATERMARK' | 'MANUAL' | 'PYRAMID';
 }
 
 export interface ExitRule {
-  id: string;
-  trade_id: string;
-  created_at: string;
-  trigger_type: 'GAIN_PCT' | 'PRICE' | 'R_MULTIPLE' | 'MANUAL';
-  trigger_value: number;
-  exit_fraction: number;
-  note: string | null;
-  executed: boolean;
+  id: string; trade_id: string; created_at: string; trigger_type: 'GAIN_PCT' | 'PRICE' | 'R_MULTIPLE' | 'MANUAL'; trigger_value: number; exit_fraction: number; note: string | null; executed: boolean;
 }
 
 export interface SecurityProfile {
-  ticker: string;
-  exchange: string;
-  name: string | null;
-  sector: string | null;
-  industry: string | null;
-  market: ContestMarket;
+  ticker: string; exchange: string; name: string | null; sector: string | null; industry: string | null; market: ContestMarket;
 }
 
 export interface PortfolioRiskSummary {
-  totalEquity: number;
-  investedCapital: number;
-  cash: number;
-  cashPct: number;
-  activePositions: number;
-  maxPositions: number;
-  totalOpenRisk: number;
-  openRiskPct: number;
-  sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[];
-  warnings: string[];
+  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; warnings: string[];
 }
 
 // --- CAN SLIM 스캐너 모듈 ---
 
-/**
- * 베이스 패턴 유형
- * - VCP는 기존 VCP 엔진과 공유
- * - CUP_WITH_HANDLE, DOUBLE_BOTTOM, FLAT_BASE는 CAN SLIM 전용 패턴 감지 알고리즘 사용
- */
-export type CanslimBasePatternType =
-  | 'CUP_WITH_HANDLE'
-  | 'DOUBLE_BOTTOM'
-  | 'FLAT_BASE'
-  | 'VCP'
-  | 'UNKNOWN';
+/** 베이스 패턴 유형 */
+export type CanslimBasePatternType = 'CUP_WITH_HANDLE' | 'DOUBLE_BOTTOM' | 'FLAT_BASE' | 'VCP' | 'UNKNOWN';
 
-/** 베이스 패턴 감지 결과 — 수치 기반 분석 후 사용자 육안 확인 필수 */
 export interface BasePattern {
   type: CanslimBasePatternType;
   pivotPoint: number;
@@ -695,99 +497,77 @@ export interface BasePattern {
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
 }
 
-/**
- * CAN SLIM 평가에 필요한 종목 데이터 (디자인 문서 §2.1)
- *
- * 왜 기존 ScannerResult와 분리하는가?
- * - CAN SLIM은 펀더멘털 중심(EPS, ROE, 기관) 데이터 구조가 필요함
- * - VCP 스캐너는 기술적 분석(가격 패턴) 중심
- * - 두 시스템은 RS Rating, MA 등 공통 메트릭만 공유
- */
 export interface CanslimStockData {
   symbol: string;
   market: MarketCode;
+  marketCap: number | null;
 
-  // ── C: Current Quarterly Earnings ──────────────────────────
-  currentQtrEpsGrowth: number | null;       // 최근 분기 EPS 성장률 (%)
-  priorQtrEpsGrowth: number | null;         // 직전 분기 EPS 성장률 — 가속화 검증용
-  epsGrowthLast3Qtrs: (number | null)[];    // [가장최근, 직전, 2분기전] — 연속 성장 검증
-  currentQtrSalesGrowth: number | null;     // 최근 분기 매출 성장률 (%)
+  // C: Current Quarterly Earnings
+  currentQtrEpsGrowth: number | null;
+  priorQtrEpsGrowth: number | null;
+  epsGrowthLast3Qtrs: (number | null)[];
+  currentQtrSalesGrowth: number | null;
 
-  // ── A: Annual Earnings Growth ──────────────────────────────
-  annualEpsGrowthEachYear: (number | null)[]; // [올해, 1년전, 2년전] — 각 연도 독립 검증
-  hadNegativeEpsInLast3Yr: boolean | null;    // 3년 내 적자 이력 여부
-  roe: number | null;                         // 자기자본이익률 (%)
+  // A: Annual Earnings Growth
+  annualEpsGrowthEachYear: (number | null)[];
+  hadNegativeEpsInLast3Yr: boolean | null;
+  roe: number | null;
 
-  // ── N: New High / Base Pattern ─────────────────────────────
+  // N: New High / Base Pattern
   currentPrice: number;
   price52WeekHigh: number;
-  pivotPoint: number | null;               // 베이스 피벗 포인트 가격
-  weeksBuildingBase: number | null;        // 베이스 형성 기간 (주)
+  pivotPoint: number | null;
+  weeksBuildingBase: number | null;
   detectedBasePattern: CanslimBasePatternType | null;
 
-  // ── S: Supply & Demand ─────────────────────────────────────
+  // S: Supply & Demand
   dailyVolume: number;
-  avgVolume50: number;                     // 50일 평균 거래량
-  floatShares: number | null;              // 유통 주식 수
-  sharesBuyback: boolean | null;           // 최근 분기 자사주 매입 여부
+  avgVolume50: number;
+  floatShares: number | null;
+  sharesBuyback: boolean | null;
 
-  // ── L: Leader ──────────────────────────────────────────────
-  rsRating: number | null;                 // 1~99 (MTN RS 모듈 연동)
-  mansfieldRsFlag: boolean | null;         // 지수 아웃퍼폼 여부
+  // L: Leader
+  rsRating: number | null;
+  mansfieldRsFlag: boolean | null;
 
-  // ── I: Institutional Sponsorship ───────────────────────────
+  // I: Institutional Sponsorship
   institutionalSponsorshipTrend: 'INCREASING' | 'FLAT' | 'DECREASING' | null;
-  institutionalOwnershipPct: number | null; // 기관 보유 비율 (%)
-  numInstitutionalHolders: number | null;   // 보유 기관 수
+  institutionalOwnershipPct: number | null;
+  numInstitutionalHolders: number | null;
 }
 
-/**
- * 매크로 시장 데이터 — M(시장 방향성) 조건 평가용
- * 기존 MasterFilter의 분배일/FTD 데이터와 연동
- */
 export interface CanslimMacroMarketData {
   actionLevel: MacroActionLevel;
-  distributionDayCount: number;   // 최근 5주 내 분배일 수
-  followThroughDay: boolean;      // 바닥 확인 신호 (FTD) 발생 여부
-  lastFTDDate: string | null;     // 가장 최근 FTD 날짜
+  distributionDayCount: number;
+  followThroughDay: boolean;
+  lastFTDDate: string | null;
+  benchmarkData?: OHLCData[];
 }
 
-/** N 조건 평가 결과 — 피벗 대비 현재가 위치 */
 export type CanslimNStatus = 'VALID' | 'EXTENDED' | 'TOO_LATE' | 'INVALID';
 
-/** CAN SLIM 7 Pillar 필터링 결과 */
 export interface CanslimResult {
   pass: boolean;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW';
-  failedPillar: string | null;       // 탈락 원인 pillar (예: 'C_EPS', 'M', 'A_ROE')
-  warnings: string[];                // 경고 플래그 (탈락은 아니나 주의)
+  failedPillar: string | null;
+  warnings: string[];
   nStatus: CanslimNStatus;
-  stopLossPrice: number | null;      // 매수 기준가 × 0.92 (7~8% 손절)
-  pillarDetails: CanslimPillarDetail[]; // 각 Pillar 평가 상세
+  stopLossPrice: number | null;
+  pillarDetails: CanslimPillarDetail[];
 }
 
-/** 개별 Pillar 평가 상세 — UI 드릴다운 표시용 */
 export interface CanslimPillarDetail {
-  pillar: string;                    // C, A, N, S, L, I, M
-  label: string;                     // 사람이 읽을 수 있는 설명
+  pillar: string;
+  label: string;
   status: 'PASS' | 'FAIL' | 'WARNING' | 'INFO';
-  value: string | number | null;     // 실제 값
-  threshold: string;                 // 기준값
-  description: string;               // 상세 설명
+  value: string | number | null;
+  threshold: string;
+  description: string;
 }
 
-/**
- * CAN SLIM + VCP 이중 스크리너 비교 티어 (디자인 문서 §4)
- * - TIER_1: 양쪽 모두 통과 — 최강 주도주 후보
- * - WATCHLIST: CAN SLIM만 통과 — 패턴 완성 대기
- * - SHORT_TERM: VCP만 통과 — 단기 트레이딩 후보
- * - EXCLUDED: 양쪽 모두 탈락
- */
 export type DualScreenerTier = 'TIER_1' | 'WATCHLIST' | 'SHORT_TERM' | 'EXCLUDED';
 
-/** CAN SLIM 스캐너 결과 — UI 테이블 표시용 */
 export interface CanslimScannerResult {
-  // 기본 종목 정보
   ticker: string;
   exchange: string;
   name: string;
@@ -795,37 +575,15 @@ export interface CanslimScannerResult {
   currentPrice: number | null;
   marketCap: number | null;
   currency: 'USD' | 'KRW';
-
-  // CAN SLIM 결과
   canslimResult: CanslimResult;
-
-  // 베이스 패턴
   basePattern: BasePattern | null;
-
-  // VCP 크로스 레퍼런스
   vcpGrade: VcpAnalysis['grade'] | null;
   vcpScore: number | null;
-
-  // 이중 검증 티어
   dualTier: DualScreenerTier;
-
-  // RS 메트릭
   rsRating: number | null;
   mansfieldRsFlag: boolean | null;
-
-  // 상태 관리
   status: ScannerStatus;
   analyzedAt: string | null;
   errorMessage: string | null;
-  dataWarnings: string[];              // DATA_PARTIAL, DATA_STALE 등
+  dataWarnings: string[];
 }
-
-/**
- * [추후 업그레이드 계획] I 조건 기관 보유 데이터 강화
- *
- * 현재: Yahoo institutionOwnership 모듈 (부분 데이터)
- * 추후:
- * - 미국시장: SEC 13F 공시 API 연동 (분기별 기관 보유 내역)
- * - 국내시장: DART 분기보고서 기관 보유 API 연동
- * - 별도 Cron 배치 → Supabase institution_holdings 테이블에 저장
- */

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getMarketDailyPrice } from '@/lib/finance/kis-api';
-import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/yahoo-api';
-import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
-import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/calculations';
-import { analyzeVcp } from '@/lib/finance/vcp-engine';
+import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/providers/yahoo-api';
+import { getSecFundamentals } from '@/lib/finance/providers/sec-edgar-api';
+import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/core/calculations';
+import { analyzeVcp } from '@/lib/finance/engines/vcp-engine';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
-import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/stock-metrics';
+import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
@@ -163,6 +163,7 @@ function mergeStandardMetrics(response: MarketAnalysisResponse, metric: StockMet
       metrics: {
         ...response.sepaEvidence.metrics,
         rsRating: standardRs,
+        rsSource: standardRs !== null ? ('UNIVERSE' as const) : (response.sepaEvidence.metrics.rsSource ?? null),
         internalRsRating: standardRs,
         rsRank: metric?.rs_rank ?? null,
         rsUniverseSize: metric?.rs_universe_size ?? null,

@@ -1,6 +1,6 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
-import { calculatePortfolioRiskSummary } from '@/lib/finance/portfolio-risk';
-import { attachTradeMetrics } from '@/lib/finance/trade-metrics';
+import { calculatePortfolioRiskSummary } from '@/lib/finance/core/portfolio-risk';
+import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { SecurityProfile, Trade } from '@/types';
 

@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -12,12 +14,18 @@ import {
   XCircle,
   Info,
   BarChart3,
+  LayoutDashboard,
+  Search,
+  Plus,
+  Check,
+  Activity,
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
-import { dualTierLabel } from '@/lib/finance/canslim-engine';
+import ScannerTabNav from '@/components/scanner/ScannerTabNav';
+import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 import type {
   CanslimMacroMarketData,
   CanslimScannerResult,
@@ -32,9 +40,11 @@ import type {
 const SCAN_CONCURRENCY = 3;
 const KR_SCAN_CONCURRENCY = 2;
 const STORAGE_PREFIX = 'mtn:canslim-snapshot:v1:';
+const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 
+type ViewMode = 'web' | 'app';
 type FilterKey = 'all' | 'pass' | 'fail' | 'tier1' | 'watchlist' | 'short_term' | 'high_confidence' | 'warnings';
-type SortKey = 'default' | 'confidence' | 'dualTier' | 'rs' | 'pillar';
+type SortKey = 'marketCap' | 'dualTier' | 'confidence' | 'rs' | 'pillar' | 'default';
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100 대형 성장주에서 CAN SLIM 주도주를 탐색합니다.' },
@@ -55,11 +65,12 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 ];
 
 const SORTS: { key: SortKey; label: string }[] = [
-  { key: 'default', label: '기본순' },
+  { key: 'marketCap', label: '시가총액순' },
   { key: 'dualTier', label: '이중검증 티어' },
   { key: 'confidence', label: '신뢰도순' },
   { key: 'rs', label: 'RS순' },
   { key: 'pillar', label: '통과 Pillar 많은 순' },
+  { key: 'default', label: '기본순' },
 ];
 
 // === 유틸 ===
@@ -126,6 +137,14 @@ function formatPrice(value: number | null, currency: 'USD' | 'KRW') {
   }).format(value);
 }
 
+function formatMarketCap(value: number | null) {
+  if (!value) return '-';
+  if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T';
+  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+  if (value >= 1e6) return (value / 1e6).toFixed(0) + 'M';
+  return value.toLocaleString();
+}
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
 }
@@ -141,8 +160,10 @@ export default function CanslimScannerPage() {
   const [scanStage, setScanStage] = useState('대기 중');
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('dualTier');
+  const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [selectedResult, setSelectedResult] = useState<CanslimScannerResult | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('web');
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -154,7 +175,36 @@ export default function CanslimScannerPage() {
       setMacro(snapshot.macro);
       setLastScannedAt(snapshot.savedAt);
     }
+
+    // 컨테스트 선정 종목 로드
+    const stored = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setSelectedTickers(new Set(parsed));
+      } catch (e) {
+        console.error('Failed to parse contest selection', e);
+      }
+    }
   }, []);
+
+  // 컨테스트 선정 저장
+  useEffect(() => {
+    if (selectedTickers.size > 0 || lastScannedAt) {
+      window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify(Array.from(selectedTickers)));
+    }
+  }, [selectedTickers]);
+
+  const toggleSelected = (ticker: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else if (next.size < 10) next.add(ticker);
+      else alert('최대 10종목까지만 선정 가능합니다.');
+      return next;
+    });
+  };
 
   const handleUniverseChange = (u: ScannerUniverse) => {
     if (isScanning) return;
@@ -183,7 +233,6 @@ export default function CanslimScannerPage() {
     abortRef.current = abort;
 
     try {
-      // 1. 유니버스 가져오기
       const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abort.signal });
       if (!resp.ok) throw new Error(`유니버스 로딩 실패 (${resp.status})`);
       const meta = await resp.json() as ScannerUniverseResponse;
@@ -192,7 +241,6 @@ export default function CanslimScannerPage() {
       setProgress({ current: 0, total: items.length });
       setScanStage('CAN SLIM 평가 실행 중');
 
-      // 초기 빈 결과
       let current: CanslimScannerResult[] = items.map((item) => ({
         ticker: item.ticker,
         exchange: item.exchange,
@@ -223,7 +271,6 @@ export default function CanslimScannerPage() {
       }));
       setResults(current);
 
-      // 2. 병렬 스캔
       const concurrency = universe.startsWith('KOS') ? KR_SCAN_CONCURRENCY : SCAN_CONCURRENCY;
       const queue = [...items];
       let completed = 0;
@@ -233,7 +280,6 @@ export default function CanslimScannerPage() {
           const item = queue.shift();
           if (!item) break;
 
-          // 진행 중 상태 업데이트
           current = current.map((r) => r.ticker === item.ticker ? { ...r, status: 'running' as const } : r);
           setResults([...current]);
 
@@ -251,11 +297,10 @@ export default function CanslimScannerPage() {
               macro: CanslimMacroMarketData;
             };
 
-            // 매크로 데이터는 첫 번째 응답에서 캐시
             if (!macro) setMacro(payload.macro);
 
             current = current.map((r) =>
-              r.ticker === item.ticker ? { ...payload.result, name: item.name, marketCap: item.marketCap } : r
+              r.ticker === item.ticker ? { ...payload.result, name: item.name, marketCap: payload.result.marketCap || item.marketCap } : r
             );
             setResults([...current]);
           } catch (err) {
@@ -310,6 +355,7 @@ export default function CanslimScannerPage() {
     else if (filterKey === 'warnings') list = list.filter((r) => r.canslimResult.warnings.length > 0 || r.dataWarnings.length > 0);
 
     list.sort((a, b) => {
+      if (sortKey === 'marketCap') return (b.marketCap ?? 0) - (a.marketCap ?? 0);
       if (sortKey === 'dualTier') return tierSortValue(a.dualTier) - tierSortValue(b.dualTier) || (b.rsRating ?? 0) - (a.rsRating ?? 0);
       if (sortKey === 'confidence') return confidenceSortValue(a.canslimResult.confidence) - confidenceSortValue(b.canslimResult.confidence);
       if (sortKey === 'rs') return (b.rsRating ?? 0) - (a.rsRating ?? 0);
@@ -329,28 +375,320 @@ export default function CanslimScannerPage() {
     errors: results.filter((r) => r.status === 'error').length,
   }), [results]);
 
-  // === 렌더링 ===
+  // === 테이블 렌더링 ===
+  const renderTable = () => (
+    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50 backdrop-blur-sm">
+      <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
+        <colgroup>
+          <col className="w-[4%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+          <col className="w-[8%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+        </colgroup>
+        <thead className="bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+          <tr>
+            <th className="px-3 py-4 text-left">#</th>
+            <th className="px-3 py-4 text-left">종목</th>
+            <th className="px-3 py-4 text-right">시가총액</th>
+            <th className="px-3 py-4 text-right">현재가</th>
+            <th className="px-3 py-4 text-left">이중 검증</th>
+            <th className="px-3 py-4 text-left">CAN SLIM</th>
+            <th className="px-3 py-4 text-left">신뢰도</th>
+            <th className="px-3 py-4 text-right">RS</th>
+            <th className="px-3 py-4 text-left">패턴</th>
+            <th className="px-3 py-4 text-center">선정</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800/50">
+          {filteredResults.map((r, idx) => (
+            <tr
+              key={r.ticker}
+              className={`cursor-pointer transition-colors hover:bg-slate-800/40 ${selectedTickers.has(r.ticker) ? 'bg-rose-500/5' : ''}`}
+              onClick={() => r.status === 'done' && setSelectedResult(r)}
+            >
+              <td className="px-3 py-4 text-slate-500 font-mono text-[10px]">{idx + 1}</td>
+              <td className="px-3 py-4">
+                <div className="font-bold text-white group-hover:text-rose-400 transition-colors">{r.ticker}</div>
+                <div className="text-[10px] text-slate-500 truncate">{r.name}</div>
+              </td>
+              <td className="px-3 py-4 text-right font-mono text-slate-400">
+                {formatMarketCap(r.marketCap)}
+              </td>
+              <td className="px-3 py-4 text-right font-mono text-slate-300 font-medium">
+                {r.status === 'running' ? <LoadingSpinner size="sm" /> : formatPrice(r.currentPrice, r.currency)}
+              </td>
+              <td className="px-3 py-4">
+                {r.status === 'done' && (
+                  <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[10px] font-bold ${tierBadgeClass(r.dualTier)}`}>
+                    {dualTierLabel(r.dualTier).emoji} {dualTierLabel(r.dualTier).label}
+                  </span>
+                )}
+                {r.status === 'error' && <span className="text-rose-400 text-[10px]">에러</span>}
+                {(r.status === 'queued' || r.status === 'running') && <span className="text-slate-600 text-[10px]">대기 중</span>}
+              </td>
+              <td className="px-3 py-4">
+                {r.status === 'done' && (
+                  <span className={`inline-flex items-center gap-1 text-xs font-bold ${r.canslimResult.pass ? 'text-emerald-400' : 'text-rose-400 font-normal opacity-70'}`}>
+                    {r.canslimResult.pass ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                    {r.canslimResult.pass ? 'PASS' : r.canslimResult.failedPillar ?? 'FAIL'}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-4">
+                {r.status === 'done' && (
+                  <span className={`text-[11px] font-bold tracking-tight ${
+                    r.canslimResult.confidence === 'HIGH' ? 'text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.2)]' :
+                    r.canslimResult.confidence === 'MEDIUM' ? 'text-amber-400' : 'text-rose-400'
+                  }`}>
+                    {r.canslimResult.confidence}
+                    {r.canslimResult.warnings.length > 0 && (
+                      <AlertTriangle className="ml-1 inline h-3 w-3 text-amber-500" />
+                    )}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-4 text-right font-mono">
+                {r.rsRating !== null ? (
+                  <span className={r.rsRating >= 90 ? 'text-emerald-400 font-bold' : r.rsRating >= 80 ? 'text-slate-200 font-semibold' : 'text-slate-500'}>
+                    {r.rsRating}
+                  </span>
+                ) : '-'}
+              </td>
+              <td className="px-3 py-4">
+                {r.basePattern ? (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-indigo-300 font-bold text-[10px] bg-indigo-500/10 px-1 rounded border border-indigo-500/20 w-fit">
+                      {r.basePattern.type.replace(/_/g, ' ')}
+                    </span>
+                    <span className="text-[9px] text-slate-500 italic">Score: {r.vcpScore ?? '-'}</span>
+                  </div>
+                ) : <span className="text-slate-700">-</span>}
+              </td>
+              <td className="px-3 py-4 text-center">
+                <button
+                  onClick={(e) => toggleSelected(r.ticker, e)}
+                  disabled={r.status !== 'done'}
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all ${
+                    selectedTickers.has(r.ticker)
+                      ? 'border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                      : 'border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
+                  } disabled:opacity-20`}
+                >
+                  {selectedTickers.has(r.ticker) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  // === 카드 렌더링 ===
+  const renderCards = () => (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {filteredResults.map((r, idx) => (
+        <motion.div
+          key={r.ticker}
+          layout
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`group flex flex-col overflow-hidden rounded-2xl border transition-all hover:border-rose-500/50 hover:shadow-2xl hover:shadow-rose-500/10 ${
+            selectedTickers.has(r.ticker) ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 bg-slate-900/40'
+          }`}
+          onClick={() => r.status === 'done' && setSelectedResult(r)}
+        >
+          {/* 카드 헤더 */}
+          <div className="relative border-b border-slate-800/50 bg-slate-900/60 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-black tracking-tight text-white group-hover:text-rose-400 transition-colors">
+                    {r.ticker}
+                  </span>
+                  {r.status === 'done' && (
+                    <span className={`inline-flex rounded-lg border px-1.5 py-0.5 text-[9px] font-bold ${tierBadgeClass(r.dualTier)}`}>
+                      {dualTierLabel(r.dualTier).label}
+                    </span>
+                  )}
+                </div>
+                <span className="truncate text-xs text-slate-500 font-medium">{r.name}</span>
+              </div>
+              <button
+                onClick={(e) => toggleSelected(r.ticker, e)}
+                disabled={r.status !== 'done'}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                  selectedTickers.has(r.ticker)
+                    ? 'border-rose-500 bg-rose-500 text-white shadow-xl shadow-rose-500/30 ring-2 ring-rose-500/20'
+                    : 'border-slate-800 bg-slate-950 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
+                } disabled:opacity-20`}
+              >
+                {selectedTickers.has(r.ticker) ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+              </button>
+            </div>
+          </div>
+
+          {/* 카드 바디 */}
+          <div className="flex flex-1 flex-col p-4 space-y-4">
+            {/* 상단 지표 영역 */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Price</span>
+                <span className="font-mono text-base font-bold text-white tracking-tight">
+                  {r.status === 'running' ? <LoadingSpinner size="sm" /> : formatPrice(r.currentPrice, r.currency)}
+                </span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-right">Relative Strength</span>
+                <span className={`font-mono text-base font-black ${
+                  (r.rsRating ?? 0) >= 90 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 
+                  (r.rsRating ?? 0) >= 80 ? 'text-white' : 'text-slate-500'
+                }`}>
+                  {r.rsRating ?? '--'}
+                </span>
+              </div>
+            </div>
+
+            {/* Pillar 진행 대시보드 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">7 Pillar Score</span>
+                <span className="text-[10px] font-black text-rose-300">{pillarPassCount(r)} / 7 PASS</span>
+              </div>
+              <div className="flex gap-1">
+                {['M','C','A','N','S','L','I'].map((p, i) => {
+                  const detail = r.canslimResult.pillarDetails.find(d => d.pillar === p);
+                  const isPass = detail?.status === 'PASS';
+                  const isFail = detail?.status === 'FAIL';
+                  return (
+                    <div 
+                      key={p} 
+                      title={`${p}: ${detail?.description || '대기 중'}`}
+                      className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+                        isPass ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 
+                        isFail ? 'bg-rose-500/40' : 'bg-slate-800'
+                      }`} 
+                    />
+                  );
+                })}
+              </div>
+              <div className="flex justify-between px-0.5">
+                {['M','C','A','N','S','L','I'].map(p => (
+                  <span key={p} className="text-[8px] font-bold text-slate-600">{p}</span>
+                ))}
+              </div>
+            </div>
+
+            {/* 카드 푸터 (메타 정보) */}
+            <div className="mt-auto pt-3 border-t border-slate-800/50">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-slate-950/60 p-2 border border-slate-800/50">
+                  <div className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter mb-0.5 text-center">Confidence</div>
+                  <div className={`text-[10px] font-black text-center ${
+                    r.canslimResult.confidence === 'HIGH' ? 'text-emerald-400' :
+                    r.canslimResult.confidence === 'MEDIUM' ? 'text-amber-400' : 'text-rose-400'
+                  }`}>
+                    {r.canslimResult.confidence}
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-950/60 p-2 border border-slate-800/50">
+                  <div className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter mb-0.5 text-center">Market Cap</div>
+                  <div className="text-[10px] font-black text-slate-300 text-center font-mono">
+                    {formatMarketCap(r.marketCap)}
+                  </div>
+                </div>
+              </div>
+              {r.basePattern && (
+                <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/5 py-1.5">
+                  <LayoutDashboard className="h-3 w-3 text-indigo-400" />
+                  <span className="text-[10px] font-bold text-indigo-300 truncate tracking-tight uppercase">
+                    {r.basePattern.type.replace(/_/g, ' ')}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* 상태 오버레이 (에러/로딩) */}
+          {r.status === 'error' && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/90 p-4 text-center backdrop-blur-sm">
+              <AlertTriangle className="mb-2 h-8 w-8 text-rose-500" />
+              <p className="text-xs font-bold text-rose-400">분석 실패</p>
+              <p className="mt-1 text-[10px] text-slate-500 line-clamp-2">{r.errorMessage}</p>
+            </div>
+          )}
+        </motion.div>
+      ))}
+    </div>
+  );
+
+  // === 메인 렌더링 ===
   return (
     <div className="space-y-6">
+      {/* 글로벌 스캐너 탭 네비게이션 */}
+      <ScannerTabNav />
+
       {/* 헤더 */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <ScanSearch className="h-7 w-7 text-rose-500" />
-            CAN SLIM 스캐너
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            윌리엄 오닐의 7 Pillar 필터로 진짜 주도주를 발굴합니다. VCP 스캐너와 이중 검증.
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-rose-500/20 p-2.5 ring-1 ring-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
+              <ScanSearch className="h-6 w-6 text-rose-500" />
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tightest">
+              CAN SLIM
+              <span className="ml-2 bg-gradient-to-r from-rose-500 to-amber-500 bg-clip-text text-transparent font-black tracking-tighter uppercase opacity-80">Scanner</span>
+            </h1>
+          </div>
+          <p className="text-sm text-slate-500 font-medium pl-14">
+            윌리엄 오닐의 7 Pillar 필터 & VCP 이중 검증 기반 주도주 발굴
           </p>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 뷰 모드 토글 (웹/앱) */}
+          <div className="flex items-center gap-1 rounded-xl bg-slate-900/50 border border-slate-800 p-1">
+            <button
+              onClick={() => setViewMode('web')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                viewMode === 'web' 
+                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <Search className="h-3.5 w-3.5" /> 웹
+            </button>
+            <button
+              onClick={() => setViewMode('app')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+                viewMode === 'app' 
+                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" /> 앱
+            </button>
+          </div>
+
+          <div className="h-8 w-px bg-slate-800 mx-1 hidden sm:block" />
+
           {isScanning ? (
-            <Button onClick={stopScan} variant="danger" size="sm" className="flex items-center gap-2">
+            <Button onClick={stopScan} variant="danger" className="flex items-center gap-2 rounded-xl font-bold shadow-xl shadow-rose-500/10 active:scale-95 transition-all">
               <Square className="h-4 w-4" /> 중단
             </Button>
           ) : (
-            <Button onClick={startScan} variant="primary" size="sm" className="flex items-center gap-2">
-              <Play className="h-4 w-4" /> CAN SLIM 스캔
+            <Button 
+              onClick={startScan} 
+              variant="primary" 
+              className="group relative flex items-center gap-2 rounded-xl border-none bg-gradient-to-br from-rose-600 to-rose-700 font-black text-white shadow-xl shadow-rose-500/20 hover:from-rose-500 hover:to-rose-600 active:scale-95 transition-all"
+            >
+              <Play className="h-4 w-4 fill-white pr-0.5" /> CAN SLIM 스캔 시작
             </Button>
           )}
         </div>
@@ -358,249 +696,266 @@ export default function CanslimScannerPage() {
 
       {/* 매크로 배너 */}
       {macro && (
-        <div className={`rounded-xl border p-4 ${
-          macro.actionLevel === 'HALT' ? 'border-rose-500/30 bg-rose-500/5' :
-          macro.actionLevel === 'REDUCED' ? 'border-amber-500/30 bg-amber-500/5' :
-          'border-emerald-500/30 bg-emerald-500/5'
-        }`}>
-          <div className="flex items-center gap-3 text-sm">
-            <Shield className={`h-5 w-5 ${
-              macro.actionLevel === 'HALT' ? 'text-rose-400' :
-              macro.actionLevel === 'REDUCED' ? 'text-amber-400' : 'text-emerald-400'
-            }`} />
-            <span className="font-medium text-white">
-              M: 시장 방향성 — {macro.actionLevel}
-            </span>
-            <span className="text-slate-400">
-              분배일: {macro.distributionDayCount}일 | FTD: {macro.followThroughDay ? '확인됨' : '미확인'}
-            </span>
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`group flex flex-col gap-4 rounded-2xl border p-5 shadow-2xl backdrop-blur-md transition-all ${
+            macro.actionLevel === 'HALT' ? 'border-rose-500/40 bg-rose-500/5 shadow-rose-500/5' :
+            macro.actionLevel === 'REDUCED' ? 'border-amber-500/40 bg-amber-500/5 shadow-amber-500/5' :
+            'border-emerald-500/40 bg-emerald-500/5 shadow-emerald-500/5'
+          }`}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`rounded-xl p-2 ${
+                macro.actionLevel === 'HALT' ? 'bg-rose-500/20 text-rose-500' :
+                macro.actionLevel === 'REDUCED' ? 'bg-amber-500/20 text-amber-500' : 
+                'bg-emerald-500/20 text-emerald-500'
+              }`}>
+                <Shield className="h-5 w-5" />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Macro Direction</span>
+                  <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${
+                    macro.actionLevel === 'HALT' ? 'bg-rose-500' :
+                    macro.actionLevel === 'REDUCED' ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`} />
+                </div>
+                <span className="text-xl font-black tracking-tightest text-white uppercase drop-shadow-sm">
+                  Market Trend: {macro.actionLevel}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-6 rounded-xl bg-slate-950/40 px-5 py-3 border border-slate-800/40">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">Distribution</span>
+                <span className="font-mono text-base font-black text-rose-400">{macro.distributionDayCount}일</span>
+              </div>
+              <div className="h-8 w-px bg-slate-800/60" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">Follow Thru</span>
+                <span className={`font-mono text-base font-black ${macro.followThroughDay ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {macro.followThroughDay ? 'SET' : 'WAIT'}
+                </span>
+              </div>
+            </div>
           </div>
+          
           {macro.actionLevel === 'HALT' && (
-            <p className="mt-2 text-xs text-rose-300">⚠️ CAN SLIM 신규 발굴 전면 정지 — 분배일 과다 또는 하락 추세</p>
+            <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 px-3 py-2 text-rose-300">
+              <AlertTriangle className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
+              <p className="text-xs font-bold tracking-tight">CAN SLIM 신규 진입 보류 — 하락 추세 또는 분배일 과다 상태</p>
+            </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* 유니버스 선택 */}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
         {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
           <button
             key={u}
             type="button"
             disabled={isScanning}
             onClick={() => handleUniverseChange(u)}
-            className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+            className={`group relative overflow-hidden rounded-xl border px-4 py-3 transition-all active:scale-95 ${
               universe === u
-                ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
-                : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white'
+                ? 'border-rose-500/60 bg-rose-500/15 text-rose-50 shadow-lg shadow-rose-500/10 ring-1 ring-rose-500/30'
+                : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-600 hover:bg-slate-800/60 hover:text-slate-200'
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            {UNIVERSES[u].label}
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="text-sm font-black tracking-tightest uppercase">{UNIVERSES[u].label}</span>
+              <span className={`text-[9px] font-bold uppercase tracking-tighter ${universe === u ? 'text-rose-400' : 'text-slate-600'}`}>
+                {universe.includes('KOS') ? 'KOSPI/KOSDAQ' : 'TECH GROWTH'}
+              </span>
+            </div>
+            {universe === u && (
+              <motion.div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500 blur-[2px]" />
+            )}
           </button>
         ))}
       </div>
 
-      {/* 진행 상태 */}
+      {/* 진행 상태 바 */}
       {isScanning && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl border border-slate-700 bg-slate-800/50 p-4"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative overflow-hidden rounded-2xl border border-slate-700 bg-slate-900/80 p-5 shadow-2xl shadow-rose-500/5 backdrop-blur-md"
         >
-          <div className="flex items-center gap-3">
-            <LoadingSpinner size="sm" />
-            <span className="text-sm text-white">{scanStage}</span>
-            <span className="ml-auto font-mono text-sm text-slate-400">
-              {progress.current}/{progress.total}
-            </span>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <LoadingSpinner size="sm" />
+              <div className="flex flex-col">
+                <span className="text-xs font-black text-rose-400 uppercase tracking-widest animate-pulse">Scanning Engine</span>
+                <span className="text-sm font-bold text-white tracking-tight">{scanStage}</span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="font-mono text-xl font-black text-white tracking-tighter">
+                {progress.current} <span className="text-slate-600 text-sm">/ {progress.total}</span>
+              </span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Analysis Load</span>
+            </div>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-700">
+          <div className="h-3 overflow-hidden rounded-full bg-slate-800/50 p-0.5 ring-1 ring-slate-700/50 shadow-inner">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-rose-500 to-amber-500"
+              className="h-full rounded-full bg-gradient-to-r from-rose-600 via-amber-500 to-rose-400"
               initial={{ width: 0 }}
               animate={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }}
-              transition={{ ease: 'easeOut' }}
+              transition={{ ease: 'easeOut', duration: 0.5 }}
             />
           </div>
         </motion.div>
       )}
 
-      {/* 통계 카드 */}
+      {/* 통계 바 */}
       {stats.total > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
-            { label: '분석 완료', value: stats.total, color: 'text-white' },
-            { label: 'PASS', value: stats.pass, color: 'text-emerald-400' },
-            { label: 'TIER 1', value: stats.tier1, color: 'text-rose-400' },
-            { label: '워치리스트', value: stats.watchlist, color: 'text-amber-400' },
-            { label: '오류', value: stats.errors, color: 'text-slate-500' },
+            { label: '분석 종목', value: stats.total, color: 'text-white', icon: <Search className="h-3 w-3" /> },
+            { label: 'PASS 유력', value: stats.pass, color: 'text-emerald-400', icon: <CheckCircle2 className="h-3 w-3" /> },
+            { label: 'TIER 1 선정', value: stats.tier1, color: 'text-rose-400', icon: <Activity className="h-3 w-3" /> },
+            { label: '공략 대기', value: stats.watchlist, color: 'text-amber-400', icon: <LayoutDashboard className="h-3 w-3" /> },
+            { label: '데이터 부족', value: stats.errors, color: 'text-slate-500', icon: <AlertTriangle className="h-3 w-3" /> },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3 text-center">
-              <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-              <div className="text-xs text-slate-500">{stat.label}</div>
+            <div key={stat.label} className="group relative rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-4 text-center transition-all hover:bg-slate-800/60 hover:border-slate-700">
+              <div className={`text-2xl font-black tracking-tighter ${stat.color} mb-1 drop-shadow-md`}>{stat.value}</div>
+              <div className="flex items-center justify-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-tighter group-hover:text-slate-300 transition-colors">
+                {stat.icon}
+                {stat.label}
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* 필터 + 정렬 */}
+      {/* 필터 및 정렬 컨트롤 */}
       {results.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilterKey(f.key)}
-              className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
-                filterKey === f.key
-                  ? 'border-rose-500/50 bg-rose-500/15 text-rose-200'
-                  : 'border-slate-700 text-slate-400 hover:text-white'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <span className="mx-2 text-slate-600">|</span>
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-300 outline-none focus:border-slate-500"
-          >
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>{s.label}</option>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center p-1 border-b border-slate-800/50 pb-5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilterKey(f.key)}
+                className={`rounded-xl border px-3.5 py-1.5 text-[11px] font-black tracking-tighter transition-all hover:scale-105 active:scale-95 ${
+                  filterKey === f.key
+                    ? 'border-rose-500/50 bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                    : 'border-slate-800 bg-slate-900/60 text-slate-500 hover:border-slate-600 hover:text-slate-300'
+                }`}
+              >
+                {f.label}
+              </button>
             ))}
-          </select>
-          {lastScannedAt && (
-            <span className="ml-auto text-xs text-slate-600">
-              마지막 스캔: {new Date(lastScannedAt).toLocaleString('ko-KR')}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* 결과 테이블 */}
-      {filteredResults.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-slate-800">
-          <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
-            <colgroup>
-              <col className="w-[5%]" />
-              <col className="w-[15%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[12%]" />
-              <col className="w-[8%]" />
-              <col className="w-[8%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
-            </colgroup>
-            <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-2 py-3 text-left">#</th>
-                <th className="px-2 py-3 text-left">종목</th>
-                <th className="px-2 py-3 text-right">현재가</th>
-                <th className="px-2 py-3 text-left">이중 검증</th>
-                <th className="px-2 py-3 text-left">CAN SLIM</th>
-                <th className="px-2 py-3 text-left">신뢰도</th>
-                <th className="px-2 py-3 text-left">VCP</th>
-                <th className="px-2 py-3 text-right">RS</th>
-                <th className="px-2 py-3 text-left">패턴</th>
-                <th className="px-2 py-3 text-right">손절가</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/50">
-              {filteredResults.map((r, idx) => (
-                <tr
-                  key={r.ticker}
-                  className="cursor-pointer transition-colors hover:bg-slate-800/50"
-                  onClick={() => r.status === 'done' && setSelectedResult(r)}
+          </div>
+          
+          <div className="lg:ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-slate-900/80 border border-slate-800 p-1 flex items-center gap-1">
+                <BarChart3 className="h-3 w-3 text-slate-600 ml-2" />
+                <select
+                  value={sortKey}
+                  onChange={(e) => setSortKey(e.target.value as SortKey)}
+                  className="bg-transparent text-[11px] font-black tracking-tighter text-slate-300 outline-none pr-3 cursor-pointer py-1"
                 >
-                  <td className="px-2 py-3 text-slate-500">{idx + 1}</td>
-                  <td className="px-2 py-3">
-                    <div className="font-medium text-white truncate">{r.ticker}</div>
-                    <div className="text-[10px] text-slate-500 truncate">{r.name}</div>
-                  </td>
-                  <td className="px-2 py-3 text-right font-mono text-slate-300">
-                    {r.status === 'running' ? <LoadingSpinner size="sm" /> : formatPrice(r.currentPrice, r.currency)}
-                  </td>
-                  <td className="px-2 py-3">
-                    {r.status === 'done' && (
-                      <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[10px] font-bold ${tierBadgeClass(r.dualTier)}`}>
-                        {dualTierLabel(r.dualTier).emoji} {dualTierLabel(r.dualTier).label}
-                      </span>
-                    )}
-                    {r.status === 'error' && (
-                      <span className="text-rose-400 text-[10px]">에러</span>
-                    )}
-                    {(r.status === 'queued' || r.status === 'running') && (
-                      <span className="text-slate-600 text-[10px]">대기 중</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3">
-                    {r.status === 'done' && (
-                      <span className={`inline-flex items-center gap-1 text-xs font-medium ${r.canslimResult.pass ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {r.canslimResult.pass ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                        {r.canslimResult.pass ? 'PASS' : r.canslimResult.failedPillar ?? 'FAIL'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3">
-                    {r.status === 'done' && (
-                      <span className={`text-xs font-medium ${
-                        r.canslimResult.confidence === 'HIGH' ? 'text-emerald-400' :
-                        r.canslimResult.confidence === 'MEDIUM' ? 'text-amber-400' : 'text-rose-400'
-                      }`}>
-                        {r.canslimResult.confidence}
-                        {r.canslimResult.warnings.length > 0 && (
-                          <AlertTriangle className="ml-1 inline h-3 w-3 text-amber-500" />
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3">
-                    {r.vcpGrade && (
-                      <span className={`text-xs ${
-                        r.vcpGrade === 'strong' ? 'text-emerald-400' :
-                        r.vcpGrade === 'forming' ? 'text-amber-400' :
-                        'text-slate-500'
-                      }`}>
-                        {r.vcpGrade}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3 text-right font-mono">
-                    {r.rsRating !== null ? (
-                      <span className={r.rsRating >= 90 ? 'text-emerald-400 font-bold' : r.rsRating >= 80 ? 'text-slate-200' : 'text-slate-500'}>
-                        {r.rsRating}
-                      </span>
-                    ) : '-'}
-                  </td>
-                  <td className="px-2 py-3 text-[10px]">
-                    {r.basePattern ? (
-                      <span className="text-indigo-300">{r.basePattern.type.replace(/_/g, ' ')}</span>
-                    ) : '-'}
-                  </td>
-                  <td className="px-2 py-3 text-right font-mono text-rose-300/70">
-                    {r.canslimResult.stopLossPrice !== null ? formatPrice(r.canslimResult.stopLossPrice, r.currency) : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {SORTS.map((s) => (
+                    <option key={s.key} value={s.key} className="bg-slate-900">{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {lastScannedAt && (
+              <div className="flex items-center gap-2 font-mono text-[9px] font-bold text-slate-600 uppercase">
+                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                SCAN SYNC: {new Date(lastScannedAt).toLocaleTimeString('ko-KR')}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* 빈 상태 */}
-      {results.length === 0 && !isScanning && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 py-20 text-center">
-          <ScanSearch className="h-12 w-12 text-slate-600" />
-          <p className="mt-4 text-sm text-slate-400">
-            유니버스를 선택하고 <strong>CAN SLIM 스캔</strong>을 시작하세요.
-          </p>
-          <p className="mt-1 text-xs text-slate-600">
-            윌리엄 오닐의 7 Pillar(M·C·A·N·S·L·I) 필터로 주도주를 발굴합니다.
-          </p>
+      {/* 결과 영역 (조건부 렌더링) */}
+      {filteredResults.length > 0 ? (
+        <div className="min-h-[400px]">
+          {viewMode === 'web' ? renderTable() : renderCards()}
         </div>
+      ) : results.length > 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Search className="h-10 w-10 text-slate-800 mb-4" />
+          <p className="text-sm font-bold text-slate-500">조건에 맞는 검색 결과가 없습니다.</p>
+          <button 
+            onClick={() => setFilterKey('all')}
+            className="mt-2 text-xs font-bold text-rose-500 underline underline-offset-4"
+          >
+            필터 초기화
+          </button>
+        </div>
+      )}
+
+      {/* 초기 빈 상태 */}
+      {results.length === 0 && !isScanning && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-800/50 py-32 text-center bg-slate-900/10"
+        >
+          <div className="relative mb-6">
+            <ScanSearch className="h-16 w-16 text-slate-700" />
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+              className="absolute -inset-2 rounded-full border border-slate-800 border-t-rose-500/50 opacity-20"
+            />
+          </div>
+          <p className="text-base font-black text-slate-400 tracking-tightest px-6">
+            유니버스를 선택하고 <strong className="text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">CAN SLIM 엔진</strong>을 가동하세요.
+          </p>
+          <p className="mt-2 text-[10px] font-black text-slate-600 uppercase tracking-widest max-w-sm px-8 leading-relaxed">
+            윌리엄 오닐의 7 Pillar(M·C·A·N·S·L·I) 분석 프레임워크를 통해 실물 경제와 주가 모멘텀이 결합된 슈퍼 주도주를 탐색합니다.
+          </p>
+        </motion.div>
+      )}
+
+      {/* 하단 플로팅 툴바 (콘테스트 선정용) */}
+      {selectedTickers.size > 0 && (
+        <motion.div 
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-8 rounded-2xl border border-rose-500/30 bg-slate-950/90 px-8 py-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] shadow-rose-500/10 backdrop-blur-2xl ring-1 ring-white/10"
+        >
+          <div className="flex flex-col border-r border-slate-800 pr-8">
+            <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Contest Pool</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-black text-white tracking-tight">{selectedTickers.size}</span>
+              <span className="text-xs font-bold text-slate-600">/ 10 종목</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSelectedTickers(new Set())}
+              className="px-2 py-1 text-[11px] font-black text-slate-500 transition-colors hover:text-rose-400 uppercase tracking-tighter"
+            >
+              전체 해제
+            </button>
+            <Link href="/contest">
+              <button className="group relative flex items-center gap-2 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 px-6 py-2.5 font-black text-white shadow-lg transition-all hover:from-rose-500 hover:to-rose-600 active:scale-95">
+                <CheckCircle2 className="h-4 w-4" />
+                선정 완료 (콘테스트 이동)
+                <motion.div 
+                  className="absolute inset-0 rounded-xl ring-2 ring-rose-500 opacity-0 group-hover:opacity-40"
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                />
+              </button>
+            </Link>
+          </div>
+        </motion.div>
       )}
 
       {/* 드릴다운 모달 */}

@@ -35,6 +35,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+/scratch/
+/.gemini/
+/brain/
 
 # typescript
 *.tsbuildinfo

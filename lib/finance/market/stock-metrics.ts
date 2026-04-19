@@ -1,8 +1,8 @@
 import { supabaseServer } from '@/lib/supabase/server';
-import { getMarketDailyPrice } from '@/lib/finance/kis-api';
-import { getYahooDailyPrice } from '@/lib/finance/yahoo-api';
-import { calculateMacroTrendFromData, calculateMansfieldFromData, calculateRSRating, calculateWeightedMomentum } from '@/lib/finance/rs-proxy';
-import { getStandardScannerUniverse } from '@/lib/finance/scanner-universes';
+import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
+import { calculateMacroTrendFromData, calculateMansfieldFromData, calculateRSRating, calculateWeightedMomentum } from '@/lib/finance/market/rs-proxy';
+import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
 import type { DataQuality, MacroActionLevel, MacroTrend, MarketCode, OHLCData, ScannerConstituent, ScannerUniverse, StockMetric } from '@/types';
 
 export const REDUCED_RS_THRESHOLD = 80;

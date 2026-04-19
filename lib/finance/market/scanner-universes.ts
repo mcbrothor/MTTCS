@@ -1,4 +1,4 @@
-import { getKisKospiMarketCapRanking } from '@/lib/finance/kis-api';
+import { getKisKospiMarketCapRanking } from '@/lib/finance/providers/kis-api';
 import { normalizeNasdaqRows } from './scanner-normalizers';
 import { rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
 import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '@/types';
@@ -213,7 +213,7 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
 
   if (ranking.length < 100) {
     try {
-      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item) => ({
+      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item: any) => ({
         ...item,
         source: 'KIS KOSPI market-cap ranking fallback',
       }));

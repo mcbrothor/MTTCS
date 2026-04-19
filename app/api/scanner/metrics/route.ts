@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchLatestMacroTrend, fetchLatestStockMetrics, macroIndexForUniverse, marketForUniverse } from '@/lib/finance/stock-metrics';
+import { fetchLatestMacroTrend, fetchLatestStockMetrics, macroIndexForUniverse, marketForUniverse } from '@/lib/finance/market/stock-metrics';
 import type { ScannerUniverse } from '@/types';
 
 function parseUniverse(value: string | null): ScannerUniverse | null {

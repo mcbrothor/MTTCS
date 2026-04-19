@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
-import { getScannerUniverse } from '@/lib/finance/scanner-universes';
+import { getScannerUniverse } from '@/lib/finance/market/scanner-universes';
 import type { ScannerUniverse, ScannerUniverseResponse } from '@/types';
 
 const UNIVERSE_TTL_MS = 30 * 60 * 1000;

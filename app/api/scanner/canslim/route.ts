@@ -8,12 +8,13 @@
  */
 
 import { NextResponse } from 'next/server';
-import { getYahooDailyPrice } from '@/lib/finance/yahoo-api';
-import { fetchCanslimFundamentals } from '@/lib/finance/canslim-data-fetcher';
-import { evaluateCanslim, determineDualScreenerTier } from '@/lib/finance/canslim-engine';
-import { detectBasePattern } from '@/lib/finance/base-pattern-engine';
-import { analyzeVcp } from '@/lib/finance/vcp-engine';
-import { analyzeSepa, calculateMovingAverage } from '@/lib/finance/calculations';
+import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
+import { fetchCanslimFundamentals } from '@/lib/finance/engines/canslim-data-fetcher';
+import { evaluateCanslim, determineDualScreenerTier } from '@/lib/finance/engines/canslim-engine';
+import { detectBasePattern } from '@/lib/finance/engines/base-pattern-engine';
+import { analyzeVcp } from '@/lib/finance/engines/vcp-engine';
+import { analyzeSepa, calculateMovingAverage } from '@/lib/finance/core/calculations';
+import { MACRO_CRITERIA } from '@/lib/finance/engines/canslim-criteria';
 import type {
   CanslimMacroMarketData,
   CanslimScannerResult,
@@ -32,17 +33,37 @@ const round = (v: number, d = 2) => Number(v.toFixed(d));
  * - CAN SLIM에서는 분배일 수와 FTD 여부만 필요합니다
  * - 향후 Supabase에 캐시된 매크로 데이터를 직접 조회하는 것으로 개선 가능
  */
+
+function getYahooTicker(ticker: string, exchange: string): string {
+  const upper = ticker.toUpperCase();
+  const ex = (exchange || '').toUpperCase();
+  
+  // 이미 접미사가 붙어있는 경우 그대로 반환
+  if (upper.includes('.') && (upper.endsWith('.KS') || upper.endsWith('.KQ'))) return upper;
+  
+  // 한국 시장 접미사 처리
+  if (ex === 'KOSPI' || ex === 'KS') return `${upper}.KS`;
+  if (ex === 'KOSDAQ' || ex === 'KQ') return `${upper}.KQ`;
+  
+  return upper;
+}
+
 async function loadMacroData(market: MarketCode): Promise<CanslimMacroMarketData> {
   try {
     const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
     const mainData = await getYahooDailyPrice(mainSymbol);
 
-    // 분배일 계산 (최근 25거래일)
+    // 분배일 계산 (최근 25거래일 = 5주)
     let distributionDayCount = 0;
+    const dropThreshold = MACRO_CRITERIA.DISTRIBUTION_DAY_DROP_PCT / 100;
+
     for (let i = Math.max(1, mainData.length - 25); i < mainData.length; i++) {
       const prev = mainData[i - 1];
       const curr = mainData[i];
-      if (curr.close < prev.close && curr.volume > prev.volume) {
+      
+      // 가격이 유의미하게 하락(-0.2% 이상)하고 거래량이 전일보다 많은 경우
+      const priceDroppedSignificantly = curr.close < prev.close * (1 - dropThreshold);
+      if (priceDroppedSignificantly && curr.volume > prev.volume) {
         distributionDayCount++;
       }
     }
@@ -56,7 +77,7 @@ async function loadMacroData(market: MarketCode): Promise<CanslimMacroMarketData
         const prev = lookback[i - 1];
         const curr = lookback[i];
         const gainPct = ((curr.close - prev.close) / prev.close) * 100;
-        if (gainPct >= 1.25 && curr.volume > prev.volume) {
+        if (gainPct >= MACRO_CRITERIA.FTD_MIN_GAIN_PCT && curr.volume > prev.volume) {
           followThroughDay = true;
           lastFTDDate = curr.date;
         }
@@ -71,10 +92,15 @@ async function loadMacroData(market: MarketCode): Promise<CanslimMacroMarketData
     const aboveMa200 = ma200 !== null && lastClose > ma200;
 
     let actionLevel: CanslimMacroMarketData['actionLevel'] = 'FULL';
-    if (!aboveMa200) actionLevel = 'HALT';
-    else if (!aboveMa50) actionLevel = 'REDUCED';
+    
+    // 오닐의 원칙: 분배일이 과다하거나 이평선을 하회할 때 단계적 축소
+    if (!aboveMa200 || distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_HALT_THRESHOLD) {
+      actionLevel = 'HALT';
+    } else if (!aboveMa50 || distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_REDUCED_THRESHOLD) {
+      actionLevel = 'REDUCED';
+    }
 
-    return { actionLevel, distributionDayCount, followThroughDay, lastFTDDate };
+    return { actionLevel, distributionDayCount, followThroughDay, lastFTDDate, benchmarkData: mainData };
   } catch {
     // 매크로 패치 실패 시 보수적으로 REDUCED 처리
     return {
@@ -82,6 +108,7 @@ async function loadMacroData(market: MarketCode): Promise<CanslimMacroMarketData
       distributionDayCount: 0,
       followThroughDay: false,
       lastFTDDate: null,
+      benchmarkData: [],
     };
   }
 }
@@ -113,6 +140,7 @@ function buildStockData(
   return {
     symbol: ticker,
     market,
+    marketCap: fundamentals.marketCap ?? null,
     currentPrice,
     price52WeekHigh: high52w,
     dailyVolume: latest?.volume ?? 0,
@@ -155,9 +183,11 @@ export async function GET(request: Request) {
     const market: MarketCode = exchange.includes('KS') || exchange.includes('KQ') || exchange.includes('KOSPI') || exchange.includes('KOSDAQ') ? 'KR' : 'US';
 
     // 1. 가격 데이터 + 펀더멘털 + 매크로를 병렬 패칭
+    const yahooTicker = getYahooTicker(ticker, exchange);
+
     const [priceData, fundamentalResult, macro] = await Promise.all([
-      getYahooDailyPrice(ticker),
-      fetchCanslimFundamentals(ticker, market),
+      getYahooDailyPrice(yahooTicker),
+      fetchCanslimFundamentals(yahooTicker, market),
       loadMacroData(market),
     ]);
 
@@ -170,7 +200,16 @@ export async function GET(request: Request) {
 
     // 2. SEPA/VCP 분석 (기존 엔진 재활용)
     const breakoutPrice = Math.max(...priceData.slice(-50).map((d) => d.high));
-    const sepaEvidence = analyzeSepa(priceData);
+    const sepaEvidence = analyzeSepa(priceData, {
+      benchmarkData: macro.benchmarkData,
+      fundamentals: {
+        epsGrowthPct: fundamentalResult.data.currentQtrEpsGrowth ?? null,
+        revenueGrowthPct: fundamentalResult.data.currentQtrSalesGrowth ?? null,
+        roePct: fundamentalResult.data.roe ?? null,
+        debtToEquityPct: null, // 현재 CanslimStockData에 부채 비율 필드 미포함
+        source: 'Yahoo Finance',
+      },
+    });
     const vcpAnalysis = analyzeVcp(priceData, breakoutPrice, {
       rsRating: sepaEvidence.metrics.rsRating ?? null,
     });
@@ -219,7 +258,7 @@ export async function GET(request: Request) {
       name: ticker, // 추후 security-lookup에서 보강
       market,
       currentPrice: stockData.currentPrice,
-      marketCap: null,
+      marketCap: fundamentalResult.data.marketCap ?? null,
       currency: market === 'KR' ? 'KRW' : 'USD',
       canslimResult,
       basePattern,
@@ -245,10 +284,10 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    console.error(`[CAN SLIM Engine Error] ${error instanceof Error ? error.stack : error}`);
     const message = error instanceof Error ? error.message : 'CAN SLIM 분석 중 오류가 발생했습니다.';
-    console.error('CAN SLIM Scanner Error:', error);
     return NextResponse.json(
-      { message, code: 'API_ERROR', recoverable: false },
+      { message, code: 'SCAN_FAILED', recoverable: true },
       { status: 500 }
     );
   }

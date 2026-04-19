@@ -1,0 +1,753 @@
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  evaluateScannerRecommendation,
+  getVolumeSignalTier,
+  isContestPoolTier,
+  recommendationSortValue,
+  type VolumeSignalTier,
+} from '@/lib/scanner-recommendation';
+import type {
+  MarketAnalysisResponse,
+  ProviderAttempt,
+  RecommendationTier,
+  ScannerConstituent,
+  ScannerResult,
+  ScannerUniverse,
+  ScannerUniverseResponse,
+  MacroTrend,
+  StockMetric,
+} from '@/types';
+
+const TOTAL_EQUITY_FOR_SCAN = '50000';
+const RISK_PERCENT_FOR_SCAN = '1';
+const SCAN_CONCURRENCY = 4;
+const KOSPI_SCAN_CONCURRENCY = 2;
+const KOSDAQ_SCAN_CONCURRENCY = 2;
+const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v3:';
+const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
+const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
+const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
+
+export type ViewMode = 'web' | 'app';
+export type FilterKey =
+  | 'all'
+  | 'sepaPass'
+  | 'recommended'
+  | 'partial'
+  | 'contestPool'
+  | 'nearPivot'
+  | 'volume'
+  | 'rs90'
+  | 'error';
+export type SortKey = 'marketCap' | 'recommendation' | 'vcpScore' | 'pivot' | 'sepa' | 'rs';
+
+interface StoredScannerSnapshot {
+  savedAt: string;
+  universeMeta: ScannerUniverseResponse;
+  results: ScannerResult[];
+}
+
+
+interface ScannerMetricsResponse {
+  market: 'KR' | 'US';
+  macroTrend: MacroTrend | null;
+  metrics: { ticker: string; metric: StockMetric | null }[];
+}
+export const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }> = {
+  NASDAQ100: {
+    label: 'NASDAQ 100',
+    description: 'Nasdaq 100 대형 성장주를 시가총액 기준으로 불러와 SEPA/VCP 후보를 스캔합니다.',
+  },
+  SP500: {
+    label: 'S&P 500',
+    description: 'S&P 500 전체에서 대형 주도주 후보를 비교합니다.',
+  },
+  KOSPI100: {
+    label: 'KOSPI 시총 상위 100',
+    description: 'KOSPI 전체 시가총액 상위 100개를 기준으로 국내 주도주 후보를 확인합니다.',
+  },
+  KOSDAQ100: {
+    label: 'KOSDAQ 시총 상위 100',
+    description: 'KOSDAQ 시가총액 상위 100개를 기준으로 성장주 후보를 확인합니다.',
+  },
+};
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'recommended', label: 'Recommended' },
+  { key: 'partial', label: 'Partial' },
+  { key: 'contestPool', label: '콘테스트 풀' },
+  { key: 'nearPivot', label: '피벗 5% 이내' },
+  { key: 'volume', label: '거래량 신호' },
+  { key: 'error', label: '오류' },
+];
+
+export const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
+  { key: 'all', label: '전체' },
+  { key: 'sepaPass', label: 'SEPA 통과' },
+  { key: 'recommended', label: 'Recommended' },
+  { key: 'partial', label: 'Partial' },
+  { key: 'contestPool', label: '콘테스트 풀' },
+  { key: 'nearPivot', label: '피벗 5% 이내' },
+  { key: 'volume', label: '거래량 신호' },
+  { key: 'rs90', label: 'RS 90+' },
+  { key: 'error', label: '오류' },
+];
+
+export const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'marketCap', label: '시가총액순' },
+  { key: 'recommendation', label: '추천 우선' },
+  { key: 'vcpScore', label: 'VCP 점수순' },
+  { key: 'pivot', label: '피벗 근접순' },
+  { key: 'sepa', label: 'SEPA 우선' },
+  { key: 'rs', label: 'RS 우선' },
+];
+
+function scannerStorageKey(universe: ScannerUniverse) {
+  return `${SCANNER_STORAGE_PREFIX}${universe}`;
+}
+
+function parseScannerUniverse(value: string | null): ScannerUniverse | null {
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
+  return null;
+}
+
+function withRecommendation(result: ScannerResult): ScannerResult {
+  return {
+    ...result,
+    ...evaluateScannerRecommendation(result),
+  };
+}
+
+function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(scannerStorageKey(universe));
+    if (!raw) return null;
+
+    const snapshot = JSON.parse(raw) as StoredScannerSnapshot;
+    if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
+    return {
+      ...snapshot,
+      results: snapshot.results.map((item) => withRecommendation(item)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: ScannerResult[], savedAt: string) {
+  const snapshot: StoredScannerSnapshot = {
+    savedAt,
+    universeMeta,
+    results: results.map((item) => withRecommendation(item)),
+  };
+  window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
+  window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
+  window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, universeMeta.universe);
+}
+
+function readStoredUniverse(key: string) {
+  return parseScannerUniverse(window.localStorage.getItem(key));
+}
+
+function uniqueUniverses(items: (ScannerUniverse | null)[]) {
+  return items.filter((item, index): item is ScannerUniverse => Boolean(item) && items.indexOf(item) === index);
+}
+
+function getInitialRestoredUniverse() {
+  if (typeof window === 'undefined') return 'NASDAQ100';
+  const latestScannedUniverse = readStoredUniverse(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+  const lastSelectedUniverse = readStoredUniverse(LAST_UNIVERSE_STORAGE_KEY);
+  const candidates = uniqueUniverses([
+    latestScannedUniverse,
+    lastSelectedUniverse,
+    'NASDAQ100',
+    'SP500',
+    'KOSPI100',
+    'KOSDAQ100',
+  ]);
+
+  const universeWithSnapshot = candidates.find((candidate) => readScannerSnapshot(candidate));
+  return universeWithSnapshot ?? lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
+}
+
+function round(value: number, digits = 2) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function rsPercentile(rank: number | null | undefined, universeSize: number | null | undefined) {
+  if (!rank || !universeSize) return null;
+  if (universeSize <= 1) return 50;
+  return Math.round((1 - ((rank - 1) / (universeSize - 1))) * 100);
+}
+
+function mergeStandardMetrics(results: ScannerResult[], rows: { ticker: string; metric: StockMetric | null }[], macroTrend: MacroTrend | null) {
+  const byTicker = new Map(rows.map((row) => [row.ticker, row.metric]));
+  return results.map((item) => {
+    const metric = byTicker.get(item.ticker) || null;
+    return withRecommendation({
+      ...item,
+      rsRating: metric?.rs_rating ?? null,
+      internalRsRating: metric?.rs_rating ?? null,
+      rsRank: metric?.rs_rank ?? null,
+      rsUniverseSize: metric?.rs_universe_size ?? null,
+      rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size),
+      ibdProxyScore: metric?.ibd_proxy_score ?? null,
+      weightedMomentumScore: metric?.ibd_proxy_score ?? null,
+      mansfieldRsFlag: metric?.mansfield_rs_flag ?? null,
+      mansfieldRsScore: metric?.mansfield_rs_score ?? null,
+      rsDataQuality: metric?.data_quality ?? 'NA',
+      macroActionLevel: macroTrend?.action_level ?? null,
+    });
+  });
+}
+
+async function loadScannerMetrics(universe: ScannerUniverse, rows: ScannerResult[]) {
+  const tickers = rows.map((item) => item.ticker).filter(Boolean);
+  if (tickers.length === 0) return { results: rows.map(withRecommendation), macroTrend: null as MacroTrend | null };
+  try {
+    const query = new URLSearchParams({ universe, tickers: tickers.join(',') });
+    const response = await fetch('/api/scanner/metrics?' + query.toString());
+    if (!response.ok) throw new Error('metrics ' + response.status);
+    const payload = await response.json() as ScannerMetricsResponse;
+    return { results: mergeStandardMetrics(rows, payload.metrics, payload.macroTrend), macroTrend: payload.macroTrend };
+  } catch {
+    return {
+      results: rows.map((item) => withRecommendation({
+        ...item,
+        rsRating: null,
+        internalRsRating: null,
+        rsRank: null,
+        rsUniverseSize: null,
+        rsPercentile: null,
+        ibdProxyScore: null,
+        weightedMomentumScore: null,
+        mansfieldRsFlag: null,
+        mansfieldRsScore: null,
+        rsDataQuality: 'NA',
+        macroActionLevel: null,
+      })),
+      macroTrend: null as MacroTrend | null,
+    };
+  }
+}
+
+function scanConcurrencyFor(universe: ScannerUniverse) {
+  if (universe === 'KOSPI100') return KOSPI_SCAN_CONCURRENCY;
+  if (universe === 'KOSDAQ100') return KOSDAQ_SCAN_CONCURRENCY;
+  return SCAN_CONCURRENCY;
+}
+
+function initialResult(item: ScannerConstituent): ScannerResult {
+  return {
+    ...item,
+    status: 'queued',
+    recommendationTier: 'Low Priority',
+    recommendationReason: '스캔 대기 중입니다.',
+    sepaMissingCount: null,
+    exceptionSignals: [],
+    providerAttempts: [],
+    sepaStatus: null,
+    sepaPassed: null,
+    sepaFailed: null,
+    vcpScore: null,
+    vcpGrade: null,
+    contractionScore: null,
+    volumeDryUpScore: null,
+    bbSqueezeScore: null,
+    pocketPivotScore: null,
+    vcpDetails: null,
+    fundamentals: null,
+    pivotPrice: null,
+    recommendedEntry: null,
+    distanceToPivotPct: null,
+    breakoutVolumeStatus: null,
+    baseType: null,
+    momentumBranch: null,
+    eightWeekReturnPct: null,
+    distanceFromMa50Pct: null,
+    low52WeekAdvancePct: null,
+    highTightFlag: null,
+    rsRating: null,
+    internalRsRating: null,
+    externalRsRating: null,
+    rsRank: null,
+    rsUniverseSize: null,
+    rsPercentile: null,
+    weightedMomentumScore: null,
+    benchmarkRelativeScore: null,
+    rsLineNewHigh: null,
+    rsLineNearHigh: null,
+    tennisBallCount: null,
+    tennisBallScore: null,
+    return3m: null,
+    return6m: null,
+    return9m: null,
+    return12m: null,
+    analyzedAt: null,
+    errorMessage: null,
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.';
+}
+
+async function parseFetchError(response: Response) {
+  try {
+    const body = await response.json() as { message?: string; error?: string; details?: { providerAttempts?: ProviderAttempt[] } };
+    return {
+      message: body.message || body.error || `요청 실패 (${response.status})`,
+      providerAttempts: body.details?.providerAttempts || [],
+    };
+  } catch {
+    return { message: `요청 실패 (${response.status})`, providerAttempts: [] };
+  }
+}
+
+function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analysis: MarketAnalysisResponse): ScannerResult {
+  const latestBar = analysis.priceData.at(-1);
+  const latestClose = latestBar?.close ?? null;
+  const currentPrice = item.currentPrice ?? latestClose;
+  const priceAsOf = item.currentPrice !== null ? item.priceAsOf : latestBar?.date ?? item.priceAsOf;
+  const recommendedEntry = analysis.vcpAnalysis.recommendedEntry || null;
+  const pivotPrice = analysis.vcpAnalysis.pivotPrice ?? recommendedEntry;
+  const distanceToPivotPct =
+    currentPrice && recommendedEntry
+      ? round(((currentPrice - recommendedEntry) / recommendedEntry) * 100)
+      : null;
+
+  return withRecommendation({
+    ...item,
+    recommendationTier: 'Low Priority',
+    recommendationReason: '',
+    sepaMissingCount: null,
+    exceptionSignals: [],
+    currentPrice,
+    priceAsOf,
+    priceSource: analysis.providerUsed || item.priceSource,
+    status: 'done',
+    providerAttempts: analysis.providerAttempts || [],
+    sepaStatus: analysis.sepaEvidence.status,
+    sepaPassed: analysis.sepaEvidence.summary.passed,
+    sepaFailed: analysis.sepaEvidence.summary.failed,
+    vcpScore: analysis.vcpAnalysis.score,
+    vcpGrade: analysis.vcpAnalysis.grade,
+    contractionScore: analysis.vcpAnalysis.contractionScore,
+    volumeDryUpScore: analysis.vcpAnalysis.volumeDryUpScore,
+    bbSqueezeScore: analysis.vcpAnalysis.bbSqueezeScore,
+    pocketPivotScore: analysis.vcpAnalysis.pocketPivotScore,
+    vcpDetails: analysis.vcpAnalysis.details,
+    fundamentals: analysis.fundamentals,
+    pivotPrice,
+    distanceToPivotPct,
+    recommendedEntry,
+    baseType: analysis.vcpAnalysis.baseType,
+    momentumBranch: analysis.vcpAnalysis.momentumBranch,
+    eightWeekReturnPct: analysis.vcpAnalysis.eightWeekReturnPct,
+    distanceFromMa50Pct: analysis.vcpAnalysis.distanceFromMa50Pct,
+    low52WeekAdvancePct: analysis.vcpAnalysis.low52WeekAdvancePct,
+    highTightFlag: analysis.vcpAnalysis.highTightFlag,
+    rsRating: analysis.sepaEvidence.metrics.rsRating,
+    internalRsRating: analysis.sepaEvidence.metrics.internalRsRating ?? null,
+    externalRsRating: analysis.sepaEvidence.metrics.externalRsRating ?? null,
+    rsRank: analysis.sepaEvidence.metrics.rsRank ?? null,
+    rsUniverseSize: analysis.sepaEvidence.metrics.rsUniverseSize ?? null,
+    rsPercentile: analysis.sepaEvidence.metrics.rsPercentile ?? null,
+    weightedMomentumScore: analysis.sepaEvidence.metrics.weightedMomentumScore ?? null,
+    benchmarkRelativeScore: analysis.sepaEvidence.metrics.benchmarkRelativeScore ?? null,
+    rsLineNewHigh: analysis.sepaEvidence.metrics.rsLineNewHigh ?? null,
+    rsLineNearHigh: analysis.sepaEvidence.metrics.rsLineNearHigh ?? null,
+    tennisBallCount: analysis.sepaEvidence.metrics.tennisBallCount ?? null,
+    tennisBallScore: analysis.sepaEvidence.metrics.tennisBallScore ?? null,
+    return3m: analysis.sepaEvidence.metrics.return3m ?? null,
+    return6m: analysis.sepaEvidence.metrics.return6m ?? null,
+    return9m: analysis.sepaEvidence.metrics.return9m ?? null,
+    return12m: analysis.sepaEvidence.metrics.return12m ?? null,
+    analyzedAt: new Date().toISOString(),
+    breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
+    errorMessage: null,
+  });
+}
+
+function formatMarketCap(value: number | null, currency: ScannerResult['currency']) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  if (currency === 'KRW') return `${Math.round(value / 100_000_000).toLocaleString('ko-KR')}억`;
+  if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
+  return `$${(value / 1_000_000_000).toFixed(1)}B`;
+}
+
+function formatPrice(value: number | null, currency: ScannerResult['currency']) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return new Intl.NumberFormat(currency === 'KRW' ? 'ko-KR' : 'en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: currency === 'KRW' ? 0 : 2,
+  }).format(value);
+}
+
+function tierClass(tier: RecommendationTier) {
+  if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  return 'border-slate-700 bg-slate-900 text-slate-300';
+}
+
+function sepaLabel(result: ScannerResult) {
+  if (result.status === 'error') return 'Error';
+  if (result.status !== 'done') return 'Pending';
+  if (result.sepaStatus === 'pass') return 'Pass';
+  if ((result.sepaMissingCount ?? 99) <= 2) return 'Partial';
+  return 'Weak';
+}
+
+function baseTypeLabel(result: ScannerResult) {
+  if (result.baseType === 'High_Tight_Flag') return 'HTF';
+  if (result.baseType === 'Standard_VCP') return 'Standard';
+  if (result.momentumBranch === 'EXTENDED') return 'Extended';
+  return '-';
+}
+
+function formatRs(result: ScannerResult) {
+  if (typeof result.rsRating !== 'number') return '-';
+  const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
+  return `${result.rsRating}${rank}`;
+}
+export function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<string>) {
+  window.localStorage.setItem(
+    CONTEST_SELECTION_STORAGE_KEY,
+    JSON.stringify({ universe, tickers: Array.from(selectedTickers), savedAt: new Date().toISOString() })
+  );
+}
+
+function readContestSelection(universe: ScannerUniverse, results: ScannerResult[]) {
+  try {
+    const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw) as { universe?: ScannerUniverse; tickers?: string[] };
+    if (parsed.universe !== universe || !Array.isArray(parsed.tickers)) return new Set<string>();
+    const validTickers = new Set(results.map((item) => item.ticker));
+    return new Set(parsed.tickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function volumeSignalClass(tier: VolumeSignalTier) {
+  if (tier === 'Strong') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Watch') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Weak') return 'border-slate-700 bg-slate-900 text-slate-300';
+  return 'border-slate-800 bg-slate-950 text-slate-500';
+}
+
+function volumeSignalDetail(result: ScannerResult) {
+  const dryUp = result.volumeDryUpScore ?? '-';
+  const pocket = result.pocketPivotScore ?? '-';
+  const breakout = result.breakoutVolumeStatus || 'unknown';
+  return `DU ${dryUp} / PP ${pocket} / ${breakout}`;
+}
+
+export function useScanner() {
+  const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
+  const [results, setResults] = useState<ScannerResult[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [scanStage, setScanStage] = useState('대기 중');
+  const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
+  const [filterKey, setFilterKey] = useState<FilterKey>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('marketCap');
+  const [viewMode, setViewMode] = useState<ViewMode>('web');
+  const [busy, setBusy] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
+  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+  const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
+  const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
+  const [showAllMacroResults, setShowAllMacroResults] = useState(false);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const initial = getInitialRestoredUniverse();
+    setUniverse(initial);
+    const snapshot = readScannerSnapshot(initial);
+    if (snapshot) {
+      setResults(snapshot.results);
+      setLastScannedAt(snapshot.savedAt);
+      setSelectedTickers(readContestSelection(initial, snapshot.results));
+          loadScannerMetrics(initial, snapshot.results).then((merged) => {
+        setResults(merged.results);
+        setMacroTrend(merged.macroTrend);
+      });
+    }
+  }, []);
+
+  const handleUniverseChange = (newUniverse: ScannerUniverse) => {
+    if (isScanning) return;
+    setUniverse(newUniverse);
+    const snapshot = readScannerSnapshot(newUniverse);
+    if (snapshot) {
+      setResults(snapshot.results);
+      setLastScannedAt(snapshot.savedAt);
+      setSelectedTickers(readContestSelection(newUniverse, snapshot.results));
+      loadScannerMetrics(newUniverse, snapshot.results).then((merged) => {
+        setResults(merged.results);
+        setMacroTrend(merged.macroTrend);
+      });
+    } else {
+      setResults([]);
+      setSelectedTickers(new Set());
+      setLastScannedAt(null);
+      setMacroTrend(null);
+    }
+    localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, newUniverse);
+  };
+
+  const startScan = async () => {
+    if (busy || isScanning) return;
+
+    setBusy(true);
+    setIsScanning(true);
+    setProgress({ current: 0, total: 0 });
+    setScanStage('유니버스 로딩 중');
+    setSelectedTickers(new Set());
+
+        setMacroTrend(null);
+    setShowAllMacroResults(false);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abortController.signal });
+      if (!resp.ok) {
+        const parsed = await parseFetchError(resp);
+        throw new Error(parsed.message);
+      }
+
+      const meta = await resp.json() as ScannerUniverseResponse;
+      const initialResults = meta.items.map(initialResult);
+      let latestResults = initialResults;
+      setResults(initialResults);
+      setProgress({ current: 0, total: initialResults.length });
+      setScanStage('KIS 가격 조회 → Yahoo fallback → 벤치마크 → SEPA/VCP 계산');
+
+      const batchSize = 10;
+      let completedCount = 0;
+
+      for (let i = 0; i < initialResults.length; i += batchSize) {
+        if (abortController.signal.aborted) break;
+        const chunk = initialResults.slice(i, i + batchSize);
+        
+        latestResults = latestResults.map((row) => chunk.some(c => c.ticker === row.ticker) ? { ...row, status: 'running' } : row);
+        setResults(latestResults);
+
+        try {
+          const payload = {
+            items: chunk.map(c => ({
+              ticker: c.ticker,
+              exchange: c.exchange,
+              currentPrice: c.currentPrice,
+              priceAsOf: c.priceAsOf,
+              priceSource: c.priceSource
+            })),
+            totalEquity: TOTAL_EQUITY_FOR_SCAN,
+            riskPercent: RISK_PERCENT_FOR_SCAN,
+          };
+
+          const response = await fetch('/api/scanner/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: abortController.signal
+          });
+
+          if (!response.ok) {
+            const parsed = await parseFetchError(response);
+            throw new Error(parsed.message);
+          }
+
+          const batchResp = await response.json();
+          const batchResults = batchResp.results;
+
+          for (const res of batchResults) {
+            const item = chunk.find(c => c.ticker === res.ticker)!;
+            if (res.success) {
+              const mapped = mapMarketAnalysisToScannerResult(item, res.data);
+              latestResults = latestResults.map((row) => row.ticker === item.ticker ? mapped : row);
+            } else {
+              const errorResult = withRecommendation({
+                ...initialResult(item),
+                status: 'error',
+                providerAttempts: res.providerAttempts || [],
+                errorMessage: res.error,
+              });
+              latestResults = latestResults.map((row) => row.ticker === item.ticker ? errorResult : row);
+            }
+          }
+          setResults(latestResults);
+        } catch (err) {
+          if (abortController.signal.aborted) break;
+          const errMsg = getErrorMessage(err);
+          for (const item of chunk) {
+             const errorResult = withRecommendation({
+               ...initialResult(item),
+               status: 'error',
+               errorMessage: errMsg,
+             });
+             latestResults = latestResults.map((row) => row.ticker === item.ticker ? errorResult : row);
+          }
+          setResults(latestResults);
+        } finally {
+          completedCount += chunk.length;
+          setProgress({ current: completedCount, total: initialResults.length });
+        }
+      }
+
+      if (!abortController.signal.aborted) {
+        const merged = await loadScannerMetrics(meta.universe, latestResults);
+        const normalized = merged.results.map((item) => withRecommendation(item));
+        setMacroTrend(merged.macroTrend);
+        const nextSelected = new Set<string>();
+        const now = new Date().toISOString();
+        setResults(normalized);
+        setSelectedTickers(nextSelected);
+        setLastScannedAt(now);
+        setScanStage('스캔 완료');
+        writeScannerSnapshot(meta, normalized, now);
+        saveContestSelection(meta.universe, nextSelected);
+      }
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        alert(`스캔 시작 실패: ${getErrorMessage(err)}`);
+      }
+    } finally {
+      setIsScanning(false);
+      setBusy(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const stopScan = () => {
+    abortControllerRef.current?.abort();
+    setIsScanning(false);
+    setBusy(false);
+    setScanStage('중단됨');
+  };
+
+  const addToWatchlist = async (item: ScannerResult) => {
+    if (isSavingWatchlist) return;
+
+    setIsSavingWatchlist(true);
+    try {
+      const response = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ticker: item.ticker,
+          exchange: item.exchange,
+          memo: `Scanner ${item.recommendationTier} / ${item.baseType ?? item.vcpGrade ?? 'unknown'} / RS ${item.rsRating ?? 'n/a'} / SEPA ${item.sepaStatus ?? 'unknown'}`,
+          tags: ['scanner', item.recommendationTier, item.baseType, item.vcpGrade, item.sepaStatus, item.rsRating ? `RS${item.rsRating}` : null].filter(Boolean),
+          priority: item.recommendationTier === 'Recommended' ? 2 : 1,
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || '관심종목 저장에 실패했습니다.');
+      }
+    } catch (err) {
+      alert(getErrorMessage(err));
+    } finally {
+      setIsSavingWatchlist(false);
+    }
+  };
+
+  const toggleSelected = (ticker: string) => {
+    setSelectedTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else if (next.size < 10) next.add(ticker);
+      else alert('콘테스트 분석 후보는 최대 10개까지 선택할 수 있습니다.');
+      saveContestSelection(universe, next);
+      return next;
+    });
+  };
+
+  const filteredResults = useMemo(() => {
+    let list = results.map((item) => withRecommendation(item));
+
+    if (macroTrend?.action_level === 'REDUCED' && !showAllMacroResults && filterKey === 'all') {
+      list = list.filter((row) => (row.rsRating || 0) >= 80 || row.status !== 'done');
+    }
+
+    if (filterKey === 'sepaPass') list = list.filter((row) => row.sepaStatus === 'pass');
+    else if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
+    else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'Partial');
+    else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
+    else if (filterKey === 'nearPivot') list = list.filter((row) => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= 5);
+    else if (filterKey === 'volume') {
+      list = list.filter((row) => 
+        ['Strong', 'Watch'].includes(getVolumeSignalTier(row)) || 
+        (row.pocketPivotScore || 0) >= 40 || 
+        (row.volumeDryUpScore || 0) >= 50 ||
+        row.breakoutVolumeStatus === 'confirmed'
+      );
+    }
+    else if (filterKey === 'rs90') list = list.filter((row) => (row.rsRating || 0) >= 90);
+    else if (filterKey === 'error') list = list.filter((row) => row.status === 'error');
+
+    list.sort((a, b) => {
+      if (sortKey === 'recommendation') {
+        return recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0);
+      }
+      if (sortKey === 'vcpScore') return (b.vcpScore || 0) - (a.vcpScore || 0);
+      if (sortKey === 'pivot') {
+        const da = a.distanceToPivotPct === null ? 999 : Math.abs(a.distanceToPivotPct);
+        const db = b.distanceToPivotPct === null ? 999 : Math.abs(b.distanceToPivotPct);
+        return da - db;
+      }
+      if (sortKey === 'sepa') {
+        const missingA = a.sepaMissingCount ?? 99;
+        const missingB = b.sepaMissingCount ?? 99;
+        return missingA - missingB || (b.vcpScore || 0) - (a.vcpScore || 0);
+      }
+      if (sortKey === 'rs') return (b.rsRating || 0) - (a.rsRating || 0) || (b.weightedMomentumScore || 0) - (a.weightedMomentumScore || 0);
+      return a.rank - b.rank;
+    });
+
+    return list;
+  }, [results, filterKey, sortKey, macroTrend, showAllMacroResults]);
+
+  const stats = useMemo(() => ({
+    recommended: results.filter((item) => item.recommendationTier === 'Recommended').length,
+    partial: results.filter((item) => item.recommendationTier === 'Partial').length,
+    errors: results.filter((item) => item.status === 'error').length,
+  }), [results]);
+
+  const dataSourceSummary = useMemo(() => {
+    const sources = Array.from(new Set(
+      results
+        .map((item) => item.priceSource || item.providerAttempts?.findLast((attempt) => attempt.status === 'success')?.provider)
+        .filter((source): source is string => Boolean(source))
+    ));
+
+    if (sources.length === 0) {
+      return universe === 'KOSPI100' || universe === 'KOSDAQ100'
+        ? '유니버스: Naver Finance 시가총액 순위 · 가격/분석: KIS → Yahoo fallback'
+        : '유니버스: 공식/공개 구성종목 API · 가격/분석: KIS → Yahoo fallback';
+    }
+
+    return sources.slice(0, 4).join(' · ') + (sources.length > 4 ? ` 외 ${sources.length - 4}개` : '');
+  }, [results, universe]);
+  return { 
+    universe, results, isScanning, progress, scanStage, lastScannedAt, 
+    filterKey, setFilterKey, sortKey, setSortKey, viewMode, setViewMode, busy, 
+    selectedResult, setSelectedResult, selectedTickers, setSelectedTickers, macroTrend, 
+    showAllMacroResults, setShowAllMacroResults, handleUniverseChange, 
+    startScan, stopScan, addToWatchlist, toggleSelected, filteredResults, 
+    stats, dataSourceSummary, isSavingWatchlist 
+  };
+}
