@@ -278,7 +278,7 @@ export async function getKoreaMarketCapConstituents(market: KoreaMarket, limit: 
 export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<ScannerConstituent[]> {
   if (market === 'KR') {
     const [kospi, kosdaq] = await Promise.all([
-      getKoreaMarketCapConstituents('KOSPI', 100),
+      getKoreaMarketCapConstituents('KOSPI', 200),
       getKoreaMarketCapConstituents('KOSDAQ', 150),
     ]);
     const byTicker = new Map<string, ScannerConstituent>();
