@@ -34,3 +34,26 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## MTN RS Metrics Batch
+
+After the `stock_metrics` and `macro_trend` tables are migrated, run the RS metrics batch to populate standard-universe RS data.
+
+```bash
+# Runs US S&P 500 and KR KOSPI100+KOSDAQ150 chunks, then finalizes rankings.
+npm run rs:metrics
+```
+
+Useful options:
+
+```bash
+npm run rs:metrics:dry
+npm run rs:metrics -- --market=US --chunk-size=50
+npm run rs:metrics -- --market=KR --calc-date=2026-04-19
+npm run rs:metrics -- --base-url=http://localhost:3000 --market=US
+```
+
+Required environment:
+
+- `MTN_BASE_URL`: target app URL. Defaults to `https://mttcs.vercel.app`.
+- `CRON_SECRET` or `MTN_CRON_SECRET`: sent as `Authorization: Bearer ...` when configured.
