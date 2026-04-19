@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ContestCandidate,
   ContestMarket,
   ContestPromptCandidate,
@@ -139,7 +139,10 @@ export function buildContestPrompt(input: ContestSessionInput) {
       compare_axes: [
         '기술적 구조와 VCP 품질',
         'Base_Type: Standard_VCP와 High_Tight_Flag는 리스크 가정과 손절 기준을 분리해 비교',
-        'RS Proxy: 동일 유니버스 순위, 3/6/9/12개월 가중 모멘텀, RS Line 신고가/근접 여부',
+        'RS Rating: 표준 유니버스 기준 사전 계산값입니다. 미국은 S&P 500, 한국은 KOSPI100+KOSDAQ150 합산 universe에서 1~99로 환산합니다.',
+        'IBD Proxy: 분기별 독립 수익률(Q1 2배 가중, Q2~Q4 1배)을 정규화한 모멘텀 점수입니다.',
+        'Mansfield RS: 52주 기준 벤치마크 대비 상대성과입니다. 양수/true일수록 지수 대비 강합니다.',
+        'Macro Action: FULL/REDUCED/HALT에 따라 진입 적극성, 포지션 크기, 손절 기준을 다르게 평가하세요.',
         '테니스 공 액션: 시장 하락일에 덜 빠지거나 상승 마감한 방어력',
         'HTF 후보는 거래량 건조화와 타이트 손절 조건을 반드시 별도 평가',
         'SEPA 조건 충족도와 예외 신호',
@@ -160,7 +163,7 @@ export function buildContestPrompt(input: ContestSessionInput) {
     '아래 payload의 후보들은 SEPA/VCP 스캐너에서 나온 종목입니다. Recommended와 Partial은 시스템이 비교 가치가 있다고 본 후보입니다.',
     '내부 뉴스 API는 제공되지 않으므로, 최근 뉴스와 애널리스트 판단 변화는 당신이 접근 가능한 웹/지식 기반으로 보완해 주세요.',
     '마스터 필터가 RED이면 후보를 배제하지 말고, 포지션 크기와 손절 조건을 더 보수적으로 평가하세요.',
-    'payload의 rs_rating, rs_rank, weighted_momentum_score, rs_line_new_high, tennis_ball_count, base_type, momentum_branch, high_tight_flag를 반드시 기술적 평가에 반영하세요.',
+    'payload의 rs_rating, rs_rank, rs_universe_size, ibd_proxy_score, mansfield_rs_score, macro_action_level, rs_line_new_high, tennis_ball_count, base_type, momentum_branch, high_tight_flag를 반드시 기술적 평가에 반영하세요.',
     'High_Tight_Flag는 강한 주도주의 예외 패턴입니다. 거래량 건조화가 없거나 stopPlan이 불리하면 순위를 낮추세요.',
     '최종 응답은 JSON만 출력하세요. 설명 문장, markdown, 코드블록을 붙이지 마세요.',
     '모든 후보가 정확히 한 번씩 등장해야 하며 rank는 1부터 N까지 중복 없이 부여해야 합니다.',

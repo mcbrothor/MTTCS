@@ -9,6 +9,7 @@ import type {
   SepaEvidence,
   TrailingStops,
 } from '@/types';
+import { calculateRsMetrics } from './rs-proxy.ts';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const DEFAULT_MINERVINI_RISK_PERCENT = 0.01;
@@ -20,89 +21,6 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function percentReturn(data: OHLCData[], lookback: number) {
-  if (data.length < lookback + 1) return null;
-  const start = data[data.length - lookback - 1]?.close;
-  const end = data.at(-1)?.close;
-  if (!start || !end) return null;
-  return round(((end - start) / start) * 100);
-}
-
-function dateMap(data: OHLCData[]) {
-  return new Map(data.map((item) => [item.date, item]));
-}
-
-function calculateLocalRsMetrics(data: OHLCData[], benchmarkData?: OHLCData[]) {
-  const return3m = percentReturn(data, 63);
-  const return6m = percentReturn(data, 126);
-  const return9m = percentReturn(data, 189);
-  const return12m = percentReturn(data, 252);
-  const legs = [
-    { value: return3m, weight: 0.4 },
-    { value: return6m, weight: 0.3 },
-    { value: return9m, weight: 0.2 },
-    { value: return12m, weight: 0.1 },
-  ].filter((leg): leg is { value: number; weight: number } => typeof leg.value === 'number');
-  const weightTotal = legs.reduce((sum, leg) => sum + leg.weight, 0);
-  const weightedMomentumScore = weightTotal > 0
-    ? round(legs.reduce((sum, leg) => sum + leg.value * leg.weight, 0) / weightTotal)
-    : null;
-
-  const stockReturn26Week = return6m;
-  const benchmarkReturn26Week = benchmarkData ? percentReturn(benchmarkData, 126) : null;
-  const benchmarkRelativeScore = stockReturn26Week !== null && benchmarkReturn26Week !== null
-    ? round(Math.min(Math.max(50 + (stockReturn26Week - benchmarkReturn26Week) * 1.5, 1), 99), 0)
-    : null;
-
-  let rsLineNewHigh: boolean | null = null;
-  let rsLineNearHigh: boolean | null = null;
-  let tennisBallCount = 0;
-  if (benchmarkData && benchmarkData.length > 0) {
-    const benchmarkByDate = dateMap(benchmarkData);
-    const matched = data
-      .map((item) => {
-        const benchmark = benchmarkByDate.get(item.date);
-        if (!benchmark || benchmark.close <= 0) return null;
-        return item.close / benchmark.close;
-      })
-      .filter((value): value is number => typeof value === 'number');
-    const recent = matched.slice(-252);
-    const current = recent.at(-1);
-    if (current && recent.length >= 20) {
-      const high = Math.max(...recent);
-      rsLineNewHigh = current >= high;
-      rsLineNearHigh = current >= high * 0.98;
-    }
-
-    const recentBars = data.slice(-61);
-    for (let index = 1; index < recentBars.length; index += 1) {
-      const currentBar = recentBars[index];
-      const previousBar = recentBars[index - 1];
-      const benchmarkIndex = benchmarkData.findIndex((item) => item.date === currentBar.date);
-      const benchmarkCurrent = benchmarkIndex >= 0 ? benchmarkData[benchmarkIndex] : null;
-      const benchmarkPrevious = benchmarkIndex > 0 ? benchmarkData[benchmarkIndex - 1] : null;
-      if (!benchmarkCurrent || !benchmarkPrevious || previousBar.close <= 0 || benchmarkPrevious.close <= 0) continue;
-      const stockReturn = ((currentBar.close - previousBar.close) / previousBar.close) * 100;
-      const benchmarkReturn = ((benchmarkCurrent.close - benchmarkPrevious.close) / benchmarkPrevious.close) * 100;
-      if (benchmarkReturn <= -1 && (stockReturn >= 0 || stockReturn > benchmarkReturn)) tennisBallCount += 1;
-    }
-  }
-
-  return {
-    return3m,
-    return6m,
-    return9m,
-    return12m,
-    weightedMomentumScore,
-    stockReturn26Week,
-    benchmarkReturn26Week,
-    benchmarkRelativeScore,
-    rsLineNewHigh,
-    rsLineNearHigh,
-    tennisBallCount,
-    tennisBallScore: Math.min(100, tennisBallCount * 20),
-  };
-}
 
 export function calculateMovingAverage(data: OHLCData[], period: number): number | null {
   if (data.length < period) return null;
@@ -322,15 +240,15 @@ function evaluableCriterion(
 }
 
 function calculateRsProxy(data: OHLCData[], benchmarkData?: OHLCData[]) {
-  const rs = calculateLocalRsMetrics(data, benchmarkData);
+  const rs = calculateRsMetrics(data, benchmarkData);
   return {
     ...rs,
     stockReturn: rs.stockReturn26Week,
     benchmarkReturn: rs.benchmarkReturn26Week,
+    // Standard-universe RS is merged from stock_metrics at runtime. Benchmark-relative score stays auxiliary for SEPA evidence only.
     rsScore: rs.benchmarkRelativeScore,
   };
 }
-
 /**
  * 기본적 분석 필터 — 항상 info(참고 정보)로 처리
  *
@@ -552,6 +470,11 @@ export function analyzeSepa(
       rsUniverseSize: null,
       rsPercentile: null,
       weightedMomentumScore: rs.weightedMomentumScore,
+      ibdProxyScore: rs.ibdProxyScore,
+      mansfieldRsFlag: rs.mansfieldRsFlag,
+      mansfieldRsScore: rs.mansfieldRsScore,
+      rsDataQuality: rs.rsDataQuality,
+      macroActionLevel: null,
       benchmarkRelativeScore: rs.benchmarkRelativeScore,
       rsLineNewHigh: rs.rsLineNewHigh,
       rsLineNearHigh: rs.rsLineNearHigh,

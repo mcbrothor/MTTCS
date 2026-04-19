@@ -132,6 +132,11 @@ export interface SepaEvidence {
     rsUniverseSize?: number | null;
     rsPercentile?: number | null;
     weightedMomentumScore?: number | null;
+    ibdProxyScore?: number | null;
+    mansfieldRsFlag?: boolean | null;
+    mansfieldRsScore?: number | null;
+    rsDataQuality?: DataQuality | null;
+    macroActionLevel?: MacroActionLevel | null;
     benchmarkRelativeScore?: number | null;
     rsLineNewHigh?: boolean | null;
     rsLineNearHigh?: boolean | null;
@@ -277,6 +282,40 @@ export interface ProviderAttempt {
 }
 
 export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI100' | 'KOSDAQ100';
+export type MarketCode = 'KR' | 'US';
+export type DataQuality = 'FULL' | 'PARTIAL' | 'NA';
+export type MacroActionLevel = 'FULL' | 'REDUCED' | 'HALT';
+
+export interface StockMetric {
+  ticker: string;
+  market: MarketCode;
+  calc_date: string;
+  ibd_proxy_score: number | null;
+  rs_rating: number | null;
+  rs_rank: number | null;
+  rs_universe_size: number | null;
+  mansfield_rs_flag: boolean | null;
+  mansfield_rs_score: number | null;
+  data_quality: DataQuality;
+  price_source: string | null;
+  error_message: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MacroTrend {
+  index_code: string;
+  market: MarketCode;
+  calc_date: string;
+  index_price: number | null;
+  ma_50: number | null;
+  ma_200: number | null;
+  is_uptrend_50: boolean | null;
+  is_uptrend_200: boolean | null;
+  action_level: MacroActionLevel;
+  created_at?: string;
+  updated_at?: string;
+}
 export type ScannerStatus = 'queued' | 'running' | 'done' | 'error';
 export type RecommendationTier = 'Recommended' | 'Partial' | 'Low Priority' | 'Error';
 
@@ -337,6 +376,11 @@ export interface ScannerResult extends ScannerConstituent {
   rsUniverseSize?: number | null;
   rsPercentile?: number | null;
   weightedMomentumScore?: number | null;
+  ibdProxyScore?: number | null;
+  mansfieldRsFlag?: boolean | null;
+  mansfieldRsScore?: number | null;
+  rsDataQuality?: DataQuality | null;
+  macroActionLevel?: MacroActionLevel | null;
   benchmarkRelativeScore?: number | null;
   rsLineNewHigh?: boolean | null;
   rsLineNearHigh?: boolean | null;
@@ -486,6 +530,11 @@ export interface ContestPromptCandidate {
   rs_universe_size?: number | null;
   rs_percentile?: number | null;
   weighted_momentum_score?: number | null;
+  ibd_proxy_score?: number | null;
+  mansfield_rs_flag?: boolean | null;
+  mansfield_rs_score?: number | null;
+  rs_data_quality?: DataQuality | null;
+  macro_action_level?: MacroActionLevel | null;
   benchmark_relative_score?: number | null;
   rs_line_new_high?: boolean | null;
   rs_line_near_high?: boolean | null;

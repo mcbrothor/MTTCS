@@ -2,47 +2,50 @@ import Card from '@/components/ui/Card';
 import { Activity, BarChart2, Bot, CheckCircle2, Crosshair, ScanSearch, Trophy, Volume2 } from 'lucide-react';
 
 const masterFilterRows = [
-  ['P3 점수', 'FTD, Distribution Pressure, NH/NL Proxy, Above 200D, Sector Rotation을 100점으로 합산합니다.'],
-  ['시장 상태', '75점 이상 GREEN, 50점 이상 YELLOW, 그 외 RED입니다. RED여도 후보 비교는 가능하지만 포지션 크기와 손절을 보수적으로 봅니다.'],
+  ['P3 점수', 'FTD, Distribution Pressure, NH/NL Proxy, Above 200D, Sector Rotation을 100점 기준으로 합산한 시장 환경 점수입니다.'],
+  ['시장 상태', '75점 이상 GREEN, 50점 이상 YELLOW, 그 미만은 RED입니다. RED라도 후보 비교는 가능하지만 포지션 크기와 손절 기준은 보수적으로 봅니다.'],
   ['Trend Alignment', '가격 차트가 아니라 50일/200일 이동평균선 두 개를 비교합니다. 현재가 > 200일선, 현재가 > 50일선, 50일선 > 200일선을 함께 봅니다.'],
   ['VIX', '20 미만 PASS, 20 이상 25 미만 WARNING, 25 이상 FAIL입니다.'],
-  ['Follow-Through Day', '조정 저점 이후 4거래일차부터 상승률과 거래량 증가가 함께 나왔는지 확인하고, 미확인 시 원인을 표시합니다.'],
+  ['Follow-Through Day', '조정 저점 이후 4거래일차부터 상승률과 거래량 증가가 함께 나타나는지 확인하며, 미확인 시에는 사유를 표시합니다.'],
   ['Sector Rotation', '전체 섹터 ETF를 20일 수익률순으로 보여주고, 성장/경기민감 섹터가 상위권인지 확인합니다.'],
 ];
 
 const scannerRows = [
-  ['Recommended', 'SEPA 통과 + 표준 VCP 형성 + 거래량 Watch 이상, 또는 High Tight Flag 통과 + RS 90+ + RS Line 신고가/근접 + 거래량 Strong 후보입니다.'],
-  ['Partial', 'SEPA 미충족이 2개 이하이면서 HTF/거래량 소화가 있거나, RS 90+와 테니스 공 액션 2회 이상으로 예외 검토 가치가 있는 후보입니다.'],
-  ['Low Priority', '조건 미달이 많아 우선순위는 낮지만 사용자가 수동으로 콘테스트에 보낼 수 있습니다.'],
+  ['Recommended', 'SEPA 통과 + Standard VCP 형성/강세 + 거래량 Watch 이상, 또는 High Tight Flag 통과 + RS 90+ + RS Line 신고가/근접 + 거래량 Strong 후보입니다.'],
+  ['Partial', 'SEPA 미충족이 2개 이하이면서 HTF/거래량 소화가 있거나, RS 90+와 테니스 공 액션 2회 이상 등 예외 검토 가치가 있는 후보입니다.'],
+  ['Low Priority', '조건 미달 항목이 많아 시스템 우선순위는 낮지만, 사용자가 수동으로 콘테스트에 보낼 수 있습니다.'],
   ['Error', '외부 API 오류, 심볼 오류, 데이터 부족 등으로 분석이 완료되지 않은 상태입니다.'],
   ['거래량 Strong', '거래량 건조화 65점 이상, 포켓 피벗 60점 이상, 또는 돌파 거래량 confirmed입니다.'],
   ['거래량 Watch', '거래량 건조화 50점 이상, 포켓 피벗 40점 이상, 또는 돌파 거래량 pending입니다.'],
-  ['RS Proxy', '동일 스캔 유니버스 안에서 3/6/9/12개월 가중 모멘텀을 순위화해 1~99 점수로 환산합니다. 공식 IBD RS가 들어오면 외부 RS를 우선합니다.'],
-  ['Base Type', '일반 추세 종목은 표준 VCP, 8주 100% 이상 급등 또는 50일선 이격 20% 이상인 종목은 High Tight Flag/얕은 베이스를 별도 태깅합니다.'],
-  ['테니스 공 액션', '최근 60거래일 중 벤치마크가 1% 이상 하락한 날에 종목이 상승 마감하거나 덜 하락한 횟수입니다.'],
+  ['Base Type', '일반 추세 후보는 Standard_VCP, 8주 100% 이상 급등 또는 50일선 이격 20% 이상 후보는 High_Tight_Flag를 별도 검사합니다.'],
+  ['테니스 공 액션', '최근 60거래일 중 벤치마크가 1% 이상 하락한 날에 종목이 상승 마감했거나 덜 하락한 횟수입니다.'],
 ];
 
-const scoreTheoryRows = [
-  ['상대강도 RS', '미너비니/오닐식 주도주 선별 철학과 학술적 모멘텀 효과를 참고합니다. 동일 유니버스 안에서 3/6/9/12개월 수익률을 최근 구간에 더 높은 가중치로 합산한 뒤 순위화합니다.'],
-  ['모멘텀 효과', 'Jegadeesh & Titman의 중기 모멘텀 연구처럼 최근 강한 종목이 일정 기간 상대 우위를 이어갈 수 있다는 경험적 현상을 참고합니다. MTN은 이 논리를 RS Proxy와 테니스 공 액션에 반영합니다.'],
-  ['VCP/HTF', '미너비니의 Volatility Contraction Pattern과 High Tight Flag 개념을 참고합니다. 가격 변동폭이 줄고 거래량이 마르는 과정을 공급 소진과 기관 매집 가능성의 흔적으로 해석합니다.'],
-  ['거래량 신호', '가격-거래량 분석과 Wyckoff식 수급 해석을 참고합니다. 거래량 건조화는 매도 물량 감소, 포켓 피벗과 돌파 거래량은 수요 우위 가능성으로 점수화합니다.'],
-  ['이동평균/추세', '추세추종과 이동평균 필터의 실무적 사용을 참고합니다. 현재가, 50일선, 200일선의 정렬은 장기 추세와 중기 탄력의 기본 체력으로 봅니다.'],
-  ['리스크 관리', '손절과 포지션 사이징은 고정 손실 한도, 패턴 무효화, R multiple 개념을 참고합니다. HTF는 변동성이 큰 예외 패턴이므로 더 타이트한 손절과 breakeven 전환을 제안합니다.'],
+const rsRows = [
+  ['표준 유니버스', '미국 시장 RS는 S&P 500 전체를 기준으로, 한국 시장 RS는 KOSPI100 + KOSDAQ150 합산 유니버스를 기준으로 계산합니다. 스캔된 일부 종목끼리만 다시 순위를 매기지 않습니다.'],
+  ['IBD Proxy Score', '현재가, 3개월 전, 6개월 전, 9개월 전, 12개월 전 가격으로 분기별 독립 수익률을 계산합니다. 최근 분기(Q1)는 2배, Q2/Q3/Q4는 1배 가중합니다.'],
+  ['RS Rating 1~99', '일일 배치가 표준 유니버스의 IBD Proxy Score를 내림차순 정렬한 뒤 1위는 99, 마지막에 가까울수록 1점에 가깝게 환산합니다.'],
+  ['Data Quality', '12개월 데이터가 모두 있으면 FULL, 일부 분기만 있으면 PARTIAL, 최소 3개월 가격도 없으면 NA로 저장합니다. NA는 스캐너에서 대체 순위를 만들지 않습니다.'],
+  ['Mansfield RS', '종목의 52주 수익률이 해당 벤치마크의 52주 수익률을 이기는지 보는 절대 상대강도입니다. 양수/true일수록 지수 대비 강합니다.'],
+  ['Macro Action', '벤치마크가 50일선과 200일선 위면 FULL, 50일선 아래/200일선 위면 REDUCED, 200일선 아래면 HALT입니다. REDUCED에서는 RS 80+ 후보를 우선 노출합니다.'],
 ];
+
+const theoryRows = [
+  ['미너비니 SEPA', '가격이 장단기 이동평균 위에 있고 52주 고점 근처에 있으며 유동성이 충분한 주도주를 찾는 구조입니다.'],
+  ['VCP와 HTF', 'VCP는 변동성 수축과 거래량 감소를 통한 공급 소진을 봅니다. HTF는 강한 급등 후 얕고 짧은 베이스를 만들 때만 예외적으로 허용합니다.'],
+  ['모멘텀 효과', 'Jegadeesh & Titman의 모멘텀 연구처럼 최근 강한 종목이 일정 기간 상대 우위를 이어가는 경향을 참고합니다.'],
+  ['Mansfield 상대강도', 'Stan Weinstein식 시장 대비 상대성과 해석을 참고해 종목이 자기 벤치마크를 실제로 이기는지 확인합니다.'],
+  ['거래량/수급', 'Wyckoff식 공급 소진 관점과 포켓 피벗/돌파 거래량 개념을 참고해 가격 상승의 질을 보조 판단합니다.'],
+  ['리스크 관리', 'Standard VCP는 패턴 무효화와 8% 손절 cap을, HTF는 베이스 저점/7% cap, +5% breakeven, +10% trailing stop을 더 엄격하게 봅니다.'],
+];
+
 const contestRows = [
-  ['후보 전달', '스캐너에서 사용자가 직접 체크한 selectedTickers만 콘테스트 전달 저장소에 기록합니다. 콘테스트 화면도 전달 후보만 표시하며 자동 Recommended 선택은 사용하지 않습니다.'],
-  ['분석 세션', '최대 10개 후보, 스캐너 스냅샷, 마스터 필터 상태, 기준가, 기준일, 데이터 출처를 DB에 저장합니다.'],
-  ['외부 LLM', 'Gemini/GPT/Claude 등에 한국어 프롬프트를 복사하고, 결과는 JSON만 또는 전체 리포트 전문을 붙여넣을 수 있습니다.'],
-  ['JSON 매핑', 'session_id, candidate_id, ticker, rank, scores, thesis, 기술/펀더멘털/실적/해자/시장/리스크/촉매/comment를 저장합니다.'],
-  ['최종 선택', 'actual_invested와 final_pick_rank로 표시합니다. 후보 10개 중 몇 개든 실제 투자 대상으로 선택할 수 있습니다.'],
-  ['성과 복기', '1주/1개월 기준가와 리뷰가로 선택군 평균 수익률과 미선택군 평균 수익률을 비교합니다. 상대 수익률이 음수면 실패/반성 필요입니다.'],
-];
-
-const tradeRows = [
-  ['평균 진입가', '체결 시간순 평균 원가 방식입니다. 매수는 보유 원가와 수량을 늘리고, 매도는 당시 평균 단가 기준으로 원가와 수량을 줄입니다.'],
-  ['실현손익', '매도 시점의 평균 단가 기준으로 계산하고, 수수료는 손익 계산에 반영합니다.'],
-  ['historicalAvgEntryPrice', '완전 청산 이후에도 참고할 수 있도록 전체 진입 체결 기준 평균가를 별도로 유지합니다.'],
+  ['후보 전달', '스캐너에서 사용자가 체크한 종목만 콘테스트 전달 저장소에 기록하고, 콘테스트 화면은 전달 후보를 우선 표시합니다.'],
+  ['분석 세션', '최대 10개 후보와 스캐너 snapshot, 마스터 필터 상태, 기준가, 데이터 출처를 DB에 저장합니다.'],
+  ['외부 LLM', 'Gemini/GPT/Claude 등에 한국어 프롬프트를 복사하고, 결과 JSON 또는 전체 리포트 전문을 다시 붙여넣을 수 있습니다.'],
+  ['JSON 매핑', 'session_id, candidate_id, ticker, rank, scores, 투자 가설, 기술/펀더멘털/실적/해자/시장/리스크/촉매/comment를 저장합니다.'],
+  ['최종 선택', 'actual_invested와 final_pick_rank로 표시합니다. 후보 10개 중 몇 개든 최종 투자 대상으로 선택할 수 있습니다.'],
+  ['성과 복기', '1주/1개월 뒤 선택군 평균 수익률과 미선택군 평균 수익률을 비교합니다. 선택군이 낮으면 실패/반성 필요로 표시합니다.'],
 ];
 
 function InfoTable({ rows }: { rows: string[][] }) {
@@ -75,7 +78,7 @@ export default function GuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 알고리즘 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          현재 MTN은 마스터 필터로 시장 환경을 읽고, 스캐너로 SEPA/VCP/RS/거래량과 High Tight Flag 예외 패턴을 정리한 뒤, 콘테스트에서 사용자가 체크한 후보만 외부 LLM 비교와 성과 복기로 누적합니다.
+          MTN은 마스터 필터로 시장 환경을 읽고, 스캐너로 SEPA/VCP/HTF/RS/거래량 후보를 찾은 뒤, 콘테스트와 성과 복기로 선택 기준을 계속 개선합니다.
         </p>
       </div>
 
@@ -106,10 +109,23 @@ export default function GuidePage() {
           <BarChart2 className="h-6 w-6 text-sky-400" />
           <h2 className="text-xl font-bold text-white">P3 마스터 필터</h2>
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          마스터 필터는 후보를 강제로 제외하는 게 아니라 시장 리스크 문맥을 제공합니다. RED일수록 진입 비중, 손절, 보유 기간 판단을 더 보수적으로 둡니다.
-        </p>
         <InfoTable rows={masterFilterRows} />
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <BarChart2 className="h-6 w-6 text-emerald-400" />
+          <h2 className="text-xl font-bold text-white">표준 유니버스 RS</h2>
+        </div>
+        <InfoTable rows={rsRows} />
+      </Card>
+
+      <Card>
+        <div className="flex items-center gap-3">
+          <ScanSearch className="h-6 w-6 text-emerald-400" />
+          <h2 className="text-xl font-bold text-white">스캐너 추천 등급</h2>
+        </div>
+        <InfoTable rows={scannerRows} />
       </Card>
 
       <Card>
@@ -118,41 +134,16 @@ export default function GuidePage() {
           <h2 className="text-xl font-bold text-white">Centaur LLM 로그</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          Centaur 로그는 Gemini 3.1 Flash-Lite를 primary로 호출하고, 실패 원인을 fallback chain에 남깁니다. 이후 Gemini fallback model, Groq
-          <span className="font-mono text-slate-200"> openai/gpt-oss-120b</span>, Cerebras
-          <span className="font-mono text-slate-200"> qwen-3-235b-a22b-instruct-2507</span>, rule-based 순서로 대체합니다.
+          Centaur는 Gemini를 primary로 호출하고, 실패 원인을 fallback chain에 남깁니다. 이후 Groq, Cerebras, rule-based 순서로 대체해 로그가 비지 않도록 합니다.
         </p>
       </Card>
 
-      <Card>
-        <div className="flex items-center gap-3">
-          <ScanSearch className="h-6 w-6 text-emerald-400" />
-          <h2 className="text-xl font-bold text-white">스캐너 추천 등급</h2>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          스캐너는 웹 표 모드를 기본으로 사용하며, 앱 카드 모드와 동일한 상세 팝업을 공유합니다. KOSPI100은 KIS 샘플/오류 순위에 흔들리지 않도록 Naver Finance KOSPI 시가총액 상위 100개를 우선 기준으로 사용합니다.
-        </p>
-        <InfoTable rows={scannerRows} />
-      </Card>
-
-      <Card>
-        <div className="flex items-center gap-3">
-          <BarChart2 className="h-6 w-6 text-violet-400" />
-          <h2 className="text-xl font-bold text-white">점수 산출 참고 이론</h2>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          MTN 점수는 특정 논문이나 IBD/MarketSmith의 비공개 산식을 그대로 복제한 값이 아닙니다. 미너비니식 주도주 선별, 모멘텀 이상현상, 가격-거래량 수급 해석, 추세추종 리스크 관리를 MTN 내부 Proxy로 구현한 판단 보조 지표입니다.
-        </p>
-        <InfoTable rows={scoreTheoryRows} />
-      </Card>
       <Card>
         <div className="flex items-center gap-3">
           <Volume2 className="h-6 w-6 text-amber-400" />
-          <h2 className="text-xl font-bold text-white">거래량 신호</h2>
+          <h2 className="text-xl font-bold text-white">점수 산출 참고 이론</h2>
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          거래량은 VCP 품질 판단의 핵심입니다. 메인 테이블에서 Strong/Watch/Weak/Unknown을 표시하고, 거래량 건조화, 포켓 피벗, 돌파 거래량으로 필터링합니다.
-        </p>
+        <InfoTable rows={theoryRows} />
       </Card>
 
       <Card>
@@ -169,17 +160,8 @@ export default function GuidePage() {
           <h2 className="text-xl font-bold text-white">SEPA/VCP 진입 해석</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          SEPA는 강한 추세의 기본 체력, VCP는 피벗 전 수축과 공급 소진을 봅니다. Partial 후보는 완벽한 SEPA가 아니어도 최근 모멘텀, 뉴스 변화,
-          거래량 신호가 있으면 비교 대상으로 남길 수 있습니다.
+          SEPA는 강한 추세의 기본 체력, VCP는 피벗 전 수축과 공급 소진, HTF는 강한 주도주의 얕은 베이스 예외를 봅니다. Partial 후보는 실패가 아니라 비교 후보로 남겨둘 가치가 있는 예외 검토군입니다.
         </p>
-      </Card>
-
-      <Card>
-        <div className="flex items-center gap-3">
-          <Activity className="h-6 w-6 text-fuchsia-400" />
-          <h2 className="text-xl font-bold text-white">매매 지표와 평균 진입가</h2>
-        </div>
-        <InfoTable rows={tradeRows} />
       </Card>
 
       <Card>
@@ -188,8 +170,7 @@ export default function GuidePage() {
           <h2 className="text-xl font-bold text-white">복기 기준</h2>
         </div>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          콘테스트 후 선택한 종목 평균 수익률이 미선택 후보 평균 수익률보다 낮으면 해당 사이클은 실패/반성 필요로 표시합니다. 목적은 매번 후보 선정 기준을
-          더 날카롭게 만드는 것입니다.
+          콘테스트 후 실제 선택 종목 평균 수익률이 미선택 후보 평균 수익률보다 낮으면 해당 사이클은 실패/반성 필요로 표시합니다. 목적은 매번 후보 선정 기준을 더 정교하게 만드는 것입니다.
         </p>
       </Card>
     </div>

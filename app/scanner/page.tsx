@@ -9,7 +9,6 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import {
-  applyUniverseRsRankings,
   evaluateScannerRecommendation,
   getVolumeSignalTier,
   isContestPoolTier,
@@ -24,6 +23,8 @@ import type {
   ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
+  MacroTrend,
+  StockMetric,
 } from '@/types';
 
 const TOTAL_EQUITY_FOR_SCAN = '50000';
@@ -58,6 +59,12 @@ interface StoredScannerSnapshot {
   results: ScannerResult[];
 }
 
+
+interface ScannerMetricsResponse {
+  market: 'KR' | 'US';
+  macroTrend: MacroTrend | null;
+  metrics: { ticker: string; metric: StockMetric | null }[];
+}
 const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }> = {
   NASDAQ100: {
     label: 'NASDAQ 100',
@@ -144,7 +151,7 @@ function readScannerSnapshot(universe: ScannerUniverse): StoredScannerSnapshot |
     if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
     return {
       ...snapshot,
-      results: applyUniverseRsRankings(snapshot.results).map((item) => withRecommendation(item)),
+      results: snapshot.results.map((item) => withRecommendation(item)),
     };
   } catch {
     return null;
@@ -155,7 +162,7 @@ function writeScannerSnapshot(universeMeta: ScannerUniverseResponse, results: Sc
   const snapshot: StoredScannerSnapshot = {
     savedAt,
     universeMeta,
-    results: applyUniverseRsRankings(results).map((item) => withRecommendation(item)),
+    results: results.map((item) => withRecommendation(item)),
   };
   window.localStorage.setItem(scannerStorageKey(universeMeta.universe), JSON.stringify(snapshot));
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
@@ -190,6 +197,63 @@ function getInitialRestoredUniverse() {
 function round(value: number, digits = 2) {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
+}
+
+function rsPercentile(rank: number | null | undefined, universeSize: number | null | undefined) {
+  if (!rank || !universeSize) return null;
+  if (universeSize <= 1) return 50;
+  return Math.round((1 - ((rank - 1) / (universeSize - 1))) * 100);
+}
+
+function mergeStandardMetrics(results: ScannerResult[], rows: { ticker: string; metric: StockMetric | null }[], macroTrend: MacroTrend | null) {
+  const byTicker = new Map(rows.map((row) => [row.ticker, row.metric]));
+  return results.map((item) => {
+    const metric = byTicker.get(item.ticker) || null;
+    return withRecommendation({
+      ...item,
+      rsRating: metric?.rs_rating ?? null,
+      internalRsRating: metric?.rs_rating ?? null,
+      rsRank: metric?.rs_rank ?? null,
+      rsUniverseSize: metric?.rs_universe_size ?? null,
+      rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size),
+      ibdProxyScore: metric?.ibd_proxy_score ?? null,
+      weightedMomentumScore: metric?.ibd_proxy_score ?? null,
+      mansfieldRsFlag: metric?.mansfield_rs_flag ?? null,
+      mansfieldRsScore: metric?.mansfield_rs_score ?? null,
+      rsDataQuality: metric?.data_quality ?? 'NA',
+      macroActionLevel: macroTrend?.action_level ?? null,
+    });
+  });
+}
+
+async function loadScannerMetrics(universe: ScannerUniverse, rows: ScannerResult[]) {
+  const tickers = rows.map((item) => item.ticker).filter(Boolean);
+  if (tickers.length === 0) return { results: rows.map(withRecommendation), macroTrend: null as MacroTrend | null };
+  try {
+    const query = new URLSearchParams({ universe, tickers: tickers.join(',') });
+    const response = await fetch('/api/scanner/metrics?' + query.toString());
+    if (!response.ok) throw new Error('metrics ' + response.status);
+    const payload = await response.json() as ScannerMetricsResponse;
+    return { results: mergeStandardMetrics(rows, payload.metrics, payload.macroTrend), macroTrend: payload.macroTrend };
+  } catch {
+    return {
+      results: rows.map((item) => withRecommendation({
+        ...item,
+        rsRating: null,
+        internalRsRating: null,
+        rsRank: null,
+        rsUniverseSize: null,
+        rsPercentile: null,
+        ibdProxyScore: null,
+        weightedMomentumScore: null,
+        mansfieldRsFlag: null,
+        mansfieldRsScore: null,
+        rsDataQuality: 'NA',
+        macroActionLevel: null,
+      })),
+      macroTrend: null as MacroTrend | null,
+    };
+  }
 }
 
 function scanConcurrencyFor(universe: ScannerUniverse) {
@@ -438,6 +502,8 @@ export default function ScannerPage() {
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
+  const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
+  const [showAllMacroResults, setShowAllMacroResults] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -449,6 +515,10 @@ export default function ScannerPage() {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
       setSelectedTickers(readContestSelection(initial, snapshot.results));
+          loadScannerMetrics(initial, snapshot.results).then((merged) => {
+        setResults(merged.results);
+        setMacroTrend(merged.macroTrend);
+      });
     }
   }, []);
 
@@ -460,10 +530,15 @@ export default function ScannerPage() {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
       setSelectedTickers(readContestSelection(newUniverse, snapshot.results));
+      loadScannerMetrics(newUniverse, snapshot.results).then((merged) => {
+        setResults(merged.results);
+        setMacroTrend(merged.macroTrend);
+      });
     } else {
       setResults([]);
       setSelectedTickers(new Set());
       setLastScannedAt(null);
+      setMacroTrend(null);
     }
     localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, newUniverse);
   };
@@ -476,6 +551,9 @@ export default function ScannerPage() {
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
     setSelectedTickers(new Set());
+
+        setMacroTrend(null);
+    setShowAllMacroResults(false);
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -531,7 +609,9 @@ export default function ScannerPage() {
       await Promise.all(workers);
 
       if (!abortController.signal.aborted) {
-        const normalized = applyUniverseRsRankings(latestResults).map((item) => withRecommendation(item));
+        const merged = await loadScannerMetrics(meta.universe, latestResults);
+        const normalized = merged.results.map((item) => withRecommendation(item));
+        setMacroTrend(merged.macroTrend);
         const nextSelected = new Set<string>();
         const now = new Date().toISOString();
         setResults(normalized);
@@ -601,6 +681,10 @@ export default function ScannerPage() {
   const filteredResults = useMemo(() => {
     let list = results.map((item) => withRecommendation(item));
 
+    if (macroTrend?.action_level === 'REDUCED' && !showAllMacroResults && filterKey === 'all') {
+      list = list.filter((row) => (row.rsRating || 0) >= 80 || row.status !== 'done');
+    }
+
     if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
     else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'Partial');
     else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
@@ -633,7 +717,7 @@ export default function ScannerPage() {
     });
 
     return list;
-  }, [results, filterKey, sortKey]);
+  }, [results, filterKey, sortKey, macroTrend, showAllMacroResults]);
 
   const stats = useMemo(() => ({
     recommended: results.filter((item) => item.recommendationTier === 'Recommended').length,
@@ -922,6 +1006,18 @@ export default function ScannerPage() {
         )}
       </section>
 
+      {macroTrend && (
+        <div className={`rounded-lg border px-4 py-3 text-sm ${macroTrend.action_level === 'HALT' ? 'border-rose-500/30 bg-rose-500/10 text-rose-100' : macroTrend.action_level === 'REDUCED' ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`}>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <span>Macro Action: <strong>{macroTrend.action_level}</strong> | {macroTrend.index_code} 기준 50일선 {macroTrend.is_uptrend_50 ? '상회' : '하회'} / 200일선 {macroTrend.is_uptrend_200 ? '상회' : '하회'}</span>
+            {macroTrend.action_level === 'REDUCED' && (
+              <button type="button" onClick={() => setShowAllMacroResults((value) => !value)} className="text-xs font-semibold underline">
+                {showAllMacroResults ? 'RS 80+ 우선 보기' : '전체 보기'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div className="flex flex-wrap gap-2">
           {SCANNER_FILTERS.map((filter) => (

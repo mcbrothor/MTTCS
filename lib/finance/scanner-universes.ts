@@ -268,7 +268,29 @@ async function fetchKosdaq100(): Promise<ScannerUniverseResponse> {
   };
 }
 
-export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
+
+export async function getKoreaMarketCapConstituents(market: KoreaMarket, limit: number): Promise<ScannerConstituent[]> {
+  const ranking = await fetchNaverKoreaMarketCapRanking(market, limit);
+  const ranked = rankKoreaMarketCapItems(ranking, limit);
+  return toKoreaConstituents(ranked, market);
+}
+
+export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<ScannerConstituent[]> {
+  if (market === 'KR') {
+    const [kospi, kosdaq] = await Promise.all([
+      getKoreaMarketCapConstituents('KOSPI', 100),
+      getKoreaMarketCapConstituents('KOSDAQ', 150),
+    ]);
+    const byTicker = new Map<string, ScannerConstituent>();
+    for (const item of [...kospi, ...kosdaq]) {
+      if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, { ...item, rank: byTicker.size + 1 });
+    }
+    return Array.from(byTicker.values());
+  }
+
+  const sp500 = await fetchStockAnalysisSp500();
+  return sp500.items.map((item, index) => ({ ...item, rank: index + 1 }));
+}export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
   if (universe === 'NASDAQ100') return fetchNasdaq100();
   if (universe === 'SP500') return fetchStockAnalysisSp500();
   if (universe === 'KOSPI100') return fetchKospi100();

@@ -5,7 +5,8 @@ import { getSecFundamentals } from '@/lib/finance/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/calculations';
 import { analyzeVcp } from '@/lib/finance/vcp-engine';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
-import type { FundamentalSnapshot, MarketAnalysisResponse, OHLCData, ProviderAttempt } from '@/types';
+import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/stock-metrics';
+import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
@@ -129,10 +130,60 @@ function getYahooFormattedTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
+function marketForExchange(exchange: string) {
+  return exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KR' as const : 'US' as const;
+}
+
+function primaryMacroIndexForExchange(exchange: string) {
+  if (exchange === 'KOSPI') return '^KS200';
+  if (exchange === 'KOSDAQ') return '^KQ150';
+  if (exchange === 'NAS' || exchange === 'NASDAQ') return 'QQQ';
+  return 'SPY';
+}
+
+async function loadStandardMetrics(ticker: string, exchange: string) {
+  try {
+    const market = marketForExchange(exchange);
+    const [metrics, macroTrend] = await Promise.all([
+      fetchLatestStockMetrics([ticker], market),
+      fetchLatestMacroTrend(market, primaryMacroIndexForExchange(exchange)),
+    ]);
+    return { metric: metrics.get(ticker) || null, macroTrend };
+  } catch {
+    return { metric: null, macroTrend: null };
+  }
+}
+
+function mergeStandardMetrics(response: MarketAnalysisResponse, metric: StockMetric | null, macroTrend: MacroTrend | null): MarketAnalysisResponse {
+  const standardRs = metric?.rs_rating ?? null;
+  return {
+    ...response,
+    sepaEvidence: {
+      ...response.sepaEvidence,
+      metrics: {
+        ...response.sepaEvidence.metrics,
+        rsRating: standardRs,
+        internalRsRating: standardRs,
+        rsRank: metric?.rs_rank ?? null,
+        rsUniverseSize: metric?.rs_universe_size ?? null,
+        rsPercentile: metric?.rs_rank && metric?.rs_universe_size
+          ? Math.round((1 - ((metric.rs_rank - 1) / Math.max(1, metric.rs_universe_size - 1))) * 100)
+          : null,
+        ibdProxyScore: metric?.ibd_proxy_score ?? response.sepaEvidence.metrics.ibdProxyScore ?? null,
+        weightedMomentumScore: metric?.ibd_proxy_score ?? response.sepaEvidence.metrics.weightedMomentumScore ?? null,
+        mansfieldRsFlag: metric?.mansfield_rs_flag ?? response.sepaEvidence.metrics.mansfieldRsFlag ?? null,
+        mansfieldRsScore: metric?.mansfield_rs_score ?? response.sepaEvidence.metrics.mansfieldRsScore ?? null,
+        rsDataQuality: metric?.data_quality ?? response.sepaEvidence.metrics.rsDataQuality ?? 'NA',
+        macroActionLevel: macroTrend?.action_level ?? response.sepaEvidence.metrics.macroActionLevel ?? null,
+      },
+    },
+  };
+}
 function getBenchmarkCandidates(exchange: string) {
   if (exchange === 'KOSPI') return ['^KS200', '^KS11'];
   if (exchange === 'KOSDAQ') return ['^KQ150', '^KQ11'];
-  return ['SPY', 'QQQ'];
+  if (exchange === 'NAS' || exchange === 'NASDAQ') return ['QQQ', '^NDX'];
+  return ['SPY', '^GSPC'];
 }
 
 function isValidTicker(ticker: string, exchange: string) {
@@ -289,17 +340,19 @@ export async function GET(request: Request) {
     const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = cacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
+      const { metric, macroTrend } = await loadStandardMetrics(ticker, exchange);
+      const mergedCached = mergeStandardMetrics(cached, metric, macroTrend);
       return NextResponse.json({
-        ...cached,
-        data: cached,
+        ...mergedCached,
+        data: mergedCached,
         meta: {
           asOf: new Date().toISOString(),
-          source: cached.providerUsed,
-          provider: cached.providerUsed,
+          source: mergedCached.providerUsed,
+          provider: mergedCached.providerUsed,
           delay: 'EOD',
-          fallbackUsed: cached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
-          warnings: cached.warnings,
-          providerAttempts: cached.providerAttempts || [],
+          fallbackUsed: mergedCached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
+          warnings: mergedCached.warnings,
+          providerAttempts: mergedCached.providerAttempts || [],
         },
       });
     }
@@ -311,10 +364,26 @@ export async function GET(request: Request) {
       includeFundamentals ? fetchFundamentals(ticker, exchange, warnings) : Promise.resolve(null),
     ]);
 
+    const { metric, macroTrend } = await loadStandardMetrics(ticker, exchange);
+
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
-    const sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
-    const vcpAnalysis = analyzeVcp(data, entryPrice, { rsRating: sepaEvidence.metrics.rsRating });
+    let sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
+    const standardRsRating = metric?.rs_rating ?? null;
+    sepaEvidence = mergeStandardMetrics({
+      ticker,
+      exchange,
+      providerUsed,
+      providerAttempts,
+      priceData: data,
+      sepaEvidence,
+      riskPlan: {} as never,
+      vcpAnalysis: {} as never,
+      fundamentals,
+      dataQuality: { bars: data.length, hasEnoughForAtr: false, hasEnoughForLongMa: false, missingFundamentals: [] },
+      warnings,
+    }, metric, macroTrend).sepaEvidence;
+    const vcpAnalysis = analyzeVcp(data, entryPrice, { rsRating: standardRsRating });
     const effectiveEntry = vcpAnalysis.recommendedEntry;
     const riskPlan = calculateMinerviniRiskPlan(
       totalEquity,
