@@ -5,7 +5,12 @@ import type { ScannerResult, RecommendationTier } from '@/types';
 
 function formatMarketCap(value: number | null, currency: ScannerResult['currency']) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  if (currency === 'KRW') return `${Math.round(value / 100_000_000).toLocaleString('ko-KR')}억`;
+  if (currency === 'KRW') {
+    const jo = value / 1_000_000_000_000;
+    if (jo >= 1) return `${jo.toFixed(2)}조원`;
+    const eok = Math.round(value / 100_000_000);
+    return `${eok.toLocaleString('ko-KR')}억`;
+  }
   if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
   return `$${(value / 1_000_000_000).toFixed(1)}B`;
 }

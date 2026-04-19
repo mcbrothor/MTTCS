@@ -13,6 +13,8 @@
 import axios from 'axios';
 import type { CanslimStockData, MarketCode } from '@/types';
 import { DATA_QUALITY } from './canslim-criteria';
+import { getDartCorpCode, getDartFinancialData, type FundamentalMetrics } from '../providers/dart-api';
+import { getSecFundamentals } from '../providers/sec-edgar-api';
 
 /** Yahoo quoteSummary에서 추출 가능한 원시 응답 구조 */
 interface YahooEarningsTrendItem {
@@ -106,21 +108,33 @@ export async function fetchCanslimFundamentals(
     const sharesBuyback = extractBuyback(result);
     if (floatShares === null) warnings.push(DATA_QUALITY.PARTIAL_LABEL + ':floatShares');
 
+    const fundamentalData: Partial<CanslimStockData> = {
+      symbol: ticker,
+      market,
+      currentQtrEpsGrowth,
+      priorQtrEpsGrowth,
+      epsGrowthLast3Qtrs,
+      currentQtrSalesGrowth,
+      annualEpsGrowthEachYear,
+      hadNegativeEpsInLast3Yr,
+      roe,
+      floatShares,
+      sharesBuyback,
+      ...institutional,
+    };
+
+    // ── KR 마켓 특화 보강 (DART) ──────────────────────────────
+    if (market === 'KR') {
+      await augmentWithDartData(ticker, fundamentalData, warnings);
+    }
+
+    // ── US 마켓 특화 보강 (EDGAR) ──────────────────────────────
+    if (market === 'US') {
+      await augmentWithEdgarData(ticker, fundamentalData, warnings);
+    }
+
     return {
-      data: {
-        symbol: ticker,
-        market,
-        currentQtrEpsGrowth,
-        priorQtrEpsGrowth,
-        epsGrowthLast3Qtrs,
-        currentQtrSalesGrowth,
-        annualEpsGrowthEachYear,
-        hadNegativeEpsInLast3Yr,
-        roe,
-        floatShares,
-        sharesBuyback,
-        ...institutional,
-      },
+      data: fundamentalData,
       warnings,
     };
   } catch (error) {
@@ -329,4 +343,97 @@ function extractBuyback(result: YahooQuoteSummaryResult): boolean | null {
     return null;
   }
   return null;
+}
+
+/**
+ * DART API를 사용하여 한국 종목의 부족한 펀더멘털 데이터를 보충합니다.
+ */
+async function augmentWithDartData(
+  ticker: string,
+  data: Partial<CanslimStockData>,
+  warnings: string[]
+) {
+  try {
+    const corpCode = await getDartCorpCode(ticker);
+    if (!corpCode) return;
+
+    // 현재 시점 기준으로 최신 분기 판단 (단순화를 위해 현재 연도와 이전 연도 조사)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const lastYear = currentYear - 1;
+
+    // DART 보고서 코드: 11013(1Q), 11012(2Q), 11014(3Q), 11011(4Q/사업)
+    const checkPeriods = [
+      { year: currentYear, code: '11014' }, // 3Q
+      { year: currentYear, code: '11012' }, // 2Q
+      { year: currentYear, code: '11013' }, // 1Q
+      { year: lastYear, code: '11011' },    // Annual (Previous Year)
+    ];
+
+    let latestMetrics: FundamentalMetrics | null = null;
+    let yearAgoMetrics: FundamentalMetrics | null = null;
+
+    // 1. 최신 가용 분기 찾기
+    for (const p of checkPeriods) {
+      const m = await getDartFinancialData(corpCode, String(p.year), p.code);
+      if (m && m.netIncome !== undefined) {
+        latestMetrics = m;
+        // 2. 1년 전 동일 분기 데이터 가져오기
+        yearAgoMetrics = await getDartFinancialData(corpCode, String(p.year - 1), p.code);
+        break;
+      }
+    }
+
+    if (latestMetrics && yearAgoMetrics) {
+      // EPS 성장률 (Net Income 기반)
+      if (latestMetrics.netIncome !== undefined && yearAgoMetrics.netIncome !== undefined && yearAgoMetrics.netIncome !== 0) {
+        const growth = round(((latestMetrics.netIncome - yearAgoMetrics.netIncome) / Math.abs(yearAgoMetrics.netIncome)) * 100);
+        data.currentQtrEpsGrowth = growth;
+        data.epsGrowthLast3Qtrs = [growth, data.epsGrowthLast3Qtrs?.[1] ?? null, data.epsGrowthLast3Qtrs?.[2] ?? null];
+      }
+
+      // 매출 성장률
+      if (latestMetrics.revenue !== undefined && yearAgoMetrics.revenue !== undefined && yearAgoMetrics.revenue !== 0) {
+        data.currentQtrSalesGrowth = round(((latestMetrics.revenue - yearAgoMetrics.revenue) / Math.abs(yearAgoMetrics.revenue)) * 100);
+      }
+
+      console.log(`✅ [DART] ${ticker} 데이터 보강 완료: EPS ${data.currentQtrEpsGrowth}%, Sales ${data.currentQtrSalesGrowth}%`);
+    } else {
+      warnings.push('DART_DATA_UNAVAILABLE');
+    }
+  } catch (err) {
+    console.error(`[DART Augmentation Error] ${ticker}:`, err);
+    warnings.push('DART_SYNC_FAILED');
+  }
+}
+
+/**
+ * SEC EDGAR API를 사용하여 미국 종목의 부족한 펀더멘털 데이터를 보충합니다.
+ */
+async function augmentWithEdgarData(
+  ticker: string,
+  data: Partial<CanslimStockData>,
+  warnings: string[]
+) {
+  try {
+    // Yahoo 데이터가 충분하다면 스킵 (보수적으로 1개라도 없으면 시도)
+    const needsAugment = data.currentQtrEpsGrowth === null || data.roe === null || data.currentQtrSalesGrowth === null;
+    if (!needsAugment) return;
+
+    const edgar = await getSecFundamentals(ticker);
+    if (edgar) {
+      if (data.currentQtrEpsGrowth === null && edgar.epsGrowthPct !== null) {
+        data.currentQtrEpsGrowth = edgar.epsGrowthPct;
+      }
+      if (data.currentQtrSalesGrowth === null && edgar.revenueGrowthPct !== null) {
+        data.currentQtrSalesGrowth = edgar.revenueGrowthPct;
+      }
+      if (data.roe === null && edgar.roePct !== null) {
+        data.roe = edgar.roePct;
+      }
+      console.log(`✅ [EDGAR] ${ticker} 데이터 보강 완료: ${edgar.source}`);
+    }
+  } catch (err) {
+    console.error(`[EDGAR Augmentation Error] ${ticker}:`, err);
+  }
 }

@@ -30,6 +30,34 @@ export interface DartCompanyInfo {
   acc_mt: string;
 }
 
+export interface DartFinancialData {
+  status: string;
+  message: string;
+  list?: {
+    rcept_no: string;
+    reprt_code: string; // 11013: 1분기, 11012: 반기, 11014: 3분기, 11011: 사업보고서
+    bsns_year: string;
+    corp_code: string;
+    stock_code: string;
+    nm_account: string;   // 계정과목명 (매출액, 영업이익, 당기순이익 등)
+    nm_account_kr: string;
+    fs_div: string;      // CFS: 연결재무제표, OFS: 재무제표
+    fs_nm: string;
+    active_nm: string;
+    amount: string;      // 금액 (당기)
+    thstrm_amount: string; // 당기금액
+    frmtrm_amount: string; // 전기금액
+    bfefrmtrm_amount: string; // 전전기금액
+  }[];
+}
+
+export interface FundamentalMetrics {
+  revenue?: number;
+  operatingIncome?: number;
+  netIncome?: number;
+  date: string;
+}
+
 /**
  * 종목코드로 DART 고유번호를 조회합니다. (Supabase DB 사용)
  */
@@ -79,6 +107,54 @@ export async function getDartCompanyInfo(corpCode: string): Promise<DartCompanyI
     return data;
   } catch (error) {
     console.error('Error fetching DART company info:', error);
+    return null;
+  }
+}
+
+/**
+ * DART 단일회사 주요계정(연결/개별)을 조회합니다.
+ */
+export async function getDartFinancialData(
+  corpCode: string,
+  year: string,
+  reprtCode: string,
+  fsDiv: 'CFS' | 'OFS' = 'CFS'
+): Promise<FundamentalMetrics | null> {
+  const apiKey = process.env.DART_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const url = `${DART_API_BASE_URL}/fnlttSinglAcctAll.json?crtfc_key=${apiKey}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${reprtCode}&fs_div=${fsDiv}`;
+    const response = await axios.get(url);
+    const data = response.data as DartFinancialData;
+
+    if (data.status !== '000' || !data.list) {
+      // 000 외에는 데이터 없음 (예: 013 - 조회된 데이터가 없음)
+      return null;
+    }
+
+    const metrics: FundamentalMetrics = {
+      date: `${year}-${reprtCode === '11011' ? '12-31' : reprtCode === '11013' ? '03-31' : reprtCode === '11012' ? '06-30' : '09-30'}`
+    };
+
+    // 주요 계정 추출 (매출액, 영업이익, 당기순이익)
+    // DART는 기업마다 계정명이 조금씩 다를 수 있으므로 포함(includes) 방식으로 체크
+    for (const item of data.list) {
+      const nm = item.nm_account.replace(/\s/g, '');
+      const amount = parseInt(item.thstrm_amount || '0', 10);
+
+      if (nm.includes('매출액') || nm === '영업수익') {
+        metrics.revenue = amount;
+      } else if (nm.includes('영업이익')) {
+        metrics.operatingIncome = amount;
+      } else if (nm.includes('당기순이익')) {
+        metrics.netIncome = amount;
+      }
+    }
+
+    return metrics;
+  } catch (error) {
+    console.error(`Error fetching DART financial data (${year}, ${reprtCode}):`, error);
     return null;
   }
 }
