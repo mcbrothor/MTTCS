@@ -11,7 +11,7 @@
  * 시스템은 보조 지표로만 제시하며, 최종 판단은 사용자가 합니다.
  */
 
-import type { HighTightFlagAnalysis, OHLCData, VcpAnalysis, VcpContraction } from '@/types';
+import type { HighTightFlagAnalysis, OHLCData, VcpAnalysis, VcpContraction } from '../../../types/index.ts';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);

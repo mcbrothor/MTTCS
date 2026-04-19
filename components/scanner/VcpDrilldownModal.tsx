@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ArrowUpRight, CalendarDays, ExternalLink, Info, Star, TrendingUp, Waves, X } from 'lucide-react';
+import { Activity, ArrowUpRight, CalendarDays, ExternalLink, Info, Star, TrendingUp, Waves, X, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Link from 'next/link';
 import type { ScannerResult } from '@/types';
@@ -161,6 +161,55 @@ export default function VcpDrilldownModal({
               <StatItem label="거래량 신호" value={translateVolumeTier(volumeTier)} />
             </div>
 
+            {/* SEPA Trend Template Checklist */}
+            <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 shadow-inner">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-black text-white uppercase tracking-wider">
+                  <TrendingUp className="h-4 w-4 text-rose-500" />
+                  <span>SEPA Trend Template</span>
+                </div>
+                <div className={`rounded-lg px-2 py-0.5 text-[10px] font-bold ${result.sepaEvidence?.summary.failed === 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
+                  {result.sepaEvidence?.summary.failed === 0 ? 'ALL CRITERIA PASSED' : `${result.sepaEvidence?.summary.failed || 0} CRITERIA FAILED`}
+                </div>
+              </div>
+              <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {result.sepaCriteria?.map((criterion, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs border-b border-slate-800/50 pb-2">
+                    <span className="text-slate-400 font-medium">{criterion.description}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-slate-500">{criterion.actual}</span>
+                      {criterion.status === 'pass' ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      ) : criterion.status === 'fail' ? (
+                        <XCircle className="h-4 w-4 text-rose-500" />
+                      ) : (
+                        <Info className="h-4 w-4 text-slate-600" />
+                      )}
+                    </div>
+                  </div>
+                )) || <p className="text-xs text-slate-600 italic">SEPA 기준 데이터가 없습니다.</p>}
+              </div>
+            </section>
+
+            {/* Fundamental Analysis Section */}
+            <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5">
+              <div className="mb-4 flex items-center gap-2 text-sm font-black text-white uppercase tracking-wider">
+                <BarChart3 className="h-4 w-4 text-amber-500" />
+                <span>Fundamental Analysis (DART/EDGAR Integrated)</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <FundamentalCard label="분기 EPS 성장률" value={pct(result.fundamentals?.epsGrowthPct)} status={result.fundamentals?.epsGrowthPct && result.fundamentals.epsGrowthPct >= 25 ? 'strong' : 'neutral'} />
+                <FundamentalCard label="분기 매출 성장률" value={pct(result.fundamentals?.revenueGrowthPct)} status={result.fundamentals?.revenueGrowthPct && result.fundamentals.revenueGrowthPct >= 20 ? 'strong' : 'neutral'} />
+                <FundamentalCard label="자기자본이익률 (ROE)" value={pct(result.fundamentals?.roePct)} status={result.fundamentals?.roePct && result.fundamentals.roePct >= 17 ? 'strong' : 'neutral'} />
+                <FundamentalCard label="부채비율" value={pct(result.fundamentals?.debtToEquityPct)} status="neutral" />
+                <FundamentalCard label="기관 보유 비율" value={pct(result.fundamentals?.institutionalOwnershipPct)} status="neutral" />
+                <FundamentalCard label="업종/섹터" value={result.fundamentals?.sector || '-'} status="neutral" />
+              </div>
+              {result.fundamentals?.source && (
+                <p className="mt-3 text-[10px] text-slate-500 italic text-right">Source: {result.fundamentals.source}</p>
+              )}
+            </section>
+
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <InfoTile label="RS 순위" value={result.rsRank && result.rsUniverseSize ? `${result.rsRank}/${result.rsUniverseSize}` : '-'} />
               <InfoTile label="가중 모멘텀" value={pct(result.weightedMomentumScore)} />
@@ -309,6 +358,15 @@ function InfoTile({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+function FundamentalCard({ label, value, status }: { label: string; value: string; status: 'strong' | 'neutral' }) {
+  return (
+    <div className={`rounded-lg border p-3 flex flex-col gap-1 ${status === 'strong' ? 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : 'border-slate-800 bg-slate-950/40'}`}>
+      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{label}</span>
+      <span className={`font-mono text-sm font-black ${status === 'strong' ? 'text-emerald-400' : 'text-slate-200'}`}>{value}</span>
     </div>
   );
 }

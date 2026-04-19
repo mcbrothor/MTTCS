@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useContestSelection } from './useContestSelection';
 import {
   evaluateScannerRecommendation,
   getVolumeSignalTier,
@@ -253,6 +254,8 @@ function initialResult(item: ScannerConstituent): ScannerResult {
     sepaStatus: null,
     sepaPassed: null,
     sepaFailed: null,
+    sepaCriteria: null,
+    sepaEvidence: null,
     vcpScore: null,
     vcpGrade: null,
     contractionScore: null,
@@ -334,6 +337,8 @@ function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analysis: Ma
     sepaStatus: analysis.sepaEvidence.status,
     sepaPassed: analysis.sepaEvidence.summary.passed,
     sepaFailed: analysis.sepaEvidence.summary.failed,
+    sepaCriteria: analysis.sepaEvidence.criteria,
+    sepaEvidence: analysis.sepaEvidence,
     vcpScore: analysis.vcpAnalysis.score,
     vcpGrade: analysis.vcpAnalysis.grade,
     contractionScore: analysis.vcpAnalysis.contractionScore,
@@ -416,25 +421,8 @@ function formatRs(result: ScannerResult) {
   const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
   return `${result.rsRating}${rank}`;
 }
-export function saveContestSelection(universe: ScannerUniverse, selectedTickers: Set<string>) {
-  window.localStorage.setItem(
-    CONTEST_SELECTION_STORAGE_KEY,
-    JSON.stringify({ universe, tickers: Array.from(selectedTickers), savedAt: new Date().toISOString() })
-  );
-}
+// Moved to useContestSelection.ts
 
-function readContestSelection(universe: ScannerUniverse, results: ScannerResult[]) {
-  try {
-    const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
-    if (!raw) return new Set<string>();
-    const parsed = JSON.parse(raw) as { universe?: ScannerUniverse; tickers?: string[] };
-    if (parsed.universe !== universe || !Array.isArray(parsed.tickers)) return new Set<string>();
-    const validTickers = new Set(results.map((item) => item.ticker));
-    return new Set(parsed.tickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10));
-  } catch {
-    return new Set<string>();
-  }
-}
 
 function volumeSignalClass(tier: VolumeSignalTier) {
   if (tier === 'Strong') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
@@ -462,7 +450,7 @@ export function useScanner() {
   const [viewMode, setViewMode] = useState<ViewMode>('web');
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
-  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+  const { selectedTickers, toggleSelection: toggleSelected, clearSelection } = useContestSelection();
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
   const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
   const [showAllMacroResults, setShowAllMacroResults] = useState(false);
@@ -476,8 +464,8 @@ export function useScanner() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(readContestSelection(initial, snapshot.results));
-          loadScannerMetrics(initial, snapshot.results).then((merged) => {
+      // Selected tickers now synced globally via useContestSelection
+      loadScannerMetrics(initial, snapshot.results).then((merged) => {
         setResults(merged.results);
         setMacroTrend(merged.macroTrend);
       });
@@ -491,14 +479,13 @@ export function useScanner() {
     if (snapshot) {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
-      setSelectedTickers(readContestSelection(newUniverse, snapshot.results));
+      // Selected tickers now synced globally via useContestSelection
       loadScannerMetrics(newUniverse, snapshot.results).then((merged) => {
         setResults(merged.results);
         setMacroTrend(merged.macroTrend);
       });
     } else {
       setResults([]);
-      setSelectedTickers(new Set());
       setLastScannedAt(null);
       setMacroTrend(null);
     }
@@ -512,7 +499,6 @@ export function useScanner() {
     setIsScanning(true);
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
-    setSelectedTickers(new Set());
 
         setMacroTrend(null);
     setShowAllMacroResults(false);
@@ -613,11 +599,9 @@ export function useScanner() {
         const nextSelected = new Set<string>();
         const now = new Date().toISOString();
         setResults(normalized);
-        setSelectedTickers(nextSelected);
         setLastScannedAt(now);
         setScanStage('스캔 완료');
         writeScannerSnapshot(meta, normalized, now);
-        saveContestSelection(meta.universe, nextSelected);
       }
     } catch (err) {
       if (!abortController.signal.aborted) {
@@ -665,16 +649,8 @@ export function useScanner() {
     }
   };
 
-  const toggleSelected = (ticker: string) => {
-    setSelectedTickers((prev) => {
-      const next = new Set(prev);
-      if (next.has(ticker)) next.delete(ticker);
-      else if (next.size < 10) next.add(ticker);
-      else alert('콘테스트 분석 후보는 최대 10개까지 선택할 수 있습니다.');
-      saveContestSelection(universe, next);
-      return next;
-    });
-  };
+// Handled by toggleSelected from useContestSelection
+
 
   const filteredResults = useMemo(() => {
     let list = results.map((item) => withRecommendation(item));
@@ -743,9 +719,9 @@ export function useScanner() {
     return sources.slice(0, 4).join(' · ') + (sources.length > 4 ? ` 외 ${sources.length - 4}개` : '');
   }, [results, universe]);
   return { 
-    universe, results, isScanning, progress, scanStage, lastScannedAt, 
+    universe, results, isScanning, progress, scanStage, lastScannedAt,
     filterKey, setFilterKey, sortKey, setSortKey, viewMode, setViewMode, busy, 
-    selectedResult, setSelectedResult, selectedTickers, setSelectedTickers, macroTrend, 
+    selectedResult, setSelectedResult, selectedTickers, clearSelection, macroTrend, 
     showAllMacroResults, setShowAllMacroResults, handleUniverseChange, 
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults, 
     stats, dataSourceSummary, isSavingWatchlist 

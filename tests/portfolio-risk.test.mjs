@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculatePortfolioRiskSummary, getMaxPositionsForEquity } from '../lib/finance/portfolio-risk.ts';
+import { calculatePortfolioRiskSummary, getMaxPositionsForEquity } from '../lib/finance/core/portfolio-risk.ts';
 
 assert.equal(getMaxPositionsForEquity(1_000_000), 2);
 assert.equal(getMaxPositionsForEquity(10_000_000), 5);

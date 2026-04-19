@@ -3,6 +3,7 @@ import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/providers/yahoo-api';
 import { getSecFundamentals } from '@/lib/finance/providers/sec-edgar-api';
 import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/core/calculations';
+import { fetchAggregatedFundamentals } from '@/lib/finance/market/fundamental-fetcher';
 import { analyzeVcp } from '@/lib/finance/engines/vcp-engine';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
@@ -97,33 +98,6 @@ function chooseLongerData(kisData: OHLCData[], yahooData: OHLCData[]) {
   return kisData;
 }
 
-function hasAnyFundamentalValue(fundamentals: FundamentalSnapshot | null) {
-  if (!fundamentals) return false;
-  return [
-    fundamentals.epsGrowthPct,
-    fundamentals.revenueGrowthPct,
-    fundamentals.roePct,
-    fundamentals.debtToEquityPct,
-  ].some((value) => value !== null);
-}
-
-function mergeFundamentals(
-  yahoo: FundamentalSnapshot | null,
-  sec: FundamentalSnapshot | null
-): FundamentalSnapshot | null {
-  if (!hasAnyFundamentalValue(yahoo) && !hasAnyFundamentalValue(sec)) return null;
-  if (!hasAnyFundamentalValue(yahoo)) return sec;
-  if (!hasAnyFundamentalValue(sec)) return yahoo;
-
-  return {
-    epsGrowthPct: yahoo?.epsGrowthPct ?? sec?.epsGrowthPct ?? null,
-    revenueGrowthPct: yahoo?.revenueGrowthPct ?? sec?.revenueGrowthPct ?? null,
-    roePct: yahoo?.roePct ?? sec?.roePct ?? null,
-    debtToEquityPct: yahoo?.debtToEquityPct ?? sec?.debtToEquityPct ?? null,
-    source: 'Yahoo Finance quoteSummary + SEC EDGAR companyfacts',
-  };
-}
-
 function getYahooFormattedTicker(ticker: string, exchange: string) {
   if (exchange === 'KOSPI') return `${ticker}.KS`;
   if (exchange === 'KOSDAQ') return `${ticker}.KQ`;
@@ -180,6 +154,7 @@ function mergeStandardMetrics(response: MarketAnalysisResponse, metric: StockMet
     },
   };
 }
+
 function getBenchmarkCandidates(exchange: string) {
   if (exchange === 'KOSPI') return ['^KS200', '^KS11'];
   if (exchange === 'KOSDAQ') return ['^KQ150', '^KQ11'];
@@ -212,29 +187,7 @@ async function fetchBenchmarkData(exchange: string, warnings: string[], attempts
 }
 
 async function fetchFundamentals(ticker: string, exchange: string, warnings: string[]) {
-  const yahooTicker = getYahooFormattedTicker(ticker, exchange);
-  const yahooFundamentals = await getYahooFundamentals(yahooTicker);
-  const needsSecFallback = !yahooFundamentals || [
-    yahooFundamentals.epsGrowthPct,
-    yahooFundamentals.revenueGrowthPct,
-    yahooFundamentals.roePct,
-    yahooFundamentals.debtToEquityPct,
-  ].some((value) => value === null);
-
-  if (!needsSecFallback) return yahooFundamentals;
-
-  const secFundamentals = await getSecFundamentals(ticker);
-  const merged = mergeFundamentals(yahooFundamentals, secFundamentals);
-
-  if (!hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
-    warnings.push('Yahoo fundamentals were sparse; SEC EDGAR was used as official-statement fallback.');
-  } else if (hasAnyFundamentalValue(yahooFundamentals) && hasAnyFundamentalValue(secFundamentals)) {
-    warnings.push('Yahoo fundamentals were merged with SEC EDGAR fields.');
-  } else if (!merged) {
-    warnings.push('Fundamental data was not available from Yahoo or SEC EDGAR.');
-  }
-
-  return merged;
+  return fetchAggregatedFundamentals(ticker, exchange, warnings);
 }
 
 function missingFundamentalLabels(fundamentals: FundamentalSnapshot | null) {

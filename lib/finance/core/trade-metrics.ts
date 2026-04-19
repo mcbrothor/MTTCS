@@ -1,4 +1,4 @@
-import type { Trade, TradeExecution, TradeMetrics, TradeStatus } from '@/types';
+import type { Trade, TradeExecution, TradeMetrics, TradeStatus } from '../../../types/index.ts';
 
 function finiteNumber(value: unknown): number | null {
   const numeric = Number(value);

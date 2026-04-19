@@ -1,4 +1,4 @@
-import type { DataQuality, MacroActionLevel, OHLCData } from '@/types';
+import type { DataQuality, MacroActionLevel, OHLCData } from '../../../types/index.ts';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);

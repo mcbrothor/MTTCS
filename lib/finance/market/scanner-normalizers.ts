@@ -1,4 +1,4 @@
-import type { ScannerConstituent } from '@/types';
+import type { ScannerConstituent } from '../../../types/index.ts';
 
 type NasdaqRow = Record<string, unknown>;
 

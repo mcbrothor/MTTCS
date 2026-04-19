@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculateTradeMetrics, deriveTradeStatus } from '../lib/finance/trade-metrics.ts';
+import { calculateTradeMetrics, deriveTradeStatus } from '../lib/finance/core/trade-metrics.ts';
 
 function run(name, fn) {
   try {

@@ -8,8 +8,8 @@ import type {
   SepaCriterion,
   SepaEvidence,
   TrailingStops,
-} from '@/types';
-import { calculateRsMetrics } from '@/lib/finance/market/rs-proxy';
+} from '../../../types/index.ts';
+import { calculateRsMetrics } from '../market/rs-proxy.ts';
 
 const round = (value: number, digits = 2) => Number(value.toFixed(digits));
 const DEFAULT_MINERVINI_RISK_PERCENT = 0.01;

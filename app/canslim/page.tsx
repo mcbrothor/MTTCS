@@ -20,6 +20,7 @@ import {
   Check,
   Activity,
 } from 'lucide-react';
+import { useContestSelection } from '@/hooks/useContestSelection';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
@@ -163,7 +164,7 @@ export default function CanslimScannerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [selectedResult, setSelectedResult] = useState<CanslimScannerResult | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('web');
-  const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+  const { selectedTickers, toggleSelection, clearSelection } = useContestSelection();
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -175,35 +176,13 @@ export default function CanslimScannerPage() {
       setMacro(snapshot.macro);
       setLastScannedAt(snapshot.savedAt);
     }
-
-    // 컨테스트 선정 종목 로드
-    const stored = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setSelectedTickers(new Set(parsed));
-      } catch (e) {
-        console.error('Failed to parse contest selection', e);
-      }
-    }
   }, []);
 
-  // 컨테스트 선정 저장
-  useEffect(() => {
-    if (selectedTickers.size > 0 || lastScannedAt) {
-      window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify(Array.from(selectedTickers)));
-    }
-  }, [selectedTickers]);
 
-  const toggleSelected = (ticker: string, e: React.MouseEvent) => {
+
+  const handleToggleSelected = (ticker: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedTickers((prev) => {
-      const next = new Set(prev);
-      if (next.has(ticker)) next.delete(ticker);
-      else if (next.size < 10) next.add(ticker);
-      else alert('최대 10종목까지만 선정 가능합니다.');
-      return next;
-    });
+    toggleSelection(ticker);
   };
 
   const handleUniverseChange = (u: ScannerUniverse) => {
@@ -472,7 +451,7 @@ export default function CanslimScannerPage() {
               </td>
               <td className="px-3 py-4 text-center">
                 <button
-                  onClick={(e) => toggleSelected(r.ticker, e)}
+                  onClick={(e) => handleToggleSelected(r.ticker, e)}
                   disabled={r.status !== 'done'}
                   className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all ${
                     selectedTickers.has(r.ticker)
@@ -521,7 +500,7 @@ export default function CanslimScannerPage() {
                 <span className="truncate text-xs text-slate-500 font-medium">{r.name}</span>
               </div>
               <button
-                onClick={(e) => toggleSelected(r.ticker, e)}
+                onClick={(e) => handleToggleSelected(r.ticker, e)}
                 disabled={r.status !== 'done'}
                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
                   selectedTickers.has(r.ticker)
@@ -938,7 +917,7 @@ export default function CanslimScannerPage() {
 
           <div className="flex items-center gap-4">
             <button
-              onClick={() => setSelectedTickers(new Set())}
+              onClick={() => clearSelection()}
               className="px-2 py-1 text-[11px] font-black text-slate-500 transition-colors hover:text-rose-400 uppercase tracking-tighter"
             >
               전체 해제

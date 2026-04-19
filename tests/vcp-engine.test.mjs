@@ -5,7 +5,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { analyzeVcp, calculateBBWidth } from '../lib/finance/vcp-engine.ts';
+import { analyzeVcp, calculateBBWidth } from '../lib/finance/engines/vcp-engine.ts';
 
 // --- 헬퍼: 시뮬레이션 OHLC 데이터 생성 ---
 

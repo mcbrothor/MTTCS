@@ -7,7 +7,7 @@ import {
   evaluateMacroTrend,
   getIBDProxyScore,
   getMansfieldRS,
-} from '../lib/finance/rs-proxy.ts';
+} from '../lib/finance/market/rs-proxy.ts';
 
 console.log('=== RS Proxy Tests ===\n');
 

@@ -7,7 +7,7 @@ import type {
   ContestReviewStatus,
   MasterFilterResponse,
   ScannerUniverse,
-} from '@/types';
+} from '../types/index.ts';
 
 const MAX_CANDIDATES = 10;
 export const CONTEST_PROMPT_VERSION = 'mtn-contest-ko-v3-rs-htf';

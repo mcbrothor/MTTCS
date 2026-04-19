@@ -5,7 +5,7 @@ import {
   calculateEntryPrice,
   calculateMinerviniRiskPlan,
   calculatePositionSize,
-} from '../lib/finance/calculations.ts';
+} from '../lib/finance/core/calculations.ts';
 
 function makeUptrendBars(length = 260, slope = 0.5, start = 50) {
   return Array.from({ length }, (_, index) => {

@@ -1,7 +1,7 @@
-import { getKisKospiMarketCapRanking } from '@/lib/finance/providers/kis-api';
+import { getKisKospiMarketCapRanking } from '../providers/kis-api';
 import { normalizeNasdaqRows } from './scanner-normalizers';
 import { rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
-import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '@/types';
+import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '../../../types/index.ts';
 
 type NasdaqRow = Record<string, unknown>;
 type KoreaMarket = 'KOSPI' | 'KOSDAQ';

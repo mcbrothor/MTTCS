@@ -163,6 +163,8 @@ export interface FundamentalSnapshot {
   revenueGrowthPct: number | null;
   roePct: number | null;
   debtToEquityPct: number | null;
+  institutionalOwnershipPct?: number | null;
+  sector?: string | null;
   source: string;
 }
 
@@ -358,6 +360,8 @@ export interface ScannerResult extends ScannerConstituent {
   sepaStatus: AssessmentStatus | null;
   sepaPassed: number | null;
   sepaFailed: number | null;
+  sepaCriteria: SepaCriterion[] | null;
+  sepaEvidence?: SepaEvidence | null;
   vcpScore: number | null;
   vcpGrade: VcpAnalysis['grade'] | null;
   contractionScore?: number | null;

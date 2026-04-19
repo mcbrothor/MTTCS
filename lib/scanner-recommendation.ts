@@ -1,4 +1,4 @@
-﻿import type { RecommendationTier, ScannerResult } from '@/types';
+import type { RecommendationTier, ScannerResult } from '../types/index.ts';
 
 export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
 

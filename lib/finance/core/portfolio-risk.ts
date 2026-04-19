@@ -1,4 +1,4 @@
-import type { PortfolioRiskSummary, SecurityProfile, Trade } from '@/types';
+import type { PortfolioRiskSummary, SecurityProfile, Trade } from '../../../types/index.ts';
 
 function finite(value: unknown) {
   const numeric = Number(value);

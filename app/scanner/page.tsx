@@ -10,7 +10,7 @@ import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 
-import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS, saveContestSelection } from '@/hooks/useScanner';
+import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS } from '@/hooks/useScanner';
 import type { ViewMode, FilterKey, SortKey } from '@/hooks/useScanner';
 import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
@@ -20,7 +20,7 @@ export default function ScannerPage() {
   const {
     universe, isScanning, progress, scanStage, lastScannedAt,
     filterKey, setFilterKey, sortKey, setSortKey, viewMode, setViewMode, busy,
-    selectedResult, setSelectedResult, selectedTickers, setSelectedTickers, macroTrend,
+    selectedResult, setSelectedResult, selectedTickers, clearSelection, macroTrend,
     showAllMacroResults, setShowAllMacroResults, handleUniverseChange,
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults,
     stats, dataSourceSummary, isSavingWatchlist, results
@@ -192,17 +192,13 @@ export default function ScannerPage() {
 
           <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                setSelectedTickers(new Set());
-                saveContestSelection(universe, new Set());
-              }}
+              onClick={() => clearSelection()}
               className="text-sm text-slate-400 transition-colors hover:text-white"
             >
               전체 해제
             </button>
             <Link
               href="/contest"
-              onClick={() => saveContestSelection(universe, selectedTickers)}
             >
               <Button icon={<ScanSearch className="h-4 w-4" />} className="bg-emerald-600 hover:bg-emerald-500">
                 콘테스트로 이동
