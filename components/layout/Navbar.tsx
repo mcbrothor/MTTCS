@@ -19,16 +19,16 @@ const navItems = [
 export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[var(--background)]/80 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-mono text-lg font-bold text-emerald-500 transition-colors hover:text-emerald-400">
           <Activity className="h-6 w-6" />
           <span>
             MTN
-            <span className="ml-2 hidden text-xs font-normal text-slate-500 xl:inline">Mantori&apos;s Trading Navigator</span>
+            <span className="ml-2 hidden text-xs font-normal text-slate-500 2xl:inline">Mantori&apos;s Trading Navigator</span>
           </span>
         </Link>
 
-        <div className="scrollbar-hide flex min-w-0 items-center justify-end gap-2.5 overflow-x-auto py-1 sm:gap-4 md:gap-5">
+        <div className="scrollbar-hide flex min-w-0 items-center justify-end gap-2 overflow-x-auto py-1 sm:gap-3 lg:gap-4">
           {navItems.map((item) => (
             <NavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />
           ))}
