@@ -1,7 +1,7 @@
 'use client';
 
 import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
-import { Area, AreaChart, Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
+import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
 import type { MasterFilterMetricDetail, MasterFilterMetrics } from '@/types';
@@ -56,6 +56,14 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
             <LineChart data={movingAverageData}>
               <Line type="monotone" dataKey="ma50" name="50일선" stroke="#10b981" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="ma200" name="200일선" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              {detail.thresholdValue && (
+                <ReferenceLine
+                  y={detail.thresholdValue}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 2"
+                  label={{ value: '기준선', fill: '#f59e0b', fontSize: 10 }}
+                />
+              )}
               <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
@@ -75,6 +83,14 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <Area type="monotone" dataKey="close" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} />
+              {detail.thresholdValue && (
+                <ReferenceLine
+                  y={detail.thresholdValue}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 2"
+                  label={{ value: '기준선', fill: '#f59e0b', fontSize: 10 }}
+                />
+              )}
               <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
             </AreaChart>
           </ResponsiveContainer>
@@ -101,7 +117,26 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
         <TrendingUp className="h-4 w-4 text-emerald-300" />
         <p className="text-sm font-bold">전체 섹터 로테이션</p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="md:hidden space-y-2">
+        {rows.map((row) => (
+          <div key={row.symbol} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
+            <div>
+              <p className="text-xs font-bold text-white">{row.name}</p>
+              <p className="font-mono text-[10px] text-slate-500">{row.symbol}</p>
+            </div>
+            <div className="text-right">
+              <p className={`font-mono text-sm font-bold ${row.return20 >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                {row.return20 > 0 ? '+' : ''}{row.return20.toFixed(2)}%
+              </p>
+              <span className={`text-[10px] ${row.riskOn ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {row.riskOn ? 'Risk-on' : 'Defensive'}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
           <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
             <tr>
@@ -169,6 +204,28 @@ export default function MetricsGrid() {
             <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? 0}/100</p>
             <p className="text-[10px] font-bold uppercase text-slate-500">Total P3 Confidence Score</p>
           </div>
+        </div>
+
+        <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
+          {[metrics.trend, metrics.breadth, metrics.volatility, metrics.liquidity, 
+            metrics.ftd, metrics.distribution, metrics.newHighLow].filter(Boolean).map((m) => (
+            <div key={m.label}>
+              <div className="mb-1 flex justify-between text-[10px] text-slate-500">
+                <span>{m.label}</span>
+                <span className={m.status === 'PASS' ? 'text-emerald-400' : m.status === 'WARNING' ? 'text-amber-400' : 'text-rose-400'}>
+                  {m.score ?? 0}/{m.weight ?? 0}점
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    m.status === 'PASS' ? 'bg-emerald-500' : m.status === 'WARNING' ? 'bg-amber-500' : 'bg-rose-500'
+                  }`}
+                  style={{ width: `${m.weight ? Math.min(((m.score ?? 0) / m.weight) * 100, 100) : 0}%` }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 

@@ -91,7 +91,15 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [market, setMarket] = useState<'US' | 'KR'>('US');
-  const [bypassRisk, setBypassRisk] = useState(false);
+  const [bypassRisk, setBypassRiskState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem('bypass_risk') === 'true';
+  });
+
+  const setBypassRisk = (value: boolean) => {
+    sessionStorage.setItem('bypass_risk', String(value));
+    setBypassRiskState(value);
+  };
 
   useEffect(() => {
     const controller = new AbortController();

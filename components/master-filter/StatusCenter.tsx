@@ -73,6 +73,27 @@ export default function StatusCenter() {
         </div>
       </div>
 
+      <div className="relative z-10 mt-3 flex flex-wrap justify-center gap-2">
+        {[data.metrics.trend, data.metrics.breadth, data.metrics.volatility, data.metrics.liquidity].map((m) => (
+          <span
+            key={m.label}
+            className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase
+              ${
+                m.status === 'PASS'
+                  ? 'border-emerald-500/40 text-emerald-300'
+                  : m.status === 'WARNING'
+                    ? 'border-amber-500/40 text-amber-300'
+                    : 'border-rose-500/40 text-rose-300'
+              }`}
+          >
+            {m.label} · {m.status}
+          </span>
+        ))}
+        <span className="rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[10px] font-bold text-slate-300">
+          P3 {data.metrics.p3Score ?? 0}/100
+        </span>
+      </div>
+
       <div className="relative z-10 mt-2 flex flex-wrap items-center justify-center gap-3">
         <div className="flex items-center gap-1.5 rounded-full border border-slate-800/80 bg-slate-900/40 px-3 py-1">
           <Globe className="h-3 w-3 text-slate-500" />

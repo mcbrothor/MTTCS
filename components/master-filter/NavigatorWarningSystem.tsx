@@ -10,14 +10,32 @@ export default function NavigatorWarningSystem() {
   const pathname = usePathname();
   const [isVisible, setIsVisible] = useState(true);
 
+  // RED 국면 판정 로직
+  const isRed = data?.state === 'RED';
+  const isYellow = data?.state === 'YELLOW';
+  
+  // 블러 적용 범위: 스캐너(/scanner) 및 개별 종목(/trades) 관련 페이지
+  const isTargetPage = pathname.startsWith('/scanner') || pathname.startsWith('/trades');
+  
+  // 모달은 모든 페이지에서 처음 진입 시 노출, 블러는 대상 페이지에서만 bypassRisk가 false일 때 적용
+  const showBlur = isRed && isTargetPage && !bypassRisk;
+  const showModal = isRed && !bypassRisk;
+
+  // ✅ useEffect는 항상 최상단에, 조건은 내부에서 처리 (Hook 규칙 준수)
+  useEffect(() => {
+    if (showBlur) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => document.body.classList.remove('overflow-hidden');
+  }, [showBlur]);
+
+  // ✅ early return은 모든 훅 선언 이후
   if (!data) return null;
 
-  const { state } = data;
-  const isYellow = state === 'YELLOW';
-  const isRed = state === 'RED';
-
   // 1. YELLOW 국면 - 상단 스티키 배너
-  const YellowBanner = () => {
+  const renderYellowBanner = () => {
     if (!isYellow || !isVisible) return null;
     return (
       <div className="sticky top-0 z-[60] w-full bg-amber-500/95 backdrop-blur-md px-4 py-2 border-b border-amber-600/50 shadow-lg animate-in slide-in-from-top duration-500">
@@ -40,23 +58,7 @@ export default function NavigatorWarningSystem() {
   };
 
   // 2. RED 국면 - 경고 모달 및 블러 제어
-  const RedAlertSystem = () => {
-    // 블러 적용 범위: 스캐너(/scanner) 및 개별 종목(/trades) 관련 페이지
-    const isTargetPage = pathname.startsWith('/scanner') || pathname.startsWith('/trades');
-    
-    // 모달은 모든 페이지에서 처음 진입 시 노출, 블러는 대상 페이지에서만 bypassRisk가 false일 때 적용
-    const showBlur = isRed && isTargetPage && !bypassRisk;
-    const showModal = isRed && !bypassRisk;
-
-    useEffect(() => {
-      if (showBlur) {
-        document.body.classList.add('overflow-hidden');
-      } else {
-        document.body.classList.remove('overflow-hidden');
-      }
-      return () => document.body.classList.remove('overflow-hidden');
-    }, [showBlur]);
-
+  const renderRedAlertSystem = () => {
     if (!isRed) return null;
 
     return (
@@ -81,7 +83,7 @@ export default function NavigatorWarningSystem() {
                   </h2>
                   <p className="text-sm text-slate-300 leading-relaxed font-medium">
                     마스터 필터가 강력한 하락 신호를 가리키고 있습니다.<br />
-                    이 구간에서의 돌파 시도는 <strong className="text-rose-400">80% 확률로 실패</strong>합니다. 모든 신규 매수를 중단하고 현금을 확보하십시오.
+                    이 구간에서의 돌파 시도는 <strong className="text-rose-400">대부분 실패로 끝납니다.</strong> 모든 신규 매수를 중단하고 현금을 확보하십시오.
                   </p>
                 </div>
 
@@ -117,8 +119,8 @@ export default function NavigatorWarningSystem() {
 
   return (
     <>
-      <YellowBanner />
-      <RedAlertSystem />
+      {renderYellowBanner()}
+      {renderRedAlertSystem()}
     </>
   );
 }

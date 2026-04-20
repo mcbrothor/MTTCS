@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
 import { AlertCircle, Bot, CheckCircle2, Cpu, Sparkles, XCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
 import type { AiFallbackAttempt, AiModelInsight } from '@/types';
@@ -33,11 +33,7 @@ function labelFor(insight: AiModelInsight) {
   return 'Rules';
 }
 
-function renderText(text: string) {
-  return text.split('\n').filter(Boolean).map((line, index) => (
-    <p key={`${index}-${line.slice(0, 12)}`}>{line}</p>
-  ));
-}
+// renderText 함수 삭제 (ReactMarkdown으로 대체)
 
 export default function InsightLog() {
   const { data, isLoading } = useMarket();
@@ -124,9 +120,36 @@ export default function InsightLog() {
               </div>
             </div>
 
-            <div className="space-y-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-300">
-              {renderText(visibleText)}
+            <div className="prose prose-invert prose-sm max-w-none space-y-3 whitespace-pre-wrap leading-relaxed text-slate-300">
+              <ReactMarkdown>{visibleText}</ReactMarkdown>
             </div>
+
+            {data?.metrics && (
+              <div className="mt-4 border-t border-slate-800/70 pt-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  분석 시점 지표 스냅샷
+                </p>
+                <div className="flex flex-wrap gap-2 text-[10px]">
+                  <span className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300">
+                    P3 {data.metrics.p3Score ?? 0}/100
+                  </span>
+                  <span
+                    className={`rounded border px-2 py-1 ${
+                      data.metrics.trend.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    추세 {data.metrics.trend.status}
+                  </span>
+                  <span
+                    className={`rounded border px-2 py-1 ${
+                      data.metrics.breadth.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    시장폭 {data.metrics.breadth.status}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {aiModelInsights.length > 0 && (
               <div className="mt-5 border-t border-slate-800/70 pt-4">
