@@ -151,16 +151,19 @@ export function calculateRSRating(rank: number, universeSize: number) {
 }
 
 export function calculateBenchmarkRelativeScore(data: OHLCData[], benchmarkData?: OHLCData[]) {
-  const stockReturn26Week = percentReturn(data, 126);
-  const benchmarkReturn26Week = benchmarkData ? percentReturn(benchmarkData, 126) : null;
-  if (stockReturn26Week === null || benchmarkReturn26Week === null) {
-    return { stockReturn26Week, benchmarkReturn26Week, benchmarkRelativeScore: null };
+  const stockMomentum = calculateWeightedMomentum(data).ibdProxyScore;
+  const benchmarkMomentum = benchmarkData ? calculateWeightedMomentum(benchmarkData).ibdProxyScore : null;
+  
+  if (stockMomentum === null || benchmarkMomentum === null) {
+    return { stockReturn26Week: null, benchmarkReturn26Week: null, benchmarkRelativeScore: null };
   }
 
-  const outperformance = stockReturn26Week - benchmarkReturn26Week;
+  // 오닐 식 상대강도: 1년 가중 모멘텀(IBD Proxy Score)의 초과 성과 기반 환산
+  // 기존 26주 수익률 대신 전체 52주 가중 성과를 비교하여 더 정확한 오닐식 상대강도 산출
+  const outperformance = stockMomentum - benchmarkMomentum;
   return {
-    stockReturn26Week,
-    benchmarkReturn26Week,
+    stockReturn26Week: percentReturn(data, 126),
+    benchmarkReturn26Week: percentReturn(benchmarkData || [], 126),
     benchmarkRelativeScore: round(clamp(50 + outperformance * 1.5, 1, 99), 0),
   };
 }

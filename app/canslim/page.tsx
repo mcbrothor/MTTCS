@@ -26,12 +26,15 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
+import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
+import { applyUniverseRsRankings } from '@/lib/scanner-recommendation';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 import type {
   CanslimMacroMarketData,
   CanslimScannerResult,
   DualScreenerTier,
   ScannerConstituent,
+  ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
 } from '@/types';
@@ -98,6 +101,7 @@ function readSnapshot(universe: ScannerUniverse): StoredSnapshot | null {
 
 function writeSnapshot(snapshot: StoredSnapshot) {
   window.localStorage.setItem(storageKey(snapshot.universe), JSON.stringify(snapshot));
+  window.localStorage.setItem('mtn:scanner:latest-scan-universe:v1', snapshot.universe);
 }
 
 function tierSortValue(tier: DualScreenerTier) {
@@ -298,7 +302,11 @@ export default function CanslimScannerPage() {
 
       await Promise.all(workers);
 
+      // 이슈 1 해결: 스캔 완료 후 유니버스 전체에 대해 RS 랭킹 산정 적용
       if (!abort.signal.aborted) {
+        current = applyUniverseRsRankings(current as any) as unknown as CanslimScannerResult[];
+        setResults([...current]);
+
         const now = new Date().toISOString();
         setLastScannedAt(now);
         setScanStage('스캔 완료');
@@ -411,12 +419,16 @@ export default function CanslimScannerPage() {
                 {(r.status === 'queued' || r.status === 'running') && <span className="text-slate-600 text-[10px]">대기 중</span>}
               </td>
               <td className="px-3 py-4">
-                {r.status === 'done' && (
-                  <span className={`inline-flex items-center gap-1 text-xs font-bold ${r.canslimResult.pass ? 'text-emerald-400' : 'text-rose-400 font-normal opacity-70'}`}>
-                    {r.canslimResult.pass ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                    {r.canslimResult.pass ? 'PASS' : r.canslimResult.failedPillar ?? 'FAIL'}
-                  </span>
-                )}
+                {r.status === 'done' && (() => {
+                  const labelInfo = getCanslimLabel(r.canslimResult.pass, r.canslimResult.failedPillar);
+                  const Icon = labelInfo.icon;
+                  return (
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold ${labelInfo.color} ${!r.canslimResult.pass && 'font-normal opacity-70'}`}>
+                      <Icon className="h-3 w-3" />
+                      {labelInfo.text}
+                    </span>
+                  );
+                })()}
               </td>
               <td className="px-3 py-4">
                 {r.status === 'done' && (

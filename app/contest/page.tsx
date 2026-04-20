@@ -75,9 +75,18 @@ function readTransferSelection(): TransferSelection | null {
   try {
     const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as TransferSelection;
+    const parsed = JSON.parse(raw);
+    
+    // 호환성: string[] 형태로 저장된 경우 (useContestSelection.ts 방식)
+    if (Array.isArray(parsed)) {
+      const storedUniverse = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+      const universe = parseUniverse(storedUniverse) || 'NASDAQ100';
+      return { universe, tickers: parsed, savedAt: new Date().toISOString() };
+    }
+
+    // 호환성: 기존 TransferSelection 포맷
     if (!parseUniverse(parsed.universe) || !Array.isArray(parsed.tickers)) return null;
-    return parsed;
+    return parsed as TransferSelection;
   } catch {
     return null;
   }

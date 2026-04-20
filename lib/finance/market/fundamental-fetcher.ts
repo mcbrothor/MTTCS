@@ -2,6 +2,10 @@ import { getYahooFundamentals } from '../providers/yahoo-api';
 import { getDartCorpCode, getDartFinancialData, type FundamentalMetrics } from '../providers/dart-api';
 import { getSecFundamentals } from '../providers/sec-edgar-api';
 import type { FundamentalSnapshot } from '@/types';
+import { supabaseServer } from '@/lib/supabase/server';
+
+const CACHE_VALID_DAYS = 90;
+
 
 /**
  * 전역 펀더멘털 데이터 수집기
@@ -14,21 +18,69 @@ export async function fetchAggregatedFundamentals(
 ): Promise<FundamentalSnapshot | null> {
   const isKR = exchange === 'KOSPI' || exchange === 'KOSDAQ';
   const yahooTicker = isKR ? `${ticker}.${exchange === 'KOSPI' ? 'KS' : 'KQ'}` : ticker;
+  const market = isKR ? 'KR' : 'US';
 
   try {
-    // 1. Yahoo Finance 기본 데이터 가져오기
+    // 1. 캐시 확인
+    try {
+      const { data: cacheData, error } = await supabaseServer
+        .from('fundamental_cache')
+        .select('*')
+        .eq('ticker', ticker)
+        .eq('market', market)
+        .single();
+
+      if (!error && cacheData) {
+        const lastUpdated = new Date(cacheData.updated_at).getTime();
+        const now = Date.now();
+        const daysSinceUpdate = (now - lastUpdated) / (1000 * 60 * 60 * 24);
+
+        if (daysSinceUpdate < CACHE_VALID_DAYS) {
+          return {
+            epsGrowthPct: cacheData.eps_growth_pct !== null ? Number(cacheData.eps_growth_pct) : null,
+            revenueGrowthPct: cacheData.revenue_growth_pct !== null ? Number(cacheData.revenue_growth_pct) : null,
+            roePct: cacheData.roe_pct !== null ? Number(cacheData.roe_pct) : null,
+            debtToEquityPct: cacheData.debt_to_equity_pct !== null ? Number(cacheData.debt_to_equity_pct) : null,
+            source: cacheData.source || 'Cache',
+          };
+        }
+      }
+    } catch {
+      // 캐시 에러 무시하고 진행
+    }
+
+    // 2. Yahoo Finance 기본 데이터 가져오기
     const yahoo = await getYahooFundamentals(yahooTicker);
 
-    // 2. 국가별 공식 데이터 보강 (DART / EDGAR)
+    // 3. 국가별 공식 데이터 보강 (DART / EDGAR)
     let augmented: FundamentalSnapshot | null = null;
-
     if (isKR) {
       augmented = await augmentWithDart(ticker, yahoo, warnings);
     } else {
       augmented = await augmentWithEdgar(ticker, yahoo, warnings);
     }
 
-    return augmented || yahoo;
+    const finalResult = augmented || yahoo;
+
+    // 4. 캐시에 저장
+    if (finalResult && (finalResult.epsGrowthPct !== null || finalResult.revenueGrowthPct !== null || finalResult.roePct !== null)) {
+      try {
+        await supabaseServer.from('fundamental_cache').upsert({
+          ticker,
+          market,
+          eps_growth_pct: finalResult.epsGrowthPct,
+          revenue_growth_pct: finalResult.revenueGrowthPct,
+          roe_pct: finalResult.roePct,
+          debt_to_equity_pct: finalResult.debtToEquityPct,
+          source: finalResult.source,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'ticker,market' });
+      } catch {
+        // 저장 실패 무시
+      }
+    }
+
+    return finalResult;
   } catch (err) {
     console.error(`[FundamentalFetcher] Error for ${ticker}:`, err);
     warnings.push(`FUNDAMENTAL_FETCH_ERROR: ${err instanceof Error ? err.message : 'Unknown'}`);

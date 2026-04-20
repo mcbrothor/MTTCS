@@ -67,6 +67,28 @@ export async function fetchCanslimFundamentals(
 ): Promise<{ data: Partial<CanslimStockData>; warnings: string[] }> {
   const warnings: string[] = [];
 
+  // 빈 기본 데이터 — Yahoo 실패 시에도 DART/EDGAR로 보강 가능
+  const fundamentalData: Partial<CanslimStockData> = {
+    symbol: ticker,
+    market,
+    currentQtrEpsGrowth: null,
+    priorQtrEpsGrowth: null,
+    epsGrowthLast3Qtrs: [null, null, null],
+    currentQtrSalesGrowth: null,
+    annualEpsGrowthEachYear: [null, null, null],
+    hadNegativeEpsInLast3Yr: null,
+    roe: null,
+    floatShares: null,
+    sharesBuyback: null,
+    institutionalSponsorshipTrend: null,
+    institutionalOwnershipPct: null,
+    numInstitutionalHolders: null,
+  };
+
+  // ── Phase 1: Yahoo Finance quoteSummary (독립 try-catch) ──────────────────
+  // 왜 별도 try-catch인가? Yahoo는 비공식 API라 자주 실패하지만,
+  // DART/EDGAR는 공식 API이므로 Yahoo 실패가 전체를 차단하면 안 됨
+  let yahooSucceeded = false;
   try {
     const response = await axios.get(
       `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`,
@@ -108,9 +130,8 @@ export async function fetchCanslimFundamentals(
     const sharesBuyback = extractBuyback(result);
     if (floatShares === null) warnings.push(DATA_QUALITY.PARTIAL_LABEL + ':floatShares');
 
-    const fundamentalData: Partial<CanslimStockData> = {
-      symbol: ticker,
-      market,
+    // Yahoo 데이터로 기본값 업데이트
+    Object.assign(fundamentalData, {
       currentQtrEpsGrowth,
       priorQtrEpsGrowth,
       epsGrowthLast3Qtrs,
@@ -121,16 +142,28 @@ export async function fetchCanslimFundamentals(
       floatShares,
       sharesBuyback,
       ...institutional,
-    };
+    });
+    yahooSucceeded = true;
+  } catch (yahooError) {
+    // Yahoo 실패 — 경고만 남기고 Phase 2로 계속 진행
+    const msg = yahooError instanceof Error ? yahooError.message : 'Unknown error';
+    warnings.push(`YAHOO_FAILED:${msg}`);
+    console.warn(`[CAN SLIM Fetcher] Yahoo quoteSummary 실패 (${ticker}): ${msg} — DART/EDGAR로 대체 시도`);
+  }
 
-    // ── Unified Fundamental Augmentation (DART / EDGAR / Yahoo Summary) ──────────────────
-    const fundamentalSnapshot = await fetchAggregatedFundamentals(ticker, market === 'KR' ? 'KOSPI' : 'NAS', warnings);
-    
+  // ── Phase 2: DART / EDGAR 공식 데이터 보강 (Yahoo 성공 여부와 무관하게 실행) ──
+  // 왜 항상 실행하는가? 공식 공시 데이터가 Yahoo보다 정확하므로,
+  // Yahoo가 성공해도 공식 데이터로 덮어쓰는 것이 올바름
+  try {
+    const fundamentalSnapshot = await fetchAggregatedFundamentals(
+      ticker,
+      market === 'KR' ? 'KOSPI' : 'NAS',
+      warnings
+    );
+
     if (fundamentalSnapshot) {
-      // Overwrite or fill Yahoo summary data with official/aggregated data
       if (fundamentalSnapshot.epsGrowthPct !== null) {
         fundamentalData.currentQtrEpsGrowth = fundamentalSnapshot.epsGrowthPct;
-        // Update the first element of the history array as well
         if (fundamentalData.epsGrowthLast3Qtrs) {
           fundamentalData.epsGrowthLast3Qtrs[0] = fundamentalSnapshot.epsGrowthPct;
         }
@@ -141,37 +174,23 @@ export async function fetchCanslimFundamentals(
       if (fundamentalSnapshot.roePct !== null) {
         fundamentalData.roe = fundamentalSnapshot.roePct;
       }
-      // Note: Institutional data is still primarily from Yahoo quoteSummary in the initial extraction
     }
-
-
-    return {
-      data: fundamentalData,
-      warnings,
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    warnings.push(`FETCH_FAILED:${msg}`);
-    return {
-      data: {
-        symbol: ticker,
-        market,
-        currentQtrEpsGrowth: null,
-        priorQtrEpsGrowth: null,
-        epsGrowthLast3Qtrs: [null, null, null],
-        currentQtrSalesGrowth: null,
-        annualEpsGrowthEachYear: [null, null, null],
-        hadNegativeEpsInLast3Yr: null,
-        roe: null,
-        floatShares: null,
-        sharesBuyback: null,
-        institutionalSponsorshipTrend: null,
-        institutionalOwnershipPct: null,
-        numInstitutionalHolders: null,
-      },
-      warnings,
-    };
+  } catch (augmentError) {
+    // DART/EDGAR도 실패하면 경고만 남김
+    const msg = augmentError instanceof Error ? augmentError.message : 'Unknown';
+    warnings.push(`AUGMENT_FAILED:${msg}`);
+    console.warn(`[CAN SLIM Fetcher] DART/EDGAR 보강 실패 (${ticker}): ${msg}`);
   }
+
+  // Yahoo와 DART/EDGAR 모두 실패한 경우 최종 경고
+  if (!yahooSucceeded && fundamentalData.currentQtrEpsGrowth === null) {
+    warnings.push('ALL_SOURCES_FAILED: Yahoo + DART/EDGAR 모두 펀더멘탈 데이터 확보 실패');
+  }
+
+  return {
+    data: fundamentalData,
+    warnings,
+  };
 }
 
 // === 내부 추출 함수들 ===

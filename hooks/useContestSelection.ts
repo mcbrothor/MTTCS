@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
+const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const MAX_SELECTION = 10;
 
 /**
@@ -60,8 +61,15 @@ export function useContestSelection() {
         next.add(ticker);
       }
       
-      // 스토리지 저장 (포맷 단순화: string[])
-      window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      // 스토리지 저장 (콘테스트 페이지 호환 형식: { universe, tickers, savedAt })
+      const storedUniverse = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY) || 'NASDAQ100';
+      const selectionObj = {
+        universe: storedUniverse,
+        tickers: Array.from(next),
+        savedAt: new Date().toISOString()
+      };
+      
+      window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify(selectionObj));
       
       // 같은 창 내의 다른 컴포넌트에게 알림 (커스텀 이벤트)
       window.dispatchEvent(new CustomEvent('mtn:selection:sync', { detail: Array.from(next) }));
@@ -83,7 +91,13 @@ export function useContestSelection() {
 
   const clearSelection = useCallback(() => {
     const next = new Set<string>();
-    window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify([]));
+    const storedUniverse = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY) || 'NASDAQ100';
+    const selectionObj = {
+      universe: storedUniverse,
+      tickers: [],
+      savedAt: new Date().toISOString()
+    };
+    window.localStorage.setItem(CONTEST_SELECTION_STORAGE_KEY, JSON.stringify(selectionObj));
     window.dispatchEvent(new CustomEvent('mtn:selection:sync', { detail: [] }));
     setSelectedTickers(next);
   }, []);

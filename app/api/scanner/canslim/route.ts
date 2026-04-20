@@ -48,22 +48,36 @@ function getYahooTicker(ticker: string, exchange: string): string {
   return upper;
 }
 
-async function loadMacroData(market: MarketCode): Promise<CanslimMacroMarketData> {
+async function loadMacroData(market: MarketCode, exchange?: string): Promise<CanslimMacroMarketData> {
   try {
-    const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
+    // 유니버스에 맞는 벤치마크 선택 — 나스닥이면 QQQ, 한국이면 ^KS200
+    const mainSymbol = market === 'KR'
+      ? (exchange === 'KOSDAQ' ? '^KQ150' : '^KS200')
+      : (exchange === 'NASDAQ' || exchange === 'NAS' ? 'QQQ' : 'SPY');
     const mainData = await getYahooDailyPrice(mainSymbol);
 
     // 분배일 계산 (최근 25거래일 = 5주)
+    // IBD 원칙: 가격이 0.2% 이상 하락 + 거래량이 50일 평균보다 높을 때만 분배일
     let distributionDayCount = 0;
     const dropThreshold = MACRO_CRITERIA.DISTRIBUTION_DAY_DROP_PCT / 100;
+    const lookbackStart = Math.max(1, mainData.length - 25);
 
-    for (let i = Math.max(1, mainData.length - 25); i < mainData.length; i++) {
+    for (let i = lookbackStart; i < mainData.length; i++) {
       const prev = mainData[i - 1];
       const curr = mainData[i];
       
-      // 가격이 유의미하게 하락(-0.2% 이상)하고 거래량이 전일보다 많은 경우
+      // 50일 평균 거래량 계산 (IBD 분배일 기준의 핵심)
+      const vol50Start = Math.max(0, i - 50);
+      const vol50Slice = mainData.slice(vol50Start, i);
+      const avgVolume50 = vol50Slice.length > 0
+        ? vol50Slice.reduce((sum, d) => sum + d.volume, 0) / vol50Slice.length
+        : curr.volume;
+      
       const priceDroppedSignificantly = curr.close < prev.close * (1 - dropThreshold);
-      if (priceDroppedSignificantly && curr.volume > prev.volume) {
+      // IBD 원칙: 거래량이 50일 평균보다 높아야 기관 매도(분배)로 판정
+      const volumeAboveAverage = curr.volume > avgVolume50;
+      
+      if (priceDroppedSignificantly && volumeAboveAverage) {
         distributionDayCount++;
       }
     }
@@ -181,6 +195,11 @@ export async function GET(request: Request) {
 
     // 시장 판별
     const market: MarketCode = exchange.includes('KS') || exchange.includes('KQ') || exchange.includes('KOSPI') || exchange.includes('KOSDAQ') ? 'KR' : 'US';
+    // 벤치마크 선택을 위한 거래소 표준화
+    const normalizedExchange = exchange.includes('KOSDAQ') || exchange.includes('KQ') ? 'KOSDAQ'
+      : exchange.includes('KOSPI') || exchange.includes('KS') ? 'KOSPI'
+      : exchange.includes('NAS') || exchange.includes('NDQ') ? 'NASDAQ'
+      : 'NYSE';
 
     // 1. 가격 데이터 + 펀더멘털 + 매크로를 병렬 패칭
     const yahooTicker = getYahooTicker(ticker, exchange);
@@ -188,7 +207,7 @@ export async function GET(request: Request) {
     const [priceData, fundamentalResult, macro] = await Promise.all([
       getYahooDailyPrice(yahooTicker),
       fetchCanslimFundamentals(yahooTicker, market),
-      loadMacroData(market),
+      loadMacroData(market, normalizedExchange),
     ]);
 
     if (priceData.length < 50) {
