@@ -213,7 +213,7 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
 
   if (ranking.length < 100) {
     try {
-      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item: Record<string, unknown>) => ({
+      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item: any) => ({
         ...item,
         source: 'KIS KOSPI market-cap ranking fallback',
       }));

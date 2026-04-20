@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useMemo } from 'react';
+
 import { AlertCircle, Bot, CheckCircle2, Cpu, Sparkles, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Card from '@/components/ui/Card';

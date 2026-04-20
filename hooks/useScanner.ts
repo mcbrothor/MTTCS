@@ -4,6 +4,7 @@ import { get, set } from 'idb-keyval';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useContestSelection } from './useContestSelection';
 import {
+  applyUniverseRsRankings,
   evaluateScannerRecommendation,
   getVolumeSignalTier,
   isContestPoolTier,
@@ -543,12 +544,33 @@ export function useScanner() {
 
       if (!abortController.signal.aborted) {
         const merged = await loadScannerMetrics(meta.universe, latestResults);
-        const normalized = merged.results.map((item) => withRecommendation(item));
+        
+        // 1. 실시간 RS 랭킹 부여 (DB에 오늘 데이터가 없더라도 현재 스캔 결과 내에서 상대 순위 계산)
+        const withRealtimeRs = applyUniverseRsRankings(merged.results);
+        
+        // 2. 추천 등급 최종 평가
+        const normalized = withRealtimeRs.map((item) => withRecommendation(item));
+        
         setMacroTrend(merged.macroTrend);
-                const now = new Date().toISOString();
+        const now = new Date().toISOString();
         setResults(normalized);
         setLastScannedAt(now);
         setScanStage('스캔 완료');
+        
+        // 3. Recommended 등급 종목 자동 콘테스트 후보 선택
+        const recommendedTickers = normalized
+          .filter(item => item.recommendationTier === 'Recommended')
+          .map(item => item.ticker);
+        
+        if (recommendedTickers.length > 0) {
+          // 이미 선택되어 있는 종목 제외하고 추가 (toggleSelection의 특성 고려)
+          recommendedTickers.forEach(ticker => {
+            if (!selectedTickers.has(ticker)) {
+              toggleSelected(ticker);
+            }
+          });
+        }
+
         writeScannerSnapshot(meta, normalized, now);
       }
     } catch (err) {

@@ -50,24 +50,41 @@ async function augmentWithDart(
 
     const now = new Date();
     const currentYear = now.getFullYear();
-    const lastYear = currentYear - 1;
-
-    // DART 보고서 코드: 11013(1Q), 11012(2Q), 11014(3Q), 11011(4Q/사업)
-    const checkPeriods = [
-      { year: currentYear, code: '11014' }, // 3Q
-      { year: currentYear, code: '11012' }, // 2Q
-      { year: currentYear, code: '11013' }, // 1Q
-      { year: lastYear, code: '11011' },    // Annual (Previous Year)
-    ];
+    const checkPeriods: { year: number; code: string }[] = [];
+    
+    // 올해 1~3Q 시도
+    checkPeriods.push({ year: currentYear, code: '11014' });
+    checkPeriods.push({ year: currentYear, code: '11012' });
+    checkPeriods.push({ year: currentYear, code: '11013' });
+    
+    // 작년 1~4Q 시도
+    checkPeriods.push({ year: currentYear - 1, code: '11011' });
+    checkPeriods.push({ year: currentYear - 1, code: '11014' });
+    checkPeriods.push({ year: currentYear - 1, code: '11012' });
+    checkPeriods.push({ year: currentYear - 1, code: '11013' });
 
     let latest: FundamentalMetrics | null = null;
     let yearAgo: FundamentalMetrics | null = null;
 
     for (const p of checkPeriods) {
-      const m = await getDartFinancialData(corpCode, String(p.year), p.code);
+      // 1. 연결재무제표(CFS) 먼저 시도
+      let m = await getDartFinancialData(corpCode, String(p.year), p.code, 'CFS');
+      
+      // 2. 연결이 없으면 개별재무제표(OFS) 시도
+      if (!m || (!m.netIncome && !m.revenue)) {
+        m = await getDartFinancialData(corpCode, String(p.year), p.code, 'OFS');
+      }
+
       if (m && m.netIncome !== undefined) {
         latest = m;
-        yearAgo = await getDartFinancialData(corpCode, String(p.year - 1), p.code);
+        // yearAgo도 같은 fsDiv로 시도해야 공정한 비교가 됨
+        const fsDiv = (m as any).fs_div === 'OFS' ? 'OFS' : 'CFS';
+        yearAgo = await getDartFinancialData(corpCode, String(p.year - 1), p.code, fsDiv as any);
+        
+        // yearAgo도 반대 케이스 시도
+        if (!yearAgo || (!yearAgo.netIncome && !yearAgo.revenue)) {
+           yearAgo = await getDartFinancialData(corpCode, String(p.year - 1), p.code, fsDiv === 'CFS' ? 'OFS' : 'CFS');
+        }
         break;
       }
     }
@@ -77,7 +94,6 @@ async function augmentWithDart(
       const revenueGrowth = yearAgo.revenue ? Number((((latest.revenue! - yearAgo.revenue) / Math.abs(yearAgo.revenue)) * 100).toFixed(2)) : null;
 
       if (yahoo) {
-        warnings.push('DART 공식 공시 데이터를 Yahoo 데이터와 병합했습니다.');
         return {
           ...yahoo,
           epsGrowthPct: epsGrowth ?? yahoo.epsGrowthPct,
@@ -101,6 +117,7 @@ async function augmentWithDart(
     return yahoo;
   }
 }
+
 
 /**
  * SEC EDGAR API를 사용하여 미국 종목의 펀더멘털 데이터를 보충합니다.

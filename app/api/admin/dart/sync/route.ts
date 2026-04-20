@@ -92,9 +92,10 @@ export async function GET(req: Request) {
 
   } catch (error: unknown) {
     console.error('[DART-SYNC] Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ 
       success: false, 
-      error: error.message || 'Unknown error' 
+      error: message
     }, { status: 500 });
   }
 }

@@ -62,12 +62,15 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase Save Resource Error:', error);
+      return apiError(`DB 저장 실패: ${error.message}`, 'DB_INSERT_FAILED', 500);
+    }
 
     return NextResponse.json({ data });
   } catch (error: unknown) {
-    console.error('Save Resource Error:', error);
-    return apiError(getErrorMessage(error), 'SAVE_RESOURCE_FAILED', 500);
+    console.error('Save Resource Exception:', error);
+    return apiError(getErrorMessage(error), 'SAVE_RESOURCE_EXCEPTION', 500);
   }
 }
 

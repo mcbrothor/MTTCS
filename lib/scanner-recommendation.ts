@@ -89,9 +89,9 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   const sepaMissingCount = result.sepaFailed ?? null;
-  const sepaPass = result.sepaStatus === 'pass';
-  const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 75);
-  const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 55);
+  const sepaPass = result.sepaStatus === 'pass' && (sepaMissingCount === 0 || sepaMissingCount === null);
+  const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
+  const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 60);
   const tightPivot = nearPivot(result.distanceToPivotPct, 3);
   const nearActionablePivot = nearPivot(result.distanceToPivotPct, 5);
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
@@ -102,9 +102,11 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const volumeStrong = volumeTier === 'Strong';
   const rs85 = scoreAtLeast(result.rsRating, 85);
   const rs90 = scoreAtLeast(result.rsRating, 90);
+  const rs95 = scoreAtLeast(result.rsRating, 95);
   const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
   const standardVcp = result.baseType === 'Standard_VCP' || (!result.baseType && constructiveVcp);
+  const tennisBall = (result.tennisBallCount || 0) >= 2;
 
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
@@ -115,58 +117,88 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     breakoutVolume ? 'Breakout volume watch' : null,
     rs90 ? 'RS 90+' : null,
     rsLineHigh ? 'RS Line high/near high' : null,
-    (result.tennisBallCount || 0) >= 2 ? `Tennis Ball ${result.tennisBallCount}` : null,
+    tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  if (sepaPass && standardVcp && constructiveVcp && volumeWatch) {
+  // --- Tier 1: Recommended (엄격한 SEPA + 기술적 증거 1개 이상 OR 압도적 기술적 리더) ---
+  
+  // 1-1. SEPA 통과 + 유효한 베이스 + 거래량/RS 뒷받침
+  if (sepaPass && constructiveVcp && (volumeWatch || rs85)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA passed with constructive Standard VCP and at least Watch-level volume evidence.',
+      recommendationReason: 'SEPA 통과 및 건설적인 차트 패턴(VCP/HTF)과 거래량/RS 리더십이 결합되었습니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if (htfPassed && rs85 && rsLineHigh && volumeStrong) {
+  // 1-2. RS 95+ 슈퍼 리더 (SEPA가 완벽하다면 우선 추천)
+  if (sepaPass && rs95 && (constructiveVcp || tennisBall)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'High Tight Flag passed with RS 85+, RS Line high/near high, and Strong volume evidence.',
+      recommendationReason: 'RS 95+의 시장 주도주 및 기술적 증거(VCP/Tennis Ball)가 확인되어 최우선 순위로 추천합니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if (sepaMissingCount !== null && sepaMissingCount <= 2 && htfPassed && volumeWatch) {
+  // 1-3. High Tight Flag (압도적 모멘텀)
+  if (htfPassed && rs90 && (volumeStrong || rsLineHigh)) {
     return {
-      recommendationTier: 'Partial',
-      recommendationReason: 'Some SEPA items are missing, but HTF base quality and volume digestion justify contest review.',
+      recommendationTier: 'Recommended',
+      recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 주도주 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
+  // 1-4. VCP 돌파 확인 (거래량 실린 돌파)
+  if (sepaPass && strongVcp && breakoutVolume && volumeStrong) {
+    return {
+      recommendationTier: 'Recommended',
+      recommendationReason: '강력한 VCP 베이스 상단에서의 거래량을 동반한 돌파 신호가 감지되었습니다.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  // --- Tier 2: Partial (기술적으론 좋으나 SEPA가 부족하거나, SEPA는 좋으나 기술적 증거가 약함) ---
+
+  // 2-1. SEPA가 1~2개 부족하지만 기술적으로 매우 훌륭한 경우 (사용자 요청: Partial 유지)
   if (sepaMissingCount !== null && sepaMissingCount <= 2 && constructiveVcp && volumeWatch) {
     return {
       recommendationTier: 'Partial',
-      recommendationReason: 'Technically strong base (score 55+) with minor SEPA misses, justifying close watch.',
+      recommendationReason: '기술적 패턴은 훌륭하나 일부 SEPA 조건(펀더멘털 등)이 미달되어 관찰이 필요합니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if (rs85 && constructiveVcp && volumeWatch) {
+  // 2-2. RS 85+ 리더십 + VCP 형성 중
+  if (rs85 && constructiveVcp) {
     return {
       recommendationTier: 'Partial',
-      recommendationReason: 'RS 85+ leader in constructive formation, justifying contest review.',
+      recommendationReason: 'RS 85+ 주도주 영역에서 베이스를 형성 중인 후보로, 콘테스트 검토 가치가 충분합니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if (rs90 && (result.tennisBallCount || 0) >= 2 && volumeWatch) {
+  // 2-3. 테니스공 액션 (변동성 수축 증거)
+  if (tennisBall && volumeWatch) {
     return {
       recommendationTier: 'Partial',
-      recommendationReason: 'RS 90+ and repeated tennis-ball action justify review, but RS alone is not enough for Recommended.',
+      recommendationReason: '반복적인 테니스공 액션(회복력)이 확인되어 건설적인 하락/반등 과정을 거치고 있습니다.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  // 2-4. 포켓 피벗 / 거래량 마름 (VCP 내부 신호)
+  if ((pocketPivot || volumeDryUp) && rs85) {
+    return {
+      recommendationTier: 'Partial',
+      recommendationReason: '베이스 내부의 매집 신호(Pocket Pivot) 또는 매물 소화(Dry-up)가 RS 리더십과 함께 관찰됩니다.',
       sepaMissingCount,
       exceptionSignals,
     };
@@ -174,11 +206,12 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
   return {
     recommendationTier: 'Low Priority',
-    recommendationReason: 'Current SEPA/VCP/RS/volume evidence is not enough for contest priority, but manual selection remains available.',
+    recommendationReason: '현재 SEPA/VCP/RS/거래량 증거가 콘테스트 우선순위에 들기에는 부족합니다. 수동 검토는 가능합니다.',
     sepaMissingCount,
     exceptionSignals,
   };
 }
+
 
 export function isContestPoolTier(tier: RecommendationTier | null | undefined) {
   return tier === 'Recommended' || tier === 'Partial';

@@ -100,7 +100,7 @@ export function getTrailingStops(value: TrailingStops | string | null): Trailing
   }
 }
 
-export function getSepaEvidence(value: unknown | string | null): Record<string, unknown> | null {
+export function getSepaEvidence(value: any): any {
   if (!value) return null;
   if (typeof value !== 'string') return value;
   try {

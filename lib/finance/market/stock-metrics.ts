@@ -46,7 +46,7 @@ function yahooTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
-async function fetchDailyBars(ticker: string, exchange: string, bars = 270): Promise<{ data: OHLCData[]; source: string }> {
+async function fetchDailyBars(ticker: string, exchange: string, bars = 300): Promise<{ data: OHLCData[]; source: string }> {
   try {
     const data = await getMarketDailyPrice(ticker, exchange, bars);
     if (data.length > 0) return { data, source: `KIS ${exchange}` };

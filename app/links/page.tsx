@@ -197,7 +197,11 @@ function AddLinkForm({
       setUrl('');
     } catch (err) {
       console.error('Save Link Error:', err);
-      onError('링크 등록에 실패했습니다. 형식과 연결 상태를 확인해 주세요.');
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        onError(`등록 실패: ${err.response.data.message}`);
+      } else {
+        onError('링크 등록에 실패했습니다. 네트워크 연결 상태를 확인해 주세요.');
+      }
     } finally {
       setSaving(false);
     }

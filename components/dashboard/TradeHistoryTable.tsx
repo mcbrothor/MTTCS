@@ -5,8 +5,7 @@ import { Star } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
 import axios from 'axios';
-import type {
-} from '@/types';
+import type { Trade, TradeExecution } from '@/types';
 import { EditPanel, ExecutionsPanel, ReviewPanel, StrategyDetail, EditDraft, ExecutionDraft, ReviewDraft, currency, numberText, signedCurrency, toInput, toNumberOrNull, isKorean, getRiskPercent } from './panels';
 
 type DetailTab = 'plan' | 'executions' | 'review';

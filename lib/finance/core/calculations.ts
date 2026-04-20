@@ -336,6 +336,7 @@ export function analyzeSepa(
   data: OHLCData[],
   options: {
     benchmarkData?: OHLCData[];
+    benchmarkTicker?: string | null;
     fundamentals?: FundamentalSnapshot | null;
   } = {}
 ): SepaEvidence {
@@ -350,6 +351,8 @@ export function analyzeSepa(
     lastClose && high52Week ? round(((high52Week - lastClose) / high52Week) * 100) : null;
   const { avgDollarVolume } = calculateAvgVolume(data);
   const rs = calculateRsProxy(data, options.benchmarkData);
+
+  const benchmarkLabel = (options.benchmarkTicker || 'SPY').replace('^KS200', 'KOSPI 200').replace('^KQ150', 'KOSDAQ 150').replace('^GSPC', 'S&P 500');
 
   const criteria: SepaCriterion[] = [
     evaluableCriterion(
@@ -420,10 +423,10 @@ export function analyzeSepa(
       '상대강도 RS 프록시 70 이상',
       rs.rsScore !== null ? passFail(rs.rsScore >= 70) : 'info',
       rs.rsScore !== null
-        ? `${rs.rsScore}점 (종목 ${rs.stockReturn}%, SPY ${rs.benchmarkReturn}%)`
+        ? `${rs.rsScore}점 (종목 ${rs.stockReturn}%, ${benchmarkLabel} ${rs.benchmarkReturn}%)`
         : '벤치마크 데이터 부족',
-      '6개월 상대강도 프록시 >= 70',
-      '공식 RS Rating 대신 SPY 대비 6개월 초과수익률로 계산한 대체 지표입니다.'
+      `6개월 상대강도 프록시(vs ${benchmarkLabel}) >= 70`,
+      `공식 RS Rating 대신 ${benchmarkLabel} 대비 6개월 초과수익률로 계산한 대체 지표입니다.`
     ),
     evaluableCriterion(
       'avg_dollar_volume',

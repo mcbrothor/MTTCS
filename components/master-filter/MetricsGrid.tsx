@@ -56,9 +56,9 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
             <LineChart data={movingAverageData}>
               <Line type="monotone" dataKey="ma50" name="50일선" stroke="#10b981" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="ma200" name="200일선" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-              {detail.thresholdValue && (
+              {!isNaN(Number(detail.threshold)) && (
                 <ReferenceLine
-                  y={detail.thresholdValue}
+                  y={Number(detail.threshold)}
                   stroke="#f59e0b"
                   strokeDasharray="4 2"
                   label={{ value: '기준선', fill: '#f59e0b', fontSize: 10 }}
@@ -83,9 +83,9 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <Area type="monotone" dataKey="close" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} />
-              {detail.thresholdValue && (
+              {!isNaN(Number(detail.threshold)) && (
                 <ReferenceLine
-                  y={detail.thresholdValue}
+                  y={Number(detail.threshold)}
                   stroke="#f59e0b"
                   strokeDasharray="4 2"
                   label={{ value: '기준선', fill: '#f59e0b', fontSize: 10 }}
@@ -208,7 +208,7 @@ export default function MetricsGrid() {
 
         <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
           {[metrics.trend, metrics.breadth, metrics.volatility, metrics.liquidity, 
-            metrics.ftd, metrics.distribution, metrics.newHighLow].filter(Boolean).map((m) => (
+            metrics.ftd, metrics.distribution, metrics.newHighLow].map((m) => m ? (
             <div key={m.label}>
               <div className="mb-1 flex justify-between text-[10px] text-slate-500">
                 <span>{m.label}</span>
@@ -225,7 +225,7 @@ export default function MetricsGrid() {
                 />
               </div>
             </div>
-          ))}
+          ) : null)}
         </div>
       </section>
 

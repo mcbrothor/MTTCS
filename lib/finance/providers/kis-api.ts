@@ -239,19 +239,21 @@ export async function getMarketDailyPrice(
   targetBars: number = DEFAULT_TARGET_BARS
 ): Promise<OHLCData[]> {
   if (exchange === 'KOSPI' || exchange === 'KOSDAQ') {
-    // For domestic, inquire-daily-itemchartprice returns up to 100 days. 
-    // We fetch current page, and if we need more, we can fetch previous date ranges.
     const collected: OHLCData[] = [];
     let endDate = getTodayString();
+    // 200일 이평선 추세 및 52주 고점 계산을 위해 필요한 최소 데이터(약 260~300거래일)를 확보합니다.
+    const startDate = '20200101'; // 과거 데이터부터 역순으로 추적
     
-    for (let page = 0; page < 3; page++) {
+    // 타겟 데이터(300개)를 확보할 때까지 루프를 돕니다. (보통 3페이지면 완료)
+    for (let page = 0; page < 6; page++) {
       if (page > 0) await sleep(200);
       
-      const pageData = await getDomesticDailyPricePage(ticker, getOneYearAgoString(), endDate);
+      const pageData = await getDomesticDailyPricePage(ticker, startDate, endDate);
       if (pageData.length === 0) break;
       
       collected.push(...pageData);
       const merged = sortAndDedupe(collected);
+      
       if (merged.length >= targetBars) {
         return merged.slice(-targetBars);
       }
@@ -259,7 +261,13 @@ export async function getMarketDailyPrice(
       const oldest = merged[0]?.date;
       if (!oldest) break;
       
-      endDate = previousCalendarDate(oldest);
+      // 다음 페이지를 위해 현재 가장 오래된 데이터의 직전 날짜를 endDate로 설정
+      const nextEndDate = previousCalendarDate(oldest);
+      if (nextEndDate === endDate) break;
+      endDate = nextEndDate;
+      
+      // 더 이상 가져올 과거 데이터가 없는 경우 (KIS API 특성상 100개 미만 반환 시)
+      if (pageData.length < 100 && merged.length < targetBars) break;
     }
     return sortAndDedupe(collected);
   }

@@ -322,7 +322,11 @@ export async function GET(request: Request) {
 
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
-    let sepaEvidence = analyzeSepa(data, { benchmarkData: benchmark.data, fundamentals });
+    let sepaEvidence = analyzeSepa(data, { 
+      benchmarkData: benchmark.data, 
+      benchmarkTicker: benchmark.ticker,
+      fundamentals 
+    });
     const standardRsRating = metric?.rs_rating ?? null;
     sepaEvidence = mergeStandardMetrics({
       ticker,
