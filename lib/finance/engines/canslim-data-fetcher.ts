@@ -62,14 +62,20 @@ const round = (v: number, d = 2) => Number(v.toFixed(d));
  * - 개별 모듈이 실패해도 다른 모듈의 데이터는 유지합니다
  */
 export async function fetchCanslimFundamentals(
-  ticker: string,
+  ticker: string, // Yahoo용 풀 티커 (예: 005930.KS)
   market: MarketCode
 ): Promise<{ data: Partial<CanslimStockData>; warnings: string[] }> {
   const warnings: string[] = [];
 
+  // DART/EDGAR용 순수 티커 추출 (접미사 제거)
+  const baseTicker = ticker.split('.')[0];
+  const isKR = market === 'KR';
+  // 거래소 추정
+  const exchange = isKR ? (ticker.endsWith('.KQ') ? 'KOSDAQ' : 'KOSPI') : 'NAS';
+
   // 빈 기본 데이터 — Yahoo 실패 시에도 DART/EDGAR로 보강 가능
   const fundamentalData: Partial<CanslimStockData> = {
-    symbol: ticker,
+    symbol: baseTicker,
     market,
     currentQtrEpsGrowth: null,
     priorQtrEpsGrowth: null,
@@ -156,8 +162,8 @@ export async function fetchCanslimFundamentals(
   // Yahoo가 성공해도 공식 데이터로 덮어쓰는 것이 올바름
   try {
     const fundamentalSnapshot = await fetchAggregatedFundamentals(
-      ticker,
-      market === 'KR' ? 'KOSPI' : 'NAS',
+      baseTicker,
+      exchange,
       warnings
     );
 

@@ -81,12 +81,19 @@ function findLocalExtrema(data: OHLCData[], window: number = PEAK_TROUGH_WINDOW)
 
 /**
  * Peak→Trough 쌍을 찾아 수축 단계를 구성합니다.
- * Minervini 기준: 각 수축은 이전보다 깊이가 얕아야 합니다.
+ * Minervini 기준: 각 수축은 이전보다 깊이가 얕아야 하며, 
+ * 수축의 최소 깊이는 종목의 전체 변동성에 따라 적응형으로 결정됩니다.
  */
 function detectContractions(data: OHLCData[], extrema: LocalExtremum[]): VcpContraction[] {
   const contractions: VcpContraction[] = [];
   const peaks = extrema.filter((e) => e.type === 'peak');
   const troughs = extrema.filter((e) => e.type === 'trough');
+
+  // 적응형 최소 수축 깊이 계산: 전체 데이터의 평균 일일 변동폭의 1.5배 또는 기본 3% 중 큰 값
+  const avgDailyRange = data.length > 0 
+    ? data.reduce((sum, d) => sum + ((d.high - d.low) / d.close) * 100, 0) / data.length
+    : MIN_CONTRACTION_DEPTH;
+  const adaptiveMinDepth = Math.max(MIN_CONTRACTION_DEPTH, round(avgDailyRange * 1.5));
 
   // 각 Peak 이후 가장 가까운 Trough를 매칭
   for (const peak of peaks) {
@@ -94,7 +101,8 @@ function detectContractions(data: OHLCData[], extrema: LocalExtremum[]): VcpCont
     if (!nextTrough) continue;
 
     const depthPct = round(((peak.price - nextTrough.price) / peak.price) * 100);
-    if (depthPct < MIN_CONTRACTION_DEPTH) continue;
+    // 적응형 깊이 기준 적용
+    if (depthPct < adaptiveMinDepth) continue;
 
     // 해당 구간의 평균 거래량 계산
     const segmentData = data.slice(peak.index, nextTrough.index + 1);
@@ -141,8 +149,13 @@ function scoreContractions(contractions: VcpContraction[]): { score: number; det
   const progressiveRatio = progressiveCount / (contractions.length - 1);
   progressiveScore = round(progressiveRatio * 60); // 최대 60점
 
-  // 수축 개수 보너스 (2~4개가 최적)
-  const countBonus = contractions.length >= 2 && contractions.length <= 4 ? 20 : 10;
+  // 수축 개수 보너스 (2~4개가 최적, 이론상 최대 6개까지만 유효 패턴으로 간주)
+  const validContractions = contractions.slice(0, 6);
+  const countBonus = validContractions.length >= 2 && validContractions.length <= 4 ? 20 : 10;
+  
+  if (contractions.length > 6) {
+    details.push(`주의: 수축이 ${contractions.length}개로 너무 많습니다. 이론상 6개 초과는 패턴 실패 가능성이 높습니다.`);
+  }
 
   // 최종 수축의 절대 깊이 보너스 (깊이가 10% 이하이면 타이트)
   const lastDepth = contractions.at(-1)?.depthPct ?? 100;

@@ -167,7 +167,14 @@ export default function CanslimScannerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [selectedResult, setSelectedResult] = useState<CanslimScannerResult | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('web');
-  const { selectedTickers, toggleSelection, clearSelection } = useContestSelection();
+  const { 
+    selectedTickers, 
+    toggleSelection: baseToggleSelection, 
+    clearSelection: baseClearSelection 
+  } = useContestSelection(universe);
+
+  const toggleSelection = (t: string) => baseToggleSelection(t, universe);
+  const clearSelection = () => baseClearSelection(universe);
 
   const abortRef = useRef<AbortController | null>(null);
 

@@ -56,8 +56,9 @@ function parseUniverse(value: string | null): ScannerUniverse | null {
 
 function getInitialUniverse() {
   if (typeof window === 'undefined') return 'NASDAQ100';
-  const transfer = readTransferSelection();
-  return transfer?.universe || parseUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY)) || 'NASDAQ100';
+  const storedLatest = parseUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY));
+  const transfer = readTransferSelection(storedLatest || 'NASDAQ100');
+  return transfer?.universe || storedLatest || 'NASDAQ100';
 }
 
 function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
@@ -71,8 +72,19 @@ function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
   }
 }
 
-function readTransferSelection(): TransferSelection | null {
+function readTransferSelection(targetUniverse: ScannerUniverse): TransferSelection | null {
   try {
+    const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
+    const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
+    if (mapRaw) {
+      const map = JSON.parse(mapRaw);
+      const selection = map[targetUniverse];
+      if (selection && Array.isArray(selection.tickers)) {
+        return selection as TransferSelection;
+      }
+    }
+
+    // 하위 호환성: 기존 mtn:contest:selected:v1에서 시도
     const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
@@ -81,11 +93,15 @@ function readTransferSelection(): TransferSelection | null {
     if (Array.isArray(parsed)) {
       const storedUniverse = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
       const universe = parseUniverse(storedUniverse) || 'NASDAQ100';
-      return { universe, tickers: parsed, savedAt: new Date().toISOString() };
+      if (universe === targetUniverse) {
+        return { universe, tickers: parsed, savedAt: new Date().toISOString() };
+      }
+      return null;
     }
 
     // 호환성: 기존 TransferSelection 포맷
     if (!parseUniverse(parsed.universe) || !Array.isArray(parsed.tickers)) return null;
+    if (parsed.universe !== targetUniverse) return null;
     return parsed as TransferSelection;
   } catch {
     return null;
@@ -241,7 +257,7 @@ function performanceSummary(candidates: ContestCandidate[], horizon: Horizon) {
 }
 
 export default function ContestPage() {
-  const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
+  const [universe, setUniverse] = useState<ScannerUniverse>(() => getInitialUniverse());
   const [snapshot, setSnapshot] = useState<StoredScannerSnapshot | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [transferInfo, setTransferInfo] = useState<TransferSelection | null>(null);
@@ -268,8 +284,8 @@ export default function ContestPage() {
       return;
     }
 
-    const transfer = readTransferSelection();
-    const transferTickers = transfer?.universe === nextUniverse ? transfer.tickers : [];
+    const transfer = readTransferSelection(nextUniverse);
+    const transferTickers = transfer?.tickers || [];
     const validTickers = new Set(next.results.map((item) => item.ticker));
     const transferred = transferTickers.filter((ticker) => validTickers.has(ticker)).slice(0, 10);
     if (transferred.length > 0) {

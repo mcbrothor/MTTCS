@@ -7,7 +7,7 @@ export function getCanslimLabel(pass: boolean, failedPillar: string | null) {
 
   switch (failedPillar) {
     case 'M_REDUCED':
-      return { text: '시장 경고 (RS부족)', color: 'text-amber-400', icon: AlertTriangle };
+      return { text: '시장 하락 (RS 90+ 한정)', color: 'text-amber-400', icon: AlertTriangle };
     case 'M':
       return { text: '시장 정지', color: 'text-rose-400', icon: Shield };
     case 'C_EPS':

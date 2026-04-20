@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { supabaseServer } from '@/lib/supabase/server';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { fetchCanslimFundamentals } from '@/lib/finance/engines/canslim-data-fetcher';
 import { evaluateCanslim, determineDualScreenerTier } from '@/lib/finance/engines/canslim-engine';
@@ -74,10 +75,12 @@ async function loadMacroData(market: MarketCode, exchange?: string): Promise<Can
         : curr.volume;
       
       const priceDroppedSignificantly = curr.close < prev.close * (1 - dropThreshold);
-      // IBD 원칙: 거래량이 50일 평균보다 높아야 기관 매도(분배)로 판정
-      const volumeAboveAverage = curr.volume > avgVolume50;
+      // 오닐/IBD 원칙: 전일보다 거래량이 많아야 함 (MUST)
+      const higherThanPrev = curr.volume > prev.volume;
+      // 실전 변형: 거래량이 평소(50일 평균)보다 너무 적으면 기관 분배로 보기 어려움
+      const significantVolume = curr.volume > avgVolume50 * 0.9;
       
-      if (priceDroppedSignificantly && volumeAboveAverage) {
+      if (priceDroppedSignificantly && higherThanPrev && significantVolume) {
         distributionDayCount++;
       }
     }
@@ -107,10 +110,10 @@ async function loadMacroData(market: MarketCode, exchange?: string): Promise<Can
 
     let actionLevel: CanslimMacroMarketData['actionLevel'] = 'FULL';
     
-    // 오닐의 원칙: 분배일이 과다하거나 이평선을 하회할 때 단계적 축소
-    if (!aboveMa200 || distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_HALT_THRESHOLD) {
+    // 사용자 피드백 반영: 분배일은 경고용이며, REDUCED/HALT 판정은 오직 이평선 이탈 기준으로만 수행
+    if (!aboveMa200) {
       actionLevel = 'HALT';
-    } else if (!aboveMa50 || distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_REDUCED_THRESHOLD) {
+    } else if (!aboveMa50) {
       actionLevel = 'REDUCED';
     }
 
@@ -204,10 +207,17 @@ export async function GET(request: Request) {
     // 1. 가격 데이터 + 펀더멘털 + 매크로를 병렬 패칭
     const yahooTicker = getYahooTicker(ticker, exchange);
 
-    const [priceData, fundamentalResult, macro] = await Promise.all([
+    const [priceData, fundamentalResult, macro, dbMetric] = await Promise.all([
       getYahooDailyPrice(yahooTicker),
       fetchCanslimFundamentals(yahooTicker, market),
       loadMacroData(market, normalizedExchange),
+      supabaseServer
+        .from('stock_metrics')
+        .select('rs_rating')
+        .eq('ticker', ticker)
+        .eq('market', market)
+        .maybeSingle()
+        .then(res => res.data)
     ]);
 
     if (priceData.length < 50) {
@@ -225,9 +235,10 @@ export async function GET(request: Request) {
         epsGrowthPct: fundamentalResult.data.currentQtrEpsGrowth ?? null,
         revenueGrowthPct: fundamentalResult.data.currentQtrSalesGrowth ?? null,
         roePct: fundamentalResult.data.roe ?? null,
-        debtToEquityPct: null, // 현재 CanslimStockData에 부채 비율 필드 미포함
-        source: 'Yahoo Finance',
+        debtToEquityPct: null,
+        source: fundamentalResult.data.roe ? 'Yahoo Finance + Snapshot' : 'Calculated',
       },
+      preCalculatedRs: dbMetric?.rs_rating ?? undefined
     });
     const vcpAnalysis = analyzeVcp(priceData, breakoutPrice, {
       rsRating: sepaEvidence.metrics.rsRating ?? null,

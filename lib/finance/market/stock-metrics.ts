@@ -229,7 +229,15 @@ export async function finalizeRsMetrics(market: MarketCode, calcDate = todayIso(
     .order('ibd_proxy_score', { ascending: false });
   if (error) throw error;
 
-  const rows = (data || []) as StockMetric[];
+  // 티커 중복 제거 (데이터 정합성 확보)
+  const uniqueTickerMap = new Map<string, StockMetric>();
+  for (const row of (data || []) as StockMetric[]) {
+    if (!uniqueTickerMap.has(row.ticker)) {
+      uniqueTickerMap.set(row.ticker, row);
+    }
+  }
+
+  const rows = Array.from(uniqueTickerMap.values());
   const universeSize = rows.length;
   const ranked = rows.map((row, index) => ({
     ...row,

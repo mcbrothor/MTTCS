@@ -22,8 +22,10 @@ export interface IbdProxyResult {
 }
 
 export interface MansfieldResult {
-  mansfieldRsFlag: boolean | null;
-  mansfieldRsScore: number | null;
+  mansfieldRsFlag: boolean | null;       // 12개월 (표준)
+  mansfieldRsScore: number | null;      // 12개월 (표준)
+  mansfieldRsFlag6m?: boolean | null;    // 6개월 (가속도 - 추가)
+  mansfieldRsScore6m?: number | null;   // 6개월 (가속도 - 추가)
   stockPerformance52w: number | null;
   benchmarkPerformance52w: number | null;
 }
@@ -169,25 +171,51 @@ export function calculateBenchmarkRelativeScore(data: OHLCData[], benchmarkData?
 }
 
 export function getMansfieldRS(stockPrices: IbdProxyInput, indexPrices: IbdProxyInput): MansfieldResult {
-  if (!hasPrice(stockPrices.currentPrice) || !hasPrice(stockPrices.price12mAgo) || !hasPrice(indexPrices.currentPrice) || !hasPrice(indexPrices.price12mAgo)) {
+  const has52w = hasPrice(stockPrices.currentPrice) && hasPrice(stockPrices.price12mAgo) && hasPrice(indexPrices.currentPrice) && hasPrice(indexPrices.price12mAgo);
+  const has26w = hasPrice(stockPrices.currentPrice) && hasPrice(stockPrices.price6mAgo) && hasPrice(indexPrices.currentPrice) && hasPrice(indexPrices.price6mAgo);
+
+  if (!has52w && !has26w) {
     return { mansfieldRsFlag: null, mansfieldRsScore: null, stockPerformance52w: null, benchmarkPerformance52w: null };
   }
 
-  const stockPerformance52w = stockPrices.currentPrice / stockPrices.price12mAgo;
-  const benchmarkPerformance52w = indexPrices.currentPrice / indexPrices.price12mAgo;
-  const mansfieldRsScore = ((stockPerformance52w / benchmarkPerformance52w) - 1) * 100;
-  return {
-    mansfieldRsFlag: stockPerformance52w > benchmarkPerformance52w,
-    mansfieldRsScore: round(mansfieldRsScore, 2),
-    stockPerformance52w: round(stockPerformance52w, 6),
-    benchmarkPerformance52w: round(benchmarkPerformance52w, 6),
+  let result: MansfieldResult = {
+    mansfieldRsFlag: null,
+    mansfieldRsScore: null,
+    stockPerformance52w: null,
+    benchmarkPerformance52w: null,
   };
+
+  if (has52w) {
+    const stockPerf52w = stockPrices.currentPrice! / stockPrices.price12mAgo!;
+    const indexPerf52w = indexPrices.currentPrice! / indexPrices.price12mAgo!;
+    result.mansfieldRsFlag = stockPerf52w > indexPerf52w;
+    result.mansfieldRsScore = round(((stockPerf52w / indexPerf52w) - 1) * 100, 2);
+    result.stockPerformance52w = round(stockPerf52w, 6);
+    result.benchmarkPerformance52w = round(indexPerf52w, 6);
+  }
+
+  if (has26w) {
+    const stockPerf26w = stockPrices.currentPrice! / stockPrices.price6mAgo!;
+    const indexPerf26w = indexPrices.currentPrice! / indexPrices.price6mAgo!;
+    result.mansfieldRsFlag6m = stockPerf26w > indexPerf26w;
+    result.mansfieldRsScore6m = round(((stockPerf26w / indexPerf26w) - 1) * 100, 2);
+  }
+
+  return result;
 }
 
 export function calculateMansfieldFromData(stockData: OHLCData[], benchmarkData?: OHLCData[]) {
   return getMansfieldRS(
-    { currentPrice: latestClose(stockData), price12mAgo: priceAtLookback(stockData, 250) ?? priceAtLookback(stockData, 252) },
-    { currentPrice: benchmarkData ? latestClose(benchmarkData) : null, price12mAgo: benchmarkData ? (priceAtLookback(benchmarkData, 250) ?? priceAtLookback(benchmarkData, 252)) : null }
+    { 
+      currentPrice: latestClose(stockData), 
+      price6mAgo: priceAtLookback(stockData, 126),
+      price12mAgo: priceAtLookback(stockData, 250) ?? priceAtLookback(stockData, 252) 
+    },
+    { 
+      currentPrice: benchmarkData ? latestClose(benchmarkData) : null, 
+      price6mAgo: benchmarkData ? priceAtLookback(benchmarkData, 126) : null,
+      price12mAgo: benchmarkData ? (priceAtLookback(benchmarkData, 250) ?? priceAtLookback(benchmarkData, 252)) : null 
+    }
   );
 }
 

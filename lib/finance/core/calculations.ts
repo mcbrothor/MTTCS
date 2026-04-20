@@ -338,6 +338,7 @@ export function analyzeSepa(
     benchmarkData?: OHLCData[];
     benchmarkTicker?: string | null;
     fundamentals?: FundamentalSnapshot | null;
+    preCalculatedRs?: number;
   } = {}
 ): SepaEvidence {
   const last = data.at(-1);
@@ -411,22 +412,24 @@ export function analyzeSepa(
     ),
     evaluableCriterion(
       'near_52w_high',
-      '52주 고점 25% 이내',
+      '52주 고점 10% 이내',
       distanceFromHigh52WeekPct !== null ? `${distanceFromHigh52WeekPct}% 아래` : null,
       distanceFromHigh52WeekPct !== null,
-      Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 25),
-      '52주 고점 대비 25% 이내',
-      '강한 종목이 고점 근처에서 쉬고 있는지 봅니다.'
+      Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 10),
+      '52주 고점 대비 10% 이내 (오닐 표준)',
+      '강한 종목이 고점 근처에서 신고가 돌파를 준비 중인지 확인합니다.'
     ),
     criterion(
       'rs_rating',
-      '상대강도 RS 프록시 70 이상',
-      rs.rsScore !== null ? passFail(rs.rsScore >= 70) : 'info',
-      rs.rsScore !== null
-        ? `${rs.rsScore}점 (종목 ${rs.stockReturn}%, ${benchmarkLabel} ${rs.benchmarkReturn}%)`
-        : '벤치마크 데이터 부족',
-      `6개월 상대강도 프록시(vs ${benchmarkLabel}) >= 70`,
-      `공식 RS Rating 대신 ${benchmarkLabel} 대비 6개월 초과수익률로 계산한 대체 지표입니다.`
+      '상대강도 RS (주요 필터)',
+      options.preCalculatedRs !== undefined ? passFail(options.preCalculatedRs >= 70) : (rs.rsScore !== null ? passFail(rs.rsScore >= 70) : 'info'),
+      options.preCalculatedRs !== undefined 
+        ? `${options.preCalculatedRs}점 (DB 기준 공식 RS)` 
+        : (rs.rsScore !== null ? `${rs.rsScore}점 (종목 ${rs.stockReturn}%, ${benchmarkLabel} ${rs.benchmarkReturn}%)` : '벤치마크 데이터 부족'),
+      '70점 이상 (권장)',
+      options.preCalculatedRs !== undefined
+        ? '데이터베이스에서 조회한 시장 전체 기준 공식 RS Rating입니다.'
+        : `공식 RS Rating 대신 ${benchmarkLabel} 대비 6개월 초과수익률로 계산한 대체 지표입니다.`
     ),
     evaluableCriterion(
       'avg_dollar_volume',
@@ -435,8 +438,22 @@ export function analyzeSepa(
       data.length >= 20,
       data.length >= 20 && avgDollarVolume >= 10_000_000,
       '$10,000,000 이상',
-      '슬리피지와 체결 리스크가 낮은 유동성 종목인지 확인합니다.'
+      '실제 거래가 활발하여 슬리피지 리스크가 낮은지 확인합니다.'
     ),
+    (() => {
+      const float = options.fundamentals?.floatShares;
+      const price = lastClose;
+      const dollarFloat = float && price ? float * price : null;
+      return evaluableCriterion(
+        'dollar_float',
+        '유동 시총 (Dollar Float)',
+        dollarFloat ? `$${(dollarFloat / 1_000_000_000).toFixed(2)}B` : '데이터 부족',
+        Boolean(dollarFloat),
+        Boolean(dollarFloat && dollarFloat <= 5_000_000_000),
+        '$5B 이하 (매물 가벼움)',
+        '유동물량이 너무 무거우면 상승에 큰 에너지가 필요합니다.'
+      );
+    })(),
     analyzeFundamentals(options.fundamentals),
   ];
 
@@ -466,7 +483,7 @@ export function analyzeSepa(
       high52Week,
       distanceFromHigh52WeekPct,
       avgDollarVolume20: avgDollarVolume || null,
-      rsRating: rs.rsScore,
+      rsRating: options.preCalculatedRs ?? rs.rsScore,
       internalRsRating: null,
       externalRsRating: null,
       rsRank: null,

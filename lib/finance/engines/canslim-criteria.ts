@@ -19,14 +19,18 @@ export const CANSLIM_CRITERIA = {
   MIN_ROE: 17,                       // 최소 ROE (%)
 
   // ── N: New High / Base Pattern ─────────────────────────────
-  MAX_DIST_FROM_52W_HIGH: 0.15,      // 52주 신고가 대비 최대 하락폭 (15%)
-  PIVOT_BUY_ZONE_MAX: 0.05,          // 피벗 대비 매수 적정 구간 상단 (+5%)
+  MAX_DIST_FROM_52W_HIGH: 0.10,      // 52주 신고가 대비 최대 하락폭 (10%) - 오닐 표준 강화
+  LOOSE_DIST_FROM_52W_HIGH: 0.15,    // 관심 종목(Loose) 최대 하락폭 (15%)
+  PIVOT_BUY_ZONE_MAX: 0.06,          // 피벗 대비 매수 적정 구간 상단 (+6%) - Minervini 버퍼 반영
   PIVOT_EXTENDED_MAX: 0.10,          // 피벗 대비 추격 위험 구간 상단 (+10%)
 
   // ── S: Supply & Demand ─────────────────────────────────────
   MIN_BREAKOUT_VOLUME_RATIO: 1.5,    // 돌파일 거래량 배율 (50일 평균 대비)
   PREFERRED_MAX_FLOAT: 50_000_000,   // 프리미엄 Float 상한 (5천만 주)
   LARGE_FLOAT_THRESHOLD: 200_000_000, // 대형주 Float (2억 주 초과 → 감점)
+  // 유동 시총 (Dollar Float = Float Shares * Price) - 현대적 매물 분석 기준
+  PREFERRED_MAX_DOLLAR_FLOAT: 1_000_000_000, // $1B 이하 (가벼움)
+  LARGE_DOLLAR_FLOAT_THRESHOLD: 5_000_000_000, // $5B 초과 (무거움)
 
   // ── L: Leader ──────────────────────────────────────────────
   MIN_RS_RATING: 80,                 // RS 최소 80점

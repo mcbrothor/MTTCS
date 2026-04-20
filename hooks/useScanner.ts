@@ -1,7 +1,7 @@
 'use client';
 
 import { get, set } from 'idb-keyval';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useContestSelection } from './useContestSelection';
 import {
   applyUniverseRsRankings,
@@ -392,7 +392,19 @@ export function useScanner() {
   const [viewMode, setViewMode] = useState<ViewMode>('web');
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
-  const { selectedTickers, toggleSelection: toggleSelected, clearSelection } = useContestSelection();
+  const { 
+    selectedTickers, 
+    toggleSelection: baseToggleSelected, 
+    clearSelection: baseClearSelection 
+  } = useContestSelection(universe);
+
+  const toggleSelected = useCallback((ticker: string) => {
+    baseToggleSelected(ticker, universe);
+  }, [baseToggleSelected, universe]);
+
+  const clearSelection = useCallback(() => {
+    baseClearSelection(universe);
+  }, [baseClearSelection, universe]);
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
   const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
   const [showAllMacroResults, setShowAllMacroResults] = useState(false);

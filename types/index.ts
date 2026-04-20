@@ -164,6 +164,7 @@ export interface FundamentalSnapshot {
   roePct: number | null;
   debtToEquityPct: number | null;
   institutionalOwnershipPct?: number | null;
+  floatShares?: number | null;
   sector?: string | null;
   source: string;
 }
