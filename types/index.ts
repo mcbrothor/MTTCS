@@ -555,6 +555,8 @@ export interface CanslimStockData {
 
 export interface CanslimMacroMarketData {
   actionLevel: MacroActionLevel;
+  is_uptrend_50?: boolean;
+  is_uptrend_200?: boolean;
   distributionDayCount: number;
   followThroughDay: boolean;
   lastFTDDate: string | null;
@@ -598,7 +600,9 @@ export interface CanslimScannerResult {
   vcpScore: number | null;
   dualTier: DualScreenerTier;
   rsRating: number | null;
+  benchmarkRelativeScore?: number | null;
   mansfieldRsFlag: boolean | null;
+  mansfieldRsScore?: number | null;
   status: ScannerStatus;
   analyzedAt: string | null;
   errorMessage: string | null;

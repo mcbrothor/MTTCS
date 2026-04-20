@@ -140,7 +140,7 @@ export default function VcpDrilldownModal({
                   {translateBaseType(result) !== '-' ? translateBaseType(result) : `VCP ${translateGrade(result.vcpGrade)}`}
                 </span>
                 <span className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs font-bold text-slate-300">
-                  상대강도 {result.rsRating ?? '-'}
+                  상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}
                 </span>
               </div>
               <p className="mt-1 text-sm font-medium text-slate-400">{result.name} · {result.exchange}</p>

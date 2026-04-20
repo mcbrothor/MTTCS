@@ -141,15 +141,33 @@ async function augmentWithDart(
       }
     }
 
-    if (latest && yearAgo) {
-      const epsGrowth = yearAgo.netIncome ? Number((((latest.netIncome! - yearAgo.netIncome) / Math.abs(yearAgo.netIncome)) * 100).toFixed(2)) : null;
-      const revenueGrowth = yearAgo.revenue ? Number((((latest.revenue! - yearAgo.revenue) / Math.abs(yearAgo.revenue)) * 100).toFixed(2)) : null;
+    if (latest) {
+      const epsGrowth = (latest && yearAgo && yearAgo.netIncome) 
+        ? Number((((latest.netIncome! - yearAgo.netIncome) / Math.abs(yearAgo.netIncome)) * 100).toFixed(2)) 
+        : null;
+      
+      const revenueGrowth = (latest && yearAgo && yearAgo.revenue) 
+        ? Number((((latest.revenue! - yearAgo.revenue) / Math.abs(yearAgo.revenue)) * 100).toFixed(2)) 
+        : null;
+
+      // ROE 계산: (당기순이익 / 자본) * 100
+      // 연율화는 생략하고 해당 시점 스냅샷 기준으로 계산 (11011 사업보고서면 연간 ROE)
+      const roe = (latest.netIncome && latest.equity && latest.equity !== 0)
+        ? Number(((latest.netIncome / latest.equity) * 100).toFixed(2))
+        : null;
+
+      // 부채비율 계산: (부채 / 자본) * 100
+      const debtToEquity = (latest.debt && latest.equity && latest.equity !== 0)
+        ? Number(((latest.debt / latest.equity) * 100).toFixed(2))
+        : null;
 
       if (yahoo) {
         return {
           ...yahoo,
           epsGrowthPct: epsGrowth ?? yahoo.epsGrowthPct,
           revenueGrowthPct: revenueGrowth ?? yahoo.revenueGrowthPct,
+          roePct: roe ?? yahoo.roePct,
+          debtToEquityPct: debtToEquity ?? yahoo.debtToEquityPct,
           source: `DART (${latest.date}) + Yahoo`,
         };
       }
@@ -157,8 +175,8 @@ async function augmentWithDart(
       return {
         epsGrowthPct: epsGrowth,
         revenueGrowthPct: revenueGrowth,
-        roePct: null,
-        debtToEquityPct: null,
+        roePct: roe,
+        debtToEquityPct: debtToEquity,
         source: `DART (${latest.date})`,
       };
     }

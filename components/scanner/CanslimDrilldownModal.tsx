@@ -171,9 +171,16 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
 
                 return (
                   <div key={group.label} className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                      {group.icon}
-                      {group.label}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                        {group.icon}
+                        {group.label}
+                      </div>
+                      {group.label === '상대강도' && (
+                        <span className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs font-bold text-slate-300">
+                          상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}
+                        </span>
+                      )}
                     </div>
                     {groupDetails.map((detail, idx) => (
                       <div key={`${detail.pillar}-${idx}`} className={`rounded-lg border px-4 py-3 ${statusBg(detail.status)}`}>

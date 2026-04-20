@@ -181,17 +181,17 @@ function mergeStandardMetrics(results: ScannerResult[], rows: { ticker: string; 
     const metric = byTicker.get(item.ticker) || null;
     return withRecommendation({
       ...item,
-      rsRating: metric?.rs_rating ?? null,
-      internalRsRating: metric?.rs_rating ?? null,
-      rsRank: metric?.rs_rank ?? null,
-      rsUniverseSize: metric?.rs_universe_size ?? null,
-      rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size),
-      ibdProxyScore: metric?.ibd_proxy_score ?? null,
-      weightedMomentumScore: metric?.ibd_proxy_score ?? null,
-      mansfieldRsFlag: metric?.mansfield_rs_flag ?? null,
-      mansfieldRsScore: metric?.mansfield_rs_score ?? null,
-      rsDataQuality: metric?.data_quality ?? 'NA',
-      macroActionLevel: macroTrend?.action_level ?? null,
+      rsRating: metric?.rs_rating ?? item.rsRating,
+      internalRsRating: metric?.rs_rating ?? item.internalRsRating,
+      rsRank: metric?.rs_rank ?? item.rsRank,
+      rsUniverseSize: metric?.rs_universe_size ?? item.rsUniverseSize,
+      rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size) ?? item.rsPercentile,
+      ibdProxyScore: metric?.ibd_proxy_score ?? item.ibdProxyScore,
+      weightedMomentumScore: metric?.ibd_proxy_score ?? item.weightedMomentumScore,
+      mansfieldRsFlag: metric?.mansfield_rs_flag ?? item.mansfieldRsFlag,
+      mansfieldRsScore: metric?.mansfield_rs_score ?? item.mansfieldRsScore,
+      rsDataQuality: metric?.data_quality ?? item.rsDataQuality,
+      macroActionLevel: macroTrend?.action_level ?? item.macroActionLevel,
     });
   });
 }

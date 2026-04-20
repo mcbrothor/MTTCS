@@ -54,11 +54,29 @@ function parseUniverse(value: string | null): ScannerUniverse | null {
   return null;
 }
 
-function getInitialUniverse() {
+function getInitialUniverse(): ScannerUniverse {
   if (typeof window === 'undefined') return 'NASDAQ100';
+  
+  // 1. 선택된 후보가 있는 유니버스 최우선 (v2 맵 전수조사)
+  try {
+    const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
+    const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
+    if (mapRaw) {
+      const map = JSON.parse(mapRaw);
+      const universes: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI100', 'KOSDAQ100'];
+      for (const u of universes) {
+        if (map[u]?.tickers?.length > 0) return u;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to scan for initial universe selections:', e);
+  }
+
+  // 2. 최근 스캔 유니버스
   const storedLatest = parseUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY));
-  const transfer = readTransferSelection(storedLatest || 'NASDAQ100');
-  return transfer?.universe || storedLatest || 'NASDAQ100';
+  if (storedLatest) return storedLatest;
+
+  return 'NASDAQ100';
 }
 
 function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {

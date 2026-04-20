@@ -19,8 +19,8 @@ export const CANSLIM_CRITERIA = {
   MIN_ROE: 17,                       // 최소 ROE (%)
 
   // ── N: New High / Base Pattern ─────────────────────────────
-  MAX_DIST_FROM_52W_HIGH: 0.10,      // 52주 신고가 대비 최대 하락폭 (10%) - 오닐 표준 강화
-  LOOSE_DIST_FROM_52W_HIGH: 0.15,    // 관심 종목(Loose) 최대 하락폭 (15%)
+  MAX_DIST_FROM_52W_HIGH: 0.05,      // 52주 신고가 대비 최대 하락폭 (5%) - 오닐 원본 기준
+  LOOSE_DIST_FROM_52W_HIGH: 0.10,    // 관심 종목(Loose) 최대 하락폭 (10%)
   PIVOT_BUY_ZONE_MAX: 0.06,          // 피벗 대비 매수 적정 구간 상단 (+6%) - Minervini 버퍼 반영
   PIVOT_EXTENDED_MAX: 0.10,          // 피벗 대비 추격 위험 구간 상단 (+10%)
 

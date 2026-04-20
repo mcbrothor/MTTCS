@@ -55,6 +55,9 @@ export interface FundamentalMetrics {
   revenue?: number;
   operatingIncome?: number;
   netIncome?: number;
+  assets?: number;
+  equity?: number;
+  debt?: number;
   date: string;
 }
 
@@ -137,18 +140,36 @@ export async function getDartFinancialData(
       date: `${year}-${reprtCode === '11011' ? '12-31' : reprtCode === '11013' ? '03-31' : reprtCode === '11012' ? '06-30' : '09-30'}`
     };
 
-    // 주요 계정 추출 (매출액, 영업이익, 당기순이익)
+    // 주요 계정 추출 (매출액, 영업이익, 당기순이익, 자산, 부채, 자본)
     // DART는 기업마다 계정명이 조금씩 다를 수 있으므로 포함(includes) 방식으로 체크
     for (const item of data.list) {
       const nm = item.nm_account.replace(/\s/g, '');
       const amount = parseInt(item.thstrm_amount || '0', 10);
 
+      // 매출액 (금융업은 영업수익)
       if (nm.includes('매출액') || nm === '영업수익') {
         metrics.revenue = amount;
-      } else if (nm.includes('영업이익')) {
+      } 
+      // 영업이익
+      else if (nm.includes('영업이익')) {
         metrics.operatingIncome = amount;
-      } else if (nm.includes('당기순이익')) {
+      } 
+      // 당기순이익 (분기/반기순이익 포함)
+      else if (nm.includes('당기순이익') || nm.includes('분기순이익') || nm.includes('반기순이익')) {
+        // '연결'이 붙은 항목 우선순위는 fsDiv에서 이미 처리됨 (CFS/OFS)
         metrics.netIncome = amount;
+      }
+      // 자본 (ROE 계산용)
+      else if (nm === '자본총계' || nm === '소유주지분' || nm === '자본') {
+        metrics.equity = amount;
+      }
+      // 부채 (부채비율 계산용)
+      else if (nm === '부채총계' || nm === '부채') {
+        metrics.debt = amount;
+      }
+      // 자산
+      else if (nm === '자산총계' || nm === '자산') {
+        metrics.assets = amount;
       }
     }
 

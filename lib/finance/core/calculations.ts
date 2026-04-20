@@ -227,7 +227,8 @@ function evaluableCriterion(
   canEvaluate: boolean,
   value: boolean,
   threshold: string,
-  description: string
+  description: string,
+  missingDataMsg?: string
 ) {
   return criterion(
     id,
@@ -235,7 +236,7 @@ function evaluableCriterion(
     canEvaluate ? passFail(value) : 'info',
     actual,
     canEvaluate ? threshold : `${threshold} (데이터 부족, 저장 차단 제외)`,
-    canEvaluate ? description : '필요한 가격 이력이 부족해 정보 항목으로만 표시합니다.'
+    canEvaluate ? description : (missingDataMsg || '필요한 가격 이력이 부족해 정보 항목으로만 표시합니다.')
   );
 }
 
@@ -451,7 +452,8 @@ export function analyzeSepa(
         Boolean(dollarFloat),
         Boolean(dollarFloat && dollarFloat <= 5_000_000_000),
         '$5B 이하 (매물 가벼움)',
-        '유동물량이 너무 무거우면 상승에 큰 에너지가 필요합니다.'
+        '유동물량이 너무 무거우면 상승에 큰 에너지가 필요합니다.',
+        '펀더멘털 지표(유동주식수)가 부족해 정보 항목으로만 표시합니다.'
       );
     })(),
     analyzeFundamentals(options.fundamentals),

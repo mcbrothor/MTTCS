@@ -75,12 +75,10 @@ async function loadMacroData(market: MarketCode, exchange?: string): Promise<Can
         : curr.volume;
       
       const priceDroppedSignificantly = curr.close < prev.close * (1 - dropThreshold);
-      // 오닐/IBD 원칙: 전일보다 거래량이 많아야 함 (MUST)
-      const higherThanPrev = curr.volume > prev.volume;
-      // 실전 변형: 거래량이 평소(50일 평균)보다 너무 적으면 기관 분배로 보기 어려움
-      const significantVolume = curr.volume > avgVolume50 * 0.9;
+      // 오닐/IBD 이론: 당일 하락 시 거래량이 평소(50일 평균)보다 많아야 본격적인 분배일로 간주
+      const volumeHigherThanAvg = curr.volume > avgVolume50;
       
-      if (priceDroppedSignificantly && higherThanPrev && significantVolume) {
+      if (priceDroppedSignificantly && volumeHigherThanAvg) {
         distributionDayCount++;
       }
     }
@@ -295,7 +293,8 @@ export async function GET(request: Request) {
       vcpGrade: vcpAnalysis.grade,
       vcpScore: vcpAnalysis.score,
       dualTier,
-      rsRating: sepaEvidence.metrics.rsRating,
+      rsRating: sepaEvidence.metrics.rsRating ?? sepaEvidence.metrics.benchmarkRelativeScore ?? null,
+      benchmarkRelativeScore: sepaEvidence.metrics.benchmarkRelativeScore ?? null,
       mansfieldRsFlag: sepaEvidence.metrics.mansfieldRsFlag ?? null,
       status: 'done',
       analyzedAt: new Date().toISOString(),

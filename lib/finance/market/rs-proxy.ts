@@ -205,17 +205,17 @@ export function getMansfieldRS(stockPrices: IbdProxyInput, indexPrices: IbdProxy
 }
 
 export function calculateMansfieldFromData(stockData: OHLCData[], benchmarkData?: OHLCData[]) {
+  const currentPrice = latestClose(stockData);
+  const price6mAgo = priceAtLookback(stockData, 126);
+  const price12mAgo = priceAtLookback(stockData, 252);
+  
+  const bCurrentPrice = benchmarkData ? latestClose(benchmarkData) : null;
+  const bPrice6mAgo = benchmarkData ? priceAtLookback(benchmarkData, 126) : null;
+  const bPrice12mAgo = benchmarkData ? priceAtLookback(benchmarkData, 252) : null;
+
   return getMansfieldRS(
-    { 
-      currentPrice: latestClose(stockData), 
-      price6mAgo: priceAtLookback(stockData, 126),
-      price12mAgo: priceAtLookback(stockData, 250) ?? priceAtLookback(stockData, 252) 
-    },
-    { 
-      currentPrice: benchmarkData ? latestClose(benchmarkData) : null, 
-      price6mAgo: benchmarkData ? priceAtLookback(benchmarkData, 126) : null,
-      price12mAgo: benchmarkData ? (priceAtLookback(benchmarkData, 250) ?? priceAtLookback(benchmarkData, 252)) : null 
-    }
+    { currentPrice, price6mAgo, price12mAgo },
+    { currentPrice: bCurrentPrice, price6mAgo: bPrice6mAgo, price12mAgo: bPrice12mAgo }
   );
 }
 

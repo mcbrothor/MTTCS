@@ -109,33 +109,32 @@ export function evaluateCanslim(
   // M: 시장 환경 최우선 체크
   // ══════════════════════════════════════════════════════════
 
-  // 분배일 기반 actionLevel 오버라이드 (디자인 문서 §1 M)
-  const effectiveAction =
-    macro.distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_HALT_THRESHOLD
-      ? 'HALT'
-      : macro.distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_REDUCED_THRESHOLD
-        ? 'REDUCED'
-        : macro.actionLevel;
+  // 분배일은 경고(Warning)로 처리하고, 실질적인 필터링은 이평선 기준(actionLevel)을 따름
+  const effectiveAction = macro.actionLevel;
+  
+  if (macro.distributionDayCount >= MACRO_CRITERIA.DISTRIBUTION_DAY_REDUCED_THRESHOLD) {
+    warnings.push(`주의: 시장 분배일이 ${macro.distributionDayCount}일 발생했습니다. 천장 징후가 있을 수 있습니다.`);
+  }
 
   addDetail(
     'M', '시장 방향성',
     effectiveAction === 'FULL' ? 'PASS' : effectiveAction === 'REDUCED' ? 'WARNING' : 'FAIL',
-    `${effectiveAction} (분배일: ${macro.distributionDayCount}, FTD: ${macro.followThroughDay ? '확인' : '미확인'})`,
-    'FULL 또는 REDUCED(RS 90+ 한정)',
-    '시장 환경이 불리하면 아무리 좋은 종목도 매수 신호를 내지 않습니다.'
+    `${effectiveAction} (50MA: ${macro.is_uptrend_50 ? '위' : '아래'}, 분배일: ${macro.distributionDayCount})`,
+    '50일 및 200일 이평선 정배열 상태 선호',
+    '시장 지수가 50일 이평선을 하락 이탈하면(REDUCED) RS 90+의 초강세주로만 대상을 압축합니다.'
   );
 
   if (effectiveAction === 'HALT') {
-    return fail('M', '시장 HALT', 'CAN SLIM 스캐너 전면 정지 — 분배일 6일 이상 또는 HALT 상태');
+    return fail('M', '시장 HALT', '시장 지수가 50일 및 200일 이평선을 모두 하회하여 스캐너를 정지합니다.');
   }
 
   if (effectiveAction === 'REDUCED') {
     const rs = stock.rsRating ?? 0;
     if (rs < CANSLIM_CRITERIA.PREFERRED_RS_RATING) {
-      return fail('M_REDUCED', '시장 REDUCED + RS 부족',
-        `REDUCED 상태에서는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 종목만 스캔 가능 (현재: ${rs})`);
+      return fail('M_REDUCED', '지수 50MA 하회 + RS 부족',
+        `지수가 50일 이평선 아래에 있을 때는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 주도주만 공략합니다. (현재: ${rs})`);
     }
-    warnings.push('시장 하락 경고 구간: RS 90+ 종목 위주로 보수적인 접근이 필요합니다.');
+    warnings.push('시장 50MA 하회 구간: 극소수의 초강세 주도주(RS 90+)에만 집중해야 합니다.');
   }
 
   // ══════════════════════════════════════════════════════════
