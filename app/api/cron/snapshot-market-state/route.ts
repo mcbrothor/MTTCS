@@ -5,8 +5,10 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { computeMacroScore } from '@/lib/macro/compute';
+import { generateMarketInsight } from '@/lib/ai/gemini';
 import { sendTelegramMessage } from '@/lib/telegram';
-import type { OHLCData } from '@/types';
+import { formatDetailedMarketReport } from '@/lib/telegram/format';
+import type { OHLCData, MasterFilterResponse, MasterFilterMetrics } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -109,24 +111,52 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
 
   if (error) throw new Error(`master_filter_snapshot upsert error: ${error.message}`);
 
-  // 텔레그램 리포트 발송
-  const emoji = result.state === 'GREEN' ? '🟢' : result.state === 'YELLOW' ? '🟡' : '🔴';
-  const report = `
-${emoji} *MTN 마스터 필터 리포트 (${market})*
----------------------------------------
-• *P3 Score*: \`${result.p3Score}/100\`
-• *Status*: \`${result.state}\`
-• *기준 일자*: \`${calcDate}\`
+  // AI 인사이트 생성 및 텔레그램 리포트 발송
+  try {
+    // AI 분석용 입력 데이터 구성
+    const insightInput = {
+      marketState: result.state,
+      market,
+      metrics: {
+        trend: result.metrics.trend,
+        breadth: result.metrics.breadth,
+        liquidity: result.metrics.liquidity, 
+        volatility: result.metrics.volatility,
+        leadership: result.p3Metrics.sectorRotation,
+        totalScore: result.p3Score,
+      },
+      macroData: {
+        mainPrice: result.lastClose,
+        vix: result.currentVix,
+      }
+    };
 
-• 추세: ${result.trendScore}pt
-• 폭: ${result.breadthScore}pt
-• 변동성: ${result.volatilityScore}pt
-• 유동성: ${result.liquidityScore}pt
----------------------------------------
-[차트 확인](https://mttcs.vercel.app/master-filter)
-  `.trim();
-  
-  await sendTelegramMessage(report).catch(console.error);
+    const aiRes = await generateMarketInsight(insightInput);
+    
+    // 리포트 포맷팅용 가상 응답 객체 생성
+    const reportData: MasterFilterResponse = {
+      state: result.state,
+      market,
+      metrics: {
+        ...result,
+        ...result.metrics,
+        ...result.p3Metrics,
+        leadership: result.p3Metrics.sectorRotation,
+        updatedAt: new Date().toISOString(),
+      } as unknown as MasterFilterMetrics,
+      insightLog: aiRes.text,
+      isAiGenerated: aiRes.isAiGenerated,
+      aiProviderUsed: aiRes.providerUsed,
+      aiModelUsed: aiRes.modelUsed,
+    };
+
+    const report = formatDetailedMarketReport(reportData);
+    await sendTelegramMessage(report);
+  } catch (aiErr) {
+    console.error('Snapshot Telegram/AI error:', aiErr);
+    // AI 에러 시엔 기본 리포트라도 발송 시도
+    await sendTelegramMessage(`[MTN Snapshot] ${market} P3 Score: ${result.p3Score} (${result.state})`);
+  }
 
   return { p3Score: result.p3Score, state: result.state };
 }
