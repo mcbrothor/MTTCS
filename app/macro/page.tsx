@@ -4,13 +4,85 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { ArrowDown, ArrowUp, Activity, Shield, TrendingUp, Droplets } from 'lucide-react';
+import { ArrowDown, ArrowUp, Activity, Shield, TrendingUp, TrendingDown, Droplets, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
+import type { MacroRegime, MacroScoreBreakdown } from '@/types';
+import { useMarket } from '@/contexts/MarketContext';
+
+interface MacroHistoryPoint {
+  date: string;
+  macroScore: number;
+  regime: MacroRegime;
+}
+
+function MacroSparkline({ history, currentScore }: { history: MacroHistoryPoint[]; currentScore: number }) {
+  if (history.length < 2) return null;
+
+  const first = history[0].macroScore;
+  const last = history.at(-1)!.macroScore;
+  const delta = last - first;
+  const isImproving = delta > 0;
+
+  return (
+    <div className="w-full mt-4 border-t border-slate-700/50 pt-4">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Macro Score 30일 추세</span>
+        <span className={`flex items-center gap-1 text-xs font-bold ${isImproving ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+          {isImproving ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : null}
+          {isImproving ? '+' : ''}{delta}pt ({first} → {currentScore})
+        </span>
+      </div>
+      <div className="h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={history} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+            <defs>
+              <linearGradient id="macroSparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#a855f7" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <ReferenceLine y={70} stroke="#10b981" strokeDasharray="3 2" strokeOpacity={0.4} />
+            <ReferenceLine y={45} stroke="#f59e0b" strokeDasharray="3 2" strokeOpacity={0.4} />
+            <Area
+              type="monotone"
+              dataKey="macroScore"
+              stroke="#a855f7"
+              strokeWidth={1.5}
+              fill="url(#macroSparkGrad)"
+              isAnimationActive={false}
+              dot={false}
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
+              formatter={(v: any) => [`Macro: ${v}`, '']}
+              labelFormatter={(l: any) => l}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex gap-4 text-[9px] text-slate-600 mt-0.5 justify-center">
+        <span className="text-emerald-600">── Risk-ON ≥70</span>
+        <span className="text-amber-600">── Neutral ≥45</span>
+      </div>
+    </div>
+  );
+}
 
 interface MacroData {
   symbol: string;
   regularMarketPrice: number;
   regularMarketChangePercent: number;
   fiftyDayAverage: number;
+}
+
+interface MacroApiResponse {
+  data: Record<string, MacroData>;
+  score: number;
+  regime: MacroRegime;
+  breakdown: MacroScoreBreakdown[];
+  spyAbove50ma: boolean;
+  hygIefDiff: number;
+  vixLevel: number;
 }
 
 const MACRO_INFO: Record<string, { name: string; descUp: string; descDown: string }> = {
@@ -39,13 +111,13 @@ function ValueDisplay({ quote, fallbackTicker }: { quote?: MacroData; fallbackTi
 
   const isUp = quote.regularMarketChangePercent > 0;
   const isAbove50 = quote.regularMarketPrice > quote.fiftyDayAverage;
-  
+
   return (
     <div className="flex flex-col items-center gap-1.5 p-2 rounded bg-slate-900/50 border border-slate-800">
       <div className="flex items-center justify-between w-full">
         <span className="font-mono text-xs text-slate-400">{quote.symbol === '^VIX' ? 'VIX' : quote.symbol}</span>
-        <span className={`flex items-center text-xs font-bold ${isUp ? 'text-red-400' : 'text-blue-400'}`}>
-          {isUp ? <ArrowUp className="w-3 h-3 " /> : <ArrowDown className="w-3 h-3 " />}
+        <span className={`flex items-center text-xs font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {isUp ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
           {Math.abs(quote.regularMarketChangePercent).toFixed(2)}%
         </span>
       </div>
@@ -53,99 +125,169 @@ function ValueDisplay({ quote, fallbackTicker }: { quote?: MacroData; fallbackTi
         <span className="font-mono text-sm text-white font-semibold">
           {quote.regularMarketPrice < 10 ? quote.regularMarketPrice.toFixed(3) : quote.regularMarketPrice.toFixed(2)}
         </span>
-        <span 
-          className={`text-[10px] px-1.5 py-0.5 rounded cursor-help ${isAbove50 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}
+        <span
+          className={`text-[10px] px-1.5 py-0.5 rounded cursor-help ${isAbove50 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}
           title={`50일선: ${quote.fiftyDayAverage.toFixed(2)} (현재가가 50일선 ${isAbove50 ? '위' : '아래'}에 있음)`}
         >
           {isAbove50 ? '50MA ▲' : '50MA ▼'}
         </span>
       </div>
-      <p className={`text-[10px] text-center mt-1 leading-snug break-keep ${isAbove50 ? 'text-red-300' : 'text-blue-300'}`}>
+      <p className={`text-[10px] text-center mt-1 leading-snug break-keep ${isAbove50 ? 'text-emerald-300' : 'text-rose-300'}`}>
         {isAbove50 ? MACRO_INFO[fallbackTicker]?.descUp : MACRO_INFO[fallbackTicker]?.descDown}
       </p>
     </div>
   );
 }
 
-function RatioDisplay({ 
-  label, topQuote, bottomQuote, descUp, descDown 
-}: { 
-  label: string; topQuote?: MacroData; bottomQuote?: MacroData; descUp: string; descDown: string; 
+function RatioDisplay({
+  label, topQuote, bottomQuote, descUp, descDown,
+}: {
+  label: string; topQuote?: MacroData; bottomQuote?: MacroData; descUp: string; descDown: string;
 }) {
   if (!topQuote || !bottomQuote) return null;
-  
-  // 등락률 차이 (상대 강도)
+
   const diff = topQuote.regularMarketChangePercent - bottomQuote.regularMarketChangePercent;
   const isUp = diff > 0;
 
   return (
-    <div className={`p-4 rounded-lg border ${isUp ? 'border-red-500/30 bg-red-500/10' : 'border-blue-500/30 bg-blue-500/10'}`}>
+    <div className={`p-4 rounded-lg border ${isUp ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-rose-500/30 bg-rose-500/10'}`}>
       <div className="flex items-center justify-between mb-2">
-        <h4 className={`text-sm font-bold ${isUp ? 'text-red-400' : 'text-blue-400'}`}>{label}</h4>
-        <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${isUp ? 'bg-red-500/20 text-red-300' : 'bg-blue-500/20 text-blue-300'}`}>
+        <h4 className={`text-sm font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>{label}</h4>
+        <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${isUp ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
           Outperformance: {isUp ? '+' : ''}{diff.toFixed(2)}%p
         </span>
       </div>
-      <p className={`text-xs leading-5 ${isUp ? 'text-red-200' : 'text-blue-200'}`}>
-        <strong className="mr-1">{isUp ? '🔴 상승:' : '🔵 하락:'}</strong>
+      <p className={`text-xs leading-5 ${isUp ? 'text-emerald-200' : 'text-rose-200'}`}>
+        <strong className="mr-1">{isUp ? '🟢 상승:' : '🔴 하락:'}</strong>
         {isUp ? descUp : descDown}
       </p>
     </div>
   );
 }
 
+const REGIME_CONFIG = {
+  RISK_ON: {
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-500/20',
+    accent: 'bg-emerald-500/30',
+    icon: <CheckCircle2 className="h-10 w-10 text-emerald-400" />,
+    title: '리스크 온 (Risk-ON)',
+    subtitle: '위험 자산 선호',
+    desc: 'S&P 500이 50일선 위에 위치하며, 글로벌 유동성이 하이일드 채권 등 위험 자산으로 유입되고 있습니다. 강세장 패턴(VCP 등)의 돌파 성공 확률이 높으므로 긍정적인 추세 추종 전략을 전개하기 좋은 환경입니다.',
+  },
+  RISK_OFF: {
+    color: 'text-rose-400',
+    bg: 'bg-rose-500/10',
+    border: 'border-rose-500/20',
+    accent: 'bg-rose-500/30',
+    icon: <ShieldAlert className="h-10 w-10 text-rose-400" />,
+    title: '리스크 오프 (Risk-OFF)',
+    subtitle: '안전 자산 도피',
+    desc: 'S&P 500이 추세를 이탈했으며, 하이일드에서 채권(안전 자산)으로 자금이 도피 중입니다. 시장의 투심이 얼어붙고 돌파 실패가 잦아지는 하락장 도입부일 수 있습니다. 신규 진입을 멈추고 현금 비중 확대와 손절 대응에 집중하세요.',
+  },
+  NEUTRAL: {
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/20',
+    accent: 'bg-amber-500/30',
+    icon: <AlertTriangle className="h-10 w-10 text-amber-400" />,
+    title: '중립 혼조세 (Neutral)',
+    subtitle: '방향성 불명확',
+    desc: '시장의 방향성이 뚜렷하지 않습니다. 자금이 안전 자산과 위험 자산 사이에서 줄다리기 중이며, 개별 종목의 실적 및 모멘텀에 집중해야 합니다. 브레이크아웃 신호에 신중하게 접근하고 리스크 한도를 보수적으로 유지하세요.',
+  },
+} as const;
 
-
-function MarketOverview({ data }: { data: Record<string, MacroData> }) {
-  const spy = data['SPY'];
-  const hyg = data['HYG'];
-  const ief = data['IEF'];
-
-  if (!spy) return null;
-
-  const isSpyUp = spy.regularMarketPrice > spy.fiftyDayAverage;
-  const isHygIefUp = hyg && ief ? hyg.regularMarketChangePercent > ief.regularMarketChangePercent : false;
-
-  let statusText = '중립 혼조세 (Neutral)';
-  let statusColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-  let desc = '시장의 방향성이 뚜렷하지 않습니다. 자금이 안전 자산과 위험 자산 사이에서 줄다리기 중이며, 개별 종목의 실적 및 모멘텀에 집중해야 합니다. 브레이크아웃 신호에 신중하게 접근하고 리스크 한도를 보수적으로 유지하세요.';
-
-  if (isSpyUp && isHygIefUp) {
-    statusText = '리스크 온 🚀 (Risk-ON)';
-    statusColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    desc = 'S&P 500이 50일선 위에 위치하며, 글로벌 유동성이 하이일드 채권 등 위험 자산으로 유입되고 있습니다. 강세장 패턴(VCP 등)의 돌파 성공 확률이 높으므로 긍정적인 추세 추종 전략을 전개하기 좋은 환경입니다.';
-  } else if (!isSpyUp && !isHygIefUp) {
-    statusText = '리스크 오프 ⚠️ (Risk-OFF)';
-    statusColor = 'text-red-400 bg-red-500/10 border-red-500/30';
-    desc = 'S&P 500이 추세를 이탈했으며, 하이일드에서 채권(안전 자산)으로 자금이 도피 중입니다. 시장의 투심이 얼어붙고 돌파 실패가 잦아지는 하락장 도입부일 수 있습니다. 신규 진입을 멈추고 현금 비중 확대와 손절 대응에 집중하세요.';
-  }
+function MacroScoreCard({ score, regime, breakdown, history }: { score: number; regime: MacroRegime; breakdown: MacroScoreBreakdown[]; history: MacroHistoryPoint[] }) {
+  const cfg = REGIME_CONFIG[regime];
 
   return (
-    <div className={`mb-8 p-5 rounded-xl border ${statusColor}`}>
-      <h3 className="flex items-center gap-2 text-lg font-bold">
-        현재 시장 종합 판정: <span>{statusText}</span>
-      </h3>
-      <p className="mt-2 text-sm leading-6 opacity-90 font-medium">
-        {desc}
+    <div className={`relative overflow-hidden rounded-xl border p-6 shadow-2xl backdrop-blur-md transition-all duration-700 ${cfg.bg} ${cfg.border}`}>
+      <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${cfg.accent}`} />
+
+      <div className="relative z-10 flex flex-col items-center gap-4 text-center mb-6">
+        <div className="rounded-full border border-slate-700/50 bg-slate-900/50 p-3 shadow-inner">{cfg.icon}</div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{cfg.subtitle}</p>
+          <h2 className={`mt-1 text-2xl font-black tracking-tight ${cfg.color}`}>{cfg.title}</h2>
+        </div>
+      </div>
+
+      {/* 점수 바 */}
+      <div className="relative z-10 mb-4">
+        <div className="flex justify-between text-xs text-slate-400 mb-1">
+          <span className="font-bold">매크로 점수</span>
+          <span className={`font-mono font-black text-lg ${cfg.color}`}>{score}/100</span>
+        </div>
+        <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className={`h-full rounded-full transition-all duration-1000 ${
+              regime === 'RISK_ON' ? 'bg-emerald-500' : regime === 'RISK_OFF' ? 'bg-rose-500' : 'bg-amber-500'
+            }`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
+          <span>Risk-OFF &lt;45</span>
+          <span>Neutral 45–69</span>
+          <span>Risk-ON ≥70</span>
+        </div>
+      </div>
+
+      {/* 컴포넌트 점수 breakdown */}
+      <div className="relative z-10 space-y-2">
+        {breakdown.map((b) => (
+          <div key={b.label}>
+            <div className="flex justify-between text-[10px] text-slate-500 mb-0.5">
+              <span>{b.label}</span>
+              <span className={b.score >= b.weight * 0.7 ? 'text-emerald-400' : b.score >= b.weight * 0.4 ? 'text-amber-400' : 'text-rose-400'}>
+                {b.score}/{b.weight} · {b.description}
+              </span>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full ${b.score >= b.weight * 0.7 ? 'bg-emerald-500' : b.score >= b.weight * 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                style={{ width: `${Math.min((b.score / b.weight) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="relative z-10 mt-4 text-xs leading-5 text-slate-400 border-t border-slate-700/50 pt-3">
+        {cfg.desc}
       </p>
-      <p className="mt-3 text-xs leading-5 opacity-70 border-t border-current pt-3 mx-[-2px]">
-        * 본 요약은 S&P 500의 50일 이평선(추세) 및 HYG/IEF(신용 채권 스프레드)를 결합하여 추산된 동적 매크로 견해입니다. 
-        아래의 핵심 지표 카드들의 화살표와 50MA 여부(위/아래)를 살펴보며 시장 자금의 세부 이동을 파악하십시오.
+      <p className="relative z-10 mt-2 text-[10px] leading-4 text-slate-600">
+        * SPY 추세·HYG/IEF 크레딧·VIX·달러금리·구리/금·시장폭 6개 컴포넌트 가중합산. 임계: ≥70 Risk-ON · 45~69 Neutral · &lt;45 Risk-OFF
       </p>
+
+      {history.length >= 2 && (
+        <div className="relative z-10">
+          <MacroSparkline history={history} currentScore={score} />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function MacroDashboardPage() {
-  const [data, setData] = useState<Record<string, MacroData>>({});
+  const [apiData, setApiData] = useState<MacroApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<MacroHistoryPoint[]>([]);
+  const { conflictWarning, data: mfData } = useMarket();
 
   useEffect(() => {
     async function fetchMacro() {
       try {
-        const res = await axios.get('/api/macro');
-        setData(res.data.data);
+        const [macroRes] = await Promise.all([
+          axios.get<MacroApiResponse>('/api/macro'),
+          fetch('/api/macro/history?days=30')
+            .then((r) => r.json())
+            .then((j: { data?: MacroHistoryPoint[] }) => { if (Array.isArray(j.data)) setHistory(j.data); })
+            .catch(() => {}),
+        ]);
+        setApiData(macroRes.data);
       } catch (err: unknown) {
         setError(axios.isAxiosError(err) ? err.response?.data?.message || err.message : '데이터를 가져오는 데 실패했습니다.');
       } finally {
@@ -164,35 +306,49 @@ export default function MacroDashboardPage() {
     );
   }
 
-  if (error) {
+  if (error || !apiData) {
     return (
-      <div className="flex h-[60vh] flex-col items-center justify-center text-red-400">
+      <div className="flex h-[60vh] flex-col items-center justify-center text-rose-400">
         <p className="text-xl font-bold">오류가 발생했습니다</p>
-        <p className="mt-2 text-red-300/70">{error}</p>
+        <p className="mt-2 text-rose-300/70">{error}</p>
       </div>
     );
   }
+
+  const { data } = apiData;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 pb-12">
       <div className="mb-4">
         <p className="text-sm font-semibold uppercase tracking-wide text-purple-400">Macro Insight</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white mb-6">매크로 분석</h1>
-        <MarketOverview data={data} />
+
+        {/* 크로스 시그널 충돌 배너 */}
+        {conflictWarning && mfData && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <div>
+              <span className="font-bold">신호 충돌 경고 · MF:{mfData.state}</span>
+              <span className="ml-2 font-normal">{conflictWarning}</span>
+            </div>
+          </div>
+        )}
+
+        <MacroScoreCard score={apiData.score} regime={apiData.regime} breakdown={apiData.breakdown} history={history} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        
+
         {/* 1. 위험 및 유동성 */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <Activity className="w-5 h-5 text-red-400" />
+            <Activity className="w-5 h-5 text-rose-400" />
             <h2 className="text-lg font-bold text-white">위험 및 유동성 (Risk & Liquidity)</h2>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <ValueDisplay quote={data['^VIX'] || data['UVXY']} fallbackTicker="^VIX" />
-            <ValueDisplay quote={data['UUP']} fallbackTicker="UUP" />
-            <ValueDisplay quote={data['KRE']} fallbackTicker="KRE" />
+            <ValueDisplay quote={data['^VIX'] as MacroData | undefined ?? data['UVXY'] as MacroData | undefined} fallbackTicker="^VIX" />
+            <ValueDisplay quote={data['UUP'] as MacroData | undefined} fallbackTicker="UUP" />
+            <ValueDisplay quote={data['KRE'] as MacroData | undefined} fallbackTicker="KRE" />
           </div>
         </Card>
 
@@ -203,10 +359,10 @@ export default function MacroDashboardPage() {
             <h2 className="text-lg font-bold text-white">채권 시장과 위험 선호도</h2>
           </div>
           <div className="grid grid-cols-4 gap-3">
-            <ValueDisplay quote={data['SHY']} fallbackTicker="SHY" />
-            <ValueDisplay quote={data['TLT']} fallbackTicker="TLT" />
-            <ValueDisplay quote={data['HYG']} fallbackTicker="HYG" />
-            <ValueDisplay quote={data['IEF']} fallbackTicker="IEF" />
+            <ValueDisplay quote={data['SHY'] as MacroData | undefined} fallbackTicker="SHY" />
+            <ValueDisplay quote={data['TLT'] as MacroData | undefined} fallbackTicker="TLT" />
+            <ValueDisplay quote={data['HYG'] as MacroData | undefined} fallbackTicker="HYG" />
+            <ValueDisplay quote={data['IEF'] as MacroData | undefined} fallbackTicker="IEF" />
           </div>
         </Card>
 
@@ -217,28 +373,31 @@ export default function MacroDashboardPage() {
             <h2 className="text-lg font-bold text-white">주식 지수 및 시장 강도 (Equity Breadth)</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-            <ValueDisplay quote={data['QQQ']} fallbackTicker="QQQ" />
-            <ValueDisplay quote={data['SPY']} fallbackTicker="SPY" />
-            <ValueDisplay quote={data['DIA']} fallbackTicker="DIA" />
-            <ValueDisplay quote={data['IWM']} fallbackTicker="IWM" />
-            <ValueDisplay quote={data['RSP']} fallbackTicker="RSP" />
+            <ValueDisplay quote={data['QQQ'] as MacroData | undefined} fallbackTicker="QQQ" />
+            <ValueDisplay quote={data['SPY'] as MacroData | undefined} fallbackTicker="SPY" />
+            <ValueDisplay quote={data['DIA'] as MacroData | undefined} fallbackTicker="DIA" />
+            <ValueDisplay quote={data['IWM'] as MacroData | undefined} fallbackTicker="IWM" />
+            <ValueDisplay quote={data['RSP'] as MacroData | undefined} fallbackTicker="RSP" />
           </div>
           <div className="grid md:grid-cols-3 gap-4">
-            <RatioDisplay 
+            <RatioDisplay
               label="QQQ / SPY (기술주 쏠림)"
-              topQuote={data['QQQ']} bottomQuote={data['SPY']}
+              topQuote={data['QQQ'] as MacroData | undefined}
+              bottomQuote={data['SPY'] as MacroData | undefined}
               descUp="빅테크 주도의 기술주 쏠림 장세"
               descDown="가치주나 방어주로 자금 이동 중"
             />
-            <RatioDisplay 
+            <RatioDisplay
               label="IWM / SPY (중소형 순환매)"
-              topQuote={data['IWM']} bottomQuote={data['SPY']}
+              topQuote={data['IWM'] as MacroData | undefined}
+              bottomQuote={data['SPY'] as MacroData | undefined}
               descUp="경제 전반에 온기가 퍼지는 건강한 상승장"
               descDown="대형주에만 자금이 숨어드는 불안장세"
             />
-            <RatioDisplay 
+            <RatioDisplay
               label="RSP / SPY (시장 건전성)"
-              topQuote={data['RSP']} bottomQuote={data['SPY']}
+              topQuote={data['RSP'] as MacroData | undefined}
+              bottomQuote={data['SPY'] as MacroData | undefined}
               descUp="소외받는 종목 없이 전체가 고루 오르는 장세"
               descDown="소수 시총 상위 기업만 오르는 '착시 상승'"
             />
@@ -252,22 +411,24 @@ export default function MacroDashboardPage() {
             <h2 className="text-lg font-bold text-white">원자재 및 비트코인 (Commodities & Crypto)</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-            <ValueDisplay quote={data['GLD']} fallbackTicker="GLD" />
-            <ValueDisplay quote={data['CPER']} fallbackTicker="CPER" />
-            <ValueDisplay quote={data['USO']} fallbackTicker="USO" />
-            <ValueDisplay quote={data['UNG']} fallbackTicker="UNG" />
-            <ValueDisplay quote={data['BTC-USD']} fallbackTicker="BTC-USD" />
+            <ValueDisplay quote={data['GLD'] as MacroData | undefined} fallbackTicker="GLD" />
+            <ValueDisplay quote={data['CPER'] as MacroData | undefined} fallbackTicker="CPER" />
+            <ValueDisplay quote={data['USO'] as MacroData | undefined} fallbackTicker="USO" />
+            <ValueDisplay quote={data['UNG'] as MacroData | undefined} fallbackTicker="UNG" />
+            <ValueDisplay quote={data['BTC-USD'] as MacroData | undefined} fallbackTicker="BTC-USD" />
           </div>
           <div className="grid md:grid-cols-2 gap-4">
-            <RatioDisplay 
+            <RatioDisplay
               label="CPER / GLD (구리 vs 금)"
-              topQuote={data['CPER']} bottomQuote={data['GLD']}
+              topQuote={data['CPER'] as MacroData | undefined}
+              bottomQuote={data['GLD'] as MacroData | undefined}
               descUp="경기 확장 뷰 우세, 국채 금리 상승, 주식 호황"
               descDown="경기 침체 뷰 우세, 국채 금리 하락, 안전자산 선호"
             />
-            <RatioDisplay 
+            <RatioDisplay
               label="HYG / IEF (위험채권 vs 안전채권)"
-              topQuote={data['HYG']} bottomQuote={data['IEF']}
+              topQuote={data['HYG'] as MacroData | undefined}
+              bottomQuote={data['IEF'] as MacroData | undefined}
               descUp="리스크 온(Risk-ON) : 주식 시장 긍정적 시그널"
               descDown="리스크 오프(Risk-OFF) : 신용 경색 및 증시 하락 경고"
             />

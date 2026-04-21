@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import type { DataSourceMeta, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
+import type { DataSourceMeta, MacroRegime, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 
 interface MarketContextValue {
   data: MasterFilterResponse | null;
@@ -11,6 +11,31 @@ interface MarketContextValue {
   setMarket: (market: 'US' | 'KR') => void;
   bypassRisk: boolean;
   setBypassRisk: (value: boolean) => void;
+  macroRegime: MacroRegime | null;
+  conflictWarning: string | null;
+}
+
+const STATE_ORDER = { GREEN: 0, YELLOW: 1, RED: 2 } as const;
+const REGIME_ORDER = { RISK_ON: 0, NEUTRAL: 1, RISK_OFF: 2 } as const;
+
+function detectConflict(mfState: 'GREEN' | 'YELLOW' | 'RED', regime: MacroRegime): string | null {
+  const mfLevel = STATE_ORDER[mfState];
+  const macroLevel = REGIME_ORDER[regime];
+  // 마스터필터가 낙관적(GREEN)인데 매크로가 비관적(RISK_OFF)이거나, 반대 방향
+  if (mfState === 'GREEN' && regime === 'RISK_OFF') {
+    return '마스터필터 GREEN이지만 매크로 Risk-OFF 상태입니다 — 보수적 접근 권장 (포지션 축소, 신규 진입 신중)';
+  }
+  if (mfState === 'RED' && regime === 'RISK_ON') {
+    return '마스터필터 RED이지만 매크로 Risk-ON 상태입니다 — 개별 종목 약세 가능성, 섹터 선별 필요';
+  }
+  // 1단계 차이 경고
+  if (mfLevel === 0 && macroLevel === 1) {
+    return '마스터필터 GREEN, 매크로 Neutral — 공격적 진입 전 매크로 개선 여부를 확인하세요.';
+  }
+  if (mfLevel === 1 && macroLevel === 2) {
+    return '마스터필터 YELLOW, 매크로 Risk-OFF — 신규 진입 자제, 기존 포지션 방어에 집중하세요.';
+  }
+  return null;
 }
 
 const MarketContext = createContext<MarketContextValue>({
@@ -21,6 +46,8 @@ const MarketContext = createContext<MarketContextValue>({
   setMarket: () => {},
   bypassRisk: false,
   setBypassRisk: () => {},
+  macroRegime: null,
+  conflictWarning: null,
 });
 
 const createEmptyMetric = (label: string, threshold: string | number, unit: string): MasterFilterMetricDetail => ({
@@ -91,6 +118,8 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [market, setMarket] = useState<'US' | 'KR'>('US');
+  const [macroRegime, setMacroRegime] = useState<MacroRegime | null>(null);
+  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [bypassRisk, setBypassRiskState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return sessionStorage.getItem('bypass_risk') === 'true';
@@ -109,14 +138,30 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
     async function fetchMarketData() {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/master-filter?market=${market}`, { signal: controller.signal });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null);
+        const [mfResponse, macroResponse] = await Promise.allSettled([
+          fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
+          fetch('/api/macro'),
+        ]);
+
+        if (mfResponse.status === 'rejected' || (mfResponse.status === 'fulfilled' && !mfResponse.value.ok)) {
+          const payload = mfResponse.status === 'fulfilled' ? await mfResponse.value.json().catch(() => null) : null;
           throw new Error(payload?.message || '마스터 필터 데이터를 불러오지 못했습니다.');
         }
-        const result = (await response.json()) as MasterFilterResponse;
+
+        const result = (await (mfResponse as PromiseFulfilledResult<Response>).value.json()) as MasterFilterResponse;
+
+        let regime: MacroRegime | null = null;
+        if (macroResponse.status === 'fulfilled' && macroResponse.value.ok) {
+          const macroJson = await macroResponse.value.json().catch(() => null);
+          if (macroJson?.regime) {
+            regime = macroJson.regime as MacroRegime;
+          }
+        }
+
         if (mounted) {
           setData({ ...result, market });
+          setMacroRegime(regime);
+          setConflictWarning(regime ? detectConflict(result.state, regime) : null);
           setError(null);
         }
       } catch (err) {
@@ -141,7 +186,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   }, [market]);
 
   return (
-    <MarketContext.Provider value={{ data, isLoading, error, market, setMarket, bypassRisk, setBypassRisk }}>
+    <MarketContext.Provider value={{ data, isLoading, error, market, setMarket, bypassRisk, setBypassRisk, macroRegime, conflictWarning }}>
       {children}
     </MarketContext.Provider>
   );

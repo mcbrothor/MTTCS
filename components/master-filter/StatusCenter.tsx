@@ -1,10 +1,80 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Globe, ShieldAlert } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Globe, ShieldAlert, TrendingDown, TrendingUp } from 'lucide-react';
+import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
 import { useMarket } from '@/contexts/MarketContext';
 
+interface HistoryPoint {
+  date: string;
+  p3Score: number;
+  state: 'GREEN' | 'YELLOW' | 'RED';
+}
+
+function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; currentScore: number }) {
+  if (history.length < 2) return null;
+
+  const first = history[0].p3Score;
+  const last = history.at(-1)!.p3Score;
+  const delta = last - first;
+  const isImproving = delta > 0;
+
+  return (
+    <div className="w-full mt-4">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">P3 Score 30일 추세</span>
+        <span className={`flex items-center gap-1 text-xs font-bold ${isImproving ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+          {isImproving ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : null}
+          {isImproving ? '+' : ''}{delta}pt ({first} → {currentScore})
+        </span>
+      </div>
+      <div className="h-16">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={history} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+            <defs>
+              <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <ReferenceLine y={75} stroke="#10b981" strokeDasharray="3 2" strokeOpacity={0.4} />
+            <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="3 2" strokeOpacity={0.4} />
+            <Area
+              type="monotone"
+              dataKey="p3Score"
+              stroke="#10b981"
+              strokeWidth={1.5}
+              fill="url(#sparkGrad)"
+              isAnimationActive={false}
+              dot={false}
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
+              formatter={(v: any) => [`P3: ${v}`, '']}
+              labelFormatter={(l: any) => l}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex gap-4 text-[9px] text-slate-600 mt-0.5 justify-center">
+        <span className="text-emerald-600">── GREEN ≥75</span>
+        <span className="text-amber-600">── YELLOW ≥50</span>
+      </div>
+    </div>
+  );
+}
+
 export default function StatusCenter() {
-  const { data, isLoading, error } = useMarket();
+  const { data, isLoading, error, market, macroRegime, conflictWarning } = useMarket();
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+
+  useEffect(() => {
+    if (!market) return;
+    fetch(`/api/master-filter/history?market=${market}&days=30`)
+      .then((r) => r.json())
+      .then((j) => { if (Array.isArray(j.data)) setHistory(j.data); })
+      .catch(() => {});
+  }, [market]);
 
   if (isLoading) {
     return (
@@ -27,8 +97,7 @@ export default function StatusCenter() {
       icon: <CheckCircle2 className="h-10 w-10 text-emerald-400" />,
       title: 'GREEN 구간',
       subtitle: '공격 가능한 상승장',
-      description:
-        '시장 추세와 내부 강도가 우호적입니다. SEPA/VCP 후보는 피벗 근처의 거래량과 리스크 금액을 확인한 뒤 계획대로 진입할 수 있습니다.',
+      description: '시장 추세와 내부 강도가 우호적입니다. SEPA/VCP 후보는 피벗 근처의 거래량과 리스크 금액을 확인한 뒤 계획대로 진입할 수 있습니다.',
       accent: 'bg-emerald-500/30',
     },
     YELLOW: {
@@ -38,8 +107,7 @@ export default function StatusCenter() {
       icon: <AlertTriangle className="h-10 w-10 text-amber-400" />,
       title: 'YELLOW 구간',
       subtitle: '중립 또는 경계',
-      description:
-        '상승 시도는 가능하지만 일부 지표가 불완전합니다. 신규 진입 규모를 줄이고 손절선과 실패 조건을 더 촘촘하게 관리하세요.',
+      description: '상승 시도는 가능하지만 일부 지표가 불완전합니다. 신규 진입 규모를 줄이고 손절선과 실패 조건을 더 촘촘하게 관리하세요.',
       accent: 'bg-amber-500/30',
     },
     RED: {
@@ -49,20 +117,28 @@ export default function StatusCenter() {
       icon: <ShieldAlert className="h-10 w-10 text-rose-400" />,
       title: 'RED 구간',
       subtitle: '방어 우선 하락장',
-      description:
-        '시장 압력이 높습니다. 신규 매수보다 현금 비중 확대, 보유 종목 손절선 준수, 포트폴리오 리스크 축소를 우선하세요.',
+      description: '시장 압력이 높습니다. 신규 매수보다 현금 비중 확대, 보유 종목 손절선 준수, 포트폴리오 리스크 축소를 우선하세요.',
       accent: 'bg-rose-500/30',
     },
   } as const;
 
   const config = stateConfig[data.state];
   const updatedAt = data.metrics.updatedAt ? new Date(data.metrics.updatedAt).toLocaleString('ko-KR') : '확인 불가';
+  const p3Score = data.metrics.p3Score ?? 0;
 
   return (
     <div
       className={`relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-lg border p-8 text-center shadow-2xl backdrop-blur-md transition-all duration-700 ${config.bg} ${config.border}`}
     >
       <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${config.accent}`} />
+
+      {/* 충돌 경고 배너 */}
+      {conflictWarning && (
+        <div className="relative z-10 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-300 flex items-center gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span>{conflictWarning}</span>
+        </div>
+      )}
 
       <div className="relative z-10 flex flex-col items-center gap-4">
         <div className="rounded-full border border-slate-700/50 bg-slate-900/50 p-3 shadow-inner">{config.icon}</div>
@@ -78,21 +154,29 @@ export default function StatusCenter() {
           <span
             key={m.label}
             className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase
-              ${
-                m.status === 'PASS'
-                  ? 'border-emerald-500/40 text-emerald-300'
-                  : m.status === 'WARNING'
-                    ? 'border-amber-500/40 text-amber-300'
-                    : 'border-rose-500/40 text-rose-300'
-              }`}
+              ${m.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : m.status === 'WARNING' ? 'border-amber-500/40 text-amber-300' : 'border-rose-500/40 text-rose-300'}`}
           >
             {m.label} · {m.status}
           </span>
         ))}
         <span className="rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[10px] font-bold text-slate-300">
-          P3 {data.metrics.p3Score ?? 0}/100
+          P3 {p3Score}/100
         </span>
+        {macroRegime && (
+          <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase
+            ${macroRegime === 'RISK_ON' ? 'border-emerald-500/40 text-emerald-300' : macroRegime === 'RISK_OFF' ? 'border-rose-500/40 text-rose-300' : 'border-amber-500/40 text-amber-300'}`}
+          >
+            Macro · {macroRegime}
+          </span>
+        )}
       </div>
+
+      {/* 30일 Sparkline */}
+      {history.length >= 2 && (
+        <div className="relative z-10 w-full max-w-xl">
+          <ScoreSparkline history={history} currentScore={p3Score} />
+        </div>
+      )}
 
       <div className="relative z-10 mt-2 flex flex-wrap items-center justify-center gap-3">
         <div className="flex items-center gap-1.5 rounded-full border border-slate-800/80 bg-slate-900/40 px-3 py-1">

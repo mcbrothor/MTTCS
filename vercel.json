@@ -1,12 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/contest-review-us",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/contest-review-kr",
-      "schedule": "0 8 * * *"
-    }
-  ]
 }

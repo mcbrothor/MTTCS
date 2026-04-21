@@ -468,6 +468,22 @@ export interface MasterFilterResponse {
   state: MarketState; market: ContestMarket; metrics: MasterFilterMetrics; insightLog: string; isAiGenerated: boolean; aiProviderUsed?: AiInsightProvider; aiModelUsed?: string; aiFallbackChain?: AiFallbackAttempt[]; aiModelInsights?: AiModelInsight[]; aiErrorSummary?: string | null;
 }
 
+export type MacroRegime = 'RISK_ON' | 'RISK_OFF' | 'NEUTRAL';
+
+export interface MacroScoreBreakdown {
+  label: string; weight: number; score: number; description: string;
+}
+
+export interface MacroResponse {
+  data: Record<string, unknown>;
+  score: number;
+  regime: MacroRegime;
+  breakdown: MacroScoreBreakdown[];
+  spyAbove50ma: boolean;
+  hygIefDiff: number;
+  vixLevel: number;
+}
+
 export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';
 
 export interface DataSourceMeta {
