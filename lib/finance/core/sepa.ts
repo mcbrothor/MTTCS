@@ -239,7 +239,7 @@ export function analyzeSepa(
       '70점 이상 (권장)',
       options.preCalculatedRs !== undefined
         ? '데이터베이스에서 조회한 시장 전체 기준 공식 RS Rating입니다.'
-        : `공식 RS Rating 대신 ${benchmarkLabel} 대비 6개월 초과수익률로 계산한 대체 지표입니다.`
+        : `공식 RS Rating 대신 ${benchmarkLabel} 대비 52주 상대수익률(Mansfield RS 방식)로 계산한 대체 지표입니다.`
     ),
     evaluableCriterion(
       'avg_dollar_volume',

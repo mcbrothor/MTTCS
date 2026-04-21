@@ -153,21 +153,34 @@ export function calculateRSRating(rank: number, universeSize: number) {
 }
 
 export function calculateBenchmarkRelativeScore(data: OHLCData[], benchmarkData?: OHLCData[]) {
-  const stockMomentum = calculateWeightedMomentum(data).ibdProxyScore;
-  const benchmarkMomentum = benchmarkData ? calculateWeightedMomentum(benchmarkData).ibdProxyScore : null;
-  
-  if (stockMomentum === null || benchmarkMomentum === null) {
-    return { stockReturn26Week: null, benchmarkReturn26Week: null, benchmarkRelativeScore: null };
+  const stockReturn26Week = percentReturn(data, 126);
+  const benchmarkReturn26Week = benchmarkData ? percentReturn(benchmarkData, 126) : null;
+
+  // 1순위: Mansfield RS (52주 상대수익률) — 가장 정확한 상대강도 측정
+  // mansfieldRsScore = (종목 52주 성과 / 벤치마크 52주 성과 - 1) * 100 (단위: %)
+  // 예) 종목 +120%, 벤치마크 +80% → mansfieldRsScore ≈ +22% → RS ≈ 83
+  const mansfield = calculateMansfieldFromData(data, benchmarkData);
+  if (mansfield.mansfieldRsScore !== null) {
+    return {
+      stockReturn26Week,
+      benchmarkReturn26Week,
+      benchmarkRelativeScore: round(clamp(50 + mansfield.mansfieldRsScore * 1.5, 1, 99), 0),
+    };
   }
 
-  // 오닐 식 상대강도: 1년 가중 모멘텀(IBD Proxy Score)의 초과 성과 기반 환산
-  // 기존 26주 수익률 대신 전체 52주 가중 성과를 비교하여 더 정확한 오닐식 상대강도 산출
-  const outperformance = stockMomentum - benchmarkMomentum;
-  return {
-    stockReturn26Week: percentReturn(data, 126),
-    benchmarkReturn26Week: percentReturn(benchmarkData || [], 126),
-    benchmarkRelativeScore: round(clamp(50 + outperformance * 1.5, 1, 99), 0),
-  };
+  // 2순위: 6개월 직접 비교 (52주 데이터 부족 시 폴백)
+  if (stockReturn26Week !== null && benchmarkReturn26Week !== null) {
+    const stockPerf = 1 + stockReturn26Week / 100;
+    const benchPerf = 1 + benchmarkReturn26Week / 100;
+    const relScore = ((stockPerf / benchPerf) - 1) * 100;
+    return {
+      stockReturn26Week,
+      benchmarkReturn26Week,
+      benchmarkRelativeScore: round(clamp(50 + relScore * 1.5, 1, 99), 0),
+    };
+  }
+
+  return { stockReturn26Week: null, benchmarkReturn26Week: null, benchmarkRelativeScore: null };
 }
 
 export function getMansfieldRS(stockPrices: IbdProxyInput, indexPrices: IbdProxyInput): MansfieldResult {
