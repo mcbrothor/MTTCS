@@ -67,6 +67,9 @@ export async function POST(request: Request) {
         url.searchParams.set('totalEquity', String(totalEquity));
         url.searchParams.set('riskPercent', String(riskPercent));
         url.searchParams.set('includeFundamentals', 'true');
+        // Batch mode: defer standard metrics (RS/macro) to the single-query
+        // /api/scanner/metrics endpoint that runs once after the scan.
+        url.searchParams.set('skipStandardMetrics', 'true');
 
         // Next.js API 핸들러 직접 호출 (HTTP 오버헤드 없음)
         const mockReq = new Request(url);

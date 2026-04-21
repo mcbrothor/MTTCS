@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
+import { analyzeSepa } from '../lib/finance/core/sepa.ts';
+import { calculateATR, calculateEntryPrice } from '../lib/finance/core/moving-average.ts';
 import {
-  analyzeSepa,
-  calculateATR,
-  calculateEntryPrice,
   calculateMinerviniRiskPlan,
   calculatePositionSize,
-} from '../lib/finance/core/calculations.ts';
+} from '../lib/finance/core/position-sizing.ts';
 
 function makeUptrendBars(length = 260, slope = 0.5, start = 50) {
   return Array.from({ length }, (_, index) => {
@@ -86,6 +85,41 @@ run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
   assert.ok(evidence.summary.info >= 1);
   assert.notEqual(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'info');
   assert.equal(evidence.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
+});
+
+run('SEPA 52주 저점 조건: 우상향 260봉은 저점 대비 +30% 충족', () => {
+  const evidence = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+  });
+  const lowCriterion = evidence.criteria.find((item) => item.id === 'above_52w_low');
+  assert.ok(lowCriterion, 'above_52w_low criterion must exist');
+  assert.equal(lowCriterion?.status, 'pass', '우상향 시 저점 대비 +30% 통과해야 함');
+  assert.ok(evidence.metrics.low52Week !== null, 'low52Week metric must be populated');
+  assert.ok((evidence.metrics.distanceFromLow52WeekPct ?? 0) >= 30);
+});
+
+run('SEPA 52주 저점 조건: 바닥권 종목은 +30% 미충족', () => {
+  // 옆으로 기는 저변동성 가격(바닥권 종목)은 저점 대비 상승률이 낮음
+  const flatBars = Array.from({ length: 260 }, (_, i) => ({
+    date: `2025-01-${String((i % 28) + 1).padStart(2, '0')}`,
+    open: 100, high: 101, low: 99, close: 100 + (i % 3) * 0.1, volume: 1_000_000,
+  }));
+  const evidence = analyzeSepa(flatBars);
+  const lowCriterion = evidence.criteria.find((item) => item.id === 'above_52w_low');
+  assert.equal(lowCriterion?.status, 'fail', '바닥권 종목은 저점 +30% 조건에서 fail');
+});
+
+run('SEPA RS Source: preCalculatedRs 제공 시 UNIVERSE 표기', () => {
+  const universeEvidence = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+    preCalculatedRs: 85,
+  });
+  assert.equal(universeEvidence.metrics.rsSource, 'UNIVERSE');
+
+  const proxyEvidence = analyzeSepa(makeUptrendBars(260, 0.6), {
+    benchmarkData: makeUptrendBars(260, 0.2),
+  });
+  assert.equal(proxyEvidence.metrics.rsSource, 'BENCHMARK_PROXY');
 });
 
 run('evaluates fundamentals only when all required fields are present', () => {

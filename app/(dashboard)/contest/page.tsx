@@ -25,7 +25,7 @@ import type {
 const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
-const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI100', 'KOSDAQ100'];
+const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
 const MISTAKE_TAGS = ['시장 국면 무시', '가짜 돌파', '추격 매수', '매도 지연', '과도한 확신', '선정 기준 오류'];
 
 interface StoredScannerSnapshot {
@@ -50,7 +50,10 @@ type ReviewDrafts = Record<string, ReviewDraft>;
 type Horizon = 'W1' | 'M1';
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
-  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
+  // backward-compat: migrate old stored values
+  if (value === 'KOSPI100') return 'KOSPI200';
+  if (value === 'KOSDAQ100') return 'KOSDAQ150';
   return null;
 }
 
@@ -63,7 +66,7 @@ function getInitialUniverse(): ScannerUniverse {
     const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
     if (mapRaw) {
       const map = JSON.parse(mapRaw);
-      const universes: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI100', 'KOSDAQ100'];
+      const universes: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
       for (const u of universes) {
         if (map[u]?.tickers?.length > 0) return u;
       }
@@ -291,7 +294,7 @@ export default function ContestPage() {
   const [llmSaveMessage, setLlmSaveMessage] = useState<string | null>(null);
   const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
 
-  const market: ContestMarket = universe === 'KOSPI100' || universe === 'KOSDAQ100' ? 'KR' : 'US';
+  const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
   const loadSnapshot = useCallback((nextUniverse: ScannerUniverse) => {
     const next = readSnapshot(nextUniverse);
