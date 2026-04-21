@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --no-warnings --experimental-strip-types tests/calculations.test.mjs)",
+      "Bash(npm test *)",
+      "Bash(rm lib/finance/engines/vcp-engine.ts)",
+      "Bash(node --no-warnings --experimental-strip-types tests/vcp-engine.test.mjs)",
+      "Bash(npx tsc *)",
+      "Bash(node --no-warnings --experimental-strip-types tests/scanner-universes.test.mjs)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(git add *)"
+    ]
+  }
+}

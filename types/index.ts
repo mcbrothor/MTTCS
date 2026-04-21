@@ -124,6 +124,8 @@ export interface SepaEvidence {
     ma200: number | null;
     high52Week: number | null;
     distanceFromHigh52WeekPct: number | null;
+    low52Week: number | null;
+    distanceFromLow52WeekPct: number | null;
     avgDollarVolume20: number | null;
     rsRating: number | null;
     /**
@@ -291,7 +293,7 @@ export interface ProviderAttempt {
   attemptedAt: string;
 }
 
-export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI100' | 'KOSDAQ100';
+export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
 export type MarketCode = 'KR' | 'US';
 export type DataQuality = 'FULL' | 'PARTIAL' | 'NA';
 export type MacroActionLevel = 'FULL' | 'REDUCED' | 'HALT';
@@ -600,6 +602,7 @@ export interface CanslimScannerResult {
   vcpScore: number | null;
   dualTier: DualScreenerTier;
   rsRating: number | null;
+  rsSource?: 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
   benchmarkRelativeScore?: number | null;
   mansfieldRsFlag: boolean | null;
   mansfieldRsScore?: number | null;

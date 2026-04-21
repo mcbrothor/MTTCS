@@ -3,7 +3,9 @@ import { fetchLatestMacroTrend, fetchLatestStockMetrics, macroIndexForUniverse, 
 import type { ScannerUniverse } from '@/types';
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
-  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI100' || value === 'KOSDAQ100') return value;
+  if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
+  if (value === 'KOSPI100') return 'KOSPI200';
+  if (value === 'KOSDAQ100') return 'KOSDAQ150';
   return null;
 }
 

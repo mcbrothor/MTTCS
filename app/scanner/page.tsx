@@ -8,8 +8,8 @@ import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 
-import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS } from '@/hooks/useScanner';
-import type { ViewMode, FilterKey, SortKey } from '@/hooks/useScanner';
+import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS } from '@/hooks/scanner';
+import type { ViewMode, FilterKey, SortKey } from '@/hooks/scanner';
 import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';

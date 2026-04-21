@@ -139,7 +139,7 @@ export function buildContestPrompt(input: ContestSessionInput) {
       compare_axes: [
         '기술적 구조와 VCP 품질',
         'Base_Type: Standard_VCP와 High_Tight_Flag는 리스크 가정과 손절 기준을 분리해 비교',
-        'RS Rating: 표준 유니버스 기준 사전 계산값입니다. 미국은 S&P 500, 한국은 KOSPI100+KOSDAQ150 합산 universe에서 1~99로 환산합니다.',
+        'RS Rating: 표준 유니버스 기준 사전 계산값입니다. 미국은 S&P 500, 한국은 KOSPI200+KOSDAQ150 합산 universe에서 1~99로 환산합니다.',
         'IBD Proxy: 분기별 독립 수익률(Q1 2배 가중, Q2~Q4 1배)을 정규화한 모멘텀 점수입니다.',
         'Mansfield RS: 52주 기준 벤치마크 대비 상대성과입니다. 양수/true일수록 지수 대비 강합니다.',
         'Macro Action: FULL/REDUCED/HALT에 따라 진입 적극성, 포지션 크기, 손절 기준을 다르게 평가하세요.',

@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/providers/yahoo-api';
 import { getSecFundamentals } from '@/lib/finance/providers/sec-edgar-api';
-import { analyzeSepa, calculateATR, calculateEntryPrice, calculateMinerviniRiskPlan } from '@/lib/finance/core/calculations';
+import { analyzeSepa } from '@/lib/finance/core/sepa';
+import { calculateATR, calculateEntryPrice } from '@/lib/finance/core/moving-average';
+import { calculateMinerviniRiskPlan } from '@/lib/finance/core/position-sizing';
 import { fetchAggregatedFundamentals } from '@/lib/finance/market/fundamental-fetcher';
-import { analyzeVcp } from '@/lib/finance/engines/vcp-engine';
+import { analyzeVcp } from '@/lib/finance/engines/vcp';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
@@ -272,6 +274,10 @@ export async function GET(request: Request) {
   const totalEquity = Number(searchParams.get('totalEquity') || DEFAULT_TOTAL_EQUITY);
   const riskPercentInput = Number(searchParams.get('riskPercent') || DEFAULT_RISK_PERCENT_INPUT);
   const includeFundamentals = searchParams.get('includeFundamentals') !== 'false';
+  // Scanner batch passes skipStandardMetrics=true to avoid N+1 single-ticker
+  // stock_metrics/macro_trend fetches — those are re-applied in a single .in()
+  // query via /api/scanner/metrics after the scan completes.
+  const skipStandardMetrics = searchParams.get('skipStandardMetrics') === 'true';
   const riskPercent = riskPercentInput / 100;
 
   if (!ticker) {
@@ -294,7 +300,9 @@ export async function GET(request: Request) {
     const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = cacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
-      const { metric, macroTrend } = await loadStandardMetrics(ticker, exchange);
+      const { metric, macroTrend } = skipStandardMetrics
+        ? { metric: null as StockMetric | null, macroTrend: null as MacroTrend | null }
+        : await loadStandardMetrics(ticker, exchange);
       const mergedCached = mergeStandardMetrics(cached, metric, macroTrend);
       return NextResponse.json({
         ...mergedCached,
@@ -318,7 +326,9 @@ export async function GET(request: Request) {
       includeFundamentals ? fetchFundamentals(ticker, exchange, warnings) : Promise.resolve(null),
     ]);
 
-    const { metric, macroTrend } = await loadStandardMetrics(ticker, exchange);
+    const { metric, macroTrend } = skipStandardMetrics
+      ? { metric: null as StockMetric | null, macroTrend: null as MacroTrend | null }
+      : await loadStandardMetrics(ticker, exchange);
 
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
