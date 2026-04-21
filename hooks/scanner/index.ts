@@ -19,6 +19,7 @@ import {
   LATEST_SCAN_UNIVERSE_STORAGE_KEY,
   RISK_PERCENT_FOR_SCAN,
   TOTAL_EQUITY_FOR_SCAN,
+  UNIVERSES,
   type FilterKey,
   type SortKey,
   type ViewMode,
@@ -28,6 +29,7 @@ import {
   initialResult,
   mapMarketAnalysisToScannerResult,
   parseFetchError,
+  parseScannerUniverse,
   withRecommendation,
 } from './helpers';
 import {
@@ -47,9 +49,12 @@ export type { ViewMode, FilterKey, SortKey } from './constants';
 export function useScanner() {
   const [universe, setUniverse] = useState<ScannerUniverse>(() => {
     if (typeof window === 'undefined') return 'NASDAQ100';
-    return (window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY) as ScannerUniverse) ||
-           (window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY) as ScannerUniverse) ||
-           'NASDAQ100';
+    // Use parseScannerUniverse for backward compatibility with old values (KOSPI100, KOSDAQ100)
+    const stored = parseScannerUniverse(window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY)) ||
+                   parseScannerUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY));
+    // Validate that result is in UNIVERSES object before returning
+    if (stored && stored in UNIVERSES) return stored;
+    return 'NASDAQ100';
   });
   const [results, setResults] = useState<ScannerResult[]>([]);
   const [isScanning, setIsScanning] = useState(false);

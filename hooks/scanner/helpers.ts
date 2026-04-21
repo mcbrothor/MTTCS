@@ -13,6 +13,9 @@ export function scannerStorageKey(universe: ScannerUniverse, prefix: string) {
 
 export function parseScannerUniverse(value: string | null): ScannerUniverse | null {
   if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
+  // Backward compatibility: migrate old universe values from Phase 2.5
+  if (value === 'KOSPI100') return 'KOSPI200';
+  if (value === 'KOSDAQ100') return 'KOSDAQ150';
   return null;
 }
 
