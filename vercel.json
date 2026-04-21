@@ -1,2 +1,24 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/snapshot-market-state?type=macro",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-market-state?market=US&type=master-filter",
+      "schedule": "5 21 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-market-state?market=KR&type=master-filter",
+      "schedule": "10 07 * * *"
+    },
+    {
+      "path": "/api/cron/contest-review-us",
+      "schedule": "0 04 * * *"
+    },
+    {
+      "path": "/api/cron/contest-review-kr",
+      "schedule": "0 08 * * *"
+    }
+  ]
 }
