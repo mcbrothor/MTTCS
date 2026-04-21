@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { computeMacroScore } from '@/lib/macro/compute';
+import { sendTelegramMessage } from '@/lib/telegram';
 import type { OHLCData } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -107,6 +108,26 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
   }, { onConflict: 'calc_date,market' });
 
   if (error) throw new Error(`master_filter_snapshot upsert error: ${error.message}`);
+
+  // 텔레그램 리포트 발송
+  const emoji = result.state === 'GREEN' ? '🟢' : result.state === 'YELLOW' ? '🟡' : '🔴';
+  const report = `
+${emoji} *MTN 마스터 필터 리포트 (${market})*
+---------------------------------------
+• *P3 Score*: \`${result.p3Score}/100\`
+• *Status*: \`${result.state}\`
+• *기준 일자*: \`${calcDate}\`
+
+• 추세: ${result.trendScore}pt
+• 폭: ${result.breadthScore}pt
+• 변동성: ${result.volatilityScore}pt
+• 유동성: ${result.liquidityScore}pt
+---------------------------------------
+[차트 확인](https://mttcs.vercel.app/master-filter)
+  `.trim();
+  
+  await sendTelegramMessage(report).catch(console.error);
+
   return { p3Score: result.p3Score, state: result.state };
 }
 
@@ -137,6 +158,25 @@ async function snapshotMacro(calcDate: string) {
   }, { onConflict: 'calc_date' });
 
   if (error) throw new Error(`macro_snapshot upsert error: ${error.message}`);
+
+  // 텔레그램 리포트 발송
+  const emoji = result.regime === 'RISK_ON' ? '🚀' : result.regime === 'RISK_OFF' ? '🛡️' : '⚖️';
+  const report = `
+${emoji} *MTN 매크로 레짐 리포트*
+---------------------------------------
+• *Macro Score*: \`${result.macroScore}/100\`
+• *Regime*: \`${result.regime}\`
+• *기준 일자*: \`${calcDate}\`
+
+• 추세: ${result.componentScores.trendScore}pt
+• 신용: ${result.componentScores.creditScore}pt
+• 변동성: ${result.componentScores.volatilityScore}pt
+---------------------------------------
+[차트 확인](https://mttcs.vercel.app/macro)
+  `.trim();
+
+  await sendTelegramMessage(report).catch(console.error);
+
   return { macroScore: result.macroScore, regime: result.regime };
 }
 
