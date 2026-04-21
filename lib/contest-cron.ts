@@ -108,5 +108,11 @@ export function validateCronRequest(request: Request) {
   if (!secret) {
     return process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
   }
-  return request.headers.get('authorization') === `Bearer ${secret}`;
+
+  // 헤더 검증 또는 쿼리 파라미터 검증 허용 (수동 테스트용)
+  const authHeader = request.headers.get('authorization');
+  const { searchParams } = new URL(request.url);
+  const querySecret = searchParams.get('secret');
+
+  return authHeader === `Bearer ${secret}` || querySecret === secret;
 }
