@@ -141,11 +141,20 @@ function formatPrice(value: number | null, currency: 'USD' | 'KRW') {
   }).format(value);
 }
 
-function formatMarketCap(value: number | null) {
+function formatMarketCap(value: number | null, currency?: string, ticker?: string) {
   if (!value) return '-';
-  if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T';
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
-  if (value >= 1e6) return (value / 1e6).toFixed(0) + 'M';
+  const isKorean = currency === 'KRW' || (ticker && /^\d{6}$/.test(ticker));
+  
+  if (isKorean) {
+    const jo = value / 1e12;
+    if (jo >= 1) return `₩${jo.toFixed(2)}조`;
+    const eok = Math.round(value / 1e8);
+    return `₩${eok.toLocaleString('ko-KR')}억`;
+  }
+  
+  if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+  if (value >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+  if (value >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
   return value.toLocaleString();
 }
 
@@ -411,7 +420,7 @@ export default function CanslimScannerPage() {
                 <div className="text-[10px] text-slate-500 truncate">{r.name}</div>
               </td>
               <td className="px-3 py-4 text-right font-mono text-slate-400">
-                {formatMarketCap(r.marketCap)}
+                {formatMarketCap(r.marketCap, r.currency, r.ticker)}
               </td>
               <td className="px-3 py-4 text-right font-mono text-slate-300 font-medium">
                 {r.status === 'running' ? <LoadingSpinner size="sm" /> : formatPrice(r.currentPrice, r.currency)}
@@ -617,7 +626,7 @@ export default function CanslimScannerPage() {
                 <div className="rounded-lg bg-slate-950/60 p-2 border border-slate-800/50">
                   <div className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter mb-0.5 text-center">Market Cap</div>
                   <div className="text-[10px] font-black text-slate-300 text-center font-mono">
-                    {formatMarketCap(r.marketCap)}
+                    {formatMarketCap(r.marketCap, r.currency, r.ticker)}
                   </div>
                 </div>
               </div>

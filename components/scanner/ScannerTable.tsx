@@ -4,24 +4,30 @@ import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import { getVolumeSignalTier, type VolumeSignalTier } from '@/lib/scanner-recommendation';
 import type { ScannerResult, RecommendationTier } from '@/types';
 
-function formatMarketCap(value: number | null, currency: ScannerResult['currency']) {
+function formatMarketCap(value: number | null, currency: ScannerResult['currency'], ticker: string) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  if (currency === 'KRW') {
+  
+  const isKorean = currency === 'KRW' || /^\d{6}$/.test(ticker);
+  
+  if (isKorean) {
     const jo = value / 1_000_000_000_000;
-    if (jo >= 1) return `${jo.toFixed(2)}조원`;
+    if (jo >= 1) return `₩${jo.toFixed(2)}조`;
     const eok = Math.round(value / 100_000_000);
-    return `${eok.toLocaleString('ko-KR')}억`;
+    return `₩${eok.toLocaleString('ko-KR')}억`;
   }
+  
   if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
   return `$${(value / 1_000_000_000).toFixed(1)}B`;
 }
 
-function formatPrice(value: number | null, currency: ScannerResult['currency']) {
+function formatPrice(value: number | null, currency: ScannerResult['currency'], ticker: string) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  return new Intl.NumberFormat(currency === 'KRW' ? 'ko-KR' : 'en-US', {
+  const isKorean = currency === 'KRW' || /^\d{6}$/.test(ticker);
+  
+  return new Intl.NumberFormat(isKorean ? 'ko-KR' : 'en-US', {
     style: 'currency',
-    currency,
-    maximumFractionDigits: currency === 'KRW' ? 0 : 2,
+    currency: isKorean ? 'KRW' : 'USD',
+    maximumFractionDigits: isKorean ? 0 : 2,
   }).format(value);
 }
 
@@ -157,8 +163,8 @@ export default function ScannerTable({
                   <p className="truncate font-mono font-bold text-white">{result.ticker}</p>
                   <p className="truncate text-[11px] text-slate-500">{result.name}</p>
                 </td>
-                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency)}</td>
-                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency)}</td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency, result.ticker)}</td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency, result.ticker)}</td>
                 <td className="px-2 py-3">
                   <span className="text-slate-300">{sepaLabel(result)}</span>
                   {result.sepaMissingCount !== null && <p className="text-[10px] text-slate-500">미충족 {result.sepaMissingCount}</p>}
