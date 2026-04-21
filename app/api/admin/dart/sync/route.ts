@@ -68,30 +68,60 @@ export async function GET(_req: Request) {
     }
 
     // ── Phase 4: 대상 종목 필터링 및 Supabase upsert ─────────────────────────
+    // DART XML에는 같은 stock_code에 과거/신규 corp_code가 중복 존재할 수 있으므로
+    // stock_code 기준으로 dedupe (modify_date 최신 우선) 후 stock_code를 conflict target으로 사용.
     console.log('[DART-SYNC] Filtering and preparing data for Supabase...');
-    const upsertData = rawList
-      .filter((item) => {
-        if (!item.stock_code) return false;
-        const stockCode = pad6(String(item.stock_code));
-        return targetMap.has(stockCode);
-      })
-      .map((item) => ({
+    const dedupMap = new Map<
+      string,
+      {
+        corp_code: string;
+        corp_name: string;
+        stock_code: string;
+        modify_date: string;
+        updated_at: string;
+      }
+    >();
+
+    for (const item of rawList) {
+      if (!item.stock_code) continue;
+      const stockCode = pad6(String(item.stock_code));
+      if (!targetMap.has(stockCode)) continue;
+
+      const row = {
         corp_code: String(item.corp_code ?? '').trim().padStart(8, '0'),
         corp_name: String(item.corp_name ?? '').trim(),
-        stock_code: pad6(String(item.stock_code)),
+        stock_code: stockCode,
         modify_date: String(item.modify_date ?? '').trim(),
         updated_at: new Date().toISOString(),
-      }));
+      };
+
+      const existing = dedupMap.get(stockCode);
+      if (!existing || row.modify_date > existing.modify_date) {
+        dedupMap.set(stockCode, row);
+      }
+    }
+
+    const upsertData = [...dedupMap.values()];
 
     console.log(`[DART-SYNC] Found ${upsertData.length} matching stocks in DART list.`);
 
     if (upsertData.length > 0) {
-      const { error } = await supabaseAdmin
+      // 기존 행이 다른 corp_code를 가진 경우 corp_code UNIQUE 제약과 충돌할 수 있으므로
+      // 대상 stock_code 행들을 먼저 삭제한 뒤 insert 한다. (sync 성격상 안전)
+      const stockCodes = upsertData.map((d) => d.stock_code);
+      const { error: deleteError } = await supabaseAdmin
         .from('dart_corp_codes')
-        .upsert(upsertData, { onConflict: 'corp_code' });
+        .delete()
+        .in('stock_code', stockCodes);
+
+      if (deleteError) {
+        throw new Error(`Supabase dart_corp_codes delete failed: ${deleteError.message}`);
+      }
+
+      const { error } = await supabaseAdmin.from('dart_corp_codes').insert(upsertData);
 
       if (error) {
-        throw new Error(`Supabase dart_corp_codes upsert failed: ${error.message}`);
+        throw new Error(`Supabase dart_corp_codes insert failed: ${error.message}`);
       }
     }
 
