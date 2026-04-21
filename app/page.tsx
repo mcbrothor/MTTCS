@@ -7,10 +7,15 @@ import MetricCards from '@/components/dashboard/MetricCards';
 import ReviewStatsDashboard from '@/components/dashboard/ReviewStatsDashboard';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import TradingViewAdvancedChart from '@/components/ui/TradingViewAdvancedChart';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
+import { Search } from 'lucide-react';
+import { toTradingViewSymbol } from '@/components/ui/TradingViewWidget';
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<'US' | 'KR'>('US');
+  const [chartSearchInput, setChartSearchInput] = useState('');
+  const [activeChartSymbol, setActiveChartSymbol] = useState('NASDAQ:AAPL');
   const {
     loading,
     error,
@@ -88,6 +93,32 @@ export default function DashboardPage() {
         sepaPassRate={sepaPassRate}
         market={market}
       />
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="text-xl font-bold text-white">Advanced Chart 검색</h2>
+          <div className="flex w-full max-w-sm items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 focus-within:border-emerald-500/50 focus-within:ring-1 focus-within:ring-emerald-500/50">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="종목 코드 입력 (예: TSLA, 005930)"
+              className="flex-1 bg-transparent text-sm text-white outline-none"
+              value={chartSearchInput}
+              onChange={(e) => setChartSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && chartSearchInput.trim()) {
+                  const val = chartSearchInput.trim().toUpperCase();
+                  const isKorean = /^\d{6}$/.test(val);
+                  setActiveChartSymbol(toTradingViewSymbol(val, isKorean ? 'KRX' : 'NASDAQ'));
+                }
+              }}
+            />
+          </div>
+        </div>
+        <div className="h-[600px] w-full overflow-hidden rounded-lg border border-slate-800">
+          <TradingViewAdvancedChart symbol={activeChartSymbol} />
+        </div>
+      </section>
 
       <EquityCurve data={equityCurve} />
 

@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { X, ExternalLink, TrendingUp } from 'lucide-react';
+import TradingViewAdvancedChart from './TradingViewAdvancedChart';
 
 // 거래소 코드를 TradingView 심볼 접두사로 변환
 // 왜: TradingView의 심볼 포맷은 "EXCHANGE:TICKER" 형태이며,
-//     KIS/Yahoo 거래소 코드와 매핑이 필요하다.
-function toTradingViewSymbol(ticker: string, exchange: string): string {
+export function toTradingViewSymbol(ticker: string, exchange: string): string {
   const upper = exchange.toUpperCase();
   // 한국 종목: 6자리 숫자 코드
   if (/^\d{6}$/.test(ticker)) {
@@ -79,15 +79,10 @@ function TradingViewModal({ ticker, exchange, onClose }: TradingViewModalProps) 
           </div>
         </div>
 
-        {/* TradingView iframe */}
-        <iframe
-          src={widgetUrl}
-          title={`${ticker} TradingView 차트`}
-          className="flex-1 border-0 bg-slate-950"
-          allowFullScreen
-          // 보안: allow-scripts만 허용 (외부 TradingView 도메인)
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        />
+        {/* TradingView Advanced Chart */}
+        <div className="flex-1 bg-slate-950">
+          <TradingViewAdvancedChart symbol={symbol} />
+        </div>
       </div>
     </div>
   );
