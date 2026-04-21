@@ -52,8 +52,8 @@ type SortKey = 'marketCap' | 'dualTier' | 'confidence' | 'rs' | 'pillar' | 'defa
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100 대형 성장주에서 CAN SLIM 주도주를 탐색합니다.' },
   SP500: { label: 'S&P 500', desc: 'S&P 500에서 펀더멘털과 기술적 분석을 결합한 주도주를 찾습니다.' },
-  KOSPI100: { label: 'KOSPI 상위 100', desc: 'KOSPI 시가총액 상위 100개 종목 CAN SLIM 스캔.' },
-  KOSDAQ100: { label: 'KOSDAQ 상위 100', desc: 'KOSDAQ 시가총액 상위 100개 종목 CAN SLIM 스캔.' },
+  KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시가총액 상위 200개 종목 CAN SLIM 스캔.' },
+  KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시가총액 상위 150개 종목 CAN SLIM 스캔.' },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -452,8 +452,18 @@ export default function CanslimScannerPage() {
               </td>
               <td className="px-3 py-4 text-right font-mono">
                 {r.rsRating !== null ? (
-                  <span className={r.rsRating >= 90 ? 'text-emerald-400 font-bold' : r.rsRating >= 80 ? 'text-slate-200 font-semibold' : 'text-slate-500'}>
-                    {r.rsRating}
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    <span className={r.rsRating >= 90 ? 'text-emerald-400 font-bold' : r.rsRating >= 80 ? 'text-slate-200 font-semibold' : 'text-slate-500'}>
+                      {r.rsRating}
+                    </span>
+                    {r.rsSource === 'BENCHMARK_PROXY' && (
+                      <span
+                        title="공식 유니버스 순위 기반 RS가 아닌, 벤치마크 대비 모멘텀으로 계산한 대체 점수입니다."
+                        className="text-[9px] font-bold text-amber-300 bg-amber-500/10 px-1 rounded border border-amber-500/30"
+                      >
+                        PROXY
+                      </span>
+                    )}
                   </span>
                 ) : '-'}
               </td>
@@ -542,9 +552,19 @@ export default function CanslimScannerPage() {
                 </span>
               </div>
               <div className="flex flex-col items-end">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-right">Relative Strength</span>
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest text-right">
+                  Relative Strength
+                  {r.rsSource === 'BENCHMARK_PROXY' && (
+                    <span
+                      title="공식 유니버스 순위 기반 RS가 아닌, 벤치마크 대비 모멘텀으로 계산한 대체 점수입니다."
+                      className="ml-1 text-[9px] font-bold text-amber-300 bg-amber-500/10 px-1 rounded border border-amber-500/30"
+                    >
+                      PROXY
+                    </span>
+                  )}
+                </span>
                 <span className={`font-mono text-base font-black ${
-                  (r.rsRating ?? 0) >= 90 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 
+                  (r.rsRating ?? 0) >= 90 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' :
                   (r.rsRating ?? 0) >= 80 ? 'text-white' : 'text-slate-500'
                 }`}>
                   {r.rsRating ?? '--'}

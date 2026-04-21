@@ -13,8 +13,9 @@ import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { fetchCanslimFundamentals } from '@/lib/finance/engines/canslim-data-fetcher';
 import { evaluateCanslim, determineDualScreenerTier } from '@/lib/finance/engines/canslim-engine';
 import { detectBasePattern } from '@/lib/finance/engines/base-pattern-engine';
-import { analyzeVcp } from '@/lib/finance/engines/vcp-engine';
-import { analyzeSepa, calculateMovingAverage } from '@/lib/finance/core/calculations';
+import { analyzeVcp } from '@/lib/finance/engines/vcp';
+import { analyzeSepa } from '@/lib/finance/core/sepa';
+import { calculateMovingAverage } from '@/lib/finance/core/moving-average';
 import { MACRO_CRITERIA } from '@/lib/finance/engines/canslim-criteria';
 import type {
   CanslimMacroMarketData,
@@ -294,6 +295,7 @@ export async function GET(request: Request) {
       vcpScore: vcpAnalysis.score,
       dualTier,
       rsRating: sepaEvidence.metrics.rsRating ?? sepaEvidence.metrics.benchmarkRelativeScore ?? null,
+      rsSource: sepaEvidence.metrics.rsSource ?? null,
       benchmarkRelativeScore: sepaEvidence.metrics.benchmarkRelativeScore ?? null,
       mansfieldRsFlag: sepaEvidence.metrics.mansfieldRsFlag ?? null,
       status: 'done',

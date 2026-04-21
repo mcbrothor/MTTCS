@@ -1,5 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// 서버 전용 가드: 브라우저 번들로 유입되면 즉시 실패시켜 Service Role Key
+// 유출을 방지합니다. (`server-only` npm 패키지 대체 구현)
+if (typeof window !== 'undefined') {
+  throw new Error(
+    '[MTN Security] lib/supabase/server.ts가 브라우저 번들에 포함되었습니다. ' +
+    '이 모듈은 서버(API Route/Server Component) 전용입니다. ' +
+    '클라이언트에서는 lib/supabase/client.ts를 사용하세요.'
+  );
+}
+
 // =============================================
 // Supabase 서버 클라이언트 (API Route 전용)
 // =============================================

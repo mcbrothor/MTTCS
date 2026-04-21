@@ -201,19 +201,19 @@ function toKoreaConstituents(ranking: ReturnType<typeof rankKoreaMarketCapItems>
   }));
 }
 
-async function fetchKospi100(): Promise<ScannerUniverseResponse> {
+async function fetchKospi200(): Promise<ScannerUniverseResponse> {
   const warnings: string[] = [];
   let ranking: KoreaRankingItem[] = [];
 
   try {
-    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 100);
+    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 200);
   } catch (error) {
     warnings.push(error instanceof Error ? `Naver Finance market-cap ranking failed: ${error.message}` : 'Naver Finance market-cap ranking failed.');
   }
 
-  if (ranking.length < 100) {
+  if (ranking.length < 200) {
     try {
-      const kisRanking = (await getKisKospiMarketCapRanking(100)).map((item: any) => ({
+      const kisRanking = (await getKisKospiMarketCapRanking(200)).map((item: any) => ({
         ...item,
         source: 'KIS KOSPI market-cap ranking fallback',
       }));
@@ -228,16 +228,16 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
     }
   }
 
-  const ranked = rankKoreaMarketCapItems(ranking, 100);
+  const ranked = rankKoreaMarketCapItems(ranking, 200);
   const items = toKoreaConstituents(ranked, 'KOSPI');
 
   if (items.length === 0) {
-    throw new Error('KOSPI market-cap top 100 could not be loaded.');
+    throw new Error('KOSPI market-cap top 200 could not be loaded.');
   }
 
   return {
-    universe: 'KOSPI100',
-    label: 'KOSPI 시가총액 상위 100',
+    universe: 'KOSPI200',
+    label: 'KOSPI 시가총액 상위 200',
     asOf: new Date().toISOString(),
     source: items.some((item) => item.priceSource.includes('KIS'))
       ? 'Naver Finance KOSPI market-cap ranking + KIS fallback'
@@ -248,23 +248,23 @@ async function fetchKospi100(): Promise<ScannerUniverseResponse> {
   };
 }
 
-async function fetchKosdaq100(): Promise<ScannerUniverseResponse> {
-  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 100);
-  const ranked = rankKoreaMarketCapItems(ranking, 100);
+async function fetchKosdaq150(): Promise<ScannerUniverseResponse> {
+  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 150);
+  const ranked = rankKoreaMarketCapItems(ranking, 150);
   const items = toKoreaConstituents(ranked, 'KOSDAQ');
 
   if (items.length === 0) {
-    throw new Error('KOSDAQ market-cap top 100 could not be loaded.');
+    throw new Error('KOSDAQ market-cap top 150 could not be loaded.');
   }
 
   return {
-    universe: 'KOSDAQ100',
-    label: 'KOSDAQ 시가총액 상위 100',
+    universe: 'KOSDAQ150',
+    label: 'KOSDAQ 시가총액 상위 150',
     asOf: new Date().toISOString(),
     source: 'Naver Finance KOSDAQ market-cap ranking',
     delayNote: 'KOSDAQ 시가총액 순위와 현재가는 Naver Finance 기준이며 지연될 수 있습니다.',
     items,
-    warnings: items.length < 100 ? [`Only ${items.length} KOSDAQ rows were parsed.`] : [],
+    warnings: items.length < 150 ? [`Only ${items.length} KOSDAQ rows were parsed.`] : [],
   };
 }
 
@@ -293,7 +293,7 @@ export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<S
 }export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
   if (universe === 'NASDAQ100') return fetchNasdaq100();
   if (universe === 'SP500') return fetchStockAnalysisSp500();
-  if (universe === 'KOSPI100') return fetchKospi100();
-  if (universe === 'KOSDAQ100') return fetchKosdaq100();
+  if (universe === 'KOSPI200') return fetchKospi200();
+  if (universe === 'KOSDAQ150') return fetchKosdaq150();
   throw new Error('Unsupported scanner universe.');
 }

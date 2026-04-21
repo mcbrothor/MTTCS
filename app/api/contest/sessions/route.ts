@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const market = parseMarket(body.market);
-    const universe = String(body.universe || (market === 'KR' ? 'KOSPI100' : 'NASDAQ100')) as ScannerUniverse;
+    const universe = String(body.universe || (market === 'KR' ? 'KOSPI200' : 'NASDAQ100')) as ScannerUniverse;
     const selectedAt = body.selected_at ? new Date(body.selected_at).toISOString() : new Date().toISOString();
     const payload = validateContestCandidates(body.candidates as ContestPromptCandidate[]);
     const marketContext = body.market_context && typeof body.market_context === 'object' ? body.market_context : null;
