@@ -253,6 +253,18 @@ export async function PATCH(request: Request) {
     if (body.emotion_note !== undefined) {
       update.emotion_note = body.emotion_note === null ? null : String(body.emotion_note);
     }
+
+    // 청산 사유 태그 — 복기 집계에 활용
+    const VALID_EXIT_REASONS = ['손절', '목표가도달', '시장RED전환', '기술적이탈', '조기청산', '기타'];
+    if (body.exit_reason !== undefined) {
+      if (body.exit_reason === null) {
+        update.exit_reason = null;
+      } else if (VALID_EXIT_REASONS.includes(String(body.exit_reason))) {
+        update.exit_reason = String(body.exit_reason);
+      } else {
+        return apiError(`exit_reason 값이 유효하지 않습니다.`, 'INVALID_EXIT_REASON', 400, { allowed: VALID_EXIT_REASONS });
+      }
+    }
     const setupTags = normalizeStringArray(body.setup_tags);
     if (setupTags !== undefined) update.setup_tags = setupTags;
     const mistakeTags = normalizeStringArray(body.mistake_tags);

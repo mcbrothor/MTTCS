@@ -6,6 +6,17 @@ export type TradeLegLabel = 'E1' | 'E2' | 'E3' | 'MANUAL';
 export type SetupTag = 'VCP' | 'SEPA' | '돌파' | '실적' | '추세' | '관심종목';
 export type MistakeTag = '추격매수' | '손절지연' | '비중초과' | '조기매도' | '계획미준수' | '진입지연';
 
+/**
+ * 청산 사유 태그 — 복기 통계에서 유형별 집계에 사용
+ * - 손절: 초기 손절선 도달
+ * - 목표가도달: R-Target 또는 이익 목표 달성
+ * - 시장RED전환: 마스터 필터 RED로 전환 후 방어적 청산
+ * - 기술적이탈: 지지선 붕괴, 이평선 하향 돌파 등
+ * - 조기청산: 계획 전 감정적 또는 선제적 청산
+ * - 기타: 위 카테고리 외 사유
+ */
+export type ExitReason = '손절' | '목표가도달' | '시장RED전환' | '기술적이탈' | '조기청산' | '기타';
+
 export interface Trade {
   id: string;
   created_at: string;
@@ -36,6 +47,7 @@ export interface Trade {
   trailing_stops: TrailingStops | null;
 
   exit_price: number | null;
+  exit_reason: ExitReason | null; // 청산 사유 태그 — 복기 집계용
   result_amount: number | null;
   final_discipline: number | null;
   emotion_note: string | null;
@@ -449,7 +461,7 @@ export interface MasterFilterMetricDetail {
 }
 
 export interface MasterFilterMetrics {
-  trend: MasterFilterMetricDetail; breadth: MasterFilterMetricDetail; liquidity: MasterFilterMetricDetail; volatility: MasterFilterMetricDetail; leadership: MasterFilterMetricDetail; ftd?: MasterFilterMetricDetail; distribution?: MasterFilterMetricDetail; newHighLow?: MasterFilterMetricDetail; above200d?: MasterFilterMetricDetail; sectorRotation?: MasterFilterMetricDetail; score: number; p3Score?: number; regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[]; meta: DataSourceMeta; mainPrice?: number; ma50?: number; ma150?: number; ma200?: number; mainHistory?: { date: string; close: number }[]; movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[]; vixHistory?: { date: string; close: number }[]; sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[]; ftdReason?: string | null; macroData?: Record<string, unknown>; updatedAt: string;
+  trend: MasterFilterMetricDetail; breadth: MasterFilterMetricDetail; liquidity: MasterFilterMetricDetail; volatility: MasterFilterMetricDetail; leadership: MasterFilterMetricDetail; ftd?: MasterFilterMetricDetail; distribution?: MasterFilterMetricDetail; newHighLow?: MasterFilterMetricDetail; above200d?: MasterFilterMetricDetail; sectorRotation?: MasterFilterMetricDetail; score: number; p3Score?: number; regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[]; meta: DataSourceMeta; mainPrice?: number; ma50?: number; ma150?: number; ma200?: number; mainHistory?: { date: string; close: number }[]; movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[]; vixHistory?: { date: string; close: number }[]; sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[]; ftdReason?: string | null; distributionDetails?: { date: string, close: number, volume: number, pctChange: number }[]; macroData?: Record<string, unknown>; updatedAt: string;
 }
 
 export interface MasterFilterResponse {

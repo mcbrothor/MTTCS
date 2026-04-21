@@ -125,14 +125,26 @@ function createMetric(input: MasterFilterMetricDetail): MasterFilterMetricDetail
   return input;
 }
 
-function calculateDistributionDays(data: { close: number; volume: number }[], lookback = 25) {
+function calculateDistributionDays(data: { date: string; close: number; volume: number }[], lookback = 25) {
   let count = 0;
+  const details: { date: string, close: number, volume: number, pctChange: number }[] = [];
+  
   for (let index = Math.max(1, data.length - lookback); index < data.length; index += 1) {
     const prev = data[index - 1];
     const curr = data[index];
-    if (curr.close < prev.close && curr.volume > prev.volume) count += 1;
+    const pctChange = ((curr.close - prev.close) / prev.close) * 100;
+    
+    if (curr.close < prev.close && curr.volume > prev.volume) {
+      count += 1;
+      details.push({
+        date: curr.date,
+        close: curr.close,
+        volume: curr.volume,
+        pctChange: Number(pctChange.toFixed(2)),
+      });
+    }
   }
-  return count;
+  return { count, details };
 }
 
 function detectFollowThroughDay(data: Pick<OHLCData, 'close' | 'high' | 'low' | 'volume'>[]) {
@@ -221,7 +233,8 @@ export async function GET(request: Request) {
     const ma150 = movingAverage(mainData, 150) || 0;
     const ma200 = movingAverage(mainData, 200) || 0;
     const currentVix = vixData.at(-1)?.close || 20;
-    const distributionDays = calculateDistributionDays(mainData);
+    const distributionInfo = calculateDistributionDays(mainData as { date: string, close: number, volume: number }[]);
+    const distributionDays = distributionInfo.count;
     const ftd = detectFollowThroughDay(mainData);
 
     const breadthRows = breadthSeries
@@ -429,6 +442,7 @@ export async function GET(request: Request) {
         vixHistory,
         sectorRows,
         ftdReason: ftd.reason,
+        distributionDetails: distributionInfo.details,
         macroData: { ...macroMap, leadingSectors, sectorRows, breadthRows, ftdReason: ftd.reason },
         regimeHistory: [
           { date: new Date().toISOString(), state: marketState, score: p3Score, reason: `P3 score ${p3Score}/100` },

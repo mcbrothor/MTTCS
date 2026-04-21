@@ -4,11 +4,14 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
+import TradingViewWidget from '@/components/ui/TradingViewWidget';
+import ExitRulesPanel from '@/components/plan/ExitRulesPanel';
+import StopEventsTimeline from '@/components/plan/StopEventsTimeline';
 import axios from 'axios';
-import type { Trade, TradeExecution } from '@/types';
+import type { Trade, TradeExecution, ExitReason } from '@/types';
 import { EditPanel, ExecutionsPanel, ReviewPanel, StrategyDetail, EditDraft, ExecutionDraft, ReviewDraft, currency, numberText, signedCurrency, toInput, toNumberOrNull, isKorean, getRiskPercent } from './panels';
 
-type DetailTab = 'plan' | 'executions' | 'review';
+type DetailTab = 'plan' | 'executions' | 'review' | 'rtarget' | 'stops';
 type SecurityNameMap = Record<string, string | null>;
 
 interface TradeHistoryTableProps {
@@ -367,6 +370,12 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
+                          {/* 차트 버튼 — TradingView iframe 팝업 */}
+                          <TradingViewWidget
+                            ticker={trade.ticker}
+                            exchange={isKorean(trade.ticker) ? 'KOSPI' : 'NAS'}
+                            variant="icon"
+                          />
                           <button
                             type="button"
                             onClick={() => handleAddToWatchlist(trade.ticker)}
@@ -387,11 +396,14 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                     </tr>
                     {isExpanded && (
                       <tr className="border-b border-slate-800 bg-slate-950/50">
-                        <td colSpan={9} className="px-4 py-5">
+                        <td colSpan={10} className="px-4 py-5">
                           <div className="mb-4 flex flex-wrap gap-2">
                             <TabButton active={activeTab === 'plan'} onClick={() => setTab(trade.id, 'plan')}>계획</TabButton>
                             <TabButton active={activeTab === 'executions'} onClick={() => setTab(trade.id, 'executions')}>체결</TabButton>
                             <TabButton active={activeTab === 'review'} onClick={() => setTab(trade.id, 'review')}>복기</TabButton>
+                            {/* 신규: R-Target과 Trailing Stop 탭 */}
+                            <TabButton active={activeTab === 'rtarget'} onClick={() => setTab(trade.id, 'rtarget')}>R-Target</TabButton>
+                            <TabButton active={activeTab === 'stops'} onClick={() => setTab(trade.id, 'stops')}>Stop 이력</TabButton>
                           </div>
                           {activeTab === 'plan' && (
                             isEditing && draft ? (
@@ -418,11 +430,27 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                             />
                           )}
                           {activeTab === 'review' && (
-                            <ReviewPanel
-                              trade={trade}
-                              busy={busyId === trade.id}
-                              onSave={(reviewDraft) => saveReview(trade, reviewDraft)}
-                            />
+                            <div className="space-y-4">
+                              {/* 청산 사유 드롭다운 — 복기 탭에 통합 */}
+                              <ExitReasonDropdown
+                                tradeId={trade.id}
+                                currentReason={trade.exit_reason}
+                                onUpdated={(reason) => replaceRow({ ...trade, exit_reason: reason })}
+                              />
+                              <ReviewPanel
+                                trade={trade}
+                                busy={busyId === trade.id}
+                                onSave={(reviewDraft) => saveReview(trade, reviewDraft)}
+                              />
+                            </div>
+                          )}
+                          {/* 신규: R-Target 패널 */}
+                          {activeTab === 'rtarget' && (
+                            <ExitRulesPanel tradeId={trade.id} />
+                          )}
+                          {/* 신규: Trailing Stop 이력 */}
+                          {activeTab === 'stops' && (
+                            <StopEventsTimeline tradeId={trade.id} initialStopPrice={trade.stoploss_price} />
                           )}
                         </td>
                       </tr>
@@ -479,3 +507,50 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
+// ===== 청산 사유 드롭다운 =====
+// 왜: 복기 탭에 청산 이유를 구조화된 드롭다운으로 기록해야
+//     나중에 유형별 승률·R 통계를 집계할 수 있다.
+const EXIT_REASONS: ExitReason[] = ['손절', '목표가도달', '시장RED전환', '기술적이탈', '조기청산', '기타'];
+
+function ExitReasonDropdown({
+  tradeId,
+  currentReason,
+  onUpdated,
+}: {
+  tradeId: string;
+  currentReason: ExitReason | null;
+  onUpdated: (reason: ExitReason | null) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (value: string) => {
+    const reason = value === '' ? null : (value as ExitReason);
+    setSaving(true);
+    try {
+      await axios.patch('/api/trades', { id: tradeId, exit_reason: reason });
+      onUpdated(reason);
+    } catch {
+      // 저장 실패 시 조용히 처리 (다음 저장 시 재시도 가능)
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2">
+      <span className="text-xs font-semibold text-slate-400 whitespace-nowrap">청산 사유</span>
+      <select
+        value={currentReason ?? ''}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={saving}
+        className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none disabled:opacity-50"
+      >
+        <option value="">— 선택 안 함 —</option>
+        {EXIT_REASONS.map((r) => (
+          <option key={r} value={r}>{r}</option>
+        ))}
+      </select>
+      {saving && <span className="text-xs text-slate-500">저장 중...</span>}
+    </div>
+  );
+}

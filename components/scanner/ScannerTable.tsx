@@ -1,5 +1,6 @@
 import { Check, Plus } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import { getVolumeSignalTier, type VolumeSignalTier } from '@/lib/scanner-recommendation';
 import type { ScannerResult, RecommendationTier } from '@/types';
 
@@ -107,17 +108,20 @@ export default function ScannerTable({
     <div className="overflow-hidden rounded-lg border border-slate-800">
       <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
         <colgroup>
-          <col className="w-[4%]" />
-          <col className="w-[17%]" />
+          <col className="w-[3%]" />
+          <col className="w-[13%]" />
+          <col className="w-[7%]" />
+          <col className="w-[7%]" />
+          <col className="w-[5%]" />
           <col className="w-[8%]" />
+          <col className="w-[5%]" />
           <col className="w-[8%]" />
           <col className="w-[7%]" />
           <col className="w-[9%]" />
           <col className="w-[6%]" />
-          <col className="w-[9%]" />
-          <col className="w-[9%]" />
-          <col className="w-[10%]" />
-          <col className="w-[7%]" />
+          {/* 새 컬럼: RS신고가, PP점수, 차트 */}
+          <col className="w-[6%]" />
+          <col className="w-[5%]" />
           <col className="w-[6%]" />
         </colgroup>
         <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
@@ -133,7 +137,10 @@ export default function ScannerTable({
             <th className="px-2 py-3 text-left">패턴</th>
             <th className="px-2 py-3 text-left">거래량</th>
             <th className="px-2 py-3 text-right">피벗</th>
-            <th className="px-2 py-3 text-center">후보</th>
+            {/* 신규: RS신고가·PP는 드릴다운 없이 테이블에서 바로 확인 */}
+            <th className="px-2 py-3 text-center" title="RS Line 신고가 여부">RS↑</th>
+            <th className="px-2 py-3 text-right" title="Pocket Pivot Score">PP</th>
+            <th className="px-2 py-3 text-center">차트/후보</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800 bg-slate-950/40">
@@ -174,7 +181,31 @@ export default function ScannerTable({
                 <td className="px-2 py-3 text-right font-mono text-slate-300">
                   {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
                 </td>
-                <td className="px-2 py-3 text-center">{selectionColumn(result)}</td>
+                {/* RS Line 신고가 — 이미 계산된 데이터를 테이블에 표시 */}
+                <td className="px-2 py-3 text-center">
+                  {result.rsLineNewHigh === true ? (
+                    <span title="RS Line 신고가" className="text-emerald-400 text-sm">✦</span>
+                  ) : result.rsLineNearHigh === true ? (
+                    <span title="RS Line 신고가 근접" className="text-amber-400 text-sm">△</span>
+                  ) : (
+                    <span className="text-slate-600">—</span>
+                  )}
+                </td>
+                {/* Pocket Pivot Score — 이미 계산된 데이터를 테이블에 표시 */}
+                <td className="px-2 py-3 text-right font-mono">
+                  {typeof result.pocketPivotScore === 'number' ? (
+                    <span className={result.pocketPivotScore >= 50 ? 'text-emerald-400' : 'text-slate-400'}>
+                      {result.pocketPivotScore}
+                    </span>
+                  ) : <span className="text-slate-600">—</span>}
+                </td>
+                {/* 차트 버튼 + 콘테스트 후보 선택 버튼 */}
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-center gap-1">
+                    <TradingViewWidget ticker={result.ticker} exchange={result.exchange ?? 'NAS'} variant="icon" />
+                    {selectionColumn(result)}
+                  </div>
+                </td>
               </tr>
             );
           })}

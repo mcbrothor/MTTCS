@@ -4,6 +4,7 @@ import { useState } from 'react';
 import DisciplineChart from '@/components/dashboard/DisciplineChart';
 import EquityCurve from '@/components/dashboard/EquityCurve';
 import MetricCards from '@/components/dashboard/MetricCards';
+import ReviewStatsDashboard from '@/components/dashboard/ReviewStatsDashboard';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
@@ -91,6 +92,8 @@ export default function DashboardPage() {
       <EquityCurve data={equityCurve} />
 
       <DisciplineChart highDiscipline={highDiscipline} lowDiscipline={lowDiscipline} />
+
+      <ReviewStatsDashboard trades={trades} />
 
       <section className="min-h-[560px]">
         <TradeHistoryTable trades={trades} limit={10} title={`${market === 'US' ? '미국' : '한국'} 주식 최근 매매`} />

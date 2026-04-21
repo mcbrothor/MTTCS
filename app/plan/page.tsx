@@ -8,6 +8,7 @@ import SepaAnalysis from '@/components/plan/SepaAnalysis';
 import VcpAnalysisPanel from '@/components/plan/VcpAnalysisPanel';
 import RiskCalculator from '@/components/plan/RiskCalculator';
 import ChecklistForm from '@/components/plan/ChecklistForm';
+import ScannerContextBanner from '@/components/plan/ScannerContextBanner';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useMarketData } from '@/hooks/useMarketData';
@@ -26,6 +27,19 @@ function PlanPageContent() {
   const searchParams = useSearchParams();
   const initialTicker = searchParams.get('ticker') || '';
   const initialExchange = searchParams.get('exchange') || 'NAS';
+
+  // 스캐너에서 전달받은 컨텍스트 데이터 — 계획서 수립 시 참고용
+  const scannerContext = {
+    ticker: initialTicker,
+    pivot: searchParams.get('pivot'),
+    entry: searchParams.get('entry'),
+    rs: searchParams.get('rs'),
+    vcpScore: searchParams.get('vcpScore'),
+    vcpGrade: searchParams.get('vcpGrade'),
+    rsNewHigh: searchParams.get('rsNewHigh'),
+    pivotDist: searchParams.get('pivotDist'),
+  };
+
   const { loading, error, analysis, fetchMarketData } = useMarketData();
   const [checklist, setChecklist] = useState<{
     chk_sepa: boolean;
@@ -102,6 +116,11 @@ function PlanPageContent() {
 
       <TickerInput onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={initialExchange} />
 
+      {/* 스캐너에서 넘어온 경우 컨텍스트 데이터 배너 표시 */}
+      {(scannerContext.pivot || scannerContext.rs) && (
+        <ScannerContextBanner {...scannerContext} />
+      )}
+
       {loading && (
         <div className="flex items-center justify-center gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-6 text-slate-300">
           <LoadingSpinner />
@@ -152,4 +171,3 @@ function PlanPageContent() {
     </div>
   );
 }
-

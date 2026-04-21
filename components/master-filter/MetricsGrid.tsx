@@ -170,6 +170,47 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
   );
 }
 
+function DistributionTable({ details }: { details: NonNullable<MasterFilterMetrics['distributionDetails']> }) {
+  if (!details || details.length === 0) return null;
+
+  return (
+    <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-slate-300">
+          <ShieldAlert className="h-4 w-4 text-rose-400" />
+          <p className="text-sm font-bold">기관 매도 (Distribution Days) 상세 내역</p>
+        </div>
+        <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">최근 25거래일 기준</span>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm text-slate-300">
+          <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
+            <tr>
+              <th className="py-2 pr-3">날짜</th>
+              <th className="py-2 pr-3 text-right">종가</th>
+              <th className="py-2 pr-3 text-right">등락률</th>
+              <th className="py-2 pr-3 text-right">거래량</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.slice().reverse().map((row, idx) => (
+              <tr key={idx} className="border-b border-slate-900 last:border-0 hover:bg-slate-900/50">
+                <td className="py-2 pr-3 font-mono text-slate-400">
+                  {new Date(row.date).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                </td>
+                <td className="py-2 pr-3 text-right font-mono">{row.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td className="py-2 pr-3 text-right font-mono text-rose-400">{row.pctChange}%</td>
+                <td className="py-2 pr-3 text-right font-mono text-slate-300">{row.volume.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function MetricsGrid() {
   const { data, isLoading } = useMarket();
 
@@ -244,6 +285,7 @@ export default function MetricsGrid() {
       </div>
 
       <SectorTable rows={metrics.sectorRows || []} />
+      <DistributionTable details={metrics.distributionDetails || []} />
 
       <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
         <div className="mb-3 flex items-center gap-2 text-slate-300">

@@ -354,7 +354,22 @@ export default function VcpDrilldownModal({
           {/* Action Footer */}
           <div className="flex flex-col gap-3 border-t border-slate-800 bg-slate-900/80 p-6 sm:flex-row">
             <Link
-              href={`/plan?ticker=${encodeURIComponent(result.ticker)}&exchange=${encodeURIComponent(result.exchange)}`}
+              href={(() => {
+                // 스캐너 → 계획서 데이터 자동 연결
+                // 왜: 스캐너에서 확인한 피벗가·RS·VCP점수를 계획서에 매번 다시 입력하는 비효율을 제거
+                const params = new URLSearchParams({
+                  ticker: result.ticker,
+                  exchange: result.exchange,
+                });
+                if (result.pivotPrice) params.set('pivot', String(result.pivotPrice));
+                if (result.recommendedEntry) params.set('entry', String(result.recommendedEntry));
+                if (result.rsRating) params.set('rs', String(result.rsRating));
+                if (result.vcpScore) params.set('vcpScore', String(result.vcpScore));
+                if (result.vcpGrade) params.set('vcpGrade', result.vcpGrade);
+                if (result.rsLineNewHigh) params.set('rsNewHigh', '1');
+                if (result.distanceToPivotPct) params.set('pivotDist', String(result.distanceToPivotPct));
+                return `/plan?${params.toString()}`;
+              })()}
               className="flex-1"
             >
               <Button className="w-full gap-2 py-6 text-base font-bold">

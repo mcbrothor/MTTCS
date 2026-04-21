@@ -64,6 +64,8 @@ export function useScanner() {
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [viewMode, setViewMode] = useState<ViewMode>('web');
+  const [customFilters, setCustomFilters] = useState<{ rsMin: number; vcpMin: number; distMax: number }>({ rsMin: 0, vcpMin: 0, distMax: 999 });
+  const [showCustomFilter, setShowCustomFilter] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectedResult, setSelectedResult] = useState<ScannerResult | null>(null);
   const {
@@ -325,6 +327,13 @@ export function useScanner() {
     else if (filterKey === 'rs90') list = list.filter((row) => (row.rsRating || 0) >= 90);
     else if (filterKey === 'error') list = list.filter((row) => row.status === 'error');
 
+    // 커스텀 필터 적용
+    if (showCustomFilter) {
+      if (customFilters.rsMin > 0) list = list.filter(row => (row.rsRating || 0) >= customFilters.rsMin);
+      if (customFilters.vcpMin > 0) list = list.filter(row => (row.vcpScore || 0) >= customFilters.vcpMin);
+      if (customFilters.distMax < 100) list = list.filter(row => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= customFilters.distMax);
+    }
+
     list.sort((a, b) => {
       if (sortKey === 'recommendation') {
         return recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier) || (b.vcpScore || 0) - (a.vcpScore || 0);
@@ -345,7 +354,7 @@ export function useScanner() {
     });
 
     return list;
-  }, [results, filterKey, sortKey, macroTrend, showAllMacroResults]);
+  }, [results, filterKey, sortKey, macroTrend, showAllMacroResults, showCustomFilter, customFilters]);
 
   const stats = useMemo(() => ({
     recommended: results.filter((item) => item.recommendationTier === 'Recommended').length,
@@ -376,5 +385,6 @@ export function useScanner() {
     showAllMacroResults, setShowAllMacroResults, handleUniverseChange,
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults,
     stats, dataSourceSummary, isSavingWatchlist,
+    customFilters, setCustomFilters, showCustomFilter, setShowCustomFilter
   };
 }

@@ -21,7 +21,8 @@ export default function ScannerPage() {
     selectedResult, setSelectedResult, selectedTickers, clearSelection, macroTrend,
     showAllMacroResults, setShowAllMacroResults, handleUniverseChange,
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults,
-    stats, dataSourceSummary, isSavingWatchlist, results
+    stats, dataSourceSummary, isSavingWatchlist, results,
+    customFilters, setCustomFilters, showCustomFilter, setShowCustomFilter
   } = useScanner();
   return (
     <div className="container mx-auto space-y-6 px-4 py-8">
@@ -136,6 +137,14 @@ export default function ScannerPage() {
               {filter.label}
             </button>
           ))}
+          <button
+            onClick={() => setShowCustomFilter(!showCustomFilter)}
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              showCustomFilter ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            상세 필터
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -154,6 +163,38 @@ export default function ScannerPage() {
           )}
         </div>
       </div>
+
+      {showCustomFilter && (
+        <div className="grid grid-cols-1 gap-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 sm:grid-cols-3">
+          <div>
+            <label className="mb-2 block text-xs font-bold text-slate-400">최소 RS Rating ({customFilters.rsMin}+)</label>
+            <input 
+              type="range" min="0" max="99" 
+              value={customFilters.rsMin} 
+              onChange={(e) => setCustomFilters(prev => ({ ...prev, rsMin: Number(e.target.value) }))}
+              className="w-full accent-emerald-500" 
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-bold text-slate-400">최소 VCP 점수 ({customFilters.vcpMin}+)</label>
+            <input 
+              type="range" min="0" max="100" 
+              value={customFilters.vcpMin} 
+              onChange={(e) => setCustomFilters(prev => ({ ...prev, vcpMin: Number(e.target.value) }))}
+              className="w-full accent-emerald-500" 
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-bold text-slate-400">피벗 최대 이격 ({customFilters.distMax}%)</label>
+            <input 
+              type="range" min="1" max="50" 
+              value={customFilters.distMax > 50 ? 50 : customFilters.distMax} 
+              onChange={(e) => setCustomFilters(prev => ({ ...prev, distMax: Number(e.target.value) }))}
+              className="w-full accent-emerald-500" 
+            />
+          </div>
+        </div>
+      )}
 
       {viewMode === 'web' ? (
         <ScannerTable 
