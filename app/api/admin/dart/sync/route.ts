@@ -106,16 +106,24 @@ export async function GET(_req: Request) {
     console.log(`[DART-SYNC] Found ${upsertData.length} matching stocks in DART list.`);
 
     if (upsertData.length > 0) {
-      // 기존 행이 다른 corp_code를 가진 경우 corp_code UNIQUE 제약과 충돌할 수 있으므로
-      // 대상 stock_code 행들을 먼저 삭제한 뒤 insert 한다. (sync 성격상 안전)
+      // stock_code와 corp_code 모두 UNIQUE 제약이 있으므로, 양쪽으로 삭제 후 insert
       const stockCodes = upsertData.map((d) => d.stock_code);
-      const { error: deleteError } = await supabaseAdmin
+      const corpCodes = upsertData.map((d) => d.corp_code);
+
+      const { error: deleteByStockError } = await supabaseAdmin
         .from('dart_corp_codes')
         .delete()
         .in('stock_code', stockCodes);
+      if (deleteByStockError) {
+        throw new Error(`Supabase dart_corp_codes delete(stock_code) failed: ${deleteByStockError.message}`);
+      }
 
-      if (deleteError) {
-        throw new Error(`Supabase dart_corp_codes delete failed: ${deleteError.message}`);
+      const { error: deleteByCorpError } = await supabaseAdmin
+        .from('dart_corp_codes')
+        .delete()
+        .in('corp_code', corpCodes);
+      if (deleteByCorpError) {
+        throw new Error(`Supabase dart_corp_codes delete(corp_code) failed: ${deleteByCorpError.message}`);
       }
 
       const { error } = await supabaseAdmin.from('dart_corp_codes').insert(upsertData);
