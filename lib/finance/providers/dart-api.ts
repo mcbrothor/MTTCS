@@ -39,9 +39,10 @@ export interface DartFinancialData {
     bsns_year: string;
     corp_code: string;
     stock_code: string;
-    account_nm: string;   // 계정과목명 (실제 API 필드명)
+    account_nm: string;
     account_id: string;
-    sj_div: string;
+    fs_div: string;      // CFS: 연결재무제표, OFS: 재무제표
+    sj_div: string;      // BS: 재무상태표, IS: 손익계산서, CF: 현금흐름표
     sj_nm: string;
     thstrm_amount: string; // 당기금액
     frmtrm_amount: string; // 전기금액
@@ -57,6 +58,9 @@ export interface FundamentalMetrics {
   assets?: number;
   equity?: number;
   debt?: number;
+  // 전기 데이터 (YoY 성장률 계산용, 별도 API 호출 불필요)
+  priorRevenue?: number;
+  priorNetIncome?: number;
   date: string;
 }
 
@@ -114,7 +118,8 @@ export async function getDartCompanyInfo(corpCode: string): Promise<DartCompanyI
 }
 
 /**
- * DART 단일회사 주요계정(연결/개별)을 조회합니다.
+ * DART 단일회사 주요계정을 조회합니다. (fnlttSinglAcnt: 주요계정 전용 엔드포인트)
+ * frmtrm_amount(전기)를 함께 반환하므로 YoY 계산에 추가 API 호출 불필요.
  */
 export async function getDartFinancialData(
   corpCode: string,
@@ -126,49 +131,53 @@ export async function getDartFinancialData(
   if (!apiKey) return null;
 
   try {
-    const url = `${DART_API_BASE_URL}/fnlttSinglAcntAll.json?crtfc_key=${apiKey}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${reprtCode}&fs_div=${fsDiv}`;
+    const url = `${DART_API_BASE_URL}/fnlttSinglAcnt.json?crtfc_key=${apiKey}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${reprtCode}&fs_div=${fsDiv}`;
     const response = await axios.get(url);
     const data = response.data as DartFinancialData;
 
     if (data.status !== '000' || !data.list) {
-      // 000 외에는 데이터 없음 (예: 013 - 조회된 데이터가 없음)
       return null;
     }
+
+    // fs_div 필터링 (API가 CFS+OFS 혼합 반환하는 경우 대비)
+    // fsDiv=CFS 요청 시 OFS도 포함되어 반환되므로 명시적 필터 필요
+    const filtered = data.list.filter((item) => item.fs_div === fsDiv);
+    // CFS 없으면 OFS로 폴백 (소규모 기업)
+    const items = filtered.length > 0 ? filtered : data.list;
+
+    const parseAmount = (s: string) => {
+      const n = parseInt((s || '').replace(/,/g, ''), 10);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     const metrics: FundamentalMetrics = {
       date: `${year}-${reprtCode === '11011' ? '12-31' : reprtCode === '11013' ? '03-31' : reprtCode === '11012' ? '06-30' : '09-30'}`
     };
 
-    // 주요 계정 추출 (매출액, 영업이익, 당기순이익, 자산, 부채, 자본)
-    // DART는 기업마다 계정명이 조금씩 다를 수 있으므로 포함(includes) 방식으로 체크
-    for (const item of data.list) {
+    // 주요계정 엔드포인트는 계정명이 정형화되어 있으므로 정확히 매칭
+    for (const item of items) {
       const nm = item.account_nm.replace(/\s/g, '');
-      const amount = parseInt(item.thstrm_amount || '0', 10);
+      const cur = parseAmount(item.thstrm_amount);
+      const prior = parseAmount(item.frmtrm_amount);
 
-      // 매출액 (금융업은 영업수익)
-      if (nm.includes('매출액') || nm === '영업수익') {
-        metrics.revenue = amount;
-      } 
-      // 영업이익
-      else if (nm.includes('영업이익')) {
-        metrics.operatingIncome = amount;
-      } 
-      // 당기순이익 (분기/반기순이익 포함)
-      else if (nm.includes('당기순이익') || nm.includes('분기순이익') || nm.includes('반기순이익')) {
-        // '연결'이 붙은 항목 우선순위는 fsDiv에서 이미 처리됨 (CFS/OFS)
-        metrics.netIncome = amount;
-      }
-      // 자본 (ROE 계산용)
-      else if (nm === '자본총계' || nm === '소유주지분' || nm === '자본') {
-        metrics.equity = amount;
-      }
-      // 부채 (부채비율 계산용)
-      else if (nm === '부채총계' || nm === '부채') {
-        metrics.debt = amount;
-      }
-      // 자산
-      else if (nm === '자산총계' || nm === '자산') {
-        metrics.assets = amount;
+      if (nm === '매출액' || nm === '영업수익') {
+        if (metrics.revenue === undefined) {
+          metrics.revenue = cur;
+          metrics.priorRevenue = prior;
+        }
+      } else if (nm === '영업이익' || nm === '영업이익(손실)') {
+        if (metrics.operatingIncome === undefined) metrics.operatingIncome = cur;
+      } else if (nm === '당기순이익' || nm === '당기순이익(손실)' || nm === '분기순이익' || nm === '반기순이익') {
+        if (metrics.netIncome === undefined) {
+          metrics.netIncome = cur;
+          metrics.priorNetIncome = prior;
+        }
+      } else if (nm === '자본총계') {
+        if (metrics.equity === undefined) metrics.equity = cur;
+      } else if (nm === '부채총계') {
+        if (metrics.debt === undefined) metrics.debt = cur;
+      } else if (nm === '자산총계') {
+        if (metrics.assets === undefined) metrics.assets = cur;
       }
     }
 

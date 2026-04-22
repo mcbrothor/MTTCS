@@ -116,38 +116,27 @@ async function augmentWithDart(
     checkPeriods.push({ year: currentYear - 1, code: '11013' });
 
     let latest: FundamentalMetrics | null = null;
-    let yearAgo: FundamentalMetrics | null = null;
 
     for (const p of checkPeriods) {
-      // 1. 연결재무제표(CFS) 먼저 시도
+      // CFS 먼저, 없으면 OFS (getDartFinancialData 내부에서 fs_div 필터 처리)
       let m = await getDartFinancialData(corpCode, String(p.year), p.code, 'CFS');
-      
-      // 2. 연결이 없으면 개별재무제표(OFS) 시도
       if (!m || (!m.netIncome && !m.revenue)) {
         m = await getDartFinancialData(corpCode, String(p.year), p.code, 'OFS');
       }
-
-      if (m && m.netIncome !== undefined) {
+      if (m && (m.netIncome !== undefined || m.revenue !== undefined)) {
         latest = m;
-        // yearAgo도 같은 fsDiv로 시도해야 공정한 비교가 됨
-        const fsDiv = (m as any).fs_div === 'OFS' ? 'OFS' : 'CFS';
-        yearAgo = await getDartFinancialData(corpCode, String(p.year - 1), p.code, fsDiv as any);
-        
-        // yearAgo도 반대 케이스 시도
-        if (!yearAgo || (!yearAgo.netIncome && !yearAgo.revenue)) {
-           yearAgo = await getDartFinancialData(corpCode, String(p.year - 1), p.code, fsDiv === 'CFS' ? 'OFS' : 'CFS');
-        }
         break;
       }
     }
 
     if (latest) {
-      const epsGrowth = (latest && yearAgo && yearAgo.netIncome) 
-        ? Number((((latest.netIncome! - yearAgo.netIncome) / Math.abs(yearAgo.netIncome)) * 100).toFixed(2)) 
+      // frmtrm_amount(전기)를 활용하므로 별도 yearAgo API 호출 불필요
+      const epsGrowth = (latest.netIncome !== undefined && latest.priorNetIncome)
+        ? Number((((latest.netIncome - latest.priorNetIncome) / Math.abs(latest.priorNetIncome)) * 100).toFixed(2))
         : null;
-      
-      const revenueGrowth = (latest && yearAgo && yearAgo.revenue) 
-        ? Number((((latest.revenue! - yearAgo.revenue) / Math.abs(yearAgo.revenue)) * 100).toFixed(2)) 
+
+      const revenueGrowth = (latest.revenue !== undefined && latest.priorRevenue)
+        ? Number((((latest.revenue - latest.priorRevenue) / Math.abs(latest.priorRevenue)) * 100).toFixed(2))
         : null;
 
       // ROE 계산: (당기순이익 / 자본) * 100
