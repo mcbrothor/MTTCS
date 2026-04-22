@@ -288,8 +288,29 @@ export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<S
     return Array.from(byTicker.values());
   }
 
-  const sp500 = await fetchStockAnalysisSp500();
-  return sp500.items.map((item, index) => ({ ...item, rank: index + 1 }));
+  // S&P 500 + NASDAQ 100 합산 (중복 ticker는 S&P 500 우선)
+  const [sp500Result, nasdaq100Result] = await Promise.allSettled([
+    fetchStockAnalysisSp500(),
+    fetchNasdaq100(),
+  ]);
+
+  const byTicker = new Map<string, ScannerConstituent>();
+
+  if (sp500Result.status === 'fulfilled') {
+    for (const item of sp500Result.value.items) {
+      byTicker.set(item.ticker, item);
+    }
+  }
+
+  if (nasdaq100Result.status === 'fulfilled') {
+    for (const item of nasdaq100Result.value.items) {
+      if (!byTicker.has(item.ticker)) {
+        byTicker.set(item.ticker, item);
+      }
+    }
+  }
+
+  return Array.from(byTicker.values()).map((item, index) => ({ ...item, rank: index + 1 }));
 }export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
   if (universe === 'NASDAQ100') return fetchNasdaq100();
   if (universe === 'SP500') return fetchStockAnalysisSp500();
