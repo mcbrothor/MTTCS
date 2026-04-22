@@ -26,13 +26,24 @@ interface CacheResult {
   deleted?: number;
 }
 
-interface UsSyncResult {
+interface UsBatchResult {
   success: boolean;
-  message?: string;
   error?: string;
-  target_count?: number;
-  filled?: number;
-  failed?: number;
+  total_count: number;
+  offset: number;
+  processed: number;
+  filled: number;
+  failed: number;
+  has_more: boolean;
+}
+
+interface UsSyncProgress {
+  totalCount: number;
+  processedCount: number;
+  filled: number;
+  failed: number;
+  batchIndex: number;
+  totalBatches: number;
 }
 
 interface UsCacheStatus {
@@ -60,7 +71,9 @@ export default function AdminPage() {
   const [cacheResult, setCacheResult] = useState<CacheResult | null>(null);
 
   const [usSyncing, setUsSyncing] = useState(false);
-  const [usSyncResult, setUsSyncResult] = useState<UsSyncResult | null>(null);
+  const [usSyncProgress, setUsSyncProgress] = useState<UsSyncProgress | null>(null);
+  const [usSyncDone, setUsSyncDone] = useState<{ filled: number; failed: number; total: number } | null>(null);
+  const [usSyncError, setUsSyncError] = useState<string | null>(null);
   const [usCacheStatus, setUsCacheStatus] = useState<UsCacheStatus | null>(null);
   const [usCacheLoading, setUsCacheLoading] = useState(false);
 
@@ -113,17 +126,58 @@ export default function AdminPage() {
   }
 
   async function handleUsSync() {
+    const BATCH_LIMIT = 30;
     setUsSyncing(true);
-    setUsSyncResult(null);
+    setUsSyncProgress(null);
+    setUsSyncDone(null);
+    setUsSyncError(null);
+
+    let offset = 0;
+    let totalCount = 0;
+    let totalFilled = 0;
+    let totalFailed = 0;
+    let batchIndex = 0;
+    let errorMsg: string | null = null;
+
     try {
-      const res = await fetch('/api/admin/us/sync');
-      const data = await res.json() as UsSyncResult;
-      setUsSyncResult(data);
-      if (data.success) await fetchUsCacheStatus();
+      while (true) {
+        const res = await fetch(`/api/admin/us/sync?offset=${offset}&limit=${BATCH_LIMIT}`);
+        const data = await res.json() as UsBatchResult;
+
+        if (!data.success) {
+          errorMsg = data.error ?? '알 수 없는 오류가 발생했습니다.';
+          setUsSyncError(errorMsg);
+          break;
+        }
+
+        totalCount = data.total_count;
+        totalFilled += data.filled;
+        totalFailed += data.failed;
+        batchIndex++;
+        offset += BATCH_LIMIT;
+
+        const totalBatches = Math.ceil(totalCount / BATCH_LIMIT);
+        setUsSyncProgress({
+          totalCount,
+          processedCount: Math.min(offset, totalCount),
+          filled: totalFilled,
+          failed: totalFailed,
+          batchIndex,
+          totalBatches,
+        });
+
+        if (!data.has_more) break;
+      }
+
+      if (!errorMsg) {
+        setUsSyncDone({ filled: totalFilled, failed: totalFailed, total: totalCount });
+        await fetchUsCacheStatus();
+      }
     } catch {
-      setUsSyncResult({ success: false, error: '네트워크 오류가 발생했습니다.' });
+      setUsSyncError('네트워크 오류가 발생했습니다.');
     } finally {
       setUsSyncing(false);
+      setUsSyncProgress(null);
     }
   }
 
@@ -307,54 +361,66 @@ export default function AdminPage() {
           className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${usSyncing ? 'animate-spin' : ''}`} />
-          {usSyncing ? '캐시 구축 중... (수 분 소요)' : 'S&P 500 캐시 구축'}
+          {usSyncing ? '캐시 구축 중...' : 'S&P 500 캐시 구축'}
         </button>
 
-        {usSyncing && (
-          <p className="text-xs text-slate-500">
-            500개 종목 × Yahoo + EDGAR 조회 중입니다. 완료까지 2~5분 소요될 수 있습니다.
-          </p>
+        {/* 진행 상황 */}
+        {usSyncing && usSyncProgress && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>
+                배치 {usSyncProgress.batchIndex} / {usSyncProgress.totalBatches}
+              </span>
+              <span>
+                {usSyncProgress.processedCount} / {usSyncProgress.totalCount}개
+              </span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-700">
+              <div
+                className="h-1.5 rounded-full bg-violet-500 transition-all duration-300"
+                style={{
+                  width: `${Math.round((usSyncProgress.processedCount / usSyncProgress.totalCount) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              성공 {usSyncProgress.filled}개 · 실패 {usSyncProgress.failed}개
+            </p>
+          </div>
         )}
 
-        {usSyncResult && (
-          <div
-            className={`rounded-lg p-4 text-sm ${
-              usSyncResult.success
-                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                : 'bg-red-500/10 border border-red-500/30 text-red-300'
-            }`}
-          >
+        {/* 완료 결과 */}
+        {usSyncDone && (
+          <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-4 text-sm text-emerald-300">
             <div className="flex items-center gap-2 font-semibold">
-              {usSyncResult.success ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4" /> 캐시 구축 완료
-                </>
-              ) : (
-                <>
-                  <X className="h-4 w-4" /> 실패
-                </>
-              )}
+              <CheckCircle2 className="h-4 w-4" /> 캐시 구축 완료
             </div>
-            {usSyncResult.success && (
-              <ul className="mt-2 space-y-1 text-slate-300">
+            <ul className="mt-2 space-y-1 text-slate-300">
+              <li>
+                전체:{' '}
+                <span className="font-semibold text-white">{usSyncDone.total}개</span>
+              </li>
+              <li>
+                캐시 성공:{' '}
+                <span className="font-bold text-emerald-400">{usSyncDone.filled}개</span>
+              </li>
+              {usSyncDone.failed > 0 && (
                 <li>
-                  대상:{' '}
-                  <span className="font-semibold text-white">{usSyncResult.target_count ?? '—'}개</span>
+                  실패:{' '}
+                  <span className="text-slate-500">{usSyncDone.failed}개</span>
                 </li>
-                <li>
-                  캐시 성공:{' '}
-                  <span className="font-bold text-emerald-400">{usSyncResult.filled ?? 0}개</span>
-                </li>
-                {(usSyncResult.failed ?? 0) > 0 && (
-                  <li>
-                    실패:{' '}
-                    <span className="text-slate-500">{usSyncResult.failed}개</span>
-                  </li>
-                )}
-                <li className="pt-1 text-slate-400">{usSyncResult.message}</li>
-              </ul>
-            )}
-            {usSyncResult.error && <p className="mt-1">{usSyncResult.error}</p>}
+              )}
+            </ul>
+          </div>
+        )}
+
+        {/* 오류 */}
+        {usSyncError && (
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-4 text-sm text-red-300">
+            <div className="flex items-center gap-2 font-semibold">
+              <X className="h-4 w-4" /> 실패
+            </div>
+            <p className="mt-1">{usSyncError}</p>
           </div>
         )}
       </section>
