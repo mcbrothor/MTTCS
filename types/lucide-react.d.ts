@@ -14,6 +14,8 @@ declare module 'lucide-react' {
   export const AlertTriangle: LucideIcon;
   export const ArrowUpRight: LucideIcon;
   export const ChevronDown: LucideIcon;
+  export const ChevronUp: LucideIcon;
+  export const ChevronUpIcon: LucideIcon;
   export const CalendarDays: LucideIcon;
   export const Check: LucideIcon;
   export const CheckCircle2: LucideIcon;
