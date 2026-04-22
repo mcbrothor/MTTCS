@@ -35,19 +35,18 @@ export interface DartFinancialData {
   message: string;
   list?: {
     rcept_no: string;
-    reprt_code: string; // 11013: 1분기, 11012: 반기, 11014: 3분기, 11011: 사업보고서
+    reprt_code: string;
     bsns_year: string;
     corp_code: string;
     stock_code: string;
-    nm_account: string;   // 계정과목명 (매출액, 영업이익, 당기순이익 등)
-    nm_account_kr: string;
-    fs_div: string;      // CFS: 연결재무제표, OFS: 재무제표
-    fs_nm: string;
-    active_nm: string;
-    amount: string;      // 금액 (당기)
+    account_nm: string;   // 계정과목명 (실제 API 필드명)
+    account_id: string;
+    sj_div: string;
+    sj_nm: string;
     thstrm_amount: string; // 당기금액
     frmtrm_amount: string; // 전기금액
     bfefrmtrm_amount: string; // 전전기금액
+    currency: string;
   }[];
 }
 
@@ -127,7 +126,7 @@ export async function getDartFinancialData(
   if (!apiKey) return null;
 
   try {
-    const url = `${DART_API_BASE_URL}/fnlttSinglAcctAll.json?crtfc_key=${apiKey}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${reprtCode}&fs_div=${fsDiv}`;
+    const url = `${DART_API_BASE_URL}/fnlttSinglAcntAll.json?crtfc_key=${apiKey}&corp_code=${corpCode}&bsns_year=${year}&reprt_code=${reprtCode}&fs_div=${fsDiv}`;
     const response = await axios.get(url);
     const data = response.data as DartFinancialData;
 
@@ -143,7 +142,7 @@ export async function getDartFinancialData(
     // 주요 계정 추출 (매출액, 영업이익, 당기순이익, 자산, 부채, 자본)
     // DART는 기업마다 계정명이 조금씩 다를 수 있으므로 포함(includes) 방식으로 체크
     for (const item of data.list) {
-      const nm = item.nm_account.replace(/\s/g, '');
+      const nm = item.account_nm.replace(/\s/g, '');
       const amount = parseInt(item.thstrm_amount || '0', 10);
 
       // 매출액 (금융업은 영업수익)
