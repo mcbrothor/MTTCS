@@ -1,47 +1,26 @@
 'use client';
 
-import { useState } from 'react';
 import InsightLog from '@/components/master-filter/InsightLog';
 import MetricsGrid from '@/components/master-filter/MetricsGrid';
 import StatusCenter from '@/components/master-filter/StatusCenter';
-import MacroView from '@/components/master-filter/MacroView';
 import { useMarket } from '@/contexts/MarketContext';
 
 export default function MasterFilterPage() {
   const { market, setMarket, data } = useMarket();
-  const [activeTab, setActiveTab] = useState<'macro' | 'master'>('macro');
   const updatedAt = data?.metrics.updatedAt || data?.metrics.meta.asOf;
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Sub-tabs */}
-      <div className="flex items-stretch border-b border-[var(--border)] mb-6">
-        <button 
-          onClick={() => setActiveTab('macro')} 
-          className={`pb-2 px-4 text-xs font-bold cursor-pointer transition-colors ${activeTab === 'macro' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'border-b-2 border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-        >
-          매크로
-        </button>
-        <button 
-          onClick={() => setActiveTab('master')} 
-          className={`pb-2 px-4 text-xs font-bold cursor-pointer transition-colors ${activeTab === 'master' ? 'border-b-2 border-emerald-500 text-emerald-400' : 'border-b-2 border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-        >
-          마스터필터
-        </button>
-      </div>
-
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-6">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-            STEP 01 · 시장 분석 {activeTab === 'macro' ? '/ 매크로' : '/ 마스터 필터'}
+            STEP 01 · 시장 분석 / 마스터 필터
           </p>
           <h1 className="text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em] text-[var(--text-primary)]">
-            {activeTab === 'macro' ? '매크로 분석' : '마스터 필터'}
+            마스터 필터
           </h1>
           <p className="mt-2 max-w-[580px] text-xs leading-[1.6] text-[var(--text-secondary)]">
-            {activeTab === 'macro' 
-              ? '글로벌 자금 흐름과 리스크 선호도를 6개 컴포넌트로 점수화합니다. 스캔 전 반드시 확인하세요.'
-              : 'FTD, 분산일, 내부 강도, 200일선 참여율 등 여러 지표를 조합하여 시장 기류를 점수화합니다. GREEN 구간이 아니면 신규 진입을 자제하거나 비중을 줄이는 것이 원칙입니다.'}
+            FTD, 분산일, 내부 강도, 200일선 참여율 등 여러 지표를 조합하여 시장 기류를 점수화합니다. GREEN 구간이 아니면 신규 진입을 자제하거나 비중을 줄이는 것이 원칙입니다.
           </p>
         </div>
 
@@ -74,39 +53,37 @@ export default function MasterFilterPage() {
         </div>
       </header>
 
-      {activeTab === 'macro' ? (
-        <MacroView />
-      ) : (
-        <div className="flex flex-col gap-6 lg:flex-row">
-          {/* Left Sidebar: Status, Log, Guidelines */}
-          <div className="flex flex-col gap-6 lg:w-[320px] xl:w-[360px] shrink-0">
-            <StatusCenter />
-            <InsightLog />
-            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
-              <h3 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
-              <ul className="space-y-3 text-sm text-[var(--text-secondary)]">
-                <li className="flex gap-2">
-                  <span className="font-semibold text-emerald-300">GREEN:</span>
-                  공격적 진입과 후보 확장에 가장 우호적인 구간입니다.
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-amber-300">YELLOW:</span>
-                  신규 진입 비중을 줄이고 리스크 관리를 우선합니다.
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-semibold text-rose-300">RED:</span>
-                  신규 매수보다 현금 방어와 기존 포지션 정리가 우선입니다.
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Right Content: Metrics Grid */}
-          <div className="flex-1 min-w-0">
-            <MetricsGrid />
+      <div className="flex flex-col gap-6 lg:flex-row">
+        {/* Left Sidebar: Status, Log, Guidelines */}
+        <div className="flex flex-col gap-6 lg:w-[320px] xl:w-[360px] shrink-0">
+          <StatusCenter />
+          <InsightLog />
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
+            <h3 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
+            <ul className="space-y-3 text-sm text-[var(--text-secondary)]">
+              <li className="flex gap-2">
+                <span className="font-semibold text-emerald-300">GREEN:</span>
+                공격적 진입과 후보 확장에 가장 우호적인 구간입니다.
+              </li>
+              <li className="flex gap-2">
+                <span className="font-semibold text-amber-300">YELLOW:</span>
+                신규 진입 비중을 줄이고 리스크 관리를 우선합니다.
+              </li>
+              <li className="flex gap-2">
+                <span className="font-semibold text-rose-300">RED:</span>
+                신규 매수보다 현금 방어와 기존 포지션 정리가 우선입니다.
+              </li>
+            </ul>
           </div>
         </div>
-      )}
+
+        {/* Right Content: Metrics Grid */}
+        <div className="flex-1 min-w-0">
+          <MetricsGrid />
+        </div>
+      </div>
     </div>
+  );
+}
   );
 }

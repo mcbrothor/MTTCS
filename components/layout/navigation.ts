@@ -28,11 +28,11 @@ export const FLOW_STEPS: FlowStep[] = [
     step: '01',
     label: '시장 분석',
     sub: '진입 조건 확인',
-    href: '/macro',
-    matchers: ['/macro', '/master-filter'],
+    href: '/master-filter',
+    matchers: ['/master-filter', '/macro'],
     tabs: [
-      { href: '/macro', label: '매크로' },
       { href: '/master-filter', label: '마스터 필터' },
+      { href: '/macro', label: '매크로' },
     ],
   },
   {
