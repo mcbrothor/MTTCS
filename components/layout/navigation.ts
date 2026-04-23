@@ -39,12 +39,12 @@ export const FLOW_STEPS: FlowStep[] = [
     key: 'scanner',
     step: '02',
     label: '종목 발굴',
-    sub: 'VCP · CAN SLIM',
+    sub: '미너비니 · 오닐',
     href: '/scanner',
     matchers: ['/scanner', '/canslim'],
     tabs: [
-      { href: '/scanner', label: 'VCP Scanner' },
-      { href: '/canslim', label: 'CAN SLIM' },
+      { href: '/scanner', label: '미너비니 스캐너' },
+      { href: '/canslim', label: '오닐 스캐너' },
     ],
   },
   {

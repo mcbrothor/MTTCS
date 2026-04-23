@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import MarketBanner from '@/components/ui/MarketBanner';
 
 const breakdown = [
   { label: 'SPY 추세', score: 20, weight: 25, desc: '50일선 상회' },
@@ -46,6 +47,8 @@ export default function MacroPage() {
           </p>
         </div>
       </header>
+
+      <MarketBanner />
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Left: Macro Regime Score */}

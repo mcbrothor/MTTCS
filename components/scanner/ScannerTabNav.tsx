@@ -18,7 +18,7 @@ export default function ScannerTabNav() {
   const tabs = [
     {
       id: 'minervini',
-      label: 'VCP Scanner',
+      label: '미너비니 스캐너',
       description: 'SEPA · pivot · contraction quality',
       href: '/scanner',
       icon: <Activity className="h-4 w-4" />,
@@ -27,7 +27,7 @@ export default function ScannerTabNav() {
     },
     {
       id: 'oneil',
-      label: 'CAN SLIM',
+      label: '오닐 스캐너',
       description: '7 pillars · earnings leadership',
       href: '/canslim',
       icon: <ScanSearch className="h-4 w-4" />,

@@ -26,13 +26,50 @@ const STATE_STYLE = {
   },
 } as const;
 
-export default function MarketBanner() {
+export default function MarketBanner({ compact = false }: { compact?: boolean }) {
   const { data, isLoading } = useMarket();
 
   if (isLoading || !data) return null;
 
   const style = STATE_STYLE[data.state];
   const updatedAt = data.metrics.updatedAt || data.metrics.meta.asOf;
+
+  if (compact) {
+    return (
+      <div className={`rounded-2xl border px-3 py-2.5 shadow-sm ${style.shell}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${style.badge}`}>
+              <span className="text-sm font-bold">{style.icon}</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${style.badge}`}>
+                  {data.state}
+                </span>
+                <h2 className="text-sm font-bold text-[var(--text-primary)]">{style.title}</h2>
+              </div>
+              <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">{style.description}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden flex-col items-end sm:flex">
+              <span className="text-[9px] font-bold uppercase tracking-tighter text-slate-500">Score</span>
+              <span className="font-mono text-xs font-bold text-[var(--text-primary)]">{data.metrics.score}/100</span>
+            </div>
+            <div className="h-6 w-px bg-white/10 hidden sm:block" />
+            <div className="hidden flex-col items-end sm:flex">
+              <span className="text-[9px] font-bold uppercase tracking-tighter text-slate-500">Updated</span>
+              <span className="font-mono text-[10px] text-[var(--text-secondary)]">
+                {updatedAt ? new Date(updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '--'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-[22px] border px-4 py-4 shadow-[var(--panel-shadow)] ${style.shell}`}>

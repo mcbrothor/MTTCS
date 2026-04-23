@@ -104,7 +104,7 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
             <div className="flex items-center gap-4 flex-wrap">
               <div className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold ${canslimResult.pass ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-rose-500/40 bg-rose-500/10 text-rose-300'}`}>
                 {canslimResult.pass ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                {canslimResult.pass ? 'CAN SLIM PASS' : `CAN SLIM FAIL — ${canslimResult.failedPillar}`}
+                {canslimResult.pass ? '오닐 PASS' : `오닐 FAIL — ${canslimResult.failedPillar}`}
               </div>
               <span className={`inline-flex rounded-lg border px-3 py-1 text-xs font-semibold ${confidenceClass(canslimResult.confidence)}`}>
                 Confidence: {canslimResult.confidence}

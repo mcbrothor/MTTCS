@@ -24,6 +24,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
+import MarketBanner from '@/components/ui/MarketBanner';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
 import { applyUniverseRsRankings } from '@/lib/scanner-recommendation';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
@@ -47,10 +48,10 @@ type FilterKey = 'all' | 'pass' | 'fail' | 'tier1' | 'watchlist' | 'short_term' 
 type SortKey = 'marketCap' | 'dualTier' | 'confidence' | 'rs' | 'pillar' | 'default';
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
-  NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100 대형 성장주에서 CAN SLIM 주도주를 탐색합니다.' },
+  NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100 대형 성장주에서 오닐 주도주를 탐색합니다.' },
   SP500: { label: 'S&P 500', desc: 'S&P 500에서 펀더멘털과 기술적 분석을 결합한 주도주를 찾습니다.' },
-  KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시가총액 상위 200개 종목 CAN SLIM 스캔.' },
-  KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시가총액 상위 150개 종목 CAN SLIM 스캔.' },
+  KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시가총액 상위 200개 종목 오닐 스캔.' },
+  KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시가총액 상위 150개 종목 오닐 스캔.' },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -234,7 +235,7 @@ export default function CanslimScannerPage() {
 
       const items = meta.items;
       setProgress({ current: 0, total: items.length });
-      setScanStage('CAN SLIM 평가 실행 중');
+      setScanStage('오닐 스캐너 평가 실행 중');
 
       let current: CanslimScannerResult[] = items.map((item) => ({
         ticker: item.ticker,
@@ -397,7 +398,7 @@ export default function CanslimScannerPage() {
             <th className="px-3 py-4 text-right">시가총액</th>
             <th className="px-3 py-4 text-right">현재가</th>
             <th className="px-3 py-4 text-left">이중 검증</th>
-            <th className="px-3 py-4 text-left">CAN SLIM</th>
+            <th className="px-3 py-4 text-left">오닐 스캐너</th>
             <th className="px-3 py-4 text-left">신뢰도</th>
             <th className="px-3 py-4 text-right">RS</th>
             <th className="px-3 py-4 text-left">패턴</th>
@@ -657,6 +658,7 @@ export default function CanslimScannerPage() {
       <FlowBanner currentKey="scanner" />
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
+      <MarketBanner compact={true} />
 
       {/* 헤더 */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
@@ -666,8 +668,8 @@ export default function CanslimScannerPage() {
               <ScanSearch className="h-6 w-6 text-rose-500" />
             </div>
             <h1 className="text-3xl font-black text-white tracking-tightest">
-              CAN SLIM
-              <span className="ml-2 bg-gradient-to-r from-rose-500 to-amber-500 bg-clip-text text-transparent font-black tracking-tighter uppercase opacity-80">Scanner</span>
+              오닐 스캐너
+
             </h1>
           </div>
           <p className="text-sm text-slate-500 font-medium pl-14">
@@ -712,7 +714,7 @@ export default function CanslimScannerPage() {
               variant="primary" 
               className="group relative flex items-center gap-2 rounded-xl border-none bg-gradient-to-br from-rose-600 to-rose-700 font-black text-white shadow-xl shadow-rose-500/20 hover:from-rose-500 hover:to-rose-600 active:scale-95 transition-all"
             >
-              <Play className="h-4 w-4 fill-white pr-0.5" /> CAN SLIM 스캔 시작
+              <Play className="h-4 w-4 fill-white pr-0.5" /> 스캔 시작
             </Button>
           )}
         </div>
@@ -770,7 +772,7 @@ export default function CanslimScannerPage() {
           {macro.actionLevel === 'HALT' && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 px-3 py-2 text-rose-300">
               <AlertTriangle className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
-              <p className="text-xs font-bold tracking-tight">CAN SLIM 신규 진입 보류 — 하락 추세 또는 분배일 과다 상태</p>
+              <p className="text-xs font-bold tracking-tight">오닐 스캐너 신규 진입 보류 — 하락 추세 또는 분배일 과다 상태</p>
             </div>
           )}
         </motion.div>
@@ -937,7 +939,7 @@ export default function CanslimScannerPage() {
             />
           </div>
           <p className="text-base font-black text-slate-400 tracking-tightest px-6">
-            유니버스를 선택하고 <strong className="text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">CAN SLIM 엔진</strong>을 가동하세요.
+            유니버스를 선택하고 <strong className="text-rose-500 drop-shadow-[0_0_10px_rgba(244,63,94,0.3)]">오닐 엔진</strong>을 가동하세요.
           </p>
           <p className="mt-2 text-[10px] font-black text-slate-600 uppercase tracking-widest max-w-sm px-8 leading-relaxed">
             윌리엄 오닐의 7 Pillar(M·C·A·N·S·L·I) 분석 프레임워크를 통해 실물 경제와 주가 모멘텀이 결합된 슈퍼 주도주를 탐색합니다.

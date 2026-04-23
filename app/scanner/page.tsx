@@ -3,13 +3,13 @@
 import Link from 'next/link';
 import { Play, ScanSearch, Square } from 'lucide-react';
 import Button from '@/components/ui/Button';
-import MarketBanner from '@/components/ui/MarketBanner';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS, type SortKey } from '@/hooks/scanner';
 import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';
+import MarketBanner from '@/components/ui/MarketBanner';
 
 const MACRO_TONE = {
   HALT: 'border-rose-400/24 bg-rose-500/10 text-rose-50',
@@ -66,8 +66,8 @@ export default function ScannerPage() {
   return (
     <div className="space-y-6 pb-12">
       <section className="panel-grid space-y-5 p-5 sm:p-6">
+        <MarketBanner compact={true} />
         <ScannerTabNav />
-        <MarketBanner />
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
           <div className="space-y-4">
@@ -76,10 +76,10 @@ export default function ScannerPage() {
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10">
                   <ScanSearch className="h-6 w-6 text-emerald-300" />
                 </span>
-                VCP Scanner
+                미너비니 스캐너
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
-                HTML 레퍼런스의 정보 위계는 받아오되, 현재 MTN의 필터 깊이와 드릴다운은 유지했습니다. 상단에서 시장 맥락과 유니버스 상태를 빠르게 읽고, 아래에서 기존 상세 스캔 흐름을 그대로 이어갈 수 있습니다.
+                미너비니의 SEPA 전략과 VCP(변동성 축소 패턴)를 기반으로 최적의 진입 시점을 발굴합니다. 스캔 실행 전 '시장 분석' 메뉴에서 현재 마스터 필터 수치와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
               </p>
             </div>
 

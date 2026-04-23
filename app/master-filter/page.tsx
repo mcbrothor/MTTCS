@@ -3,6 +3,7 @@
 import InsightLog from '@/components/master-filter/InsightLog';
 import MetricsGrid from '@/components/master-filter/MetricsGrid';
 import StatusCenter from '@/components/master-filter/StatusCenter';
+import MarketBanner from '@/components/ui/MarketBanner';
 import { useMarket } from '@/contexts/MarketContext';
 
 export default function MasterFilterPage() {
@@ -53,6 +54,8 @@ export default function MasterFilterPage() {
         </div>
       </header>
 
+      <MarketBanner />
+
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Left Sidebar: Status, Log, Guidelines */}
         <div className="flex flex-col gap-6 lg:w-[320px] xl:w-[360px] shrink-0">
@@ -83,7 +86,5 @@ export default function MasterFilterPage() {
         </div>
       </div>
     </div>
-  );
-}
   );
 }
