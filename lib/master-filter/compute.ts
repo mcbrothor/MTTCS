@@ -179,12 +179,18 @@ export function computeP3(
   const leadingSectors = sectorRows.slice(0, 3);
   const sectorRiskOnCount = leadingSectors.filter((r) => r.riskOn).length;
 
+  const trendScoreScaled = trendScore * 10; // 0~2 -> 0~20
+  const volatilityScoreScaled = currentVix < 20 ? 20 : currentVix < 25 ? 12 : 5;
+
   const ftdScore = ftd.found ? 20 : 8;
   const distributionScore = distributionDays <= 3 ? 20 : distributionDays <= 5 ? 12 : 4;
   const newHighLowScore = newHighLowProxy >= 1.8 ? 20 : newHighLowProxy >= 1.2 ? 12 : 5;
   const above200Score = above200Pct >= 60 ? 20 : above200Pct >= 40 ? 12 : 5;
   const sectorScore = sectorRiskOnCount >= 2 ? 20 : sectorRiskOnCount === 1 ? 12 : 5;
-  const p3Score = ftdScore + distributionScore + newHighLowScore + above200Score + sectorScore;
+
+  // 7개 항목 합산 (각 20점, 총 140점) 후 100점 만점으로 환산
+  const totalRawScore = ftdScore + distributionScore + newHighLowScore + above200Score + sectorScore + trendScoreScaled + volatilityScoreScaled;
+  const p3Score = Math.round((totalRawScore / 140) * 100);
 
   const trendScore = (lastClose > ma200 ? 1 : 0) + (lastClose > ma50 ? 0.5 : 0) + (ma50 > ma200 ? 0.5 : 0);
   const volatilityScore = currentVix < 20 ? 0.5 : 0;
@@ -208,6 +214,8 @@ export function computeP3(
       unit: '',
       description: `${mainSymbol} 현재가가 50일/200일 이평선 위에 있는지, 50일선이 200일선 위에 있는지 확인합니다. 현재가 ${round(lastClose)}.`,
       source: `Yahoo Finance ${mainSymbol}`,
+      score: trendScoreScaled,
+      weight: 20,
     },
     breadth: {
       label: 'Market Breadth',
@@ -217,6 +225,8 @@ export function computeP3(
       unit: '%',
       description: `${breadthEtfs.join(', ')} 중 200일선 위에 있는 비율입니다.`,
       source: 'Yahoo Finance ETF proxy',
+      score: above200Score,
+      weight: 20,
     },
     liquidity: {
       label: 'Distribution Days',
@@ -226,6 +236,8 @@ export function computeP3(
       unit: 'days',
       description: '최근 25거래일 중 하락일이면서 전일보다 거래량이 증가한 날을 누적합니다.',
       source: `Yahoo Finance ${mainSymbol} volume`,
+      score: distributionScore,
+      weight: 20,
     },
     volatility: {
       label: 'Volatility (VIX)',
@@ -235,6 +247,8 @@ export function computeP3(
       unit: 'pts',
       description: 'VIX 20 미만은 정상 변동성, 20~25는 주의, 25 이상은 위험 구간으로 해석합니다.',
       source: 'CBOE via Yahoo',
+      score: volatilityScoreScaled,
+      weight: 20,
     },
   };
 

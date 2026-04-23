@@ -248,8 +248,15 @@ export default function MetricsGrid() {
         </div>
 
         <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
-          {[metrics.trend, metrics.breadth, metrics.volatility, metrics.liquidity, 
-            metrics.ftd, metrics.distribution, metrics.newHighLow].map((m) => m ? (
+          {[
+            metrics.trend, 
+            metrics.breadth, 
+            metrics.volatility, 
+            metrics.ftd, 
+            metrics.distribution, 
+            metrics.newHighLow,
+            metrics.sectorRotation
+          ].map((m) => m ? (
             <div key={m.label}>
               <div className="mb-1 flex justify-between text-[10px] text-slate-500">
                 <span>{m.label}</span>

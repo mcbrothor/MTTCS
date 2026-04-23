@@ -58,6 +58,8 @@ const createEmptyMetric = (label: string, threshold: string | number, unit: stri
   unit,
   description: '데이터를 불러오지 못했습니다.',
   source: 'System Fallback',
+  score: 0,
+  weight: 20,
 });
 
 function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
