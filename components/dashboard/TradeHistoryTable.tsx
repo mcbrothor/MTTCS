@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Star } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -384,6 +385,9 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                           >
                             <Star className="h-4 w-4" />
                           </button>
+                          <ActionLink href={`/history/${trade.id}?market=${isKorean(trade.ticker) ? 'KR' : 'US'}`}>
+                            3-Layer
+                          </ActionLink>
                           <ActionButton onClick={() => setExpandedId(isExpanded ? null : trade.id)}>
                             {isExpanded ? '접기' : '상세'}
                           </ActionButton>
@@ -490,6 +494,17 @@ function ActionButton({
     >
       {children}
     </button>
+  );
+}
+
+function ActionLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs font-semibold text-sky-100 transition-colors hover:bg-sky-500/10"
+    >
+      {children}
+    </Link>
   );
 }
 

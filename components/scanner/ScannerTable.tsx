@@ -39,10 +39,12 @@ function tierClass(tier: RecommendationTier) {
 }
 
 function sepaLabel(result: ScannerResult) {
+  const corePassed = result.sepaEvidence?.summary.corePassed;
+  const coreTotal = result.sepaEvidence?.summary.coreTotal ?? 7;
   if (result.status === 'error') return 'Error';
   if (result.status !== 'done') return 'Pending';
-  if (result.sepaStatus === 'pass') return 'Pass';
-  if ((result.sepaMissingCount ?? 99) <= 2) return 'Partial';
+  if (result.sepaStatus === 'pass' && corePassed === coreTotal) return 'Pass';
+  if (typeof corePassed === 'number' && corePassed >= coreTotal - 1) return 'Partial';
   return 'Weak';
 }
 
@@ -57,6 +59,13 @@ function formatRs(result: ScannerResult) {
   if (typeof result.rsRating !== 'number') return '-';
   const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
   return `${result.rsRating}${rank}`;
+}
+
+function RsSourceBadge({ source }: { source: ScannerResult['rsSource'] }) {
+  if (source === 'DB_BATCH') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">DB</span>;
+  if (source === 'BENCHMARK_PROXY') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Proxy</span>;
+  if (source === 'UNIVERSE') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-slate-700/60 text-slate-400 border border-slate-600/40">Rank</span>;
+  return null;
 }
 
 function volumeSignalClass(tier: VolumeSignalTier) {
@@ -167,13 +176,22 @@ export default function ScannerTable({
                 <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency, result.ticker)}</td>
                 <td className="px-2 py-3">
                   <span className="text-slate-300">{sepaLabel(result)}</span>
-                  {result.sepaMissingCount !== null && <p className="text-[10px] text-slate-500">미충족 {result.sepaMissingCount}</p>}
+                  {result.sepaEvidence?.summary.corePassed !== undefined && (
+                    <p className="text-[10px] text-slate-500">
+                      Core {result.sepaEvidence.summary.corePassed}/{result.sepaEvidence.summary.coreTotal}
+                    </p>
+                  )}
                 </td>
                 <td className="px-2 py-3">{tierBadge(result)}</td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">
                   {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
                 </td>
-                <td className="px-2 py-3 font-mono text-slate-200">{formatRs(result)}</td>
+                <td className="px-2 py-3 font-mono text-slate-200">
+                  <span className="flex items-center">
+                    {formatRs(result)}
+                    <RsSourceBadge source={result.rsSource} />
+                  </span>
+                </td>
                 <td className="px-2 py-3 text-[11px] text-slate-300">
                   <p className="truncate">{baseTypeLabel(result)}</p>
                   {result.momentumBranch === 'EXTENDED' && <p className="text-[10px] text-amber-300">확장</p>}

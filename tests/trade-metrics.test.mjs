@@ -74,6 +74,22 @@ run('recalculates remaining average entry after partial exit and later add', () 
   assert.equal(metrics.realizedPnL, 800);
 });
 
+run('keeps remaining cost basis consistent across two trims and a later pyramid', () => {
+  const metrics = calculateTradeMetrics(baseTrade, [
+    execution({ price: 100, shares: 60, executed_at: '2026-01-01T00:00:00.000Z', leg_label: 'E1' }),
+    execution({ price: 110, shares: 40, executed_at: '2026-01-02T00:00:00.000Z', leg_label: 'E2' }),
+    execution({ side: 'EXIT', price: 120, shares: 50, executed_at: '2026-01-03T00:00:00.000Z', leg_label: 'MANUAL' }),
+    execution({ side: 'EXIT', price: 118, shares: 20, executed_at: '2026-01-04T00:00:00.000Z', leg_label: 'MANUAL' }),
+    execution({ price: 130, shares: 10, executed_at: '2026-01-05T00:00:00.000Z', leg_label: 'E3' }),
+  ]);
+
+  assert.equal(metrics.netShares, 40);
+  assert.equal(metrics.avgEntryPrice, 110.5);
+  assert.equal(metrics.historicalAvgEntryPrice, 106.3636);
+  assert.equal(metrics.realizedPnL, 1080);
+  assert.equal(metrics.unrealizedPnL, null);
+});
+
 run('marks fully closed trade completed and computes final r multiple', () => {
   const metrics = calculateTradeMetrics(baseTrade, [
     execution({ price: 100, shares: 125, fees: 1 }),

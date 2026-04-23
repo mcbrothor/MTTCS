@@ -1,6 +1,8 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
-import { parseLlmRankings } from '@/lib/contest';
+import { normalizeContestLlmResponse } from '@/lib/contest';
+import { buildContestSnapshot, buildLlmVerdict } from '@/lib/finance/core/snapshot';
 import { supabaseServer } from '@/lib/supabase/server';
+import type { BeautyContestSession, ContestCandidate } from '@/types';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,7 +18,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (candidateError) throw candidateError;
     if (!candidates || candidates.length === 0) return apiError('Contest session has no candidates.', 'NOT_FOUND', 404);
 
-    const rankings = parseLlmRankings(raw, candidates.map((candidate) => ({ id: candidate.id, ticker: candidate.ticker })));
+    const normalized = normalizeContestLlmResponse(
+      raw,
+      candidates.map((candidate) => ({ id: candidate.id, ticker: candidate.ticker })),
+      id
+    );
+    const rankings = normalized.rankings;
+    const canonicalRaw = JSON.stringify(normalized, null, 2);
     const idByTicker = new Map(candidates.map((candidate) => [String(candidate.ticker).toUpperCase(), candidate.id]));
     const idByCandidateId = new Map(candidates.map((candidate) => [String(candidate.id), candidate.id]));
 
@@ -27,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         .from('contest_candidates')
         .update({
           llm_rank: ranking.rank,
-          llm_comment: ranking.comment,
+          llm_comment: ranking.comment || ranking.key_strength,
           llm_scores: ranking.scores || {},
           llm_analysis: ranking.analysis,
           updated_at: new Date().toISOString(),
@@ -39,8 +47,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { error: sessionError } = await supabaseServer
       .from('beauty_contest_sessions')
       .update({
-        llm_raw_response: raw,
+        llm_raw_response: canonicalRaw,
         llm_provider: body.llm_provider ? String(body.llm_provider).slice(0, 100) : null,
+        response_schema_version: normalized.response_schema_version,
         status: 'REVIEW_READY',
         updated_at: new Date().toISOString(),
       })
@@ -49,10 +58,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data, error } = await supabaseServer
       .from('beauty_contest_sessions')
-      .select('*, contest_candidates(*, contest_reviews(*))')
+      .select('*, candidates:contest_candidates(*, reviews:contest_reviews(*))')
       .eq('id', id)
       .single();
     if (error) throw error;
+
+    const session = data as BeautyContestSession;
+    const linkedCandidates = (session.candidates || []).filter((candidate): candidate is ContestCandidate => Boolean(candidate.linked_trade_id));
+
+    for (const candidate of linkedCandidates) {
+      const { error: syncError } = await supabaseServer
+        .from('trades')
+        .update({
+          contest_snapshot: buildContestSnapshot(session, candidate),
+          llm_verdict: buildLlmVerdict(session, candidate),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', candidate.linked_trade_id);
+      if (syncError) throw syncError;
+    }
 
     return apiSuccess(data, { source: 'Supabase contest_candidates', provider: 'Supabase', delay: 'REALTIME' });
   } catch (error) {

@@ -63,7 +63,10 @@ export async function GET() {
     }
 
     return NextResponse.json({ success: true, results, message: '미국 및 한국 시장 상세 리포트가 모두 발송되었습니다.' });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Unknown test report error' },
+      { status: 500 }
+    );
   }
 }

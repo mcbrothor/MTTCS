@@ -162,6 +162,7 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
     low52WeekAdvancePct: analysis.vcpAnalysis.low52WeekAdvancePct,
     highTightFlag: analysis.vcpAnalysis.highTightFlag,
     rsRating: analysis.sepaEvidence.metrics.rsRating,
+    rsSource: analysis.sepaEvidence.metrics.rsSource ?? null,
     internalRsRating: analysis.sepaEvidence.metrics.internalRsRating ?? null,
     externalRsRating: analysis.sepaEvidence.metrics.externalRsRating ?? null,
     rsRank: analysis.sepaEvidence.metrics.rsRank ?? null,

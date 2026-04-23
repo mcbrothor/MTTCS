@@ -1,5 +1,9 @@
 import type {
   ContestCandidate,
+  ContestLlmOverall,
+  ContestLlmRanking,
+  ContestLlmRecommendation,
+  ContestLlmResponse,
   ContestMarket,
   ContestPromptCandidate,
   ContestReview,
@@ -8,10 +12,14 @@ import type {
   MasterFilterResponse,
   ScannerUniverse,
 } from '../types/index.ts';
+import { extractStructuredJson } from './ai/gemini.ts';
 
 const MAX_CANDIDATES = 10;
+const VALID_LLM_OVERALL: ContestLlmOverall[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
+const VALID_LLM_RECOMMENDATIONS: ContestLlmRecommendation[] = ['PROCEED', 'WATCH', 'SKIP'];
+
 export const CONTEST_PROMPT_VERSION = 'mtn-contest-ko-v3-rs-htf';
-export const CONTEST_RESPONSE_SCHEMA_VERSION = 'mtn-contest-json-v2';
+export const CONTEST_RESPONSE_SCHEMA_VERSION = 'mtn-contest-json-v3';
 
 export interface ContestSessionInput {
   market: ContestMarket;
@@ -22,14 +30,7 @@ export interface ContestSessionInput {
   llmProvider?: string | null;
 }
 
-export interface ParsedLlmRanking {
-  candidate_id: string | null;
-  ticker: string;
-  rank: number;
-  comment: string | null;
-  scores: Record<string, unknown> | null;
-  analysis: Record<string, unknown>;
-}
+export type ParsedLlmRanking = ContestLlmRanking;
 
 type ExpectedCandidate = string | { id?: string | null; ticker: string };
 
@@ -48,6 +49,7 @@ export function validateContestCandidates(candidates: ContestPromptCandidate[]) 
     if (!ticker || !exchange) {
       throw new Error(`Candidate ${index + 1} must include ticker and exchange.`);
     }
+
     const key = `${exchange}:${ticker}`;
     if (seen.has(key)) {
       throw new Error(`Duplicate candidate detected: ${ticker}.`);
@@ -87,15 +89,77 @@ function compactMarketContext(input: ContestSessionInput['marketContext']) {
   };
 }
 
+export function buildContestResponseSchema(sessionId?: string | null) {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['response_schema_version', 'session_id', 'rankings'],
+    properties: {
+      response_schema_version: {
+        type: 'string',
+        enum: [CONTEST_RESPONSE_SCHEMA_VERSION],
+      },
+      session_id: {
+        type: ['string', 'null'],
+        description: sessionId ? `Must equal ${sessionId}` : 'Contest session id from the prompt payload.',
+      },
+      rankings: {
+        type: 'array',
+        minItems: 1,
+        maxItems: MAX_CANDIDATES,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'session_id',
+            'candidate_id',
+            'ticker',
+            'rank',
+            'overall',
+            'key_strength',
+            'key_risk',
+            'recommendation',
+            'confidence',
+          ],
+          properties: {
+            session_id: { type: ['string', 'null'] },
+            candidate_id: { type: ['string', 'null'] },
+            ticker: { type: 'string' },
+            rank: { type: 'integer', minimum: 1, maximum: MAX_CANDIDATES },
+            overall: { type: 'string', enum: VALID_LLM_OVERALL },
+            key_strength: { type: 'string', minLength: 1, maxLength: 1000 },
+            key_risk: { type: 'string', minLength: 1, maxLength: 1000 },
+            recommendation: { type: 'string', enum: VALID_LLM_RECOMMENDATIONS },
+            confidence: { type: 'number', minimum: 0, maximum: 1 },
+            comment: { type: ['string', 'null'] },
+            scores: { type: ['object', 'null'] },
+            analysis: { type: ['object', 'null'] },
+          },
+        },
+      },
+    },
+  };
+}
+
 export function buildContestPrompt(input: ContestSessionInput) {
   const candidates = validateContestCandidates(input.candidates);
   const marketContext = compactMarketContext(input.marketContext);
-  const responseExample = {
+  const sessionId = input.sessionId || 'session-id';
+  const responseSchema = buildContestResponseSchema(input.sessionId || null);
+  const responseExample: ContestLlmResponse = {
+    response_schema_version: CONTEST_RESPONSE_SCHEMA_VERSION,
+    session_id: sessionId,
     rankings: candidates.map((candidate, index) => ({
-      session_id: input.sessionId || 'session-id',
+      session_id: sessionId,
       candidate_id: candidate.candidate_id || 'candidate-id',
       ticker: candidate.ticker,
       rank: index + 1,
+      overall: index === 0 ? 'POSITIVE' : index === candidates.length - 1 ? 'NEGATIVE' : 'NEUTRAL',
+      key_strength: 'Short sentence describing the strongest reason.',
+      key_risk: 'Short sentence describing the main risk.',
+      recommendation: index === 0 ? 'PROCEED' : index === candidates.length - 1 ? 'SKIP' : 'WATCH',
+      confidence: 0.72,
+      comment: 'One-line summary.',
       scores: {
         technical: 0,
         fundamental: 0,
@@ -104,15 +168,7 @@ export function buildContestPrompt(input: ContestSessionInput) {
         market_fit: 0,
         risk_reward: 0,
       },
-      investment_thesis: '한국어 투자 가설',
-      technical_view: 'SEPA/VCP/피벗/거래량 관점',
-      fundamental_view: '재무 건전성과 사업 품질 관점',
-      earnings_growth_view: '최근 매출, 이익 성장과 추정치 변화',
-      moat_view: '경쟁우위, 시장지위, 지속가능성',
-      market_context: '마스터 필터와 현재 시장 국면에 대한 적합성',
-      risks: ['핵심 리스크'],
-      catalysts: ['상승 촉매'],
-      comment: '짧은 최종 사유',
+      analysis: {},
     })),
   };
 
@@ -126,112 +182,58 @@ export function buildContestPrompt(input: ContestSessionInput) {
     selected_at: new Date().toISOString(),
     market_context: marketContext,
     market_context_guide: {
-      p3Score: '마스터 필터 총점입니다. GREEN/YELLOW/RED 판단의 핵심 배경으로 사용하세요.',
-      followThroughDay: '기관 매수 재개 신호입니다.',
-      distributionPressure: '기관 매도 압력입니다. 높을수록 보수적으로 평가하세요.',
-      newHighLowProxy: '시장 참여 폭과 내부 강도 proxy입니다.',
-      above200d: '주요 ETF가 200일선 위에 있는 비율입니다.',
-      sectorRotation: '성장/경기민감 섹터 주도 여부입니다.',
-      redMarketRule: 'RED 국면이어도 후보 비교는 하되 포지션 크기, 손절, 진입 타이밍을 더 보수적으로 평가하세요.',
+      p3Score: 'Use the macro score as a background constraint rather than as the only reason.',
+      followThroughDay: 'Treat follow-through as a positive confirmation signal.',
+      distributionPressure: 'High distribution pressure should reduce aggressiveness.',
+      newHighLowProxy: 'Use it as a participation proxy.',
+      above200d: 'Use it as a breadth proxy.',
+      sectorRotation: 'Use it to judge whether leadership is risk-on or defensive.',
+      redMarketRule: 'In RED conditions, be more conservative on recommendation, stop discipline, and sizing.',
     },
     scoring_context: {
-      rank_1_meaning: '가장 우선 비교할 돌파/주도주 후보',
+      rank_1_meaning: 'Best relative candidate among the submitted names.',
       compare_axes: [
-        '기술적 구조와 VCP 품질',
-        'Base_Type: Standard_VCP와 High_Tight_Flag는 리스크 가정과 손절 기준을 분리해 비교',
-        'RS Rating: 표준 유니버스 기준 사전 계산값입니다. 미국은 S&P 500, 한국은 KOSPI200+KOSDAQ150 합산 universe에서 1~99로 환산합니다.',
-        'IBD Proxy: 분기별 독립 수익률(Q1 2배 가중, Q2~Q4 1배)을 정규화한 모멘텀 점수입니다.',
-        'Mansfield RS: 52주 기준 벤치마크 대비 상대성과입니다. 양수/true일수록 지수 대비 강합니다.',
-        'Macro Action: FULL/REDUCED/HALT에 따라 진입 적극성, 포지션 크기, 손절 기준을 다르게 평가하세요.',
-        '테니스 공 액션: 시장 하락일에 덜 빠지거나 상승 마감한 방어력',
-        'HTF 후보는 거래량 건조화와 타이트 손절 조건을 반드시 별도 평가',
-        'SEPA 조건 충족도와 예외 신호',
-        '최근 매출과 이익 성장',
-        '펀더멘털 품질과 재무 안정성',
-        '해자와 시장 지위',
-        '최근 뉴스와 애널리스트 판단 변화',
-        '마스터 필터 시장 국면 적합성',
-        '리스크 대비 보상',
+        'Technical structure and VCP quality',
+        'Base type and High Tight Flag edge cases',
+        'RS Rating and universe-relative leadership',
+        'IBD proxy and Mansfield RS strength',
+        'Macro action level and market regime fit',
+        'SEPA pass/fail details and exception signals',
+        'Recent sales and earnings growth',
+        'Moat, industry leadership, and risk/reward',
       ],
       output_contract: responseExample,
+      output_schema: responseSchema,
     },
     candidates,
   };
 
   const llmPrompt = [
-    '당신은 월가 IB 애널리스트와 헤지펀드 포트폴리오 매니저의 관점으로 MTN 후보 종목을 비교하는 한국어 리서치 엔진입니다.',
-    '아래 payload의 후보들은 SEPA/VCP 스캐너에서 나온 종목입니다. Recommended와 Partial은 시스템이 비교 가치가 있다고 본 후보입니다.',
-    '내부 뉴스 API는 제공되지 않으므로, 최근 뉴스와 애널리스트 판단 변화는 당신이 접근 가능한 웹/지식 기반으로 보완해 주세요.',
-    '마스터 필터가 RED이면 후보를 배제하지 말고, 포지션 크기와 손절 조건을 더 보수적으로 평가하세요.',
-    'payload의 rs_rating, rs_rank, rs_universe_size, ibd_proxy_score, mansfield_rs_score, macro_action_level, rs_line_new_high, tennis_ball_count, base_type, momentum_branch, high_tight_flag를 반드시 기술적 평가에 반영하세요.',
-    'High_Tight_Flag는 강한 주도주의 예외 패턴입니다. 거래량 건조화가 없거나 stopPlan이 불리하면 순위를 낮추세요.',
-    '최종 응답은 JSON만 출력하세요. 설명 문장, markdown, 코드블록을 붙이지 마세요.',
-    '모든 후보가 정확히 한 번씩 등장해야 하며 rank는 1부터 N까지 중복 없이 부여해야 합니다.',
-    '필수 매핑 필드인 session_id, candidate_id, ticker를 그대로 유지하세요.',
+    'You are MTN beauty contest analyst.',
+    'Write the reasoning in Korean, but return only valid JSON.',
+    `response_schema_version must be "${CONTEST_RESPONSE_SCHEMA_VERSION}".`,
+    'Do not return markdown, prose, or code fences.',
+    'Every ranking must include session_id, candidate_id, ticker, rank, overall, key_strength, key_risk, recommendation, and confidence.',
+    'Use overall from POSITIVE | NEUTRAL | NEGATIVE.',
+    'Use recommendation from PROCEED | WATCH | SKIP.',
+    'confidence must be a number between 0.0 and 1.0.',
+    'All submitted candidates must be ranked exactly once with unique ranks from 1 to N.',
     '',
-    '요구 JSON 예시:',
+    'JSON schema:',
+    JSON.stringify(responseSchema, null, 2),
+    '',
+    'JSON example:',
     JSON.stringify(responseExample, null, 2),
     '',
-    '분석 payload:',
+    'Analysis payload:',
     JSON.stringify(payload, null, 2),
   ].join('\n');
 
   return { payload: candidates, llmPrompt, promptPayload: payload };
 }
 
-function parseJsonCandidate(value: string) {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
 export function extractJsonPayload(raw: string) {
-  const trimmed = raw.trim();
-  const direct = parseJsonCandidate(trimmed);
-  if (direct) return direct;
-
-  const fences = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi));
-  for (const fence of fences) {
-    const parsed = parseJsonCandidate((fence[1] || '').trim());
-    if (parsed) return parsed;
-  }
-
-  for (let start = 0; start < trimmed.length; start += 1) {
-    const open = trimmed[start];
-    if (open !== '{' && open !== '[') continue;
-    const close = open === '{' ? '}' : ']';
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-
-    for (let index = start; index < trimmed.length; index += 1) {
-      const char = trimmed[index];
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === '\\') {
-        escaped = true;
-        continue;
-      }
-      if (char === '"') {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-      if (char === open) depth += 1;
-      if (char === close) depth -= 1;
-      if (depth === 0) {
-        const parsed = parseJsonCandidate(trimmed.slice(start, index + 1));
-        if (parsed) return parsed;
-        break;
-      }
-    }
-  }
-
-  throw new Error('LLM response must include a valid JSON object or JSON code block.');
+  return extractStructuredJson(raw);
 }
 
 export function extractLlmSessionId(raw: string) {
@@ -265,55 +267,143 @@ function normalizeExpected(expected: ExpectedCandidate[]) {
 
 function stringOrNull(value: unknown, max = 4000) {
   if (value === undefined || value === null) return null;
-  return String(value).slice(0, max);
+  const text = String(value).trim();
+  if (!text) return null;
+  return text.slice(0, max);
 }
 
 function objectOrNull(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function coerceRankingItem(item: unknown): ParsedLlmRanking | null {
+function arrayOrSingleText(value: unknown) {
+  if (Array.isArray(value)) {
+    const rows = value
+      .map((item) => stringOrNull(item, 500))
+      .filter((item): item is string => Boolean(item));
+    return rows.length > 0 ? rows : null;
+  }
+  return stringOrNull(value, 500);
+}
+
+function normalizeOverall(value: unknown): ContestLlmOverall | null {
+  const text = String(value || '').trim().toUpperCase();
+  return VALID_LLM_OVERALL.includes(text as ContestLlmOverall) ? (text as ContestLlmOverall) : null;
+}
+
+function normalizeRecommendation(value: unknown): ContestLlmRecommendation | null {
+  const text = String(value || '').trim().toUpperCase();
+  return VALID_LLM_RECOMMENDATIONS.includes(text as ContestLlmRecommendation)
+    ? (text as ContestLlmRecommendation)
+    : null;
+}
+
+function inferRecommendation(overall: ContestLlmOverall | null): ContestLlmRecommendation {
+  if (overall === 'POSITIVE') return 'PROCEED';
+  if (overall === 'NEGATIVE') return 'SKIP';
+  return 'WATCH';
+}
+
+function confidenceOrNull(value: unknown) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (numeric < 0) return 0;
+  if (numeric > 1) return 1;
+  return Math.round((numeric + Number.EPSILON) * 100) / 100;
+}
+
+function coerceRankingItem(item: unknown, fallbackSessionId: string | null): ParsedLlmRanking | null {
   if (!item || typeof item !== 'object') return null;
   const row = item as Record<string, unknown>;
   const ticker = String(row.ticker || row.symbol || '').trim().toUpperCase();
-  const candidate_id = row.candidate_id === undefined || row.candidate_id === null ? null : String(row.candidate_id);
+  const candidateId = row.candidate_id === undefined || row.candidate_id === null ? null : String(row.candidate_id);
+  const sessionId = row.session_id === undefined || row.session_id === null
+    ? fallbackSessionId
+    : String(row.session_id);
   const rank = Number(row.rank ?? row.llm_rank);
-  if (!ticker || !Number.isInteger(rank) || rank < 1 || rank > MAX_CANDIDATES) return null;
+  const overall = normalizeOverall(row.overall);
+  const recommendation = normalizeRecommendation(row.recommendation) || inferRecommendation(overall);
+  const keyStrength = stringOrNull(row.key_strength, 1000)
+    || stringOrNull(row.investment_thesis, 1000)
+    || stringOrNull(row.comment, 1000);
+  const keyRisk = stringOrNull(row.key_risk, 1000)
+    || (Array.isArray(row.risks) ? stringOrNull(row.risks[0], 1000) : stringOrNull(row.risks, 1000));
+  const confidence = confidenceOrNull(row.confidence);
 
-  const comment = stringOrNull(row.comment, 1000) || stringOrNull(row.investment_thesis, 1000);
+  if (!ticker || !Number.isInteger(rank) || rank < 1 || rank > MAX_CANDIDATES) return null;
+  if (!overall || !keyStrength || !keyRisk || confidence === null) return null;
+
+  const comment = stringOrNull(row.comment, 1000) || keyStrength;
   const scores = objectOrNull(row.scores);
   const analysis = {
+    overall,
+    key_strength: keyStrength,
+    key_risk: keyRisk,
+    recommendation,
+    confidence,
     investment_thesis: stringOrNull(row.investment_thesis),
     technical_view: stringOrNull(row.technical_view),
     fundamental_view: stringOrNull(row.fundamental_view),
     earnings_growth_view: stringOrNull(row.earnings_growth_view),
     moat_view: stringOrNull(row.moat_view),
     market_context: stringOrNull(row.market_context),
-    risks: Array.isArray(row.risks) ? row.risks : stringOrNull(row.risks),
-    catalysts: Array.isArray(row.catalysts) ? row.catalysts : stringOrNull(row.catalysts),
+    risks: arrayOrSingleText(row.risks),
+    catalysts: arrayOrSingleText(row.catalysts),
     raw: row,
   };
-  return { candidate_id, ticker, rank, comment, scores, analysis };
+
+  return {
+    session_id: sessionId,
+    candidate_id: candidateId,
+    ticker,
+    rank,
+    overall,
+    key_strength: keyStrength,
+    key_risk: keyRisk,
+    recommendation,
+    confidence,
+    comment,
+    scores,
+    analysis,
+  };
 }
 
-export function parseLlmRankings(raw: string, expectedCandidates: ExpectedCandidate[]) {
+export function normalizeContestLlmResponse(
+  raw: string,
+  expectedCandidates: ExpectedCandidate[],
+  expectedSessionId?: string | null
+): ContestLlmResponse {
   const parsed = extractJsonPayload(raw);
+  const root = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    ? parsed as Record<string, unknown>
+    : null;
   const rankingsSource = Array.isArray(parsed)
     ? parsed
-    : Array.isArray((parsed as Record<string, unknown>)?.rankings)
-      ? ((parsed as Record<string, unknown>).rankings as unknown[])
+    : Array.isArray(root?.rankings)
+      ? (root?.rankings as unknown[])
       : null;
 
   if (!rankingsSource) {
     throw new Error('LLM response must include a rankings array.');
   }
 
+  const rootSessionId = typeof root?.session_id === 'string' && root.session_id.trim()
+    ? root.session_id.trim()
+    : null;
+  const responseSchemaVersion = typeof root?.response_schema_version === 'string' && root.response_schema_version.trim()
+    ? root.response_schema_version.trim()
+    : CONTEST_RESPONSE_SCHEMA_VERSION;
+
+  if (expectedSessionId && rootSessionId && expectedSessionId !== rootSessionId) {
+    throw new Error(`LLM response session_id mismatch: expected ${expectedSessionId}, received ${rootSessionId}.`);
+  }
+
   const expected = normalizeExpected(expectedCandidates);
   const expectedTickerSet = new Set(expected.map((candidate) => candidate.ticker));
   const expectedIdSet = new Set(expected.map((candidate) => candidate.id).filter(Boolean));
-  const rows = rankingsSource.map(coerceRankingItem);
+  const rows = rankingsSource.map((item) => coerceRankingItem(item, rootSessionId || expectedSessionId || null));
   if (rows.some((row) => row === null)) {
-    throw new Error('Each ranking must include ticker and rank.');
+    throw new Error('Each ranking must include ticker, rank, overall, key_strength, key_risk, recommendation, and confidence.');
   }
 
   const rankings = rows as ParsedLlmRanking[];
@@ -321,12 +411,21 @@ export function parseLlmRankings(raw: string, expectedCandidates: ExpectedCandid
   const rankSet = new Set<number>();
 
   for (const row of rankings) {
-    if (!expectedTickerSet.has(row.ticker)) throw new Error(`Unexpected ticker in LLM response: ${row.ticker}.`);
+    if (expectedSessionId && row.session_id && row.session_id !== expectedSessionId) {
+      throw new Error(`LLM response session_id mismatch: expected ${expectedSessionId}, received ${row.session_id}.`);
+    }
+    if (!expectedTickerSet.has(row.ticker)) {
+      throw new Error(`Unexpected ticker in LLM response: ${row.ticker}.`);
+    }
     if (row.candidate_id && expectedIdSet.size > 0 && !expectedIdSet.has(row.candidate_id)) {
       throw new Error(`Unexpected candidate_id in LLM response: ${row.candidate_id}.`);
     }
-    if (tickerSet.has(row.ticker)) throw new Error(`Duplicate ticker in LLM response: ${row.ticker}.`);
-    if (rankSet.has(row.rank)) throw new Error(`Duplicate rank in LLM response: ${row.rank}.`);
+    if (tickerSet.has(row.ticker)) {
+      throw new Error(`Duplicate ticker in LLM response: ${row.ticker}.`);
+    }
+    if (rankSet.has(row.rank)) {
+      throw new Error(`Duplicate rank in LLM response: ${row.rank}.`);
+    }
     tickerSet.add(row.ticker);
     rankSet.add(row.rank);
   }
@@ -335,7 +434,31 @@ export function parseLlmRankings(raw: string, expectedCandidates: ExpectedCandid
     throw new Error('LLM response must rank every selected candidate.');
   }
 
-  return rankings.sort((a, b) => a.rank - b.rank);
+  const rankingSessionIds = Array.from(new Set(rankings
+    .map((row) => row.session_id)
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)));
+  const resolvedSessionId = expectedSessionId || rootSessionId || (rankingSessionIds.length === 1 ? rankingSessionIds[0] : null);
+
+  if (expectedSessionId && resolvedSessionId && expectedSessionId !== resolvedSessionId) {
+    throw new Error(`LLM response session_id mismatch: expected ${expectedSessionId}, received ${resolvedSessionId}.`);
+  }
+
+  return {
+    response_schema_version: responseSchemaVersion === CONTEST_RESPONSE_SCHEMA_VERSION
+      ? responseSchemaVersion
+      : CONTEST_RESPONSE_SCHEMA_VERSION,
+    session_id: resolvedSessionId,
+    rankings: rankings
+      .map((row) => ({
+        ...row,
+        session_id: row.session_id || resolvedSessionId,
+      }))
+      .sort((a, b) => a.rank - b.rank),
+  };
+}
+
+export function parseLlmRankings(raw: string, expectedCandidates: ExpectedCandidate[]) {
+  return normalizeContestLlmResponse(raw, expectedCandidates).rankings;
 }
 
 export function reviewDueDate(selectedAt: string | Date, horizon: ContestReviewHorizon) {
@@ -378,6 +501,3 @@ export function summarizeContestReview(candidates: (ContestCandidate & { reviews
 export function normalizeReviewStatus(value: unknown): ContestReviewStatus {
   return value === 'UPDATED' || value === 'ERROR' || value === 'MANUAL' || value === 'PENDING' ? value : 'PENDING';
 }
-
-
-

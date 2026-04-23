@@ -16,7 +16,7 @@ function NoteBox({ title, text }: { title: string; text: string }) {
 export function StrategyDetail({ trade }: { trade: Trade }) {
   const targets = getEntryTargets(trade.entry_targets);
   const stops = getTrailingStops(trade.trailing_stops);
-  const sepa = getSepaEvidence(trade.sepa_evidence as any);
+  const sepa = getSepaEvidence(trade.sepa_evidence);
   const riskPct = (getRiskPercent(trade) * 100).toFixed(1).replace('.0', '');
   const metrics = trade.metrics;
   const exchange = isKorean(trade.ticker) ? 'KOSPI' : 'NAS';
@@ -116,7 +116,7 @@ export function StrategyDetail({ trade }: { trade: Trade }) {
             <span className="rounded-lg border border-sky-500/30 px-2 py-1 text-sky-300">정보 {sepa.summary.info}</span>
           </div>
           <div className="grid gap-2 md:grid-cols-2">
-            {sepa.criteria.map((item: any) => (
+            {sepa.criteria.map((item) => (
               <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-950 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-medium text-white">{item.label}</p>

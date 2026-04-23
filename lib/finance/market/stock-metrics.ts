@@ -5,8 +5,6 @@ import { calculateMacroTrendFromData, calculateMansfieldFromData, calculateRSRat
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
 import type { DataQuality, MacroActionLevel, MacroTrend, MarketCode, OHLCData, ScannerConstituent, ScannerUniverse, StockMetric } from '@/types';
 
-export const REDUCED_RS_THRESHOLD = 80;
-
 interface MetricInput {
   market: MarketCode;
   calcDate: string;

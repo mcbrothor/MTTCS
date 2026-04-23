@@ -54,8 +54,8 @@ function MacroSparkline({ history, currentScore }: { history: MacroHistoryPoint[
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
-              formatter={(v: any) => [`Macro: ${v}`, '']}
-              labelFormatter={(l: any) => l}
+              formatter={(value) => [`Macro: ${value ?? '-'}`, ''] as [string, string]}
+              labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -316,11 +316,39 @@ export default function MacroDashboardPage() {
   }
 
   const { data } = apiData;
+  const updatedAt = mfData?.metrics.updatedAt || mfData?.metrics.meta.asOf;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 pb-12">
+    <div className="mx-auto max-w-6xl space-y-5 pb-12">
+      <section className="panel-grid p-5 sm:p-6">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="max-w-3xl">
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[var(--text-primary)]">매크로 분석</h1>
+            <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
+              첨부 HTML의 상단 정보 구조를 기준으로 점수와 리스크 상태를 먼저 읽도록 정리했습니다. 기존 MTN의 세부 자산군 분석과 경고 로직은 그대로 유지합니다.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[430px]">
+            <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Regime</p>
+              <p className="mt-2 font-mono text-2xl font-semibold text-[var(--text-primary)]">{apiData.regime}</p>
+            </div>
+            <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Score</p>
+              <p className="mt-2 font-mono text-2xl font-semibold text-[var(--text-primary)]">{apiData.score}/100</p>
+            </div>
+            <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">MF Sync</p>
+              <p className="mt-2 font-mono text-sm font-semibold text-[var(--text-primary)]">
+                {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '--'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="mb-4">
-        <p className="text-sm font-semibold uppercase tracking-wide text-purple-400">Macro Insight</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white mb-6">매크로 분석</h1>
 
         {/* 크로스 시그널 충돌 배너 */}

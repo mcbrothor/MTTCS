@@ -50,8 +50,8 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
-              formatter={(v: any) => [`P3: ${v}`, '']}
-              labelFormatter={(l: any) => l}
+              formatter={(value) => [`P3: ${value ?? '-'}`, ''] as [string, string]}
+              labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -134,18 +134,30 @@ export default function StatusCenter() {
 
       {/* 충돌 경고 배너 */}
       {conflictWarning && (
-        <div className="relative z-10 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs text-amber-300 flex items-center gap-2">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-          <span>{conflictWarning}</span>
+        <div className="relative z-10 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 flex items-start gap-2 text-left mb-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+          <span className="leading-relaxed">{conflictWarning}</span>
         </div>
       )}
 
-      <div className="relative z-10 flex flex-col items-center gap-4">
-        <div className="rounded-full border border-slate-700/50 bg-slate-900/50 p-3 shadow-inner">{config.icon}</div>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{config.subtitle}</p>
-          <h2 className={`mb-2 mt-1 text-3xl font-black tracking-tight ${config.color}`}>{config.title}</h2>
-          <p className="max-w-xl text-sm font-medium leading-relaxed text-slate-300">{config.description}</p>
+      <div className="relative z-10 flex flex-col items-center gap-3 w-full">
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">MARKET STATE</p>
+        <h2 className={`text-5xl font-black tracking-tight font-mono ${config.color} drop-shadow-lg mb-2`}>{data.state}</h2>
+        
+        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 rounded-full transition-all duration-1000"
+            style={{ width: `${Math.min(p3Score, 100)}%` }}
+          />
+        </div>
+        <p className="text-xs text-slate-400 font-medium">종합 점수 {p3Score}/100</p>
+        
+        <div className={`mt-2 w-full p-3 rounded-xl border ${config.bg} ${config.border} text-left`}>
+          <div className="flex items-center gap-2 mb-1.5">
+            {config.icon && <div className="[&>svg]:w-4 [&>svg]:h-4">{config.icon}</div>}
+            <span className={`text-xs font-bold ${config.color}`}>{config.title}</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-slate-300">{config.description}</p>
         </div>
       </div>
 

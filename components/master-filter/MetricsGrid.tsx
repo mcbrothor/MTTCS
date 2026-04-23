@@ -270,14 +270,11 @@ export default function MetricsGrid() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
         <MetricCard detail={metrics.trend} movingAverageData={metrics.movingAverageHistory} />
         <MetricCard detail={metrics.breadth} chartData={metrics.mainHistory} />
         <MetricCard detail={metrics.volatility} chartData={metrics.vixHistory} />
         <MetricCard detail={metrics.liquidity} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {p3Cards.map((detail) => (
           <MetricCard key={detail.label} detail={detail} compact />
         ))}

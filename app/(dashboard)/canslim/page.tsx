@@ -11,8 +11,6 @@ import {
   ScanSearch,
   Shield,
   Square,
-  XCircle,
-  Info,
   BarChart3,
   LayoutDashboard,
   Search,
@@ -20,10 +18,10 @@ import {
   Check,
   Activity,
 } from 'lucide-react';
+import FlowBanner from '@/components/layout/FlowBanner';
 import { useContestSelection } from '@/hooks/useContestSelection';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import MarketBanner from '@/components/ui/MarketBanner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
@@ -33,7 +31,6 @@ import type {
   CanslimMacroMarketData,
   CanslimScannerResult,
   DualScreenerTier,
-  ScannerConstituent,
   ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
@@ -195,7 +192,7 @@ export default function CanslimScannerPage() {
       setMacro(snapshot.macro);
       setLastScannedAt(snapshot.savedAt);
     }
-  }, []);
+  }, [universe]);
 
 
 
@@ -320,7 +317,7 @@ export default function CanslimScannerPage() {
 
       // 이슈 1 해결: 스캔 완료 후 유니버스 전체에 대해 RS 랭킹 산정 적용
       if (!abort.signal.aborted) {
-        current = applyUniverseRsRankings(current as any) as unknown as CanslimScannerResult[];
+        current = applyUniverseRsRankings(current as unknown as ScannerResult[]) as unknown as CanslimScannerResult[];
         setResults([...current]);
 
         const now = new Date().toISOString();
@@ -509,7 +506,7 @@ export default function CanslimScannerPage() {
   // === 카드 렌더링 ===
   const renderCards = () => (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {filteredResults.map((r, idx) => (
+      {filteredResults.map((r) => (
         <motion.div
           key={r.ticker}
           layout
@@ -588,7 +585,7 @@ export default function CanslimScannerPage() {
                 <span className="text-[10px] font-black text-rose-300">{pillarPassCount(r)} / 7 PASS</span>
               </div>
               <div className="flex gap-1">
-                {['M','C','A','N','S','L','I'].map((p, i) => {
+                {['M','C','A','N','S','L','I'].map((p) => {
                   const detail = r.canslimResult.pillarDetails.find(d => d.pillar === p);
                   const isPass = detail?.status === 'PASS';
                   const isFail = detail?.status === 'FAIL';
@@ -657,6 +654,7 @@ export default function CanslimScannerPage() {
   // === 메인 렌더링 ===
   return (
     <div className="space-y-6">
+      <FlowBanner currentKey="scanner" />
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
 

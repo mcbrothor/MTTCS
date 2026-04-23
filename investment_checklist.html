@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>추세추종 돌파매매 실전 체크리스트</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700;900&family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8C97A;
+    --gold-dim: #8A6E2F;
+    --dark: #0A0C0F;
+    --dark-2: #111418;
+    --dark-3: #181D24;
+    --dark-4: #1E242D;
+    --dark-5: #252D38;
+    --border: rgba(201,168,76,0.18);
+    --border-strong: rgba(201,168,76,0.4);
+    --text-primary: #F0EAD6;
+    --text-secondary: #9A9080;
+    --text-dim: #5A5248;
+    --red: #E05252;
+    --red-dim: rgba(224,82,82,0.15);
+    --yellow: #F0C040;
+    --yellow-dim: rgba(240,192,64,0.12);
+    --green: #4DB87A;
+    --green-dim: rgba(77,184,122,0.12);
+    --blue: #5B9BD5;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--dark);
+    color: var(--text-primary);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    top: -30%;
+    right: -20%;
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, rgba(201,168,76,0.05) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+    animation: fadeDown 0.8s ease both;
+  }
+
+  .header-badge {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--gold);
+    border: 1px solid var(--border-strong);
+    padding: 6px 18px;
+    margin-bottom: 24px;
+    text-transform: uppercase;
+    background: rgba(201,168,76,0.05);
+  }
+
+  .header h1 {
+    font-family: 'Noto Serif KR', serif;
+    font-size: clamp(26px, 4vw, 40px);
+    font-weight: 900;
+    color: var(--text-primary);
+    line-height: 1.3;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+
+  .header h1 span {
+    color: var(--gold);
+  }
+
+  .header-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 300;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── SCORE DASHBOARD ── */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .dash-card {
+    background: var(--dark-3);
+    border: 1px solid var(--border);
+    padding: 20px 16px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .dash-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--gold);
+    transform: scaleX(0);
+    transition: transform 0.4s ease;
+  }
+
+  .dash-card:hover::before { transform: scaleX(1); }
+
+  .dash-card .label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .dash-card .value {
+    font-family: 'DM Mono', monospace;
+    font-size: 32px;
+    font-weight: 500;
+    color: var(--gold);
+    transition: color 0.3s;
+  }
+
+  .dash-card .value.ready { color: var(--green); }
+  .dash-card .value.warning { color: var(--yellow); }
+  .dash-card .value.danger { color: var(--red); }
+
+  .dash-card .sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── STATUS BANNER ── */
+  .status-banner {
+    padding: 16px 24px;
+    border: 1px solid var(--border);
+    margin-bottom: 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--dark-3);
+    animation: fadeUp 0.6s 0.3s ease both;
+    transition: all 0.4s;
+  }
+
+  .status-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-dim);
+    box-shadow: 0 0 0 4px rgba(90,82,72,0.2);
+    transition: all 0.3s;
+  }
+
+  .status-banner.go .status-dot {
+    background: var(--green);
+    box-shadow: 0 0 0 4px rgba(77,184,122,0.2), 0 0 12px var(--green);
+  }
+
+  .status-banner.warn .status-dot {
+    background: var(--yellow);
+    box-shadow: 0 0 0 4px rgba(240,192,64,0.2), 0 0 12px var(--yellow);
+  }
+
+  .status-banner.stop .status-dot {
+    background: var(--red);
+    box-shadow: 0 0 0 4px rgba(224,82,82,0.2), 0 0 12px var(--red);
+  }
+
+  .status-text {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: color 0.3s;
+  }
+
+  .status-banner.go .status-text { color: var(--green); }
+  .status-banner.warn .status-text { color: var(--yellow); }
+  .status-banner.stop .status-text { color: var(--red); }
+
+  /* ── PRINCIPLE BOX ── */
+  .principle {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--gold);
+    background: var(--dark-3);
+    padding: 20px 24px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.6s 0.35s ease both;
+  }
+
+  .principle-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .principle p {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+
+  .principle p strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  /* ── SECTION ── */
+  .section {
+    margin-bottom: 32px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .section-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    background: rgba(201,168,76,0.08);
+    border: 1px solid var(--border-strong);
+    padding: 4px 10px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+  }
+
+  .section-title-wrap { flex: 1; }
+
+  .section-title {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .section-subtitle {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    margin-top: 2px;
+    font-weight: 300;
+  }
+
+  .section-progress {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .section-progress span {
+    color: var(--gold);
+  }
+
+  .chevron {
+    font-size: 14px;
+    color: var(--text-dim);
+    transition: transform 0.3s;
+    flex-shrink: 0;
+  }
+
+  .section.collapsed .chevron { transform: rotate(-90deg); }
+
+  .section-progress-bar {
+    height: 2px;
+    background: var(--dark-5);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .section-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold));
+    width: 0%;
+    transition: width 0.5s ease;
+  }
+
+  /* ── SUB-SECTION ── */
+  .sub-section {
+    margin-bottom: 8px;
+  }
+
+  .sub-section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    padding: 8px 0 4px 2px;
+    border-bottom: 1px solid rgba(201,168,76,0.06);
+    margin-bottom: 6px;
+  }
+
+  /* ── CHECK ITEM ── */
+  .check-item {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    align-items: start;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid transparent;
+    border-bottom: 1px solid rgba(201,168,76,0.06);
+    background: var(--dark-2);
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .check-item:hover {
+    background: var(--dark-3);
+    border-color: var(--border);
+  }
+
+  .check-item.checked {
+    background: rgba(77,184,122,0.04);
+    border-color: rgba(77,184,122,0.15);
+  }
+
+  .check-item.checked::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--green);
+  }
+
+  .check-item.unchecked-warn {
+    animation: pulse-warn 1s ease;
+  }
+
+  /* Checkbox */
+  .checkbox {
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--text-dim);
+    background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .check-item.checked .checkbox {
+    border-color: var(--green);
+    background: rgba(77,184,122,0.15);
+  }
+
+  .checkbox-mark {
+    color: var(--green);
+    font-size: 13px;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: all 0.2s;
+  }
+
+  .check-item.checked .checkbox-mark {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Item content */
+  .item-content { flex: 1; }
+
+  .item-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+  }
+
+  .item-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid;
+  }
+
+  .item-tag.quant { color: var(--blue); border-color: rgba(91,155,213,0.3); background: rgba(91,155,213,0.06); }
+  .item-tag.mental { color: #B07DD5; border-color: rgba(176,125,213,0.3); background: rgba(176,125,213,0.06); }
+  .item-tag.key { color: var(--gold); border-color: var(--border); background: rgba(201,168,76,0.06); }
+  .item-tag.risk { color: var(--red); border-color: rgba(224,82,82,0.3); background: var(--red-dim); }
+
+  .item-text {
+    font-size: 13.5px;
+    color: var(--text-primary);
+    line-height: 1.65;
+    font-weight: 400;
+  }
+
+  .check-item.checked .item-text {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+    text-decoration-color: rgba(77,184,122,0.4);
+  }
+
+  .item-text strong {
+    color: var(--gold-light);
+    font-weight: 600;
+  }
+
+  .check-item.checked .item-text strong {
+    color: var(--text-secondary);
+  }
+
+  /* Criterion badge */
+  .criterion {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--dark-4);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 2px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .check-item.checked .criterion {
+    background: rgba(77,184,122,0.08);
+    border-color: rgba(77,184,122,0.2);
+    color: var(--green);
+  }
+
+  /* ── FINAL APPROVAL ── */
+  .final-box {
+    border: 1px solid var(--border-strong);
+    background: var(--dark-3);
+    padding: 28px 28px;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.6s 0.5s ease both;
+  }
+
+  .final-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .final-box-title {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .final-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .final-check:last-child { border-bottom: none; }
+
+  .final-check:hover { opacity: 0.85; }
+
+  .final-cb {
+    width: 20px; height: 20px;
+    border: 1.5px solid var(--gold-dim);
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .final-check.checked .final-cb {
+    background: rgba(201,168,76,0.15);
+    border-color: var(--gold);
+  }
+
+  .final-cb-mark {
+    color: var(--gold);
+    font-size: 12px;
+    opacity: 0;
+    transition: all 0.2s;
+    transform: scale(0.5);
+  }
+
+  .final-check.checked .final-cb-mark {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .final-text {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+  }
+
+  .final-check.checked .final-text {
+    color: var(--gold-light);
+  }
+
+  /* ── MEMO / LOG ── */
+  .log-section {
+    background: var(--dark-3);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 32px;
+    animation: fadeUp 0.6s 0.55s ease both;
+  }
+
+  .log-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .log-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .log-field label {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+
+  .log-field input, .log-field textarea {
+    width: 100%;
+    background: var(--dark-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: vertical;
+  }
+
+  .log-field input:focus, .log-field textarea:focus {
+    border-color: var(--gold-dim);
+  }
+
+  .log-field.full { grid-column: 1 / -1; }
+
+  /* ── QUOTE ── */
+  .quote-block {
+    border-left: 3px solid var(--gold);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    background: rgba(201,168,76,0.04);
+    animation: fadeUp 0.6s 0.6s ease both;
+  }
+
+  .quote-text {
+    font-family: 'Noto Serif KR', serif;
+    font-size: 14px;
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: 1.8;
+    margin-bottom: 8px;
+  }
+
+  .quote-author {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+  }
+
+  /* ── RESET BUTTON ── */
+  .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 24px;
+    animation: fadeUp 0.6s 0.65s ease both;
+  }
+
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 12px 28px;
+    cursor: pointer;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--gold);
+    transition: all 0.2s;
+  }
+
+  .btn:hover {
+    background: rgba(201,168,76,0.1);
+    border-color: var(--gold);
+  }
+
+  .btn.primary {
+    background: rgba(201,168,76,0.12);
+    border-color: var(--gold);
+  }
+
+  .btn.danger {
+    color: var(--red);
+    border-color: rgba(224,82,82,0.3);
+  }
+
+  .btn.danger:hover {
+    background: var(--red-dim);
+    border-color: var(--red);
+  }
+
+  /* ── SECTION BODY COLLAPSE ── */
+  .section-body {
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+    max-height: 5000px;
+    opacity: 1;
+  }
+
+  .section.collapsed .section-body {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse-warn {
+    0% { background: var(--dark-2); }
+    50% { background: rgba(224,82,82,0.1); }
+    100% { background: var(--dark-2); }
+  }
+
+  /* Print */
+  @media print {
+    body { background: white; color: black; }
+    .btn, .actions { display: none; }
+  }
+
+  /* Mobile */
+  @media (max-width: 600px) {
+    .dashboard { grid-template-columns: 1fr 1fr; }
+    .check-item { grid-template-columns: 36px 1fr; }
+    .criterion { display: none; }
+    .log-grid { grid-template-columns: 1fr; }
+    .section-progress { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-badge">Trend Following · Breakout Trading</div>
+    <h1>추세추종 돌파매매<br><span>실전 체크리스트</span></h1>
+    <p class="header-sub">매수 버튼을 누르기 전, 모든 항목을 순서대로 점검하십시오</p>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="dashboard">
+    <div class="dash-card">
+      <div class="label">전체 항목</div>
+      <div class="value" id="total-count">0</div>
+      <div class="sub">Total Items</div>
+    </div>
+    <div class="dash-card">
+      <div class="label">완료 항목</div>
+      <div class="value" id="checked-count">0</div>
+      <div class="sub">Checked</div>
+    </div>
+    <div class="dash-card">
+      <div class="label">완료율</div>
+      <div class="value" id="pct-count">0%</div>
+      <div class="sub">Completion Rate</div>
+    </div>
+  </div>
+
+  <!-- STATUS BANNER -->
+  <div class="status-banner" id="status-banner">
+    <div class="status-dot"></div>
+    <div class="status-text" id="status-text">체크리스트를 시작하십시오</div>
+  </div>
+
+  <!-- PRINCIPLE -->
+  <div class="principle">
+    <div class="principle-title">사용 원칙</div>
+    <p>이 리스트는 <strong>필터가 아니라 거울</strong>입니다. 항목에 체크하는 것이 목적이 아니라, 각 질문에 <strong>"왜 Yes인지"를 스스로 설명할 수 있어야</strong> 합니다. 설명하지 못하면 No입니다. 🔴 하나라도 No → 진입 불가 / 🟡 애매 → 포지션 축소 or 대기</p>
+  </div>
+
+  <!-- SECTIONS CONTAINER -->
+  <div id="sections-container"></div>
+
+  <!-- FINAL APPROVAL -->
+  <div class="final-box">
+    <div class="final-box-title">⬛ 최종 승인 — 매수 직전 최후 질문</div>
+    <div class="final-check" onclick="toggleFinal(this)">
+      <div class="final-cb"><span class="final-cb-mark">✓</span></div>
+      <div class="final-text">나는 이 종목이 왜 지금 올라야 하는지, <strong>근거를 3가지</strong> 말할 수 있다.</div>
+    </div>
+    <div class="final-check" onclick="toggleFinal(this)">
+      <div class="final-cb"><span class="final-cb-mark">✓</span></div>
+      <div class="final-text"><strong>손절선에 도달하면 이유 불문하고 즉시 팔 수 있다.</strong> (망설임 없이)</div>
+    </div>
+    <div class="final-check" onclick="toggleFinal(this)">
+      <div class="final-cb"><span class="final-cb-mark">✓</span></div>
+      <div class="final-text">이 매매가 <strong>틀려도</strong> 나의 자산과 심리는 안전하다. (리스크 사전 수용)</div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log-section">
+    <div class="log-title">▸ 매매 기록 (Trade Log)</div>
+    <div class="log-grid">
+      <div class="log-field">
+        <label>종목명 / 코드</label>
+        <input type="text" placeholder="예) 삼성전자 / 005930">
+      </div>
+      <div class="log-field">
+        <label>진입일</label>
+        <input type="date">
+      </div>
+      <div class="log-field">
+        <label>피봇 포인트</label>
+        <input type="text" placeholder="예) 75,000원">
+      </div>
+      <div class="log-field">
+        <label>손절선</label>
+        <input type="text" placeholder="예) 69,000원 (-8%)">
+      </div>
+      <div class="log-field">
+        <label>1차 익절 목표</label>
+        <input type="text" placeholder="예) 90,000원 (+20%)">
+      </div>
+      <div class="log-field">
+        <label>포지션 크기</label>
+        <input type="text" placeholder="예) 전체 자산의 15%">
+      </div>
+      <div class="log-field full">
+        <label>진입 근거 요약 (3가지)</label>
+        <textarea rows="3" placeholder="1. &#10;2. &#10;3."></textarea>
+      </div>
+      <div class="log-field full">
+        <label>결과 및 배운 점</label>
+        <textarea rows="2" placeholder="매매 종료 후 복기를 반드시 기록하십시오."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUOTE -->
+  <div class="quote-block">
+    <div class="quote-text">"선도하는 업종의 선도주를 투자해서 돈을 벌지 못한다면, 다른 어떤 종목을 사도 돈을 벌지 못할 것이다."</div>
+    <div class="quote-author">— Jesse Livermore</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" onclick="window.print()">⬛ 출력하기</button>
+    <button class="btn danger" onclick="resetAll()">↺ 초기화</button>
+  </div>
+
+</div>
+
+<script>
+const DATA = [
+  {
+    id: 's0',
+    step: '0단계',
+    title: '나의 현재 상태 점검',
+    subtitle: 'Are YOU ready? — 시장보다 위험한 것은 지금 이 순간의 나 자신입니다.',
+    delay: 0,
+    items: [
+      {
+        id: 'i0-1',
+        tags: [{t:'정신', c:'mental'}],
+        text: '현재 나의 <strong>포트폴리오 전체 손익</strong>이 안정적인가? (최근 연속 손절로 심리가 흔들린 상태가 아닌가?)',
+        criterion: '심리 안정 확인'
+      },
+      {
+        id: 'i0-2',
+        tags: [{t:'정신', c:'mental'}],
+        text: '이 종목에 대해 <strong>뉴스·커뮤니티·지인</strong>으로부터 "오른다"는 정보를 먼저 접한 것이 아닌가? (정보 매수 배제)',
+        criterion: '워치리스트 기반'
+      },
+      {
+        id: 'i0-3',
+        tags: [{t:'정신', c:'mental'}],
+        text: '이 매수 결정이 <strong>FOMO(놓칠 것 같은 두려움)</strong>가 아닌, 사전에 설정한 워치리스트 기반인가?',
+        criterion: 'FOMO 배제'
+      },
+      {
+        id: 'i0-4',
+        tags: [{t:'정신', c:'mental'}, {t:'핵심', c:'key'}],
+        text: '지금 이 종목에 <strong>감정적으로 집착</strong>하고 있지 않은가? ("꼭 이게 돼야 해"라는 생각 없는가?)',
+        criterion: '집착 없음'
+      }
+    ]
+  },
+  {
+    id: 's1',
+    step: '1단계',
+    title: '시장 및 업종 환경',
+    subtitle: 'Where to play? — 숲이 불타고 있으면 좋은 나무도 탑니다.',
+    delay: 1,
+    subsections: [
+      {
+        label: '1-A. 시장 전체 환경',
+        items: [
+          {
+            id: 'i1-1',
+            tags: [{t:'수치', c:'quant'}],
+            text: '시장(KOSPI/KOSDAQ)이 <strong>200일 이동평균선 위</strong>에 있는가?',
+            criterion: '지수 > 200MA'
+          },
+          {
+            id: 'i1-2',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '시장이 <strong>IBD식 "확인된 상승 추세"</strong> 상태인가? (팔로우스루 데이 발생 이후, 분배일 4회 미만)',
+            criterion: '분배일 < 4회'
+          },
+          {
+            id: 'i1-3',
+            tags: [{t:'수치', c:'quant'}],
+            text: '<strong>미국 시장(S&P500/나스닥)</strong>이 동반 강세이거나 중립인가? (글로벌 리스크오프 국면 배제)',
+            criterion: '글로벌 중립+'
+          }
+        ]
+      },
+      {
+        label: '1-B. 업종(섹터) 환경',
+        items: [
+          {
+            id: 'i1-4',
+            tags: [{t:'수치', c:'quant'}],
+            text: '해당 업종의 <strong>이익 추정치(컨센서스 EPS)가 3개월 연속 상향</strong> 조정되고 있는가?',
+            criterion: '3개월+ 연속 상향'
+          },
+          {
+            id: 'i1-5',
+            tags: [{t:'수치', c:'quant'}],
+            text: '해당 업종 ETF/지수가 <strong>KOSPI 대비 상대강도(RS)가 최근 4주 기준 양(+)</strong>인가?',
+            criterion: 'RS > 0 (4주)'
+          },
+          {
+            id: 'i1-6',
+            tags: [{t:'수치', c:'quant'}],
+            text: '해당 업종의 <strong>거래대금 비중이 최근 10거래일 평균 대비 증가</strong>하고 있는가? (자금 유입)',
+            criterion: '거래대금 비중↑'
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 's2',
+    step: '2단계',
+    title: '개별 종목 퀄리티',
+    subtitle: 'What to buy? — 업종 내에서도 "한 방에 끝내는 종목"은 따로 있습니다.',
+    delay: 2,
+    subsections: [
+      {
+        label: '2-A. 펀더멘털 모멘텀',
+        items: [
+          {
+            id: 'i2-1',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '최근 <strong>2분기 연속 EPS 성장률이 20% 이상</strong>이거나, 적자→흑자 <strong>턴어라운드</strong> 중인가?',
+            criterion: 'EPS YoY +20%+'
+          },
+          {
+            id: 'i2-2',
+            tags: [{t:'수치', c:'quant'}],
+            text: '매출 성장률이 <strong>최근 4분기 평균 15% 이상</strong>인가? (EPS만 좋고 매출 없는 구조 배제)',
+            criterion: '매출 YoY +15%+'
+          },
+          {
+            id: 'i2-3',
+            tags: [{t:'수치', c:'quant'}],
+            text: '해당 기업에 <strong>기관/외국인이 최근 3개월 누적 순매수</strong> 상태인가? (스마트머니 확인)',
+            criterion: '기관+외인 순매수'
+          },
+          {
+            id: 'i2-4',
+            tags: [{t:'핵심', c:'key'}],
+            text: '현재 실적 모멘텀의 <strong>구조적 이유(신제품·수주·규제변화 등)</strong>를 1문장으로 설명할 수 있는가?',
+            criterion: '서술 가능'
+          }
+        ]
+      },
+      {
+        label: '2-B. 기술적 주도성',
+        items: [
+          {
+            id: 'i2-5',
+            tags: [{t:'수치', c:'quant'}],
+            text: '<strong>52주 신고가</strong> 기준 상위 30% 이내에 주가가 위치하는가?',
+            criterion: '고가 대비 >70%'
+          },
+          {
+            id: 'i2-6',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '52주 신저가 대비 <strong>최소 30% 이상</strong> 상승했으며, 초기 급등 시 <strong>평소 거래량의 3배 이상</strong>이 동반되었는가?',
+            criterion: '+30% & 거래량 3배+'
+          },
+          {
+            id: 'i2-7',
+            tags: [{t:'수치', c:'quant'}],
+            text: '주가가 <strong>50일, 150일, 200일 이동평균선 모두 위</strong>에 위치하며, 각 선이 <strong>순서대로 정배열</strong>인가?',
+            criterion: '50>150>200 정배열'
+          },
+          {
+            id: 'i2-8',
+            tags: [{t:'수치', c:'quant'}],
+            text: '시장 조정 시 이 종목의 하락폭이 <strong>KOSPI 하락폭의 50% 이내</strong>인가? (하방 경직성)',
+            criterion: '낙폭 < 시장×0.5'
+          },
+          {
+            id: 'i2-9',
+            tags: [{t:'수치', c:'quant'}],
+            text: 'IBD RS Rating 기준 <strong>상위 20% 이내</strong>에 해당하는가? (52주 수익률 상위 비교)',
+            criterion: 'RS 80점+'
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 's3',
+    step: '3단계',
+    title: '베이스 및 패턴 셋업',
+    subtitle: 'When to prepare? — 에너지가 응축되며 매도 물량이 마르는 구간을 찾습니다.',
+    delay: 3,
+    subsections: [
+      {
+        label: '3-A. 베이스 형태 적합성',
+        items: [
+          {
+            id: 'i3-1',
+            tags: [{t:'수치', c:'quant'}],
+            text: '차트상 명확한 베이스 패턴이 <strong>충분한 기간</strong> 형성되었는가?',
+            criterion: 'CwH:7주+ / Flat:5주+'
+          },
+          {
+            id: 'i3-2',
+            tags: [{t:'수치', c:'quant'}],
+            text: '베이스의 <strong>최대 조정 깊이</strong>가 기준 이내인가?',
+            criterion: 'CwH:-33% / Flat:-15%'
+          },
+          {
+            id: 'i3-3',
+            tags: [{t:'수치', c:'quant'}],
+            text: '베이스 형성 횟수가 <strong>3회 이하</strong>인가? (4회 이상 = 패턴 노출, 실패 확률 급증)',
+            criterion: '베이스 카운트 ≤3'
+          },
+          {
+            id: 'i3-4',
+            tags: [{t:'수치', c:'quant'}],
+            text: '베이스가 이전보다 얕은 구조(2nd, 3rd stage)라면, 깊이가 <strong>전 베이스의 절반 이하</strong>인가?',
+            criterion: 'Late-stage 경계'
+          }
+        ]
+      },
+      {
+        label: '3-B. 에너지 응축 확인 (VCP)',
+        items: [
+          {
+            id: 'i3-5',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '베이스 우측으로 갈수록 <strong>가격 변동폭이 축소</strong>되고 있는가? (Volatility Contraction)',
+            criterion: '각 수축폭 < 이전'
+          },
+          {
+            id: 'i3-6',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '돌파 직전 <strong>거래량이 명확히 감소</strong>하여 50일 평균 거래량을 하회했는가? (매도 물량 소진)',
+            criterion: '거래량 < 50일 평균'
+          },
+          {
+            id: 'i3-7',
+            tags: [{t:'수치', c:'quant'}],
+            text: '핸들이 형성된 경우, <strong>쐐기형(고점·저점 모두 하락)</strong>이 아닌 수평 또는 약상승 형태인가?',
+            criterion: '쐐기형 배제'
+          },
+          {
+            id: 'i3-8',
+            tags: [{t:'수치', c:'quant'}],
+            text: '베이스 기간 중 <strong>기관 순매수가 꾸준히 유입</strong>되고 있는가? (하방 지지 확인)',
+            criterion: '기관 누적 순매수'
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 's4',
+    step: '4단계',
+    title: '진입 및 리스크 관리',
+    subtitle: 'How to execute? — 좋은 종목을 나쁜 타점에 사면 좋은 매매가 아닙니다.',
+    delay: 4,
+    subsections: [
+      {
+        label: '4-A. 진입 타점 설정',
+        items: [
+          {
+            id: 'i4-1',
+            tags: [{t:'핵심', c:'key'}],
+            text: '<strong>피봇 포인트(매수 타점)</strong>를 사전에 정확히 설정했는가? (베이스 최고점 + 10센트 룰 적용)',
+            criterion: '사전 설정 완료'
+          },
+          {
+            id: 'i4-2',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '현재 주가가 피봇 포인트 대비 <strong>5% 이내</strong>인가? (5% 초과 = 추격매수, 진입 불가)',
+            criterion: '현재가 ≤ 피봇×1.05'
+          },
+          {
+            id: 'i4-3',
+            tags: [{t:'수치', c:'quant'}, {t:'핵심', c:'key'}],
+            text: '돌파 시 <strong>당일 거래량이 50일 평균 거래량의 150% 이상</strong> 터지고 있는가?',
+            criterion: '거래량 > 50MA×1.5'
+          }
+        ]
+      },
+      {
+        label: '4-B. 자금 및 리스크 관리',
+        items: [
+          {
+            id: 'i4-4',
+            tags: [{t:'위험', c:'risk'}, {t:'수치', c:'quant'}],
+            text: '<strong>1회 매수 금액</strong>이 전체 투자 가능 자금의 <strong>10~25% 이내</strong>로 설정되었는가?',
+            criterion: '포지션 ≤ 25%'
+          },
+          {
+            id: 'i4-5',
+            tags: [{t:'위험', c:'risk'}, {t:'핵심', c:'key'}],
+            text: '<strong>손절선</strong>을 사전에 설정했으며, 해당 선 도달 시 <strong>전량 기계적 청산</strong>할 것을 결심했는가?',
+            criterion: '피봇 대비 -7~8%'
+          },
+          {
+            id: 'i4-6',
+            tags: [{t:'위험', c:'risk'}, {t:'수치', c:'quant'}],
+            text: '이번 매매에서 <strong>최대 허용 손실금액(R)</strong>을 계산했으며, 이는 전체 자산의 <strong>1~2% 이내</strong>인가?',
+            criterion: '손실액 ≤ 자산×2%'
+          },
+          {
+            id: 'i4-7',
+            tags: [{t:'위험', c:'risk'}, {t:'수치', c:'quant'}],
+            text: '현재 포트폴리오 전체의 <strong>오픈 포지션이 3~5개 이내</strong>인가? (분산 과다 or 집중 과다 배제)',
+            criterion: '종목 수 3~5개'
+          },
+          {
+            id: 'i4-8',
+            tags: [{t:'위험', c:'risk'}, {t:'수치', c:'quant'}],
+            text: '목표 <strong>수익:손실 비율(R-Multiple)</strong>이 최소 <strong>2:1 이상</strong>으로 설정되었는가?',
+            criterion: 'RR ≥ 2:1'
+          }
+        ]
+      }
+    ]
+  }
+];
+
+let state = {};
+
+function getAllItems() {
+  let all = [];
+  DATA.forEach(sec => {
+    if (sec.items) {
+      sec.items.forEach(item => all.push(item.id));
+    }
+    if (sec.subsections) {
+      sec.subsections.forEach(sub => {
+        sub.items.forEach(item => all.push(item.id));
+      });
+    }
+  });
+  return all;
+}
+
+function buildTagsHTML(tags) {
+  return tags.map(t => `<span class="item-tag ${t.c}">${t.t}</span>`).join('');
+}
+
+function buildItemHTML(item) {
+  return `
+    <div class="check-item" id="item-${item.id}" onclick="toggleItem('${item.id}')">
+      <div class="checkbox"><span class="checkbox-mark">✓</span></div>
+      <div class="item-content">
+        <div class="item-tags">${buildTagsHTML(item.tags)}</div>
+        <div class="item-text">${item.text}</div>
+      </div>
+      <div class="criterion">${item.criterion}</div>
+    </div>
+  `;
+}
+
+function buildSectionHTML(sec) {
+  let bodyHTML = '';
+  if (sec.items) {
+    bodyHTML = sec.items.map(buildItemHTML).join('');
+  }
+  if (sec.subsections) {
+    bodyHTML = sec.subsections.map(sub => `
+      <div class="sub-section">
+        <div class="sub-section-label">${sub.label}</div>
+        ${sub.items.map(buildItemHTML).join('')}
+      </div>
+    `).join('');
+  }
+  const totalItems = sec.items ? sec.items.length : sec.subsections.reduce((a,s) => a+s.items.length, 0);
+  return `
+    <div class="section" id="section-${sec.id}" style="animation-delay: ${sec.delay * 0.08}s">
+      <div class="section-header" onclick="toggleSection('${sec.id}')">
+        <div class="section-num">${sec.step}</div>
+        <div class="section-title-wrap">
+          <div class="section-title">${sec.title}</div>
+          <div class="section-subtitle">${sec.subtitle}</div>
+        </div>
+        <div class="section-progress"><span id="prog-${sec.id}">0</span>/${totalItems}</div>
+        <div class="chevron">▾</div>
+      </div>
+      <div class="section-progress-bar">
+        <div class="section-progress-fill" id="fill-${sec.id}"></div>
+      </div>
+      <div class="section-body">
+        ${bodyHTML}
+      </div>
+    </div>
+  `;
+}
+
+function render() {
+  const container = document.getElementById('sections-container');
+  container.innerHTML = DATA.map(buildSectionHTML).join('');
+  // restore state
+  Object.keys(state).forEach(id => {
+    if (state[id]) {
+      const el = document.getElementById('item-' + id);
+      if (el) el.classList.add('checked');
+    }
+  });
+  updateDashboard();
+}
+
+function toggleItem(id) {
+  state[id] = !state[id];
+  const el = document.getElementById('item-' + id);
+  el.classList.toggle('checked', state[id]);
+  updateDashboard();
+  saveState();
+}
+
+function toggleFinal(el) {
+  el.classList.toggle('checked');
+  updateDashboard();
+}
+
+function toggleSection(id) {
+  const sec = document.getElementById('section-' + id);
+  sec.classList.toggle('collapsed');
+}
+
+function getSectionItems(sec) {
+  let all = [];
+  if (sec.items) all = sec.items.map(i => i.id);
+  if (sec.subsections) sec.subsections.forEach(s => s.items.forEach(i => all.push(i.id)));
+  return all;
+}
+
+function updateDashboard() {
+  const allIds = getAllItems();
+  const total = allIds.length;
+  const checked = allIds.filter(id => state[id]).length;
+  const pct = total === 0 ? 0 : Math.round((checked / total) * 100);
+
+  document.getElementById('total-count').textContent = total;
+  const checkedEl = document.getElementById('checked-count');
+  checkedEl.textContent = checked;
+  checkedEl.className = 'value';
+  if (pct === 100) checkedEl.classList.add('ready');
+  else if (pct >= 50) checkedEl.classList.add('warning');
+  else checkedEl.classList.add('danger');
+
+  const pctEl = document.getElementById('pct-count');
+  pctEl.textContent = pct + '%';
+  pctEl.className = 'value';
+  if (pct === 100) pctEl.classList.add('ready');
+  else if (pct >= 70) pctEl.classList.add('warning');
+  else pctEl.classList.add('danger');
+
+  // Section progress
+  DATA.forEach(sec => {
+    const ids = getSectionItems(sec);
+    const done = ids.filter(id => state[id]).length;
+    const progEl = document.getElementById('prog-' + sec.id);
+    const fillEl = document.getElementById('fill-' + sec.id);
+    if (progEl) progEl.textContent = done;
+    if (fillEl) fillEl.style.width = (ids.length ? (done/ids.length*100) : 0) + '%';
+  });
+
+  // Status banner
+  const banner = document.getElementById('status-banner');
+  const statusText = document.getElementById('status-text');
+  banner.className = 'status-banner';
+  if (pct === 0) {
+    statusText.textContent = '체크리스트를 시작하십시오';
+  } else if (pct < 50) {
+    banner.classList.add('stop');
+    statusText.textContent = `🔴 진입 불가 — ${total - checked}개 항목 미완료 (완료율 ${pct}%)`;
+  } else if (pct < 100) {
+    banner.classList.add('warn');
+    statusText.textContent = `🟡 주의 — 포지션 축소 또는 대기 권장 (완료율 ${pct}%)`;
+  } else {
+    banner.classList.add('go');
+    statusText.textContent = `🟢 조건부 진입 가능 — 최종 승인 3개 항목을 확인하십시오`;
+  }
+}
+
+function saveState() {
+  try { localStorage.setItem('checklist_state', JSON.stringify(state)); } catch(e) {}
+}
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('checklist_state');
+    if (s) state = JSON.parse(s);
+  } catch(e) { state = {}; }
+}
+
+function resetAll() {
+  if (!confirm('모든 체크를 초기화하시겠습니까?')) return;
+  state = {};
+  document.querySelectorAll('.final-check').forEach(el => el.classList.remove('checked'));
+  saveState();
+  render();
+}
+
+loadState();
+render();
+</script>
+</body>
+</html>

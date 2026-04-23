@@ -1,4 +1,5 @@
 import type { PortfolioRiskSummary, SecurityProfile, Trade } from '../../../types/index.ts';
+import { buildTradePositionLifecycle } from './position-lifecycle.ts';
 
 function finite(value: unknown) {
   const numeric = Number(value);
@@ -62,6 +63,29 @@ export function calculatePortfolioRiskSummary(
     }
   }
 
+  const positions = active.map((trade) => {
+    const lifecycle = buildTradePositionLifecycle(trade);
+    const profile = profileByTicker.get(trade.ticker.toUpperCase());
+    const netShares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
+    const avgEntryPrice = trade.metrics?.avgEntryPrice ?? trade.entry_price ?? null;
+    const currentPrice = trade.metrics?.currentPrice ?? null;
+    return {
+      ticker: trade.ticker,
+      status: trade.status,
+      sector: profile?.sector || 'Unknown',
+      exposure: Number((netShares * finite(avgEntryPrice)).toFixed(2)),
+      netShares: Number(netShares.toFixed(4)),
+      avgEntryPrice: avgEntryPrice === null ? null : Number(avgEntryPrice.toFixed(4)),
+      currentPrice: currentPrice === null ? null : Number(currentPrice.toFixed(4)),
+      unrealizedPnL: trade.metrics?.unrealizedPnL ?? null,
+      unrealizedR: trade.metrics?.unrealizedR ?? null,
+      openRisk: Number(finite(trade.metrics?.openRisk).toFixed(2)),
+      pyramidCount: lifecycle.pyramidCount,
+      partialExitCount: lifecycle.partialExitCount,
+      latestAction: lifecycle.events.at(-1)?.action ?? null,
+    };
+  });
+
   return {
     totalEquity: Number(equity.toFixed(2)),
     investedCapital: Number(investedCapital.toFixed(2)),
@@ -73,5 +97,6 @@ export function calculatePortfolioRiskSummary(
     openRiskPct: equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0,
     sectorExposure,
     warnings,
+    positions,
   };
 }

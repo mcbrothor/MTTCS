@@ -239,6 +239,14 @@ export function analyzeVcp(
   let finalRecommendedEntry = recommendedEntry;
   let finalEntrySource = entrySource;
 
+  if (contractions.length < 2) {
+    finalScore = Math.min(finalScore, 40);
+    if (finalScore >= 25) {
+      finalGrade = 'forming';
+    }
+    allDetails.push('수축이 2개 미만이라 점수를 40점 이하로 제한합니다.');
+  }
+
   allDetails.push(
     `Momentum branch: ${momentum.momentumBranch} (8-week return ${momentum.eightWeekReturnPct ?? 'n/a'}%, MA50 distance ${momentum.distanceFromMa50Pct ?? 'n/a'}%, 52-week low advance ${momentum.low52WeekAdvancePct ?? 'n/a'}%).`
   );

@@ -54,9 +54,10 @@ export function scoreContractions(contractions: VcpContraction[]): { score: numb
     return { score: contractions.length === 1 ? 20 : 0, details };
   }
 
+  const sequentialLowering = validateSequentialLowering(contractions);
   let progressiveCount = 0;
   for (let i = 1; i < contractions.length; i++) {
-    if (contractions[i].depthPct < contractions[i - 1].depthPct) {
+    if (contractions[i].depthPct < contractions[i - 1].depthPct && sequentialLowering.pairs[i - 1]?.passed) {
       progressiveCount++;
     }
   }
@@ -78,9 +79,30 @@ export function scoreContractions(contractions: VcpContraction[]): { score: numb
 
   details.push(`수축 ${contractions.length}개 감지, 깊이: ${contractions.map((c) => `${c.depthPct}%`).join(' → ')}`);
   details.push(`점진적 수축 비율: ${round(progressiveRatio * 100, 0)}% (${progressiveCount}/${contractions.length - 1})`);
+  details.push(`고점·저점 동시 하락 비율: ${round(sequentialLowering.ratio * 100, 0)}% (${sequentialLowering.passedCount}/${Math.max(1, contractions.length - 1)})`);
   if (lastDepth <= 10) details.push(`최종 수축 ${lastDepth}% — 매우 타이트한 패턴`);
 
   return { score, details };
+}
+
+export function validateSequentialLowering(contractions: VcpContraction[]) {
+  const pairs = [];
+  for (let i = 1; i < contractions.length; i++) {
+    const previous = contractions[i - 1];
+    const current = contractions[i];
+    pairs.push({
+      passed: current.peakPrice < previous.peakPrice && current.troughPrice < previous.troughPrice,
+    });
+  }
+
+  const passedCount = pairs.filter((item) => item.passed).length;
+  const ratio = pairs.length > 0 ? passedCount / pairs.length : 0;
+
+  return {
+    pairs,
+    passedCount,
+    ratio,
+  };
 }
 
 /**
@@ -105,7 +127,7 @@ export function scoreVolumeDryUp(
     }
   }
   const decreasingRatio = decreasingCount / (contractions.length - 1);
-  const trendScore = round(decreasingRatio * 50);
+  const trendScore = round(decreasingRatio * 70);
 
   const recentSlice = data.slice(-50);
   const avg50Volume = recentSlice.length > 0

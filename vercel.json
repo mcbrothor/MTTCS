@@ -19,6 +19,14 @@
     {
       "path": "/api/cron/contest-review-kr",
       "schedule": "0 08 * * *"
+    },
+    {
+      "path": "/api/cron/rs-metrics?market=US",
+      "schedule": "15 21 * * 1-5"
+    },
+    {
+      "path": "/api/cron/rs-metrics?market=KR",
+      "schedule": "15 07 * * 1-5"
     }
   ]
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Trade, TradeExecution, TradeLegLabel } from '@/types';
 import { ExecutionDraft, currency, numberText, signedCurrency, dateInputValue, getEntryTargets } from './shared';
 import { Trash2 } from 'lucide-react';
+import PositionLifecycleCard from '@/components/plan/PositionLifecycleCard';
 
 export function DetailMetric({ 
   label, 
@@ -209,6 +210,8 @@ export function ExecutionsPanel({
           color={metrics?.unrealizedR && metrics.unrealizedR >= 0 ? 'emerald' : 'coral'}
         />
       </div>
+
+      <PositionLifecycleCard trade={trade} />
 
       <ExecutionForm trade={trade} busy={busy} onSave={onSave} />
 

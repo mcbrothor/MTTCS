@@ -38,6 +38,7 @@ import {
   readScannerSnapshot,
   writeScannerSnapshot,
 } from './storage';
+import { passesScannerMacroPolicy } from '@/lib/finance/market/macro-policy';
 
 export {
   UNIVERSES,
@@ -84,6 +85,12 @@ export function useScanner() {
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
   const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
   const [showAllMacroResults, setShowAllMacroResults] = useState(false);
+
+  const macroScopedResults = useMemo(() => {
+    return results
+      .map((item) => withRecommendation(item))
+      .filter((item) => passesScannerMacroPolicy(item, macroTrend?.action_level, showAllMacroResults));
+  }, [results, macroTrend, showAllMacroResults]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -245,6 +252,7 @@ export function useScanner() {
 
         // 3. Recommended 등급 종목 자동 콘테스트 후보 선택
         const recommendedTickers = normalized
+          .filter((item) => passesScannerMacroPolicy(item, merged.macroTrend?.action_level, false))
           .filter(item => item.recommendationTier === 'Recommended')
           .map(item => item.ticker);
 
@@ -305,11 +313,7 @@ export function useScanner() {
   };
 
   const filteredResults = useMemo(() => {
-    let list = results.map((item) => withRecommendation(item));
-
-    if (macroTrend?.action_level === 'REDUCED' && !showAllMacroResults && filterKey === 'all') {
-      list = list.filter((row) => (row.rsRating || 0) >= 80 || row.status !== 'done');
-    }
+    let list = [...macroScopedResults];
 
     if (filterKey === 'sepaPass') list = list.filter((row) => row.sepaStatus === 'pass');
     else if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
@@ -354,13 +358,13 @@ export function useScanner() {
     });
 
     return list;
-  }, [results, filterKey, sortKey, macroTrend, showAllMacroResults, showCustomFilter, customFilters]);
+  }, [macroScopedResults, filterKey, sortKey, showCustomFilter, customFilters]);
 
   const stats = useMemo(() => ({
-    recommended: results.filter((item) => item.recommendationTier === 'Recommended').length,
-    partial: results.filter((item) => item.recommendationTier === 'Partial').length,
-    errors: results.filter((item) => item.status === 'error').length,
-  }), [results]);
+    recommended: macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length,
+    partial: macroScopedResults.filter((item) => item.recommendationTier === 'Partial').length,
+    errors: macroScopedResults.filter((item) => item.status === 'error').length,
+  }), [macroScopedResults]);
 
   const dataSourceSummary = useMemo(() => {
     const sources = Array.from(new Set(

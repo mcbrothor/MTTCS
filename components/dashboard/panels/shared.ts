@@ -100,13 +100,14 @@ export function getTrailingStops(value: TrailingStops | string | null): Trailing
   }
 }
 
-export function getSepaEvidence(value: any): any {
+export function getSepaEvidence(value: SepaEvidence | string | null): SepaEvidence | null {
   if (!value) return null;
   if (typeof value !== 'string') return value;
   try {
-    return JSON.parse(value);
+    return JSON.parse(value) as SepaEvidence;
   } catch {
     return null;
   }
 }
 
+import type { SepaEvidence } from '@/types';

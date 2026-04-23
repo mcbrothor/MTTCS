@@ -24,7 +24,7 @@ interface ScannerContextBannerProps {
 }
 
 export default function ScannerContextBanner({
-  ticker, pivot, entry, rs, vcpScore, vcpGrade, rsNewHigh, pivotDist,
+  pivot, entry, rs, vcpScore, vcpGrade, rsNewHigh, pivotDist,
 }: ScannerContextBannerProps) {
   // 스캐너 데이터가 하나도 없으면 배너를 렌더링하지 않음
   if (!pivot && !rs && !vcpScore) return null;

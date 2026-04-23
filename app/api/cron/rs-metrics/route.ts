@@ -1,6 +1,7 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { validateCronRequest } from '@/lib/contest-cron';
 import { finalizeRsMetrics, runRsMetricsChunk } from '@/lib/finance/market/stock-metrics';
+import { sendTelegramMessage } from '@/lib/telegram';
 import type { MarketCode } from '@/types';
 
 function parseMarket(value: string | null): MarketCode[] | null {
@@ -10,8 +11,22 @@ function parseMarket(value: string | null): MarketCode[] | null {
 }
 
 function parseMode(value: string | null) {
-  if (value === 'enqueue' || value === 'chunk' || value === 'finalize') return value;
-  return 'enqueue';
+  if (value === 'enqueue' || value === 'chunk' || value === 'finalize' || value === 'auto') return value;
+  return 'auto';
+}
+
+async function runMarketAuto(market: MarketCode, calcDate: string, chunkSize: number) {
+  const chunks = [];
+  let chunkIndex: number | null = 0;
+
+  while (chunkIndex !== null) {
+    const chunkResult = await runRsMetricsChunk({ market, calcDate, chunkIndex, chunkSize });
+    chunks.push(chunkResult);
+    chunkIndex = chunkResult.nextChunkIndex;
+  }
+
+  const finalized = await finalizeRsMetrics(market, calcDate);
+  return { market, mode: 'auto', chunks, finalized };
 }
 
 export async function GET(request: Request) {
@@ -42,13 +57,24 @@ export async function GET(request: Request) {
     for (const market of markets) {
       if (mode === 'chunk') {
         results.push(await runRsMetricsChunk({ market, calcDate, chunkIndex, chunkSize }));
-      } else {
+      } else if (mode === 'finalize') {
         results.push(await finalizeRsMetrics(market, calcDate));
+      } else {
+        results.push(await runMarketAuto(market, calcDate, chunkSize));
       }
     }
 
     return apiSuccess({ mode, calcDate, results }, { source: 'MTN RS cron', provider: 'MTN', delay: 'EOD' });
   } catch (error) {
+    await sendTelegramMessage(
+      [
+        '*RS Metrics Cron Failed*',
+        `- mode: ${mode}`,
+        `- market: ${markets.join(', ')}`,
+        `- calcDate: ${calcDate}`,
+        `- error: ${getErrorMessage(error, 'RS metrics cron failed.')}`,
+      ].join('\n')
+    );
     return apiError(getErrorMessage(error, 'RS metrics cron failed.'), 'API_ERROR', 500);
   }
 }

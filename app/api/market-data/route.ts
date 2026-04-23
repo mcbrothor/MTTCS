@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
-import { getYahooDailyPrice, getYahooFundamentals } from '@/lib/finance/providers/yahoo-api';
-import { getSecFundamentals } from '@/lib/finance/providers/sec-edgar-api';
+import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { analyzeSepa } from '@/lib/finance/core/sepa';
 import { calculateATR, calculateEntryPrice } from '@/lib/finance/core/moving-average';
 import { calculateMinerviniRiskPlan } from '@/lib/finance/core/position-sizing';
@@ -139,8 +138,8 @@ function mergeStandardMetrics(response: MarketAnalysisResponse, metric: StockMet
       metrics: {
         ...response.sepaEvidence.metrics,
         rsRating: standardRs,
-        rsSource: standardRs !== null ? ('UNIVERSE' as const) : (response.sepaEvidence.metrics.rsSource ?? null),
-        internalRsRating: standardRs,
+        rsSource: standardRs !== null ? ('DB_BATCH' as const) : (response.sepaEvidence.metrics.rsSource ?? null),
+        externalRsRating: standardRs,
         rsRank: metric?.rs_rank ?? null,
         rsUniverseSize: metric?.rs_universe_size ?? null,
         rsPercentile: metric?.rs_rank && metric?.rs_universe_size

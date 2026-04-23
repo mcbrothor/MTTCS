@@ -27,8 +27,6 @@ import type {
 
 export const dynamic = 'force-dynamic';
 
-const round = (v: number, d = 2) => Number(v.toFixed(d));
-
 /**
  * 왜 master-filter에서 매크로 데이터를 직접 가져오지 않는가?
  * - master-filter API는 전체 시장 분석용으로 응답이 무겁습니다
@@ -237,7 +235,8 @@ export async function GET(request: Request) {
         debtToEquityPct: null,
         source: fundamentalResult.data.roe ? 'Yahoo Finance + Snapshot' : 'Calculated',
       },
-      preCalculatedRs: dbMetric?.rs_rating ?? undefined
+      preCalculatedRs: dbMetric?.rs_rating ?? undefined,
+      rsSourceHint: dbMetric?.rs_rating !== undefined && dbMetric?.rs_rating !== null ? 'DB_BATCH' : undefined,
     });
     const vcpAnalysis = analyzeVcp(priceData, breakoutPrice, {
       rsRating: sepaEvidence.metrics.rsRating ?? null,

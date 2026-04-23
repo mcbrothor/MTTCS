@@ -34,9 +34,6 @@ interface TradingViewModalProps {
 
 function TradingViewModal({ ticker, exchange, onClose }: TradingViewModalProps) {
   const symbol = toTradingViewSymbol(ticker, exchange);
-  // TradingView Widget 임베드 URL — 무료, API 키 불필요
-  // interval=W : 주봉 (VCP 패턴 확인에 적합)
-  const widgetUrl = `https://www.tradingview.com/widgetembed/?symbol=${encodeURIComponent(symbol)}&interval=W&theme=dark&style=1&locale=ko&toolbar_bg=%23131722&enable_publishing=0&hide_top_toolbar=0&hide_legend=0&save_image=0&calendar=0&studies=RSI%40tv-basicstudies&support_host=https%3A%2F%2Fwww.tradingview.com`;
   const externalUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`;
 
   return (

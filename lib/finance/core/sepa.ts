@@ -15,9 +15,10 @@ function criterion(
   status: AssessmentStatus,
   actual: number | string | null,
   threshold: string,
-  description: string
+  description: string,
+  isCore: boolean = false
 ): SepaCriterion {
-  return { id, label, status, actual, threshold, description };
+  return { id, label, status, actual, threshold, description, isCore };
 }
 
 function passFail(value: boolean): AssessmentStatus {
@@ -32,7 +33,8 @@ function evaluableCriterion(
   value: boolean,
   threshold: string,
   description: string,
-  missingDataMsg?: string
+  missingDataMsg?: string,
+  isCore: boolean = false
 ) {
   return criterion(
     id,
@@ -40,7 +42,8 @@ function evaluableCriterion(
     canEvaluate ? passFail(value) : 'info',
     actual,
     canEvaluate ? threshold : `${threshold} (데이터 부족, 저장 차단 제외)`,
-    canEvaluate ? description : (missingDataMsg || '필요한 가격 이력이 부족해 정보 항목으로만 표시합니다.')
+    canEvaluate ? description : (missingDataMsg || '필요한 가격 이력이 부족해 정보 항목으로만 표시합니다.'),
+    isCore
   );
 }
 
@@ -137,6 +140,7 @@ export function analyzeSepa(
     benchmarkTicker?: string | null;
     fundamentals?: FundamentalSnapshot | null;
     preCalculatedRs?: number;
+    rsSourceHint?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY';
   } = {}
 ): SepaEvidence {
   const last = data.at(-1);
@@ -158,67 +162,70 @@ export function analyzeSepa(
 
   const criteria: SepaCriterion[] = [
     evaluableCriterion(
-      'price_gt_ma50',
+      'price_vs_ma50',
       '현재가 > 50일 이동평균',
       ma50 ? `${round(lastClose ?? 0)} / MA50 ${ma50}` : null,
       lastClose !== null && ma50 !== null,
       Boolean(lastClose !== null && ma50 !== null && lastClose > ma50),
       '현재가가 50일선 위',
-      '단기 추세가 살아 있는지 확인합니다.'
+      '단기 추세가 살아 있는지 확인합니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
-      'price_gt_ma150',
+      'price_vs_ma150',
       '현재가 > 150일 이동평균',
       ma150 ? `${round(lastClose ?? 0)} / MA150 ${ma150}` : null,
       lastClose !== null && ma150 !== null,
       Boolean(lastClose !== null && ma150 !== null && lastClose > ma150),
       '현재가가 150일선 위',
-      '중기 추세 위에 있는 종목만 후보로 둡니다.'
+      '중기 추세 위에 있는 종목만 후보로 둡니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
-      'price_gt_ma200',
+      'price_vs_ma200',
       '현재가 > 200일 이동평균',
       ma200 ? `${round(lastClose ?? 0)} / MA200 ${ma200}` : null,
       lastClose !== null && ma200 !== null,
       Boolean(lastClose !== null && ma200 !== null && lastClose > ma200),
       '현재가가 200일선 위',
-      '장기 하락 추세 종목을 배제합니다.'
+      '장기 하락 추세 종목을 배제합니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
-      'ma50_gt_ma150',
-      '50일선 > 150일선',
-      ma50 && ma150 ? `${ma50} / ${ma150}` : null,
-      ma50 !== null && ma150 !== null,
-      Boolean(ma50 !== null && ma150 !== null && ma50 > ma150),
-      'MA50이 MA150보다 높음',
-      '단기 추세가 중기 추세보다 강한지 봅니다.'
+      'ma_alignment',
+      '50일선 > 150일선 > 200일선',
+      ma50 && ma150 && ma200 ? `${ma50} / ${ma150} / ${ma200}` : null,
+      ma50 !== null && ma150 !== null && ma200 !== null,
+      Boolean(ma50 !== null && ma150 !== null && ma200 !== null && ma50 > ma150 && ma150 > ma200),
+      'MA50 > MA150 > MA200 정배열',
+      '상승 추세의 정렬 상태를 확인합니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
-      'ma150_gt_ma200',
-      '150일선 > 200일선',
-      ma150 && ma200 ? `${ma150} / ${ma200}` : null,
-      ma150 !== null && ma200 !== null,
-      Boolean(ma150 !== null && ma200 !== null && ma150 > ma200),
-      'MA150이 MA200보다 높음',
-      '상승 추세의 정렬 상태를 확인합니다.'
-    ),
-    evaluableCriterion(
-      'ma200_rising',
+      'ma200_uptrend',
       '200일선 상승',
       ma200 && ma200PrevMonth ? `${ma200} / 1개월 전 ${ma200PrevMonth}` : null,
       ma200 !== null && ma200PrevMonth !== null,
       Boolean(ma200 !== null && ma200PrevMonth !== null && ma200 > ma200PrevMonth),
       '200일선이 최소 1개월 전보다 높음',
-      '장기 추세가 우상향인지 확인합니다.'
+      '장기 추세가 우상향인지 확인합니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
-      'near_52w_high',
+      'within_52w_high',
       '52주 고점 10% 이내',
       distanceFromHigh52WeekPct !== null ? `${distanceFromHigh52WeekPct}% 아래` : null,
       distanceFromHigh52WeekPct !== null,
       Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 10),
       '52주 고점 대비 10% 이내 (오닐 표준)',
-      '강한 종목이 고점 근처에서 신고가 돌파를 준비 중인지 확인합니다.'
+      '강한 종목이 고점 근처에서 신고가 돌파를 준비 중인지 확인합니다.',
+      undefined,
+      true
     ),
     evaluableCriterion(
       'above_52w_low',
@@ -227,7 +234,9 @@ export function analyzeSepa(
       distanceFromLow52WeekPct !== null,
       Boolean(distanceFromLow52WeekPct !== null && distanceFromLow52WeekPct >= 30),
       '52주 저점 대비 +30% 이상 (미너비니 Stage 2)',
-      '바닥에 묶여있는 종목이 템플릿을 통과하지 않도록 합니다.'
+      '바닥에 묶여있는 종목이 템플릿을 통과하지 않도록 합니다.',
+      undefined,
+      true
     ),
     criterion(
       'rs_rating',
@@ -273,13 +282,18 @@ export function analyzeSepa(
     failed: criteria.filter((item) => item.status === 'fail').length,
     info: criteria.filter((item) => item.status === 'info').length,
     total: criteria.length,
+    corePassed: criteria.filter((item) => item.isCore && item.status === 'pass').length,
+    coreFailed: criteria.filter((item) => item.isCore && item.status === 'fail').length,
+    coreTotal: criteria.filter((item) => item.isCore).length,
   };
 
   let finalStatus: 'pass' | 'fail' | 'warning' = 'pass';
-  if (summary.failed > 3) {
-    finalStatus = 'fail';
-  } else if (summary.failed > 0) {
+  if (summary.corePassed >= summary.coreTotal) {
+    finalStatus = 'pass';
+  } else if (summary.corePassed >= summary.coreTotal - 1) {
     finalStatus = 'warning';
+  } else {
+    finalStatus = 'fail';
   }
 
   return {
@@ -297,7 +311,7 @@ export function analyzeSepa(
       distanceFromLow52WeekPct,
       avgDollarVolume20: avgDollarVolume || null,
       rsRating: options.preCalculatedRs ?? rs.rsScore,
-      rsSource: options.preCalculatedRs !== undefined ? 'UNIVERSE' : (rs.rsScore !== null ? 'BENCHMARK_PROXY' : null),
+      rsSource: options.rsSourceHint ?? (options.preCalculatedRs !== undefined ? 'UNIVERSE' : (rs.rsScore !== null ? 'BENCHMARK_PROXY' : null)),
       internalRsRating: null,
       externalRsRating: null,
       rsRank: null,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
+import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import type { MasterFilterResponse, OHLCData } from '@/types';
 
@@ -90,10 +91,10 @@ export async function GET(request: Request) {
     const res = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs);
 
     // 2. 외부 연동을 위한 매핑 (AI 인사이트용)
-    const macroMap = macroQuotes.reduce((acc, quote) => {
+    const macroMap = macroQuotes.reduce<Record<string, YahooQuote>>((acc, quote) => {
       acc[quote.symbol] = quote;
       return acc;
-    }, {} as Record<string, any>);
+    }, {});
 
     const insightInput = {
       marketState: res.state,

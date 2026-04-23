@@ -6,6 +6,7 @@
 
 import assert from 'node:assert/strict';
 import { analyzeVcp, calculateBBWidth } from '../lib/finance/engines/vcp/index.ts';
+import { validateSequentialLowering } from '../lib/finance/engines/vcp/contractions.ts';
 
 // --- 헬퍼: 시뮬레이션 OHLC 데이터 생성 ---
 
@@ -211,8 +212,8 @@ console.log('=== VCP Engine Tests ===\n');
 {
   const data = generateUptrend(100, 260);
   const result = analyzeVcp(data, 150);
-  assert.ok(result.score < 50, `단순 상승 추세 → 점수 50 미만 (실제: ${result.score})`);
-  assert.ok(['none', 'weak'].includes(result.grade), '단순 상승 → weak 또는 none');
+  assert.ok(result.score <= 40, `단순 상승 추세 → 점수 40 이하 (실제: ${result.score})`);
+  assert.ok(['none', 'weak', 'forming'].includes(result.grade), '단순 상승 + 수축 부족 → forming 이하');
   console.log(`✅ Test 2: 단순 상승 추세 → 점수 ${result.score} (${result.grade})`);
 }
 
@@ -288,6 +289,19 @@ console.log('=== VCP Engine Tests ===\n');
   assert.equal(result.entrySource, 'HIGH_TIGHT_FLAG');
   assert.ok(result.highTightFlag.stopPrice <= result.recommendedEntry);
   console.log('✅ Test 8: Extended momentum + shallow dry-up base → High Tight Flag tagged');
+}
+
+{
+  const lowering = validateSequentialLowering([
+    { peakDate: '2025-01-01', troughDate: '2025-01-05', peakPrice: 120, troughPrice: 102, depthPct: 15, avgVolume: 1_200_000 },
+    { peakDate: '2025-01-10', troughDate: '2025-01-14', peakPrice: 114, troughPrice: 98, depthPct: 14, avgVolume: 900_000 },
+    { peakDate: '2025-01-18', troughDate: '2025-01-22', peakPrice: 116, troughPrice: 99, depthPct: 13, avgVolume: 800_000 },
+  ]);
+
+  assert.equal(lowering.passedCount, 1, '두 번째 수축만 peak/trough 동시 하락 조건 충족');
+  assert.equal(lowering.pairs[0].passed, true);
+  assert.equal(lowering.pairs[1].passed, false);
+  console.log('✅ Test 9: sequential lowering validates peak and trough together');
 }
 
 console.log('\n=== All VCP Engine Tests Passed ===');

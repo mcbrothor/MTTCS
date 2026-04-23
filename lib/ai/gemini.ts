@@ -37,6 +37,65 @@ export interface MarketInsightResult {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function parseJsonCandidate(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+export function extractStructuredJson(raw: string) {
+  const trimmed = raw.trim();
+  const direct = parseJsonCandidate(trimmed);
+  if (direct) return direct;
+
+  const fences = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi));
+  for (const fence of fences) {
+    const parsed = parseJsonCandidate((fence[1] || '').trim());
+    if (parsed) return parsed;
+  }
+
+  for (let start = 0; start < trimmed.length; start += 1) {
+    const open = trimmed[start];
+    if (open !== '{' && open !== '[') continue;
+    const close = open === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (char === open) depth += 1;
+      if (char === close) depth -= 1;
+      if (depth === 0) {
+        const parsed = parseJsonCandidate(trimmed.slice(start, index + 1));
+        if (parsed) return parsed;
+        break;
+      }
+    }
+  }
+
+  throw new Error('Model response must include a valid JSON object or JSON code block.');
+}
+
+export function parseStructuredJsonResponse<T>(raw: string, validate: (payload: unknown) => T) {
+  return validate(extractStructuredJson(raw));
+}
+
 function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = MODEL_TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {

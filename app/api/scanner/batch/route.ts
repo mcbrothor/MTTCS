@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GET as getMarketData } from '@/app/api/market-data/route';
-import type { MarketAnalysisResponse, ProviderAttempt } from '@/types';
+import type { MarketAnalysisResponse } from '@/types';
 
 // =============================================
 // 스캐너 분석 데이터 서버사이드 배치 처리 API

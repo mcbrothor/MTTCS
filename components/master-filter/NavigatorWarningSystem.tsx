@@ -38,7 +38,7 @@ export default function NavigatorWarningSystem() {
   const renderYellowBanner = () => {
     if (!isYellow || !isVisible) return null;
     return (
-      <div className="sticky top-0 z-[60] w-full bg-amber-500/95 backdrop-blur-md px-4 py-2 border-b border-amber-600/50 shadow-lg animate-in slide-in-from-top duration-500">
+      <div className="sticky top-[108px] z-[60] w-full bg-amber-500/95 backdrop-blur-md px-4 py-2 border-b border-amber-600/50 shadow-lg animate-in slide-in-from-top duration-500">
         <div className="mx-auto max-w-7xl flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-slate-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />

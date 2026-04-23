@@ -65,12 +65,14 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
   return results.map((item) => {
     const ranked = rankByTicker.get(item.ticker);
     if (!ranked) return item;
-    const externalRsRating = item.externalRsRating ?? null;
+    const externalRsRating = item.externalRsRating ?? (item.rsSource === 'BENCHMARK_PROXY' ? item.rsRating ?? null : null);
     const internalRsRating = ranked.rating;
     return {
       ...item,
       internalRsRating,
+      externalRsRating,
       rsRating: externalRsRating ?? internalRsRating ?? item.benchmarkRelativeScore ?? null,
+      rsSource: externalRsRating !== null ? (item.rsSource ?? 'BENCHMARK_PROXY') : 'UNIVERSE',
       rsRank: ranked.rank,
       rsUniverseSize: universeSize,
       rsPercentile: ranked.percentile,
@@ -79,17 +81,26 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
 }
 
 export function evaluateScannerRecommendation(result: Partial<ScannerResult>): ScannerRecommendation {
+  const summary = result.sepaEvidence?.summary;
+  const coreTotal = summary?.coreTotal ?? 7;
+  const fallbackCorePassed = result.sepaStatus === 'pass'
+    ? coreTotal
+    : (typeof result.sepaFailed === 'number' && result.sepaFailed <= 2 ? coreTotal - 1 : null);
+  const corePassed = summary?.corePassed ?? fallbackCorePassed;
+  const coreFailed = summary?.coreFailed ?? (typeof corePassed === 'number' ? Math.max(0, coreTotal - corePassed) : null);
+
   if (result.status === 'error') {
     return {
       recommendationTier: 'Error',
       recommendationReason: result.errorMessage || 'Data fetch or analysis did not complete.',
-      sepaMissingCount: result.sepaFailed ?? null,
+      sepaMissingCount: coreFailed ?? result.sepaFailed ?? null,
       exceptionSignals: [],
     };
   }
 
-  const sepaMissingCount = result.sepaFailed ?? null;
-  const sepaPass = result.sepaStatus === 'pass' && (sepaMissingCount === 0 || sepaMissingCount === null);
+  const sepaMissingCount = coreFailed ?? result.sepaFailed ?? null;
+  const sepaPass = result.sepaStatus === 'pass' && corePassed === coreTotal;
+  const nearSepaPass = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
   const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
   const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 60);
   const tightPivot = nearPivot(result.distanceToPivotPct, 3);
@@ -105,7 +116,6 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const rs95 = scoreAtLeast(result.rsRating, 95);
   const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
-  const standardVcp = result.baseType === 'Standard_VCP' || (!result.baseType && constructiveVcp);
   const tennisBall = (result.tennisBallCount || 0) >= 2;
 
   const exceptionSignals = [
@@ -165,10 +175,10 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   // --- Tier 2: Partial (기술적으론 좋으나 SEPA가 부족하거나, SEPA는 좋으나 기술적 증거가 약함) ---
 
   // 2-1. SEPA가 1~2개 부족하지만 기술적으로 매우 훌륭한 경우 (사용자 요청: Partial 유지)
-  if (sepaMissingCount !== null && sepaMissingCount <= 2 && constructiveVcp && volumeWatch) {
+  if (nearSepaPass && !sepaPass && constructiveVcp && volumeWatch) {
     return {
       recommendationTier: 'Partial',
-      recommendationReason: '기술적 패턴은 훌륭하나 일부 SEPA 조건(펀더멘털 등)이 미달되어 관찰이 필요합니다.',
+      recommendationReason: '핵심 SEPA 기준이 1개 부족해 경고 구간이지만, 기술적 패턴과 거래량 신호가 살아 있어 관찰 후보로 유지합니다.',
       sepaMissingCount,
       exceptionSignals,
     };

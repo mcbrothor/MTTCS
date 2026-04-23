@@ -5,8 +5,9 @@ import { computeMacroScore } from '@/lib/macro/compute';
 const MACRO_SYMBOLS = [
   'UVXY', '^VIX', 'UUP', 'KRE',
   'SHY', 'TLT', 'HYG', 'IEF',
-  'QQQ', 'SPY', 'DIA', 'IWM', 'RSP',
+  'QQQ', 'SPY', '^KS200', 'DIA', 'IWM', 'RSP',
   'GLD', 'CPER', 'USO', 'UNG', 'BTC-USD',
+  '^GSPC', '^IXIC', '^KS11', '^KQ11', 'KRW=X',
 ];
 
 export async function GET() {

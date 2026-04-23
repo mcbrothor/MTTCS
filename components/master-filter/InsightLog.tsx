@@ -103,7 +103,7 @@ export default function InsightLog() {
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-200">
-                  {isAiGenerated ? 'CENTAUR 전략 로그 (AI Router)' : 'CENTAUR 규칙 로그'}
+                  {isAiGenerated ? 'LLM 시장 브리핑 (AI Router)' : '시장 규칙 브리핑'}
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500">
                   {showingRouterPick ? 'Router 우선순위 모델의 대표 답변입니다.' : '선택한 모델의 수집 답변을 보고 있습니다.'}

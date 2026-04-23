@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import FlowBanner from '@/components/layout/FlowBanner';
 import DisciplineChart from '@/components/dashboard/DisciplineChart';
 import EquityCurve from '@/components/dashboard/EquityCurve';
 import MetricCards from '@/components/dashboard/MetricCards';
@@ -54,6 +55,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-12">
+      <FlowBanner currentKey="review" />
+
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Dashboard</p>

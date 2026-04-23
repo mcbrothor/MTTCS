@@ -69,7 +69,8 @@ function mergeStandardMetrics(results: ScannerResult[], rows: { ticker: string; 
     return withRecommendation({
       ...item,
       rsRating: metric?.rs_rating ?? item.rsRating,
-      internalRsRating: metric?.rs_rating ?? item.internalRsRating,
+      externalRsRating: metric?.rs_rating ?? item.externalRsRating,
+      rsSource: metric?.rs_rating !== null && metric?.rs_rating !== undefined ? 'DB_BATCH' : item.rsSource,
       rsRank: metric?.rs_rank ?? item.rsRank,
       rsUniverseSize: metric?.rs_universe_size ?? item.rsUniverseSize,
       rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size) ?? item.rsPercentile,

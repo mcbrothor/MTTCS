@@ -58,9 +58,116 @@ export interface Trade {
   invalidation_note?: string | null;
   review_note?: string | null;
   review_action?: string | null;
+  entry_snapshot?: TradeEntrySnapshot | null;
+  contest_snapshot?: TradeContestSnapshot | null;
+  llm_verdict?: TradeLlmVerdict | null;
 
   executions?: TradeExecution[];
   metrics?: TradeMetrics;
+}
+
+export interface TradeEntrySnapshot {
+  version: 'mtn-entry-snapshot-v1';
+  captured_at: string;
+  ticker: string;
+  direction: Direction;
+  checklist: {
+    sepa: boolean;
+    market: boolean;
+    risk: boolean;
+    entry: boolean;
+    stoploss: boolean;
+    exit: boolean;
+    psychology: boolean;
+  };
+  plan: {
+    total_equity: number | null;
+    planned_risk: number | null;
+    risk_percent: number | null;
+    entry_price: number | null;
+    stoploss_price: number | null;
+    position_size: number | null;
+    total_shares: number | null;
+    entry_targets: EntryTargets | null;
+    trailing_stops: TrailingStops | null;
+  };
+  sepa: {
+    status: AssessmentStatus | null;
+    passed: number | null;
+    failed: number | null;
+    core_passed: number | null;
+    core_failed: number | null;
+    core_total: number | null;
+    rs_rating: number | null;
+    rs_source: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
+    macro_action_level: MacroActionLevel | null;
+  };
+  vcp: {
+    grade: VcpAnalysis['grade'] | null;
+    score: number | null;
+    base_type: BaseType | null;
+    pivot_price: number | null;
+    recommended_entry: number | null;
+    invalidation_price: number | null;
+    breakout_volume_status: VcpAnalysis['breakoutVolumeStatus'] | null;
+    contraction_count: number | null;
+    volume_dry_up_score: number | null;
+    pocket_pivot_score: number | null;
+  };
+  notes: {
+    plan_note: string | null;
+    invalidation_note: string | null;
+  };
+}
+
+export interface TradeContestSnapshot {
+  version: 'mtn-contest-snapshot-v1';
+  captured_at: string;
+  session: {
+    id: string;
+    market: ContestMarket;
+    universe: ScannerUniverse | string;
+    selected_at: string;
+    status: BeautyContestStatus;
+    llm_provider: string | null;
+    response_schema_version?: string | null;
+  };
+  candidate: {
+    id: string;
+    ticker: string;
+    exchange: string;
+    name: string | null;
+    user_rank: number;
+    llm_rank: number | null;
+    actual_invested: boolean;
+    final_pick_rank: number | null;
+    recommendation_tier?: RecommendationTier | null;
+    recommendation_reason?: string | null;
+    entry_reference_price: number | null;
+    linked_trade_id: string | null;
+  };
+  market_context?: Record<string, unknown> | null;
+  candidate_pool_snapshot?: unknown[] | null;
+}
+
+export interface TradeLlmVerdict {
+  version: 'mtn-llm-verdict-v1';
+  captured_at: string;
+  session_id: string;
+  candidate_id: string;
+  ticker: string;
+  llm_provider: string | null;
+  llm_rank: number | null;
+  comment: string | null;
+  overall?: ContestLlmOverall | null;
+  key_strength?: string | null;
+  key_risk?: string | null;
+  recommendation?: ContestLlmRecommendation | null;
+  confidence?: number | null;
+  scores?: Record<string, unknown> | null;
+  raw?: Record<string, unknown> | null;
+  analysis?: Record<string, unknown> | null;
+  response_schema_version?: string | null;
 }
 
 export interface TradeExecution {
@@ -118,6 +225,7 @@ export interface SepaCriterion {
   actual: number | string | null;
   threshold: string;
   description: string;
+  isCore?: boolean;
 }
 
 export interface SepaEvidence {
@@ -128,6 +236,9 @@ export interface SepaEvidence {
     failed: number;
     info: number;
     total: number;
+    corePassed: number;
+    coreFailed: number;
+    coreTotal: number;
   };
   metrics: {
     lastClose: number | null;
@@ -142,11 +253,12 @@ export interface SepaEvidence {
     rsRating: number | null;
     /**
      * RS Rating의 출처를 명시합니다.
-     * - 'UNIVERSE': stock_metrics 테이블에서 유니버스 전체 순위 기반 (미너비니 의도에 부합)
+     * - 'DB_BATCH': stock_metrics 테이블에 저장된 rs:metrics 배치 결과 (공식 RS Rating)
+     * - 'UNIVERSE': 현재 호출의 내부 유니버스 랭킹
      * - 'BENCHMARK_PROXY': SPY 대비 6개월 초과수익률로 추정 (Fallback — 참고용)
      * - null: RS를 계산할 수 없었음
      */
-    rsSource?: 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
+    rsSource?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
     internalRsRating?: number | null;
     externalRsRating?: number | null;
     rsRank?: number | null;
@@ -407,6 +519,7 @@ export interface ScannerResult extends ScannerConstituent {
   low52WeekAdvancePct?: number | null;
   highTightFlag?: HighTightFlagAnalysis | null;
   rsRating?: number | null;
+  rsSource?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
   internalRsRating?: number | null;
   externalRsRating?: number | null;
   rsRank?: number | null;
@@ -497,9 +610,32 @@ export type ContestMarket = 'US' | 'KR';
 export type BeautyContestStatus = 'OPEN' | 'REVIEW_READY' | 'COMPLETED';
 export type ContestReviewHorizon = 'W1' | 'M1';
 export type ContestReviewStatus = 'PENDING' | 'UPDATED' | 'ERROR' | 'MANUAL';
+export type ContestLlmOverall = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE';
+export type ContestLlmRecommendation = 'PROCEED' | 'WATCH' | 'SKIP';
 
 export interface ContestPromptCandidate {
   candidate_id?: string; ticker: string; exchange: string; name: string; user_rank: number; recommendation_tier?: RecommendationTier | null; recommendation_reason?: string | null; exception_signals?: string[]; rs_rating: number | null; internal_rs_rating?: number | null; external_rs_rating?: number | null; rs_rank?: number | null; rs_universe_size?: number | null; rs_percentile?: number | null; weighted_momentum_score?: number | null; ibd_proxy_score?: number | null; mansfield_rs_flag?: boolean | null; mansfield_rs_score?: number | null; rs_data_quality?: DataQuality | null; macro_action_level?: MacroActionLevel | null; benchmark_relative_score?: number | null; rs_line_new_high?: boolean | null; rs_line_near_high?: boolean | null; tennis_ball_count?: number | null; tennis_ball_score?: number | null; return_3m?: number | null; return_6m?: number | null; return_9m?: number | null; return_12m?: number | null; base_type?: BaseType | null; momentum_branch?: MomentumBranch | null; eight_week_return_pct?: number | null; distance_from_ma50_pct?: number | null; low_52_week_advance_pct?: number | null; high_tight_flag?: HighTightFlagAnalysis | null; sepa_status: AssessmentStatus | null; sepa_passed: number | null; sepa_failed: number | null; vcp_status: VcpAnalysis['grade'] | null; vcp_score: number | null; contraction_score: number | null; volume_dry_up_score: number | null; bb_squeeze_score: number | null; pocket_pivot_score: number | null; pivot_price: number | null; distance_to_pivot_pct: number | null; avg_dollar_volume: number | null; price: number | null; price_as_of: string | null; source: string; provider_attempts?: ProviderAttempt[];
+}
+
+export interface ContestLlmRanking {
+  session_id: string | null;
+  candidate_id: string | null;
+  ticker: string;
+  rank: number;
+  overall: ContestLlmOverall;
+  key_strength: string;
+  key_risk: string;
+  recommendation: ContestLlmRecommendation;
+  confidence: number;
+  comment: string | null;
+  scores: Record<string, unknown> | null;
+  analysis: Record<string, unknown>;
+}
+
+export interface ContestLlmResponse {
+  response_schema_version: string;
+  session_id: string | null;
+  rankings: ContestLlmRanking[];
 }
 
 export interface BeautyContestSession {
@@ -527,7 +663,7 @@ export interface SecurityProfile {
 }
 
 export interface PortfolioRiskSummary {
-  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; warnings: string[];
+  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; warnings: string[]; positions?: { ticker: string; status: TradeStatus; sector: string; exposure: number; netShares: number; avgEntryPrice: number | null; currentPrice: number | null; unrealizedPnL: number | null; unrealizedR: number | null; openRisk: number; pyramidCount: number; partialExitCount: number; latestAction: string | null; }[];
 }
 
 // --- CAN SLIM 스캐너 모듈 ---
@@ -630,7 +766,7 @@ export interface CanslimScannerResult {
   vcpScore: number | null;
   dualTier: DualScreenerTier;
   rsRating: number | null;
-  rsSource?: 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
+  rsSource?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
   benchmarkRelativeScore?: number | null;
   mansfieldRsFlag: boolean | null;
   mansfieldRsScore?: number | null;

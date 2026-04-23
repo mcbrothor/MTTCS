@@ -41,6 +41,8 @@ assert.equal(summary.investedCapital, 2000);
 assert.equal(summary.cash, 0);
 assert.equal(summary.totalOpenRisk, 140);
 assert.equal(summary.openRiskPct, 7);
+assert.equal(summary.positions?.length, 2);
+assert.equal(summary.positions?.[0].pyramidCount, 0);
 assert.equal(summary.sectorExposure[0].sector, 'Technology');
 assert.equal(summary.sectorExposure[0].exposurePct, 100);
 assert.ok(summary.warnings.some((warning) => warning.includes('Technology concentration')));

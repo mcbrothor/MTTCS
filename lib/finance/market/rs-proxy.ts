@@ -191,7 +191,7 @@ export function getMansfieldRS(stockPrices: IbdProxyInput, indexPrices: IbdProxy
     return { mansfieldRsFlag: null, mansfieldRsScore: null, stockPerformance52w: null, benchmarkPerformance52w: null };
   }
 
-  let result: MansfieldResult = {
+  const result: MansfieldResult = {
     mansfieldRsFlag: null,
     mansfieldRsScore: null,
     stockPerformance52w: null,

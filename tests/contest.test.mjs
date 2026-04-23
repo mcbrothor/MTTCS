@@ -4,9 +4,11 @@ import {
   calculateReturnPct,
   extractLlmSessionId,
   isReviewDue,
+  normalizeContestLlmResponse,
   parseLlmRankings,
   reviewDueDate,
   validateContestCandidates,
+  CONTEST_RESPONSE_SCHEMA_VERSION,
 } from '../lib/contest.ts';
 
 const candidates = Array.from({ length: 3 }, (_, index) => ({
@@ -42,9 +44,9 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
     marketContext: { state: 'YELLOW', market: 'US', metrics: { p3Score: 55 } },
   });
   assert.equal(payload.length, 3);
-  assert.match(llmPrompt, /JSON만 출력/);
-  assert.match(llmPrompt, /candidate_id/);
-  assert.match(llmPrompt, /마스터 필터/);
+  assert.match(llmPrompt, /response_schema_version/);
+  assert.match(llmPrompt, /PROCEED/);
+  assert.match(llmPrompt, /key_strength/);
   assert.match(llmPrompt, /NVDA/);
 }
 
@@ -56,58 +58,121 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
 }
 
 {
-  const rankings = parseLlmRankings(
+  const normalized = normalizeContestLlmResponse(
     JSON.stringify({
+      response_schema_version: CONTEST_RESPONSE_SCHEMA_VERSION,
+      session_id: 'session-1',
       rankings: [
-        { ticker: 'META', rank: 1, comment: 'best setup' },
-        { ticker: 'NVDA', rank: 2, comment: 'extended' },
-        { ticker: 'TSLA', rank: 3, comment: 'watch' },
+        {
+          session_id: 'session-1',
+          candidate_id: 'cand-meta',
+          ticker: 'META',
+          rank: 1,
+          overall: 'POSITIVE',
+          key_strength: 'Best mix of earnings and structure',
+          key_risk: 'Could be extended after earnings',
+          recommendation: 'PROCEED',
+          confidence: 0.84,
+          comment: 'Top pick',
+          scores: { technical: 91 },
+        },
+        {
+          session_id: 'session-1',
+          candidate_id: 'cand-nvda',
+          ticker: 'NVDA',
+          rank: 2,
+          overall: 'NEUTRAL',
+          key_strength: 'Elite relative strength',
+          key_risk: 'Needs tighter handle',
+          recommendation: 'WATCH',
+          confidence: 0.63,
+        },
+        {
+          session_id: 'session-1',
+          candidate_id: 'cand-tsla',
+          ticker: 'TSLA',
+          rank: 3,
+          overall: 'NEGATIVE',
+          key_strength: 'Volatile momentum',
+          key_risk: 'Weak earnings quality',
+          recommendation: 'SKIP',
+          confidence: 0.74,
+        },
       ],
     }),
-    ['NVDA', 'META', 'TSLA']
+    candidates.map((candidate) => ({ id: candidate.candidate_id, ticker: candidate.ticker })),
+    'session-1'
   );
-  assert.deepEqual(rankings.map((item) => item.ticker), ['META', 'NVDA', 'TSLA']);
+
+  assert.equal(normalized.response_schema_version, CONTEST_RESPONSE_SCHEMA_VERSION);
+  assert.equal(normalized.session_id, 'session-1');
+  assert.equal(normalized.rankings[0].recommendation, 'PROCEED');
 }
 
 {
   const rankings = parseLlmRankings(
     [
-      '리포트 전문입니다.',
+      'preface',
       '```json',
       JSON.stringify({
         rankings: [
           {
             candidate_id: 'cand-meta',
+            session_id: 'session-1',
             ticker: 'META',
             rank: 1,
+            overall: 'POSITIVE',
+            key_strength: 'Best compounder',
+            key_risk: 'Valuation remains high',
+            recommendation: 'PROCEED',
+            confidence: 0.88,
             scores: { technical: 91 },
             investment_thesis: 'best compounder',
             technical_view: 'tight base',
-            fundamental_view: 'quality',
-            earnings_growth_view: 'accelerating',
-            moat_view: 'network',
             market_context: 'fits YELLOW market',
             risks: ['valuation'],
             catalysts: ['AI'],
             comment: 'best setup',
           },
-          { candidate_id: 'cand-nvda', ticker: 'NVDA', rank: 2, comment: 'extended' },
-          { candidate_id: 'cand-tsla', ticker: 'TSLA', rank: 3, comment: 'watch' },
+          {
+            candidate_id: 'cand-nvda',
+            session_id: 'session-1',
+            ticker: 'NVDA',
+            rank: 2,
+            overall: 'NEUTRAL',
+            key_strength: 'Leadership remains strong',
+            key_risk: 'Extended from proper entry',
+            recommendation: 'WATCH',
+            confidence: 0.67,
+          },
+          {
+            candidate_id: 'cand-tsla',
+            session_id: 'session-1',
+            ticker: 'TSLA',
+            rank: 3,
+            overall: 'NEGATIVE',
+            key_strength: 'Can move fast',
+            key_risk: 'Too erratic for current tape',
+            recommendation: 'SKIP',
+            confidence: 0.7,
+          },
         ],
       }),
       '```',
-      '끝',
     ].join('\n'),
     candidates.map((candidate) => ({ id: candidate.candidate_id, ticker: candidate.ticker }))
   );
 
   assert.equal(rankings[0].candidate_id, 'cand-meta');
   assert.deepEqual(rankings[0].scores, { technical: 91 });
-  assert.equal(rankings[0].analysis.investment_thesis, 'best compounder');
+  assert.equal(rankings[0].analysis.key_strength, 'Best compounder');
+  assert.equal(rankings[0].analysis.recommendation, 'PROCEED');
 }
 
 {
   const sessionId = extractLlmSessionId(JSON.stringify({
+    response_schema_version: CONTEST_RESPONSE_SCHEMA_VERSION,
+    session_id: 'session-from-paste',
     rankings: [
       { session_id: 'session-from-paste', ticker: 'NVDA', rank: 1 },
       { session_id: 'session-from-paste', ticker: 'META', rank: 2 },
@@ -118,8 +183,43 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
 
 {
   assert.throws(
+    () => normalizeContestLlmResponse(
+      JSON.stringify({
+        session_id: 'other-session',
+        rankings: [
+          {
+            session_id: 'other-session',
+            ticker: 'NVDA',
+            rank: 1,
+            overall: 'POSITIVE',
+            key_strength: 'Leader',
+            key_risk: 'Extended',
+            recommendation: 'PROCEED',
+            confidence: 0.8,
+          },
+          {
+            session_id: 'other-session',
+            ticker: 'META',
+            rank: 2,
+            overall: 'NEUTRAL',
+            key_strength: 'Stable',
+            key_risk: 'Slowdown',
+            recommendation: 'WATCH',
+            confidence: 0.6,
+          },
+        ],
+      }),
+      ['NVDA', 'META'],
+      'session-1'
+    ),
+    /session_id mismatch/
+  );
+}
+
+{
+  assert.throws(
     () => parseLlmRankings('{"rankings":[{"ticker":"NVDA","rank":1}]}', ['NVDA', 'META']),
-    /rank every selected candidate/
+    /rank every selected candidate|Each ranking must include/
   );
 }
 

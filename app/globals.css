@@ -9,11 +9,29 @@
 
 @layer base {
   :root {
-    --background: #0a0e1a;
-    --foreground: #f8fafc;
-    --card: rgba(255, 255, 255, 0.03);
-    --border: rgba(255, 255, 255, 0.1);
-    --radius: 0.5rem;
+    --c0: #040810;
+    --c1: #070d1b;
+    --c2: #0b1220;
+    --c3: #101928;
+    --c4: #162135;
+    --b1: rgba(58, 80, 112, 0.34);
+    --b2: rgba(122, 143, 181, 0.26);
+    --t1: #e8edf7;
+    --t2: #96a9c7;
+    --t3: #516886;
+    --background: var(--c0);
+    --foreground: var(--t1);
+    --card: rgba(16, 25, 40, 0.8);
+    --border: rgba(96, 116, 150, 0.28);
+    --border-strong: rgba(122, 143, 181, 0.42);
+    --surface-soft: rgba(14, 23, 40, 0.62);
+    --surface-strong: rgba(16, 25, 40, 0.88);
+    --surface-accent: rgba(22, 33, 53, 0.92);
+    --text-primary: var(--t1);
+    --text-secondary: var(--t2);
+    --text-tertiary: var(--t3);
+    --panel-shadow: 0 24px 70px rgba(2, 6, 23, 0.42);
+    --radius: 0.75rem;
   }
 }
 
@@ -21,25 +39,72 @@
   * {
     border-color: var(--border);
   }
+
+  html {
+    color-scheme: dark;
+  }
+
   body {
-    background-color: var(--background);
+    background:
+      radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 28%),
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
+      linear-gradient(180deg, var(--c1) 0%, var(--c0) 42%, #02050d 100%);
     color: var(--foreground);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(122, 143, 181, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(122, 143, 181, 0.03) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 85%);
+    opacity: 0.35;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::selection {
+    background: rgba(16, 185, 129, 0.28);
+    color: var(--t1);
+  }
 }
 
 @layer utilities {
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
   .glass-card {
-    background-color: var(--card);
-    backdrop-filter: blur(12px);
-    border-radius: var(--radius);
+    background:
+      linear-gradient(180deg, rgba(17, 27, 44, 0.94), rgba(10, 17, 32, 0.88));
+    backdrop-filter: blur(16px);
+    border-radius: 1rem;
     border: 1px solid var(--border);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--panel-shadow);
     transition: all 0.3s ease-in-out;
   }
+
   .glass-card:hover {
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    border-color: var(--border-strong);
+    box-shadow: 0 24px 70px rgba(2, 6, 23, 0.56);
+  }
+
+  .panel-grid {
+    background:
+      linear-gradient(180deg, rgba(17, 27, 44, 0.92), rgba(10, 17, 32, 0.86));
+    border: 1px solid var(--border);
+    border-radius: 1.5rem;
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(18px);
   }
 }

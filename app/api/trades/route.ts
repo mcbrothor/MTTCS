@@ -1,15 +1,68 @@
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
 import { getServerSession } from '@/lib/auth/session';
+import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
+import { buildEntrySnapshot } from '@/lib/finance/core/snapshot';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
 import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
 import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
+import { supabaseServer } from '@/lib/supabase/server';
 import type { Trade, TradeStatus } from '@/types';
 
 const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+const SNAPSHOT_RELEVANT_FIELDS = new Set([
+  'ticker',
+  'direction',
+  'chk_sepa',
+  'chk_market',
+  'chk_risk',
+  'chk_entry',
+  'chk_stoploss',
+  'chk_exit',
+  'chk_psychology',
+  'total_equity',
+  'planned_risk',
+  'risk_percent',
+  'entry_price',
+  'stoploss_price',
+  'position_size',
+  'total_shares',
+  'entry_targets',
+  'trailing_stops',
+  'sepa_evidence',
+  'vcp_analysis',
+  'plan_note',
+  'invalidation_note',
+]);
+
+type TradeRecordForSnapshot = Pick<
+  Trade,
+  | 'ticker'
+  | 'direction'
+  | 'chk_sepa'
+  | 'chk_market'
+  | 'chk_risk'
+  | 'chk_entry'
+  | 'chk_stoploss'
+  | 'chk_exit'
+  | 'chk_psychology'
+  | 'sepa_evidence'
+  | 'total_equity'
+  | 'planned_risk'
+  | 'risk_percent'
+  | 'entry_price'
+  | 'stoploss_price'
+  | 'position_size'
+  | 'total_shares'
+  | 'entry_targets'
+  | 'trailing_stops'
+  | 'plan_note'
+  | 'invalidation_note'
+> & {
+  vcp_analysis?: unknown;
+};
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '알 수 없는 오류';
+  return error instanceof Error ? error.message : 'Unexpected error';
 }
 
 function apiError(message: string, code: string, status = 400, details?: unknown) {
@@ -22,10 +75,6 @@ function apiError(message: string, code: string, status = 400, details?: unknown
     },
     { status }
   );
-}
-
-function isKorean(ticker: string) {
-  return /^\d{6}$/.test(ticker);
 }
 
 function normalizeRiskPercent(value: unknown) {
@@ -58,37 +107,80 @@ function nullableText(value: unknown, max = 2000) {
   return text ? text.slice(0, max) : null;
 }
 
+function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
+  const positionSize =
+    typeof trade.position_size === 'number'
+      ? trade.position_size
+      : typeof trade.total_shares === 'number'
+        ? trade.total_shares
+        : null;
+  const totalShares =
+    typeof trade.total_shares === 'number'
+      ? trade.total_shares
+      : typeof trade.position_size === 'number'
+        ? trade.position_size
+        : null;
+
+  return buildEntrySnapshot({
+    ticker: trade.ticker,
+    direction: trade.direction,
+    checklist: {
+      chk_sepa: trade.chk_sepa,
+      chk_market: trade.chk_market,
+      chk_risk: trade.chk_risk,
+      chk_entry: trade.chk_entry,
+      chk_stoploss: trade.chk_stoploss,
+      chk_exit: trade.chk_exit,
+      chk_psychology: trade.chk_psychology,
+    },
+    sepaEvidence: trade.sepa_evidence,
+    vcpAnalysis: trade.vcp_analysis as never,
+    totalEquity: trade.total_equity,
+    plannedRisk: trade.planned_risk,
+    riskPercent: trade.risk_percent,
+    entryPrice: trade.entry_price,
+    stoplossPrice: trade.stoploss_price,
+    positionSize,
+    totalShares,
+    entryTargets: trade.entry_targets,
+    trailingStops: trade.trailing_stops,
+    planNote: trade.plan_note,
+    invalidationNote: trade.invalidation_note,
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const sepaStatus = body.sepa_evidence?.status;
+    const ticker = String(body.ticker || '').trim().toUpperCase();
     const totalShares = Number(body.total_shares ?? body.position_size ?? 0);
     const plannedRisk = Number(body.planned_risk ?? 0);
     const riskPercent = normalizeRiskPercent(body.risk_percent ?? 0.03);
+    const direction = body.direction === 'SHORT' ? 'SHORT' : 'LONG';
 
-    if (!body.ticker) {
-      return apiError('티커가 필요합니다.', 'MISSING_TICKER');
+    if (!ticker) {
+      return apiError('Ticker is required.', 'MISSING_TICKER');
     }
-    if (sepaStatus === 'fail' || body.chk_sepa === false) {
-      return apiError('SEPA 실패 조건이 있어 매매 계획을 저장할 수 없습니다.', 'SEPA_FAILED');
+    if (body.sepa_evidence?.status === 'fail' || body.chk_sepa === false) {
+      return apiError('SEPA conditions failed.', 'SEPA_FAILED');
     }
     if (!Number.isFinite(totalShares) || totalShares <= 0) {
-      return apiError('계획 수량은 1주 이상이어야 합니다.', 'INVALID_POSITION_SIZE');
+      return apiError('Position size must be at least 1 share.', 'INVALID_POSITION_SIZE');
     }
     if (!Number.isFinite(plannedRisk) || plannedRisk <= 0) {
-      return apiError('계획 리스크 금액이 유효하지 않습니다.', 'INVALID_PLANNED_RISK');
+      return apiError('Planned risk must be greater than zero.', 'INVALID_PLANNED_RISK');
     }
     if (!riskPercent || riskPercent > 0.1) {
-      return apiError('허용 손실 비율은 0% 초과 10% 이하로 저장해야 합니다.', 'INVALID_RISK_PERCENT');
+      return apiError('Risk percent must be greater than 0 and at most 10%.', 'INVALID_RISK_PERCENT');
     }
     if (!body.entry_targets || !body.trailing_stops || !body.sepa_evidence) {
-      return apiError('SEPA 분석 근거와 Minervini 진입 계획이 필요합니다.', 'MISSING_STRATEGY_FIELDS');
+      return apiError('SEPA evidence and entry plan fields are required.', 'MISSING_STRATEGY_FIELDS');
     }
 
-    const record = {
-      ticker: String(body.ticker).toUpperCase(),
-      direction: body.direction || 'LONG',
-      status: 'PLANNED' as const,
+    const record: Record<string, unknown> & TradeRecordForSnapshot = {
+      ticker,
+      direction,
+      status: 'PLANNED',
       chk_sepa: Boolean(body.chk_sepa),
       chk_market: body.chk_market ?? body.chk_sepa,
       chk_risk: Boolean(body.chk_risk),
@@ -117,9 +209,11 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
+    record.entry_snapshot = buildTradeEntrySnapshot(record as TradeRecordForSnapshot);
+
     const session = await getServerSession();
     if (session) {
-      (record as Record<string, unknown>).user_id = session.systemId;
+      record.user_id = session.systemId;
     }
 
     const { data, error } = await supabaseServer
@@ -133,7 +227,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ data });
   } catch (error: unknown) {
     console.error('Save Trade Error:', error);
-    return apiError(getErrorMessage(error) || '매매 계획 저장 중 오류가 발생했습니다.', 'SAVE_TRADE_FAILED', 500);
+    return apiError(getErrorMessage(error), 'SAVE_TRADE_FAILED', 500);
   }
 }
 
@@ -147,36 +241,15 @@ export async function GET() {
     if (error) throw error;
 
     const allRecords = (data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[];
-    const activeTrades = allRecords.filter((t) => t.status === 'ACTIVE');
-    
-    // 1. ACTIVE 종목들의 실시간 가격 병렬 조회
-    const priceMap = new Map<string, number | null>();
-    
-    const usTickers = [...new Set(activeTrades.filter((t) => !isKorean(t.ticker)).map((t) => t.ticker))];
-    const krTickers = [...new Set(activeTrades.filter((t) => isKorean(t.ticker)).map((t) => t.ticker))];
+    const priceMap = await buildLivePriceMap(allRecords, {
+      getUsQuotes: getYahooQuotes,
+      getKrPrice: getKisDomesticPrice,
+    });
 
-    // US 가격 (Yahoo - batch)
-    const usQuotesPromise = usTickers.length > 0 ? getYahooQuotes(usTickers) : Promise.resolve([]);
-    
-    // KR 가격 (KIS)
-    const krQuotesPromises = krTickers.map(async (ticker) => ({
-      symbol: ticker,
-      price: await getKisDomesticPrice(ticker)
-    }));
-
-    const [usQuotes, krQuotes] = await Promise.all([
-      usQuotesPromise,
-      Promise.all(krQuotesPromises)
-    ]);
-
-    usQuotes.forEach((q) => priceMap.set(q.symbol, q.regularMarketPrice));
-    krQuotes.forEach((q) => priceMap.set(q.symbol, q.price));
-
-    // 2. 전체 매매 데이터 구성 및 매트릭스 부착
     const trades = allRecords.map((trade) => {
       const { trade_executions: tradeExecutions, ...rest } = trade;
       const currentPrice = trade.status === 'ACTIVE' ? (priceMap.get(trade.ticker) || null) : null;
-      
+
       return attachTradeMetrics({
         ...rest,
         executions: tradeExecutions || [],
@@ -186,7 +259,7 @@ export async function GET() {
     return NextResponse.json({ data: trades });
   } catch (error: unknown) {
     console.error('Fetch Trades Error:', error);
-    return apiError(getErrorMessage(error) || '매매 데이터를 불러오는 중 오류가 발생했습니다.', 'FETCH_TRADES_FAILED', 500);
+    return apiError(getErrorMessage(error), 'FETCH_TRADES_FAILED', 500);
   }
 }
 
@@ -196,22 +269,37 @@ export async function PATCH(request: Request) {
     const id = String(body.id || '').trim();
 
     if (!id) {
-      return apiError('수정할 매매 계획 ID가 필요합니다.', 'MISSING_TRADE_ID');
+      return apiError('Trade ID is required.', 'MISSING_TRADE_ID');
     }
+
+    const { data: existingTrade, error: existingTradeError } = await supabaseServer
+      .from('trades')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (existingTradeError) throw existingTradeError;
 
     const update: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
+    if (body.direction !== undefined) {
+      if (body.direction !== 'LONG' && body.direction !== 'SHORT') {
+        return apiError('Direction must be LONG or SHORT.', 'INVALID_DIRECTION', 400, { allowed: ['LONG', 'SHORT'] });
+      }
+      update.direction = body.direction;
+    }
+
     if (body.ticker !== undefined) {
       const ticker = String(body.ticker).trim().toUpperCase();
-      if (!ticker) return apiError('티커가 필요합니다.', 'MISSING_TICKER');
+      if (!ticker) return apiError('Ticker is required.', 'MISSING_TICKER');
       update.ticker = ticker;
     }
 
     if (body.status !== undefined) {
       if (!VALID_STATUSES.includes(body.status)) {
-        return apiError('상태 값이 유효하지 않습니다.', 'INVALID_STATUS', 400, { allowed: VALID_STATUSES });
+        return apiError('Invalid trade status.', 'INVALID_STATUS', 400, { allowed: VALID_STATUSES });
       }
       update.status = body.status;
     }
@@ -233,7 +321,7 @@ export async function PATCH(request: Request) {
       const value = nullableNumber(body[field]);
       if (value === undefined) continue;
       if (Number.isNaN(value)) {
-        return apiError(`${field} 값은 숫자여야 합니다.`, 'INVALID_NUMBER', 400, { field });
+        return apiError(`${field} must be a number.`, 'INVALID_NUMBER', 400, { field });
       }
       update[field] = value;
     }
@@ -241,7 +329,7 @@ export async function PATCH(request: Request) {
     if (body.risk_percent !== undefined) {
       const riskPercent = normalizeRiskPercent(body.risk_percent);
       if (!riskPercent || riskPercent > 0.1) {
-        return apiError('허용 손실 비율은 0% 초과 10% 이하로 입력해 주세요.', 'INVALID_RISK_PERCENT');
+        return apiError('Risk percent must be greater than 0 and at most 10%.', 'INVALID_RISK_PERCENT');
       }
       update.risk_percent = riskPercent;
     }
@@ -254,17 +342,17 @@ export async function PATCH(request: Request) {
       update.emotion_note = body.emotion_note === null ? null : String(body.emotion_note);
     }
 
-    // 청산 사유 태그 — 복기 집계에 활용
-    const VALID_EXIT_REASONS = ['손절', '목표가도달', '시장RED전환', '기술적이탈', '조기청산', '기타'];
-    if (body.exit_reason !== undefined) {
-      if (body.exit_reason === null) {
-        update.exit_reason = null;
-      } else if (VALID_EXIT_REASONS.includes(String(body.exit_reason))) {
-        update.exit_reason = String(body.exit_reason);
-      } else {
-        return apiError(`exit_reason 값이 유효하지 않습니다.`, 'INVALID_EXIT_REASON', 400, { allowed: VALID_EXIT_REASONS });
+    const checklistFields = ['chk_sepa', 'chk_market', 'chk_risk', 'chk_entry', 'chk_stoploss', 'chk_exit', 'chk_psychology'] as const;
+    for (const field of checklistFields) {
+      if (body[field] !== undefined) {
+        update[field] = Boolean(body[field]);
       }
     }
+
+    if (body.exit_reason !== undefined) {
+      update.exit_reason = body.exit_reason === null ? null : String(body.exit_reason);
+    }
+
     const setupTags = normalizeStringArray(body.setup_tags);
     if (setupTags !== undefined) update.setup_tags = setupTags;
     const mistakeTags = normalizeStringArray(body.mistake_tags);
@@ -280,6 +368,15 @@ export async function PATCH(request: Request) {
     if (body.entry_targets !== undefined) update.entry_targets = body.entry_targets;
     if (body.trailing_stops !== undefined) update.trailing_stops = body.trailing_stops;
     if (body.sepa_evidence !== undefined) update.sepa_evidence = body.sepa_evidence;
+    if (body.vcp_analysis !== undefined) update.vcp_analysis = body.vcp_analysis;
+
+    if (Object.keys(body).some((field) => SNAPSHOT_RELEVANT_FIELDS.has(field))) {
+      const mergedTrade = {
+        ...(existingTrade as TradeRecordForSnapshot),
+        ...update,
+      };
+      update.entry_snapshot = buildTradeEntrySnapshot(mergedTrade);
+    }
 
     const { data, error } = await supabaseServer
       .from('trades')
@@ -292,6 +389,7 @@ export async function PATCH(request: Request) {
 
     const trade = data as unknown as Trade & { trade_executions?: Trade['executions'] };
     const { trade_executions: tradeExecutions, ...rest } = trade;
+
     return NextResponse.json({
       data: attachTradeMetrics({
         ...rest,
@@ -300,7 +398,7 @@ export async function PATCH(request: Request) {
     });
   } catch (error: unknown) {
     console.error('Update Trade Error:', error);
-    return apiError(getErrorMessage(error) || '매매 계획 수정 중 오류가 발생했습니다.', 'UPDATE_TRADE_FAILED', 500);
+    return apiError(getErrorMessage(error), 'UPDATE_TRADE_FAILED', 500);
   }
 }
 
@@ -309,7 +407,7 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id')?.trim();
 
   if (!id) {
-    return apiError('삭제할 매매 계획 ID가 필요합니다.', 'MISSING_TRADE_ID');
+    return apiError('Trade ID is required.', 'MISSING_TRADE_ID');
   }
 
   try {
@@ -319,6 +417,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ data: { id } });
   } catch (error: unknown) {
     console.error('Delete Trade Error:', error);
-    return apiError(getErrorMessage(error) || '매매 계획 삭제 중 오류가 발생했습니다.', 'DELETE_TRADE_FAILED', 500);
+    return apiError(getErrorMessage(error), 'DELETE_TRADE_FAILED', 500);
   }
 }

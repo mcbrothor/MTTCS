@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
+import FlowBanner from '@/components/layout/FlowBanner';
 import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { extractLlmSessionId } from '@/lib/contest';
+import { CONTEST_RESPONSE_SCHEMA_VERSION, extractLlmSessionId } from '@/lib/contest';
+import { getContestStructuredVerdict } from '@/lib/contest-presentation';
 import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import type {
   ApiSuccess,
   BeautyContestSession,
   ContestCandidate,
+  ContestLlmOverall,
+  ContestLlmRecommendation,
   ContestMarket,
   ContestPromptCandidate,
   ContestReview,
@@ -222,6 +226,20 @@ function tierClass(tier?: RecommendationTier | null) {
   if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
   if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
   return 'border-slate-700 text-slate-300';
+}
+
+function verdictOverallClass(value: ContestLlmOverall | null) {
+  if (value === 'POSITIVE') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (value === 'NEGATIVE') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  if (value === 'NEUTRAL') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  return 'border-slate-700 text-slate-400';
+}
+
+function verdictRecommendationClass(value: ContestLlmRecommendation | null) {
+  if (value === 'PROCEED') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (value === 'SKIP') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  if (value === 'WATCH') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  return 'border-slate-700 text-slate-400';
 }
 
 function reviewTone(review: ContestReview) {
@@ -561,6 +579,8 @@ export default function ContestPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
+      <FlowBanner currentKey="contest" />
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Contest</p>
@@ -696,6 +716,17 @@ export default function ContestPage() {
           <p className="mt-1 text-sm text-slate-400">
             JSON만 붙여넣어도 되고, LLM 리포트 전문을 붙여넣어도 MTN이 JSON 코드블록 또는 객체를 추출합니다.
           </p>
+          <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/6 p-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-200">
+                Schema {CONTEST_RESPONSE_SCHEMA_VERSION}
+              </span>
+              <span className="text-slate-400">Required: `session_id`, `rank`, `overall`, `key_strength`, `key_risk`, `recommendation`, `confidence`</span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              `overall`은 `POSITIVE/NEUTRAL/NEGATIVE`, `recommendation`은 `PROCEED/WATCH/SKIP`, `confidence`는 `0.0~1.0` 범위여야 합니다.
+            </p>
+          </div>
           <textarea
             value={llmJson}
             onChange={(event) => setLlmJson(event.target.value)}
@@ -742,7 +773,7 @@ export default function ContestPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-semibold text-white">{session.market} | {session.universe} | {formatDate(session.selected_at)}</p>
-                  <p className="mt-1 text-xs text-slate-400">{session.candidates?.length || 0} candidates | {session.status}</p>
+                  <p className="mt-1 text-xs text-slate-400">{session.candidates?.length || 0} candidates | {session.status} | {session.response_schema_version || 'legacy'}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs">
                   {orderedCandidates(session).slice(0, 10).map((candidate) => (
@@ -799,7 +830,14 @@ export default function ContestPage() {
                       <td className="py-3 pr-3 text-right font-mono text-slate-200">{formatPrice(basePriceFor(candidate), candidate.exchange)}</td>
                       <td className="py-3 pr-3 text-xs text-slate-500">{baseSourceFor(candidate)}</td>
                       <td className="py-3 pr-3 font-mono text-slate-300">{candidate.llm_rank ? `#${candidate.llm_rank}` : '-'}</td>
-                      <td className="py-3 text-xs text-slate-400">{candidate.llm_comment || candidate.final_pick_note || '-'}</td>
+                      <td className="py-3 text-xs text-slate-400">
+                        {(() => {
+                          const verdict = getContestStructuredVerdict(candidate);
+                          return verdict.recommendation
+                            ? `${verdict.recommendation}${verdict.confidence !== null ? ` · ${Math.round(verdict.confidence * 100)}%` : ''} · ${verdict.keyStrength || verdict.comment || '-'}`
+                            : candidate.llm_comment || candidate.final_pick_note || '-';
+                        })()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -827,24 +865,41 @@ export default function ContestPage() {
           </div>
 
           <div className="mt-5 space-y-4">
-            {activeCandidates.map((candidate) => (
+            {activeCandidates.map((candidate) => {
+              const verdict = getContestStructuredVerdict(candidate);
+              return (
               <article key={candidate.id} className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
+                  <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xl font-bold text-white">{candidate.ticker}</span>
                       <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">사용자 #{candidate.user_rank}</span>
                       {candidate.llm_rank && <span className="rounded-lg border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300">LLM #{candidate.llm_rank}</span>}
                       {candidate.final_pick_rank && <span className="rounded-lg border border-sky-500/30 px-2 py-1 text-xs text-sky-300">최종 #{candidate.final_pick_rank}</span>}
                       {candidate.recommendation_tier && <span className={`rounded-lg border px-2 py-1 text-xs ${tierClass(candidate.recommendation_tier)}`}>{candidate.recommendation_tier}</span>}
+                      {verdict.overall && <span className={`rounded-lg border px-2 py-1 text-xs ${verdictOverallClass(verdict.overall)}`}>{verdict.overall}</span>}
+                      {verdict.recommendation && <span className={`rounded-lg border px-2 py-1 text-xs ${verdictRecommendationClass(verdict.recommendation)}`}>{verdict.recommendation}</span>}
+                      {verdict.confidence !== null && <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">Confidence {Math.round(verdict.confidence * 100)}%</span>}
                       <span className={`rounded-lg border px-2 py-1 text-xs ${candidate.actual_invested ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400'}`}>
                         {candidate.actual_invested ? '선정' : '미선정'}
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-400">{candidate.name || candidate.exchange}</p>
-                    {candidate.llm_comment && <p className="mt-2 text-sm leading-6 text-slate-300">{candidate.llm_comment}</p>}
-                    {typeof candidate.llm_analysis?.investment_thesis === 'string' && (
+                    {verdict.comment && <p className="mt-2 text-sm leading-6 text-slate-300">{verdict.comment}</p>}
+                    {!verdict.hasStructuredData && typeof candidate.llm_analysis?.investment_thesis === 'string' && (
                       <p className="mt-2 text-xs leading-5 text-slate-400">Thesis: {candidate.llm_analysis.investment_thesis}</p>
+                    )}
+                    {verdict.hasStructuredData && (
+                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/6 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300">Key Strength</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-200">{verdict.keyStrength || '-'}</p>
+                        </div>
+                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/6 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-300">Key Risk</p>
+                          <p className="mt-2 text-sm leading-6 text-slate-200">{verdict.keyRisk || '-'}</p>
+                        </div>
+                      </div>
                     )}
                   </div>
                   <button
@@ -933,7 +988,7 @@ export default function ContestPage() {
                   })}
                 </div>
               </article>
-            ))}
+            );})}
           </div>
         </section>
       )}

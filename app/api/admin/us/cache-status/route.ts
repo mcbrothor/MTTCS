@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
-export async function GET(_req: Request) {
+export async function GET() {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Supabase Admin client is not configured' }, { status: 500 });
   }

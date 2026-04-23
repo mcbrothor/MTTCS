@@ -1,6 +1,9 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
+import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { calculatePortfolioRiskSummary } from '@/lib/finance/core/portfolio-risk';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
+import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
+import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { SecurityProfile, Trade } from '@/types';
 
@@ -19,11 +22,16 @@ export async function GET(request: Request) {
     if (tradeError) throw tradeError;
 
     const isKorean = (ticker: string) => /^\d{6}$/.test(ticker);
-    const trades = ((tradeRows || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[])
-      .filter((trade) => market === 'KR' ? isKorean(trade.ticker) : !isKorean(trade.ticker))
-      .map((trade) => {
+    const scopedTrades = ((tradeRows || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[])
+      .filter((trade) => market === 'KR' ? isKorean(trade.ticker) : !isKorean(trade.ticker));
+    const priceMap = await buildLivePriceMap(scopedTrades, {
+      getUsQuotes: getYahooQuotes,
+      getKrPrice: getKisDomesticPrice,
+    });
+    const trades = scopedTrades.map((trade) => {
         const { trade_executions: tradeExecutions, ...rest } = trade;
-        return attachTradeMetrics({ ...rest, executions: tradeExecutions || [] } as Trade);
+        const currentPrice = trade.status === 'ACTIVE' ? (priceMap.get(trade.ticker) || null) : null;
+        return attachTradeMetrics({ ...rest, executions: tradeExecutions || [] } as Trade, currentPrice);
       });
 
     const totalEquity = Number(settings?.total_equity || fallbackEquity);

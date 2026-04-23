@@ -18,7 +18,7 @@ function normalizeName(name: string): string {
     .trim();
 }
 
-export async function GET(_req: Request) {
+export async function GET() {
   const apiKey = process.env.DART_API_KEY;
 
   if (!apiKey) {
