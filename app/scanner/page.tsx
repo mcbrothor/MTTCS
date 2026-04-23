@@ -66,16 +66,16 @@ export default function ScannerPage() {
   return (
     <div className="space-y-6 pb-12">
       <section className="panel-grid space-y-5 p-5 sm:p-6">
-        <MarketBanner compact={true} />
         <ScannerTabNav />
+        <MarketBanner compact={true} />
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
           <div className="space-y-4">
             <div>
-              <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight text-[var(--text-primary)]">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10">
+              <h1 className="flex items-center gap-3 text-3xl font-black tracking-tightest text-[var(--text-primary)]">
+                <div className="rounded-2xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
                   <ScanSearch className="h-6 w-6 text-emerald-300" />
-                </span>
+                </div>
                 미너비니 스캐너
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">

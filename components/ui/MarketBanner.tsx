@@ -36,33 +36,33 @@ export default function MarketBanner({ compact = false }: { compact?: boolean })
 
   if (compact) {
     return (
-      <div className={`rounded-2xl border px-3 py-2.5 shadow-sm ${style.shell}`}>
-        <div className="flex items-center justify-between gap-4">
+      <div className={`rounded-xl border px-3 py-1.5 shadow-sm transition-all hover:bg-white/5 ${style.shell}`}>
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${style.badge}`}>
-              <span className="text-sm font-bold">{style.icon}</span>
+            <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black ${style.badge}`}>
+              {style.icon}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${style.badge}`}>
-                  {data.state}
-                </span>
-                <h2 className="text-sm font-bold text-[var(--text-primary)]">{style.title}</h2>
-              </div>
-              <p className="text-[11px] text-[var(--text-secondary)] line-clamp-1">{style.description}</p>
+            <div className="flex items-center gap-2">
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tighter ${style.badge}`}>
+                {data.state}
+              </span>
+              <span className="text-[11px] font-bold text-[var(--text-primary)]">
+                {style.title}
+              </span>
+              <span className="hidden sm:inline text-[10px] text-[var(--text-tertiary)] opacity-60">— {style.description}</span>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <div className="hidden flex-col items-end sm:flex">
-              <span className="text-[9px] font-bold uppercase tracking-tighter text-slate-500">Score</span>
-              <span className="font-mono text-xs font-bold text-[var(--text-primary)]">{data.metrics.score}/100</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-black uppercase tracking-tighter text-[var(--text-tertiary)]">Score</span>
+              <span className="font-mono text-[11px] font-black text-[var(--text-primary)]">{data.metrics.score}/100</span>
             </div>
-            <div className="h-6 w-px bg-white/10 hidden sm:block" />
-            <div className="hidden flex-col items-end sm:flex">
-              <span className="text-[9px] font-bold uppercase tracking-tighter text-slate-500">Updated</span>
+            <div className="h-3 w-px bg-white/10" />
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-black uppercase tracking-tighter text-[var(--text-tertiary)]">Updated</span>
               <span className="font-mono text-[10px] text-[var(--text-secondary)]">
-                {updatedAt ? new Date(updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '--'}
+                {updatedAt ? new Date(updatedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--'}
               </span>
             </div>
           </div>
