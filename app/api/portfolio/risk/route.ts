@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
-    const fallbackEquity = Number(searchParams.get('totalEquity') || 50_000);
+    const fallbackEquity = Number(searchParams.get('totalEquity') || 0);
 
     const [{ data: tradeRows, error: tradeError }, { data: settings }, { data: profiles }] = await Promise.all([
       supabaseServer.from('trades').select('*, trade_executions(*)').in('status', ['ACTIVE', 'PLANNED']),

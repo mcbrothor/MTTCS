@@ -26,7 +26,7 @@ interface SecurityLookupResponse {
 export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS' }: TickerInputProps) {
   const [ticker, setTicker] = useState(initialTicker.toUpperCase());
   const [exchange, setExchange] = useState(initialExchange);
-  const [totalEquity, setTotalEquity] = useState(50_000);
+  const [totalEquity, setTotalEquity] = useState(0);
   const [riskPercent, setRiskPercent] = useState(1);
   const [lookup, setLookup] = useState<TickerLookupState>({
     status: 'idle',

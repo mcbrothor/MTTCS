@@ -18,7 +18,7 @@ import {
   Check,
   Activity,
 } from 'lucide-react';
-import FlowBanner from '@/components/layout/FlowBanner';
+
 import { useContestSelection } from '@/hooks/useContestSelection';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -654,71 +654,102 @@ export default function CanslimScannerPage() {
 
   // === 메인 렌더링 ===
   return (
-    <div className="space-y-6">
-      <FlowBanner currentKey="scanner" />
+    <div className="space-y-6 pb-12">
+      <section className="panel-grid space-y-5 p-5 sm:p-6">
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
       <MarketBanner compact={true} />
 
-      {/* 헤더 */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-rose-500/20 p-2.5 ring-1 ring-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
-              <ScanSearch className="h-6 w-6 text-rose-500" />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
+          <div className="space-y-4">
+            <div>
+              <h1 className="flex items-center gap-3 text-3xl font-black tracking-tightest text-white">
+                <div className="rounded-2xl bg-rose-500/20 p-2.5 ring-1 ring-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
+                  <ScanSearch className="h-6 w-6 text-rose-500" />
+                </div>
+                오닐 스캐너
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 font-medium">
+                윌리엄 오닐의 7 Pillar 필터 & VCP 이중 검증 기반 주도주 발굴
+              </p>
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tightest">
-              오닐 스캐너
-
-            </h1>
-          </div>
-          <p className="text-sm text-slate-500 font-medium pl-14">
-            윌리엄 오닐의 7 Pillar 필터 & VCP 이중 검증 기반 주도주 발굴
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {/* 뷰 모드 토글 (웹/앱) */}
-          <div className="flex items-center gap-1 rounded-xl bg-slate-900/50 border border-slate-800 p-1">
-            <button
-              onClick={() => setViewMode('web')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                viewMode === 'web' 
-                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              <Search className="h-3.5 w-3.5" /> 웹
-            </button>
-            <button
-              onClick={() => setViewMode('app')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
-                viewMode === 'app' 
-                  ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' 
-                  : 'text-slate-500 hover:text-slate-300'
-              }`}
-            >
-              <LayoutDashboard className="h-3.5 w-3.5" /> 앱
-            </button>
           </div>
 
-          <div className="h-8 w-px bg-slate-800 mx-1 hidden sm:block" />
+          <div className="rounded-[24px] border border-slate-800 bg-slate-900/50 p-4 shadow-xl">
+            <div className="grid gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  Scan Control
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  유니버스와 뷰 모드를 정한 뒤 바로 스캔을 실행할 수 있습니다.
+                </p>
+              </div>
 
-          {isScanning ? (
-            <Button onClick={stopScan} variant="danger" className="flex items-center gap-2 rounded-xl font-bold shadow-xl shadow-rose-500/10 active:scale-95 transition-all">
-              <Square className="h-4 w-4" /> 중단
-            </Button>
-          ) : (
-            <Button 
-              onClick={startScan} 
-              variant="primary" 
-              className="group relative flex items-center gap-2 rounded-xl border-none bg-gradient-to-br from-rose-600 to-rose-700 font-black text-white shadow-xl shadow-rose-500/20 hover:from-rose-500 hover:to-rose-600 active:scale-95 transition-all"
-            >
-              <Play className="h-4 w-4 fill-white pr-0.5" /> 스캔 시작
-            </Button>
-          )}
+              <div className="grid gap-3">
+                <div className="grid gap-1.5 text-xs text-slate-500">
+                  Universe Selection
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
+                      <button
+                        key={u}
+                        onClick={() => handleUniverseChange(u)}
+                        disabled={isScanning}
+                        className={`group relative overflow-hidden rounded-xl border p-2 text-left transition-all active:scale-95 ${
+                          universe === u
+                            ? 'border-rose-500/50 bg-rose-500/10 text-white ring-1 ring-rose-500/30'
+                            : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:border-slate-700'
+                        }`}
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
+                        <p className={`text-[8px] font-bold ${universe === u ? 'text-rose-400' : 'text-slate-700'}`}>
+                          {u.includes('KOS') ? 'KR MARKET' : 'TECH GROWTH'}
+                        </p>
+                        {universe === u && (
+                          /* @ts-ignore - framer-motion layoutId type issue */
+                          <motion.div layoutId="activeUniverse" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500 blur-[2px]" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5 text-xs text-slate-500">
+                    View Mode
+                    <div className="flex rounded-xl border border-slate-800 bg-slate-950/40 p-1">
+                      {(['web', 'app'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setViewMode(mode)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
+                            viewMode === mode ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'text-slate-500'
+                          }`}
+                        >
+                          {mode === 'web' ? 'TABLE' : 'CARDS'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    {isScanning ? (
+                      <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
+                        <Square className="h-3.5 w-3.5" /> 중단
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={startScan} 
+                        className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border-none bg-gradient-to-br from-rose-600 to-rose-700 font-black text-white shadow-xl shadow-rose-500/20 hover:from-rose-500 hover:to-rose-600 active:scale-95 transition-all"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-white" /> 스캔 시작
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* 매크로 배너 */}
       {macro && (
@@ -778,32 +809,7 @@ export default function CanslimScannerPage() {
         </motion.div>
       )}
 
-      {/* 유니버스 선택 */}
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
-          <button
-            key={u}
-            type="button"
-            disabled={isScanning}
-            onClick={() => handleUniverseChange(u)}
-            className={`group relative overflow-hidden rounded-xl border px-4 py-3 transition-all active:scale-95 ${
-              universe === u
-                ? 'border-rose-500/60 bg-rose-500/15 text-rose-50 shadow-lg shadow-rose-500/10 ring-1 ring-rose-500/30'
-                : 'border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-600 hover:bg-slate-800/60 hover:text-slate-200'
-            } disabled:cursor-not-allowed disabled:opacity-40`}
-          >
-            <div className="flex flex-col items-start gap-0.5">
-              <span className="text-sm font-black tracking-tightest uppercase">{UNIVERSES[u].label}</span>
-              <span className={`text-[9px] font-bold uppercase tracking-tighter ${universe === u ? 'text-rose-400' : 'text-slate-600'}`}>
-                {universe.includes('KOS') ? 'KOSPI/KOSDAQ' : 'TECH GROWTH'}
-              </span>
-            </div>
-            {universe === u && (
-              <motion.div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500 blur-[2px]" />
-            )}
-          </button>
-        ))}
-      </div>
+
 
       {/* 진행 상태 바 */}
       {isScanning && (
@@ -848,16 +854,19 @@ export default function CanslimScannerPage() {
             { label: '공략 대기', value: stats.watchlist, color: 'text-amber-400', icon: <LayoutDashboard className="h-3 w-3" /> },
             { label: '데이터 부족', value: stats.errors, color: 'text-slate-500', icon: <AlertTriangle className="h-3 w-3" /> },
           ].map((stat) => (
-            <div key={stat.label} className="group relative rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-4 text-center transition-all hover:bg-slate-800/60 hover:border-slate-700">
-              <div className={`text-2xl font-black tracking-tighter ${stat.color} mb-1 drop-shadow-md`}>{stat.value}</div>
-              <div className="flex items-center justify-center gap-1.5 text-[10px] font-black text-slate-500 uppercase tracking-tighter group-hover:text-slate-300 transition-colors">
+            <div key={stat.label} className="flex flex-col gap-1 rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+              <div className="flex items-center gap-1.5 opacity-60">
                 {stat.icon}
-                {stat.label}
+                <span className="text-[10px] font-bold uppercase tracking-tight text-slate-400">{stat.label}</span>
               </div>
+              <span className={`font-mono text-2xl font-black tracking-tightest ${stat.color}`}>
+                {stat.value}
+              </span>
             </div>
           ))}
         </div>
       )}
+      </section>
 
       {/* 필터 및 정렬 컨트롤 */}
       {results.length > 0 && (

@@ -12,7 +12,7 @@ import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData,
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
-const DEFAULT_TOTAL_EQUITY = 50_000;
+const DEFAULT_TOTAL_EQUITY = 0;
 const DEFAULT_RISK_PERCENT_INPUT = 1;
 
 function sleep(ms: number) {
@@ -287,8 +287,8 @@ export async function GET(request: Request) {
     return apiError('지원하지 않는 티커 형식입니다. 미국 종목은 GOOG/BRK-B 형식, 한국 종목은 6자리 코드를 사용해 주세요.', 'INVALID_TICKER', 400);
   }
 
-  if (!Number.isFinite(totalEquity) || totalEquity <= 0) {
-    return apiError('총 자본은 0보다 큰 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
+  if (!Number.isFinite(totalEquity) || totalEquity < 0) {
+    return apiError('총 자본은 0 이상의 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
   }
 
   if (!Number.isFinite(riskPercentInput) || riskPercentInput <= 0 || riskPercentInput > 10) {

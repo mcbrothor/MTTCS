@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Play, ScanSearch, Square } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, ScanSearch, Square, Search, CheckCircle2, Activity, AlertTriangle, LayoutDashboard } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import VcpDrilldownModal from '@/components/scanner/VcpDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
@@ -107,61 +109,67 @@ export default function ScannerPage() {
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                  Universe
-                  <select
-                    value={universe}
-                    onChange={(event) => handleUniverseChange(event.target.value as ScannerUniverse)}
-                    disabled={isScanning}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-emerald-400/40"
-                  >
-                    {Object.entries(UNIVERSES).map(([key, { label }]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-
+              <div className="grid gap-3">
                 <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                  View
-                  <div className="flex rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
-                    {(['web', 'app'] as const).map((mode) => (
+                  Universe Selection
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
                       <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setViewMode(mode)}
-                        className={`flex-1 rounded-[14px] px-3 py-2 text-xs font-semibold transition-colors ${
-                          viewMode === mode
-                            ? 'bg-emerald-500 text-slate-950'
-                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        key={u}
+                        onClick={() => handleUniverseChange(u)}
+                        disabled={isScanning}
+                        className={`group relative overflow-hidden rounded-xl border p-2 text-left transition-all active:scale-95 ${
+                          universe === u
+                            ? 'border-emerald-500/50 bg-emerald-500/10 text-white ring-1 ring-emerald-500/30'
+                            : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:border-emerald-500/30'
                         }`}
                       >
-                        {mode === 'web' ? 'Table' : 'Cards'}
+                        <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
+                        <p className={`text-[8px] font-bold ${universe === u ? 'text-emerald-400' : 'text-slate-600'}`}>
+                          {u.includes('KOS') ? 'KR MARKET' : 'TECH GROWTH'}
+                        </p>
+                        {universe === u && (
+                          /* @ts-ignore - framer-motion layoutId type issue */
+                          <motion.div layoutId="activeUniverseMinervini" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-emerald-500 blur-[2px]" />
+                        )}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-                    Last Scan
-                  </p>
-                  <p className="mt-1 font-mono text-sm font-semibold text-[var(--text-primary)]">
-                    {formatDateTime(lastScannedAt)}
-                  </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
+                    View Mode
+                    <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
+                      {(['web', 'app'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setViewMode(mode)}
+                          className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
+                            viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
+                          }`}
+                        >
+                          {mode === 'web' ? 'TABLE' : 'CARDS'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    {isScanning ? (
+                      <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
+                        <Square className="h-3.5 w-3.5" /> 중단
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={startScan} 
+                        disabled={busy || scanBlocked}
+                        className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border-none bg-gradient-to-br from-emerald-600 to-emerald-700 font-black text-white shadow-xl shadow-emerald-500/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 transition-all"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-white" /> {scanBlocked ? 'HALT 차단' : '스캔 시작'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-
-                {isScanning ? (
-                  <Button variant="danger" onClick={stopScan} icon={<Square className="h-4 w-4" />} className="rounded-2xl">
-                    중단
-                  </Button>
-                ) : (
-                  <Button onClick={startScan} icon={<Play className="h-4 w-4" />} disabled={busy || scanBlocked} className="rounded-2xl">
-                    {scanBlocked ? 'HALT 차단' : '스캔 시작'}
-                  </Button>
-                )}
               </div>
             </div>
           </div>
