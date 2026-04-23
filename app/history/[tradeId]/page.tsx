@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
-import FlowBanner from '@/components/layout/FlowBanner';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import {
@@ -193,7 +192,7 @@ export default function HistoryTradeDetailPage() {
   if (error) {
     return (
       <div className="space-y-6 pb-12">
-        <FlowBanner currentKey="review" />
+
         <Card className="border border-rose-500/30 bg-rose-500/10">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-rose-200">Review Error</p>
           <h1 className="mt-3 text-2xl font-bold text-white">Trade review could not be loaded.</h1>
@@ -210,7 +209,7 @@ export default function HistoryTradeDetailPage() {
   if (!trade) {
     return (
       <div className="space-y-6 pb-12">
-        <FlowBanner currentKey="review" />
+
         <Card>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Review</p>
           <h1 className="mt-3 text-2xl font-bold text-white">Trade record was not found.</h1>
@@ -237,7 +236,7 @@ export default function HistoryTradeDetailPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      <FlowBanner currentKey="review" />
+
 
       <div className="flex flex-col gap-4 rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(17,94,89,0.32))] px-6 py-6 shadow-[var(--panel-shadow)] lg:flex-row lg:items-end lg:justify-between">
         <div>

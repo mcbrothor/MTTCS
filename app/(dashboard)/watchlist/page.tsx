@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import { Eye, Plus, Save, Star, Trash2, X } from 'lucide-react';
-import FlowBanner from '@/components/layout/FlowBanner';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -132,7 +131,7 @@ export default function WatchlistPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
-      <FlowBanner currentKey="watchlist" />
+
 
       <div className="flex items-start justify-between">
         <div>

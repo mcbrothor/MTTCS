@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
-import FlowBanner from '@/components/layout/FlowBanner';
 import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -579,7 +578,7 @@ export default function ContestPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
-      <FlowBanner currentKey="contest" />
+
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
