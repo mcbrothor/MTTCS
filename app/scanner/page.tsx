@@ -339,45 +339,75 @@ export default function ScannerPage() {
         )}
       </section>
 
-      {filteredResults.length > 0 ? (
-        viewMode === 'web' ? (
-          <ScannerTable
-            results={filteredResults}
-            selectedTickers={selectedTickers}
-            onToggleSelect={toggleSelected}
-            onRowClick={(res) => setSelectedResult(res)}
-          />
+      <AnimatePresence mode="wait">
+        {filteredResults.length > 0 ? (
+          <motion.div
+            key={`${universe}-${filterKey}-${viewMode}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {viewMode === 'web' ? (
+              <ScannerTable
+                results={filteredResults}
+                selectedTickers={selectedTickers}
+                onToggleSelect={toggleSelected}
+                onRowClick={(res) => setSelectedResult(res)}
+              />
+            ) : (
+              <ScannerCardView
+                results={filteredResults}
+                selectedTickers={selectedTickers}
+                onToggleSelect={toggleSelected}
+                onCardClick={(res) => setSelectedResult(res)}
+              />
+            )}
+          </motion.div>
         ) : (
-          <ScannerCardView
-            results={filteredResults}
-            selectedTickers={selectedTickers}
-            onToggleSelect={toggleSelected}
-            onCardClick={(res) => setSelectedResult(res)}
-          />
-        )
-      ) : null}
+          <motion.div
+            key="empty-state"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-800 bg-slate-900/20 px-6 py-20 text-center backdrop-blur-sm"
+          >
+            <div className="relative mb-6">
+              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/10" />
+              <div className="relative rounded-full bg-slate-950 p-6 ring-1 ring-white/10 shadow-2xl">
+                <ScanSearch className="h-10 w-10 text-emerald-400" />
+              </div>
+            </div>
+            
+            <h3 className="text-xl font-black tracking-tight text-white">후보 발굴을 시작하세요</h3>
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-400">
+              {results.length === 0 
+                ? "아직 스캔된 결과가 없습니다. 상단의 '스캔 시작' 버튼을 눌러 미너비니의 SEPA 전략에 부합하는 종목을 실시간으로 발굴해 보세요."
+                : "선택한 필터 조건에 맞는 종목이 없습니다. 상세 필터 수치를 조정하거나 다른 유니버스를 시도해 보세요."}
+            </p>
 
-      {results.length === 0 && !isScanning && (
-        <div className="rounded-[24px] border border-dashed border-[var(--border)] bg-[var(--surface-soft)] px-6 py-16 text-center">
-          <ScanSearch className="mx-auto mb-4 h-12 w-12 text-[var(--text-tertiary)]" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">스캔 결과가 없습니다.</h3>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">상단 컨트롤에서 스캔을 시작하면 즉시 후보가 채워집니다.</p>
-        </div>
-      )}
+            <div className="mt-8 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-left transition-colors hover:bg-white/10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Strategy Tip #1</p>
+                <p className="mt-2 text-xs text-slate-300">RS Rating이 80 이상인 종목은 시장 주도주(Leader)일 가능성이 매우 높습니다.</p>
+              </div>
+              <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-left transition-colors hover:bg-white/10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Strategy Tip #2</p>
+                <p className="mt-2 text-xs text-slate-300">VCP 패턴의 마지막 수축(Tightness) 지점은 최적의 로우 리스크 진입점입니다.</p>
+              </div>
+            </div>
 
-      {results.length > 0 && filteredResults.length === 0 && !isScanning && isMacroRestricted && (
-        <div className="rounded-[24px] border border-dashed border-rose-400/25 bg-rose-500/6 px-6 py-16 text-center">
-          <ScanSearch className="mx-auto mb-4 h-12 w-12 text-rose-300/70" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-            {macroTrend?.action_level === 'HALT' ? 'HALT 상태로 후보 노출이 제한되었습니다.' : 'REDUCED 상태로 RS 강한 후보만 노출합니다.'}
-          </h3>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            {macroTrend?.action_level === 'HALT'
-              ? '전체 보기로 전환하면 기존 스캔 결과를 참고용으로 검토할 수 있습니다.'
-              : '우측 토글로 전체 결과를 볼 수 있지만, 기본 화면은 RS 80+ 중심으로 압축됩니다.'}
-          </p>
-        </div>
-      )}
+            {!isScanning && results.length === 0 && (
+              <Button 
+                onClick={startScan} 
+                className="mt-10 rounded-2xl bg-emerald-600 px-8 py-3 font-bold hover:bg-emerald-500 active:scale-95 shadow-xl shadow-emerald-500/20"
+              >
+                지금 스캔 실행하기
+              </Button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {selectedTickers.size > 0 && (
         <div className="fixed bottom-8 left-1/2 z-50 flex w-[min(92vw,640px)] -translate-x-1/2 items-center justify-between gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl">

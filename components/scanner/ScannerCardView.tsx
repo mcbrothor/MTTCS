@@ -157,6 +157,29 @@ interface ScannerCardViewProps {
   onCardClick: (result: ScannerResult) => void;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 260,
+      damping: 20,
+    },
+  },
+};
+
 export default function ScannerCardView({
   results,
   selectedTickers,
@@ -182,7 +205,12 @@ export default function ScannerCardView({
   );
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+    >
       {results.map((result) => {
         const volumeTier = getVolumeSignalTier(result);
         const rsBand = getScannerRsBand(result);
@@ -195,8 +223,7 @@ export default function ScannerCardView({
           <motion.div
             key={result.ticker}
             layout
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            variants={itemVariants}
             whileHover={{ y: -3, scale: 1.01 }}
             onClick={() => result.status === 'done' && onCardClick(result)}
             className={`group relative overflow-hidden rounded-[24px] border p-4 transition-all ${

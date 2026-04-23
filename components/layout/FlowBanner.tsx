@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Check } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { FLOW_STEPS, getActiveFlowStep, type FlowStepKey } from '@/components/layout/navigation';
 
 interface FlowBannerProps {
@@ -18,7 +19,7 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
   const activeIndex = FLOW_STEPS.findIndex((step) => step.key === activeStep.key);
 
   return (
-    <div className={`overflow-x-auto rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)]/85 px-3 py-3 shadow-[var(--panel-shadow)] ${className}`}>
+    <div className={`overflow-x-auto rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)]/40 px-3 py-3 shadow-[var(--panel-shadow)] backdrop-blur-xl ${className}`}>
       <div className="flex min-w-max items-center gap-2">
         {FLOW_STEPS.map((step, index) => {
           const isActive = step.key === activeStep.key;
@@ -28,29 +29,42 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
             <Link
               key={step.key}
               href={step.href}
-              className={`flex min-w-[150px] items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
-                isActive
-                  ? 'border-emerald-400/40 bg-emerald-500/12 text-[var(--text-primary)] shadow-[0_18px_40px_rgba(16,185,129,0.12)]'
-                  : isDone
-                    ? 'border-sky-400/20 bg-sky-400/8 text-[var(--text-secondary)]'
-                    : 'border-transparent bg-[var(--surface-soft)] text-[var(--text-tertiary)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]'
-              }`}
+              className="relative flex min-w-[160px] flex-1 items-center gap-3 rounded-2xl px-4 py-3 transition-all"
             >
-              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] font-bold ${
+              {isActive && (
+                <motion.div
+                  layoutId="activeFlowStep"
+                  className="absolute inset-0 rounded-2xl border border-emerald-400/40 bg-emerald-500/12 shadow-[0_18px_40px_rgba(16,185,129,0.12)]"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+              
+              <div className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border font-mono text-[11px] font-bold transition-colors duration-300 ${
                 isActive
-                  ? 'border-emerald-400/50 bg-emerald-500/15 text-emerald-200'
+                  ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-200'
                   : isDone
                     ? 'border-sky-400/25 bg-sky-400/10 text-sky-200'
                     : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-tertiary)]'
               }`}>
                 {isDone ? <Check className="h-4 w-4" /> : step.step}
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
-                  Step {step.step}
+              
+              <div className="relative z-10 min-w-0">
+                <p className={`text-[9px] font-black uppercase tracking-[0.25em] transition-colors duration-300 ${
+                  isActive ? 'text-emerald-400/80' : 'text-[var(--text-tertiary)]'
+                }`}>
+                  STEP {step.step}
                 </p>
-                <p className="truncate text-sm font-semibold">{step.label}</p>
-                <p className="truncate text-xs text-[var(--text-secondary)]">{step.sub}</p>
+                <p className={`truncate text-sm font-bold transition-colors duration-300 ${
+                  isActive ? 'text-[var(--text-primary)]' : isDone ? 'text-[var(--text-secondary)]' : 'text-[var(--text-tertiary)]'
+                }`}>
+                  {step.label}
+                </p>
+                <p className={`truncate text-[11px] transition-colors duration-300 ${
+                  isActive ? 'text-emerald-200/60' : 'text-[var(--text-tertiary)]/70'
+                }`}>
+                  {step.sub}
+                </p>
               </div>
             </Link>
           );
@@ -59,3 +73,4 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
     </div>
   );
 }
+
