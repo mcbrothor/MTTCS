@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       });
 
     const totalEquity = Number(settings?.total_equity || fallbackEquity);
-    const summary = calculatePortfolioRiskSummary(trades, totalEquity, (profiles || []) as SecurityProfile[]);
+    const summary = calculatePortfolioRiskSummary(trades, totalEquity, (profiles || []) as SecurityProfile[], market);
 
     return apiSuccess(summary, {
       source: 'Supabase trades + portfolio_settings',

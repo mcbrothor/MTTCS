@@ -113,7 +113,15 @@ export default function PortfolioPage() {
             <Metric label="투입 금액" value={money(summary.investedCapital, market)} />
             <Metric label="현금" value={`${money(summary.cash, market)} (${summary.cashPct}%)`} />
             <Metric label="오픈 리스크" value={`${money(summary.totalOpenRisk, market)} (${summary.openRiskPct}%)`} />
-            <Metric label="보유 포지션" value={`${summary.activePositions}/${summary.maxPositions}`} />
+            <Metric
+              label="보유 포지션"
+              value={`${summary.activePositions}/${summary.maxPositions}`}
+              tooltip={
+                market === 'KR'
+                  ? '• 200만 이하: 최대 2개\n• 1000만 이하: 최대 5개\n• 1000만 초과: 최대 10개'
+                  : '• $1,000 이하: 최대 2개\n• $10,000 이하: 최대 5개\n• $10,000 초과: 최대 10개'
+              }
+            />
           </div>
 
           <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
@@ -193,11 +201,18 @@ export default function PortfolioPage() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
+    <div className="group relative rounded-lg border border-slate-800 bg-slate-950/50 p-4 transition-colors hover:border-slate-700">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-2 font-mono text-xl font-bold text-white">{value}</p>
+      {tooltip && (
+        <div className="pointer-events-none absolute -top-2 left-1/2 z-50 w-max -translate-x-1/2 -translate-y-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 opacity-0 shadow-xl transition-all group-hover:top-0 group-hover:opacity-100">
+          <p className="font-semibold text-emerald-400 mb-1">포지션 제한 규칙</p>
+          <div className="whitespace-pre-line leading-relaxed">{tooltip}</div>
+          <div className="absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
+        </div>
+      )}
     </div>
   );
 }

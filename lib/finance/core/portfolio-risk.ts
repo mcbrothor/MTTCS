@@ -6,16 +6,24 @@ function finite(value: unknown) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-export function getMaxPositionsForEquity(totalEquity: number) {
-  if (totalEquity <= 1_000_000) return 2;
-  if (totalEquity <= 10_000_000) return 5;
-  return 10;
+export function getMaxPositionsForEquity(totalEquity: number, market: 'US' | 'KR') {
+  if (market === 'KR') {
+    if (totalEquity <= 2_000_000) return 2;
+    if (totalEquity <= 10_000_000) return 5;
+    return 10;
+  } else {
+    // US
+    if (totalEquity <= 1_000) return 2;
+    if (totalEquity <= 10_000) return 5;
+    return 10;
+  }
 }
 
 export function calculatePortfolioRiskSummary(
   trades: Trade[],
   totalEquity: number,
-  profiles: SecurityProfile[] = []
+  profiles: SecurityProfile[] = [],
+  market: 'US' | 'KR' = 'US'
 ): PortfolioRiskSummary {
   const active = trades.filter((trade) => trade.status === 'ACTIVE');
   const profileByTicker = new Map(profiles.map((profile) => [profile.ticker.toUpperCase(), profile]));
@@ -40,7 +48,7 @@ export function calculatePortfolioRiskSummary(
     sectorMap.set(sector, row);
   }
 
-  const maxPositions = getMaxPositionsForEquity(equity);
+  const maxPositions = getMaxPositionsForEquity(equity, market);
   const warnings: string[] = [];
   if (active.length > maxPositions) {
     warnings.push(`Active positions exceed the seed-size limit: ${active.length}/${maxPositions}.`);
