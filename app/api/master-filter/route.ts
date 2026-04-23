@@ -100,11 +100,7 @@ export async function GET(request: Request) {
       marketState: res.state,
       market,
       metrics: {
-        trend: res.metrics.trend,
-        breadth: res.metrics.breadth,
-        liquidity: res.metrics.liquidity,
-        volatility: res.metrics.volatility,
-        leadership: res.p3Metrics.sectorRotation,
+        ...res.metrics,
         totalScore: res.p3Score,
       },
       macroData: {
@@ -126,14 +122,8 @@ export async function GET(request: Request) {
       market,
       metrics: {
         ...res.metrics,
-        leadership: {
-          ...res.p3Metrics.sectorRotation,
-          label: 'Sector Leadership',
-          description: '전체 섹터 ETF를 20거래일 수익률순으로 보고 성장/경기민감 섹터 주도 여부를 확인합니다.',
-        },
-        ...res.p3Metrics,
-        score: res.legacyScore,
-        p3Score: res.p3Score,
+        // 하위 호환성 필드
+        score: res.p3Score,
         mainPrice: res.lastClose,
         ma50: res.ma50,
         ma150: res.ma150,

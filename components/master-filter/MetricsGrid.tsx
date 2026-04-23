@@ -226,10 +226,15 @@ export default function MetricsGrid() {
     );
   }
 
-  const { metrics } = data;
-  const p3Cards = [metrics.ftd, metrics.distribution, metrics.newHighLow, metrics.above200d, metrics.sectorRotation].filter(
-    (item): item is MasterFilterMetricDetail => Boolean(item)
-  );
+  const displayMetricsList = [
+    { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory },
+    { detail: metrics.breadth, chartData: metrics.mainHistory },
+    { detail: metrics.volatility, chartData: metrics.vixHistory },
+    { detail: metrics.ftd },
+    { detail: metrics.distribution },
+    { detail: metrics.newHighLow },
+    { detail: metrics.sectorRotation }
+  ];
 
   return (
     <div className="space-y-5">
@@ -248,28 +253,20 @@ export default function MetricsGrid() {
         </div>
 
         <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
-          {[
-            metrics.trend, 
-            metrics.breadth, 
-            metrics.volatility, 
-            metrics.ftd, 
-            metrics.distribution, 
-            metrics.newHighLow,
-            metrics.sectorRotation
-          ].map((m) => m ? (
-            <div key={m.label}>
+          {displayMetricsList.map(({ detail }) => detail ? (
+            <div key={detail.label}>
               <div className="mb-1 flex justify-between text-[10px] text-slate-500">
-                <span>{m.label}</span>
-                <span className={m.status === 'PASS' ? 'text-emerald-400' : m.status === 'WARNING' ? 'text-amber-400' : 'text-rose-400'}>
-                  {m.score ?? 0}/{m.weight ?? 0}점
+                <span>{detail.label}</span>
+                <span className={detail.status === 'PASS' ? 'text-emerald-400' : detail.status === 'WARNING' ? 'text-amber-400' : 'text-rose-400'}>
+                  {detail.score ?? 0}/{detail.weight ?? 0}점
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
                 <div
                   className={`h-full rounded-full transition-all duration-1000 ${
-                    m.status === 'PASS' ? 'bg-emerald-500' : m.status === 'WARNING' ? 'bg-amber-500' : 'bg-rose-500'
+                    detail.status === 'PASS' ? 'bg-emerald-500' : detail.status === 'WARNING' ? 'bg-amber-500' : 'bg-rose-500'
                   }`}
-                  style={{ width: `${m.weight ? Math.min(((m.score ?? 0) / m.weight) * 100, 100) : 0}%` }}
+                  style={{ width: `${detail.weight ? Math.min(((detail.score ?? 0) / detail.weight) * 100, 100) : 0}%` }}
                 />
               </div>
             </div>
@@ -278,14 +275,15 @@ export default function MetricsGrid() {
       </section>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
-        <MetricCard detail={metrics.trend} movingAverageData={metrics.movingAverageHistory} />
-        <MetricCard detail={metrics.breadth} chartData={metrics.mainHistory} />
-        <MetricCard detail={metrics.volatility} chartData={metrics.vixHistory} />
-        <MetricCard detail={metrics.liquidity} />
-        {p3Cards.map((detail) => (
-          <MetricCard key={detail.label} detail={detail} compact />
-        ))}
-        <MetricCard detail={metrics.leadership} compact />
+        {displayMetricsList.map(({ detail, chartData, movingAverageData }, idx) => detail ? (
+          <MetricCard 
+            key={detail.label} 
+            detail={detail} 
+            chartData={chartData} 
+            movingAverageData={movingAverageData}
+            compact={idx >= 3} 
+          />
+        ) : null)}
       </div>
 
       <SectorTable rows={metrics.sectorRows || []} />

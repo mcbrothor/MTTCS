@@ -134,15 +134,12 @@ export interface P3ComputeResult {
   metrics: {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
-    liquidity: MasterFilterMetricDetail;
     volatility: MasterFilterMetricDetail;
-  };
-  p3Metrics: {
-    ftd: MasterFilterMetricDetail;
     distribution: MasterFilterMetricDetail;
+    ftd: MasterFilterMetricDetail;
     newHighLow: MasterFilterMetricDetail;
-    above200d: MasterFilterMetricDetail;
     sectorRotation: MasterFilterMetricDetail;
+    p3Score: number;
   };
   mainHistory: { date: string; close: number }[];
   vixHistory: { date: string; close: number }[];
@@ -179,7 +176,9 @@ export function computeP3(
   const leadingSectors = sectorRows.slice(0, 3);
   const sectorRiskOnCount = leadingSectors.filter((r) => r.riskOn).length;
 
+  const trendScore = (lastClose > ma200 ? 1 : 0) + (lastClose > ma50 ? 0.5 : 0) + (ma50 > ma200 ? 0.5 : 0);
   const trendScoreScaled = trendScore * 10; // 0~2 -> 0~20
+  const volatilityScore = currentVix < 20 ? 0.5 : 0;
   const volatilityScoreScaled = currentVix < 20 ? 20 : currentVix < 25 ? 12 : 5;
 
   const ftdScore = ftd.found ? 20 : 8;
@@ -192,8 +191,6 @@ export function computeP3(
   const totalRawScore = ftdScore + distributionScore + newHighLowScore + above200Score + sectorScore + trendScoreScaled + volatilityScoreScaled;
   const p3Score = Math.round((totalRawScore / 140) * 100);
 
-  const trendScore = (lastClose > ma200 ? 1 : 0) + (lastClose > ma50 ? 0.5 : 0) + (ma50 > ma200 ? 0.5 : 0);
-  const volatilityScore = currentVix < 20 ? 0.5 : 0;
   const legacyScore =
     trendScore +
     (above200Pct >= 40 ? 1 : 0) +
@@ -218,25 +215,14 @@ export function computeP3(
       weight: 20,
     },
     breadth: {
-      label: 'Market Breadth',
+      label: 'Above 200D (Breadth)',
       value: Number(above200Pct.toFixed(0)),
-      threshold: 50,
-      status: (above200Pct >= 60 ? 'PASS' : above200Pct >= 40 ? 'WARNING' : 'FAIL') as 'PASS' | 'WARNING' | 'FAIL',
+      threshold: 60,
+      status: statusFromScore(above200Score),
       unit: '%',
-      description: `${breadthEtfs.join(', ')} 중 200일선 위에 있는 비율입니다.`,
+      description: `주요 지수/ETF 중 200일선 위에 있는 비율입니다. (${breadthEtfs.join(', ')})`,
       source: 'Yahoo Finance ETF proxy',
       score: above200Score,
-      weight: 20,
-    },
-    liquidity: {
-      label: 'Distribution Days',
-      value: distributionDays,
-      threshold: 5,
-      status: (distributionDays <= 3 ? 'PASS' : distributionDays <= 5 ? 'WARNING' : 'FAIL') as 'PASS' | 'WARNING' | 'FAIL',
-      unit: 'days',
-      description: '최근 25거래일 중 하락일이면서 전일보다 거래량이 증가한 날을 누적합니다.',
-      source: `Yahoo Finance ${mainSymbol} volume`,
-      score: distributionScore,
       weight: 20,
     },
     volatility: {
@@ -250,9 +236,17 @@ export function computeP3(
       score: volatilityScoreScaled,
       weight: 20,
     },
-  };
-
-  const p3Metrics = {
+    distribution: {
+      label: 'Distribution Pressure',
+      value: distributionDays,
+      threshold: 5,
+      status: statusFromScore(distributionScore),
+      unit: 'days',
+      description: '최근 25거래일 중 하락일이면서 전일보다 거래량이 증가한 날(분산일)을 누적합니다.',
+      source: `${mainSymbol} volume proxy`,
+      score: distributionScore,
+      weight: 20,
+    },
     ftd: {
       label: 'Follow-Through Day',
       value: ftd.found ? `${ftd.daysAgo} days ago` : 'Unconfirmed',
@@ -262,17 +256,6 @@ export function computeP3(
       description: ftd.reason,
       source: `${mainSymbol} proxy`,
       score: ftdScore,
-      weight: 20,
-    },
-    distribution: {
-      label: 'Distribution Pressure',
-      value: distributionDays,
-      threshold: 5,
-      status: statusFromScore(distributionScore),
-      unit: 'days',
-      description: '기관 매도 압력이 과도하게 누적되는지 확인합니다.',
-      source: `${mainSymbol} volume proxy`,
-      score: distributionScore,
       weight: 20,
     },
     newHighLow: {
@@ -286,19 +269,8 @@ export function computeP3(
       score: newHighLowScore,
       weight: 20,
     },
-    above200d: {
-      label: 'Above 200D',
-      value: Number(above200Pct.toFixed(0)),
-      threshold: 60,
-      status: statusFromScore(above200Score),
-      unit: '%',
-      description: '주요 지수/ETF 중 200일선 위에 있는 비율입니다.',
-      source: 'Yahoo Finance ETF proxy',
-      score: above200Score,
-      weight: 20,
-    },
     sectorRotation: {
-      label: 'Sector Rotation',
+      label: 'Sector Leadership',
       value: sectorRows.length ? `${sectorRows.length} sectors ranked` : 'N/A',
       threshold: 'Risk-on sectors in leadership',
       status: statusFromScore(sectorScore),
@@ -308,6 +280,7 @@ export function computeP3(
       score: sectorScore,
       weight: 20,
     },
+    p3Score,
   };
 
   const mainHistory = mainData.slice(-50).map((d) => ({ date: d.date, close: d.close }));
@@ -322,6 +295,6 @@ export function computeP3(
     trendScore, breadthScore: above200Pct, volatilityScore, liquidityScore: distributionDays,
     legacyScore, lastClose, ma50, ma150, ma200, currentVix, above200Pct, newHighLowProxy,
     distributionDays, distributionDetails: distributionInfo.details, ftd,
-    metrics, p3Metrics, mainHistory, vixHistory, movingAverageHistory,
+    metrics, mainHistory, vixHistory, movingAverageHistory,
   };
 }
