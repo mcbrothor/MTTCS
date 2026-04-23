@@ -204,8 +204,10 @@ export default function ScannerCardView({
     </button>
   );
 
+  const MotionDiv = motion.div as any;
+
   return (
-    <motion.div
+    <MotionDiv
       variants={containerVariants}
       initial="hidden"
       animate="visible"
@@ -220,7 +222,7 @@ export default function ScannerCardView({
           : `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct.toFixed(1)}%`;
 
         return (
-          <motion.div
+          <MotionDiv
             key={result.ticker}
             layout
             variants={itemVariants}
@@ -334,9 +336,9 @@ export default function ScannerCardView({
                 </div>
               )}
             </div>
-          </motion.div>
+          </MotionDiv>
         );
       })}
-    </div>
+    </MotionDiv>
   );
 }

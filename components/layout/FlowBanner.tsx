@@ -17,6 +17,7 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
     ? FLOW_STEPS.find((step) => step.key === currentKey) ?? FLOW_STEPS[0]
     : getActiveFlowStep(pathname);
   const activeIndex = FLOW_STEPS.findIndex((step) => step.key === activeStep.key);
+  const MotionDiv = motion.div as any;
 
   return (
     <div className={`overflow-x-auto rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)]/40 px-3 py-3 shadow-[var(--panel-shadow)] backdrop-blur-xl ${className}`}>
@@ -32,7 +33,7 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
               className="relative flex min-w-[160px] flex-1 items-center gap-3 rounded-2xl px-4 py-3 transition-all"
             >
               {isActive && (
-                <motion.div
+                <MotionDiv
                   layoutId="activeFlowStep"
                   className="absolute inset-0 rounded-2xl border border-emerald-400/40 bg-emerald-500/12 shadow-[0_18px_40px_rgba(16,185,129,0.12)]"
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}

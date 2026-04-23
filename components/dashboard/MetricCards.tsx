@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Activity, DollarSign, ShieldCheck, Target, TrendingUp, BarChart3, PieChart, Briefcase } from 'lucide-react';
+import { Activity, DollarSign, ShieldCheck, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Card from '@/components/ui/Card';
 
@@ -51,7 +51,7 @@ export default function MetricCards({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric
-            icon={<PieChart className="h-5 w-5 text-electric-blue" />}
+            icon={<Activity className="h-5 w-5 text-electric-blue" />}
             label="승률"
             value={`${winRate.toFixed(1)}%`}
             border="border-t-electric-blue"
@@ -117,7 +117,7 @@ export default function MetricCards({
 
         <section>
           <div className="mb-4 flex items-center gap-2">
-            <Briefcase className="h-4 w-4 text-sky-400" />
+            <Activity className="h-4 w-4 text-sky-400" />
             <h3 className="text-xs font-bold uppercase tracking-widest text-[var(--text-tertiary)]">Exposure & Pipeline</h3>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
