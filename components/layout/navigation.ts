@@ -1,4 +1,5 @@
 export type FlowStepKey =
+  | 'dashboard'
   | 'market'
   | 'scanner'
   | 'watchlist'
@@ -24,8 +25,17 @@ export interface FlowStep {
 
 export const FLOW_STEPS: FlowStep[] = [
   {
-    key: 'market',
+    key: 'dashboard',
     step: '01',
+    label: '대시보드',
+    sub: '커맨드 센터',
+    href: '/',
+    matchers: ['/'],
+    tabs: [],
+  },
+  {
+    key: 'market',
+    step: '02',
     label: '시장 분석',
     sub: '진입 조건 확인',
     href: '/master-filter',
@@ -37,7 +47,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'scanner',
-    step: '02',
+    step: '03',
     label: '종목 발굴',
     sub: '미너비니 · 오닐',
     href: '/scanner',
@@ -49,7 +59,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'watchlist',
-    step: '03',
+    step: '04',
     label: '관심 종목',
     sub: '후보 추적',
     href: '/watchlist',
@@ -58,7 +68,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'plan',
-    step: '04',
+    step: '05',
     label: '매매 계획',
     sub: '리스크 계산',
     href: '/plan',
@@ -67,7 +77,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'portfolio',
-    step: '05',
+    step: '06',
     label: '포트폴리오',
     sub: '노출도 점검',
     href: '/portfolio',
@@ -76,7 +86,7 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'contest',
-    step: '06',
+    step: '07',
     label: '콘테스트',
     sub: 'LLM 비교 분석',
     href: '/contest',
@@ -85,11 +95,11 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'review',
-    step: '07',
+    step: '08',
     label: '성과 복기',
-    sub: '대시보드 · 히스토리',
+    sub: '히스토리',
     href: '/history',
-    matchers: ['/', '/history'],
+    matchers: ['/history'],
     tabs: [],
   },
 ];

@@ -670,8 +670,20 @@ export default function CanslimScannerPage() {
                 오닐 스캐너
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 font-medium">
-                윌리엄 오닐의 7 Pillar 필터 & VCP 이중 검증 기반 주도주 발굴
+                윌리엄 오닐의 CANSLIM 원칙을 기반으로 강력한 실적 성장과 기술적 주도력을 가진 종목을 발굴합니다. 7 Pillar 필터와 VCP 패턴의 이중 검증을 통해 신뢰도 높은 투자 후보를 선별합니다.
               </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-400">
+                Universe <span className="ml-1 font-mono text-white">{UNIVERSES[universe].label}</span>
+              </span>
+              <span className="rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-400">
+                Results <span className="ml-1 font-mono text-white">{filteredResults.length}</span>
+              </span>
+              <span className="rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-400">
+                Selected <span className="ml-1 font-mono text-white">{selectedTickers.size}/10</span>
+              </span>
             </div>
           </div>
 
