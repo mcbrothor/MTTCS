@@ -90,10 +90,7 @@ export const FLOW_STEPS: FlowStep[] = [
     sub: '대시보드 · 히스토리',
     href: '/history',
     matchers: ['/', '/history'],
-    tabs: [
-      { href: '/', label: '대시보드' },
-      { href: '/history', label: '매매 복기' },
-    ],
+    tabs: [],
   },
 ];
 
