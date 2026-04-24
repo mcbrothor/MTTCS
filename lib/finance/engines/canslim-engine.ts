@@ -93,19 +93,27 @@ export function evaluateCanslim(
   );
 
   if (effectiveAction === 'HALT') {
-    return fail('M', '시장 HALT', '시장 환경이 방어 구간이라 신규 진입을 중단합니다.');
+    // HALT에서도 스캔 허용 — 차세대 리더 발굴 기회 유지. 강한 경고만 추가.
+    warnings.push('⚠️ 시장 HALT 구간: 신규 진입은 자제하되 워치리스트 등록 후 FTD 확인 시 점진적 진입을 고려합니다.');
+    confidence = minConfidence(confidence, 'LOW');
+    addDetail(
+      'M',
+      '시장 방향성',
+      'WARNING',
+      `HALT (200MA 하회)`,
+      'FULL / REDUCED 권장',
+      'HALT 구간에서 선택한 종목은 포지션 축소 및 엄격한 손절 원칙 유지.'
+    );
   }
 
   if (effectiveAction === 'REDUCED') {
     const rs = stock.rsRating ?? 0;
     if (rs < CANSLIM_CRITERIA.PREFERRED_RS_RATING) {
-      return fail(
-        'M_REDUCED',
-        '시장 약세 + RS 부족',
-        `시장 약세 구간에서는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 종목만 통과시킵니다.`
-      );
+      confidence = minConfidence(confidence, 'MEDIUM');
+      warnings.push(`시장 약세 구간에서는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 종목 우선 검토를 권장합니다.`);
+    } else {
+      warnings.push('시장 약세 구간이지만 RS 90+ 초강세주로 확인됩니다. 포지션 사이즈 축소 권장.');
     }
-    warnings.push('시장 약세 구간이라 RS 90+ 초강세주만 통과시켰습니다.');
   }
 
   if (stock.currentQtrEpsGrowth !== null) {
@@ -239,11 +247,17 @@ export function evaluateCanslim(
     }
   }
 
+  // 턴어라운드 허용: 단일 연도 적자는 경고, 복수 연도 적자는 탈락
   if (stock.hadNegativeEpsInLast3Yr === true) {
-    addDetail('A', '3년 내 적자 이력', 'FAIL', '적자 기록', '적자 없음', '최근 3년 안에 적자가 확인됐습니다.');
-    return fail('A_NEGATIVE_EPS', '적자 이력', '최근 3년 내 적자 기록 발견');
-  }
-  if (stock.hadNegativeEpsInLast3Yr === false) {
+    const negativeYears = stock.annualEpsGrowthEachYear.filter((v) => v !== null && v < -50).length;
+    if (negativeYears >= 2) {
+      addDetail('A', '3년 내 적자 이력', 'FAIL', '복수 연도 적자', '1개 연도 이하', '최근 3년 중 2개 연도 이상 깊은 역성장이 확인됐습니다.');
+      return fail('A_NEGATIVE_EPS', '복수 연도 적자', '최근 3년 중 2개 연도 이상 심각한 역성장');
+    }
+    confidence = minConfidence(confidence, 'MEDIUM');
+    warnings.push('최근 3년 내 적자 또는 역성장 기록이 있습니다. 턴어라운드 여부를 직접 확인하세요.');
+    addDetail('A', '3년 내 적자 이력', 'WARNING', '1개 연도 적자/역성장', '적자 없음 권장', '단일 연도 부진은 턴어라운드 허용. 최근 분기 회복 여부로 판단.');
+  } else if (stock.hadNegativeEpsInLast3Yr === false) {
     addDetail('A', '3년 내 적자 이력', 'PASS', '적자 없음', '적자 없음', '최근 3년 내 적자 기록이 없습니다.');
   }
 
@@ -264,15 +278,28 @@ export function evaluateCanslim(
     const hasNegativeYear = validYears.some((value) => value < 0);
 
     if (hasNegativeYear) {
+      const negCount = validYears.filter((v) => v < 0).length;
+      if (negCount >= 2) {
+        addDetail(
+          'A',
+          '연도별 EPS 성장',
+          'FAIL',
+          validYears.map((value) => `${value}%`).join(', '),
+          '역성장 연도 1개 이하',
+          '2개 연도 이상 역성장이 확인됐습니다.'
+        );
+        return fail('A_ANNUAL', '연간 EPS 복수 역성장', '연도별 EPS 성장률에 2개 이상 역성장 구간이 있습니다.');
+      }
+      confidence = minConfidence(confidence, 'MEDIUM');
+      warnings.push('1개 연도 역성장이 있으나 턴어라운드 허용 범위입니다. 최근 분기 회복 추세를 확인하세요.');
       addDetail(
         'A',
         '연도별 EPS 성장',
-        'FAIL',
+        'WARNING',
         validYears.map((value) => `${value}%`).join(', '),
-        '모든 연도 플러스 성장',
-        '최근 연도 중 역성장 구간이 포함되어 있습니다.'
+        '역성장 연도 1개 이하 (권장)',
+        '단일 연도 역성장은 경고로 처리. 최근 회복 추세면 통과 가능.'
       );
-      return fail('A_ANNUAL', '연간 EPS 역성장', '연도별 EPS 성장률에 음수 구간이 있습니다.');
     }
 
     if (annualAverageGrowth >= CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH) {
@@ -458,9 +485,11 @@ export function evaluateCanslim(
     warnings.push('RS 데이터가 부족합니다.');
   }
 
+  // Yahoo에서 기관 추세를 신뢰성 있게 확인 불가 → WARNING으로만 처리
   if (stock.institutionalSponsorshipTrend === 'DECREASING') {
-    addDetail('I', '기관 보유 추세', 'FAIL', 'DECREASING', 'INCREASING / FLAT', '기관 보유 추세가 감소 중입니다.');
-    return fail('I_TREND', '기관 이탈', '기관 보유 추세가 감소하고 있습니다.');
+    confidence = minConfidence(confidence, 'MEDIUM');
+    warnings.push('기관 보유 추세가 감소 중으로 보고됩니다. 데이터 소스 신뢰도를 확인하세요.');
+    addDetail('I', '기관 보유 추세', 'WARNING', 'DECREASING', 'INCREASING / FLAT', 'Yahoo 데이터 한계로 추세 신뢰도 낮음. SEC 13F/DART 확인 권장.');
   }
 
   if (stock.numInstitutionalHolders !== null) {

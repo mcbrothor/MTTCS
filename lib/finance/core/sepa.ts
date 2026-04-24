@@ -1,6 +1,7 @@
 import type {
   AssessmentStatus,
   FundamentalSnapshot,
+  MarketCode,
   OHLCData,
   SepaCriterion,
   SepaEvidence,
@@ -141,6 +142,8 @@ export function analyzeSepa(
     fundamentals?: FundamentalSnapshot | null;
     preCalculatedRs?: number;
     rsSourceHint?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY';
+    market?: MarketCode;
+    exchange?: string;  // 'KOSPI' | 'KOSDAQ' | 'NASDAQ' | 'NYSE' 등
   } = {}
 ): SepaEvidence {
   const last = data.at(-1);
@@ -159,6 +162,16 @@ export function analyzeSepa(
   const rs = calculateRsProxy(data, options.benchmarkData);
 
   const benchmarkLabel = (options.benchmarkTicker || 'SPY').replace('^KS200', 'KOSPI 200').replace('^KQ150', 'KOSDAQ 150').replace('^GSPC', 'S&P 500');
+
+  // 시장별 거래대금 기준: US $10M, KOSPI ₩30억, KOSDAQ ₩10억
+  const isKR = options.market === 'KR';
+  const isKosdaq = options.exchange === 'KOSDAQ';
+  const volumeThreshold = isKR
+    ? (isKosdaq ? 1_000_000_000 : 3_000_000_000)
+    : 10_000_000;
+  const volumeThresholdLabel = isKR
+    ? (isKosdaq ? '₩10억 이상' : '₩30억 이상')
+    : '$10,000,000 이상';
 
   const criteria: SepaCriterion[] = [
     evaluableCriterion(
@@ -218,12 +231,12 @@ export function analyzeSepa(
     ),
     evaluableCriterion(
       'within_52w_high',
-      '52주 고점 10% 이내',
+      '52주 고점 25% 이내',
       distanceFromHigh52WeekPct !== null ? `${distanceFromHigh52WeekPct}% 아래` : null,
       distanceFromHigh52WeekPct !== null,
-      Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 10),
-      '52주 고점 대비 10% 이내 (오닐 표준)',
-      '강한 종목이 고점 근처에서 신고가 돌파를 준비 중인지 확인합니다.',
+      Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 25),
+      '52주 고점 대비 25% 이내 (Minervini Trend Template)',
+      'VCP 베이스 형성 중인 종목 포함. 10% 이내면 피벗 근접, 25%까지는 후보군.',
       undefined,
       true
     ),
@@ -238,25 +251,42 @@ export function analyzeSepa(
       undefined,
       true
     ),
-    criterion(
-      'rs_rating',
-      '상대강도 RS (주요 필터)',
-      options.preCalculatedRs !== undefined ? passFail(options.preCalculatedRs >= 70) : (rs.rsScore !== null ? passFail(rs.rsScore >= 70) : 'info'),
-      options.preCalculatedRs !== undefined
-        ? `${options.preCalculatedRs}점 (DB 기준 공식 RS)`
-        : (rs.rsScore !== null ? `${rs.rsScore}점 (종목 ${rs.stockReturn}%, ${benchmarkLabel} ${rs.benchmarkReturn}%)` : '벤치마크 데이터 부족'),
-      '70점 이상 (권장)',
-      options.preCalculatedRs !== undefined
-        ? '데이터베이스에서 조회한 시장 전체 기준 공식 RS Rating입니다.'
-        : `공식 RS Rating 대신 ${benchmarkLabel} 대비 52주 상대수익률(Mansfield RS 방식)로 계산한 대체 지표입니다.`
-    ),
+    (() => {
+      // RS pass/fail 판정은 유니버스 전체 백분위 기반 DB 배치값일 때만 수행.
+      // benchmarkRelativeScore(proxy)는 전체 랭킹 없이 단일 벤치마크 대비 수익률이라
+      // pass/fail 기준으로 쓰면 상승장 전종목 통과 / 하락장 전종목 탈락 오류 발생.
+      const hasRealRs = options.preCalculatedRs !== undefined &&
+        (options.rsSourceHint === 'DB_BATCH' || options.rsSourceHint === 'UNIVERSE');
+      const rsValue = hasRealRs
+        ? options.preCalculatedRs!
+        : rs.rsScore;
+
+      return criterion(
+        'rs_rating',
+        '상대강도 RS',
+        hasRealRs ? passFail(options.preCalculatedRs! >= 70) : 'info',
+        rsValue !== null
+          ? hasRealRs
+            ? `${rsValue}점 (유니버스 백분위 공식 RS)`
+            : `${rsValue}점 (참고 — ${benchmarkLabel} 대비 상대수익률 추정, 유니버스 랭킹 아님)`
+          : '데이터 없음',
+        '70점 이상 (유니버스 백분위 기준, DB 배치 실행 후 활성화)',
+        hasRealRs
+          ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
+          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률 추정치를 참고값으로 표시합니다. pass/fail 판정에 반영되지 않습니다.`
+      );
+    })(),
     evaluableCriterion(
       'avg_dollar_volume',
       '20일 평균 거래대금',
-      avgDollarVolume ? `$${avgDollarVolume.toLocaleString()}` : null,
+      avgDollarVolume
+        ? isKR
+          ? `₩${(avgDollarVolume / 1_000_000_000).toFixed(1)}B`
+          : `$${avgDollarVolume.toLocaleString()}`
+        : null,
       data.length >= 20,
-      data.length >= 20 && avgDollarVolume >= 10_000_000,
-      '$10,000,000 이상',
+      data.length >= 20 && avgDollarVolume >= volumeThreshold,
+      volumeThresholdLabel,
       '실제 거래가 활발하여 슬리피지 리스크가 낮은지 확인합니다.'
     ),
     (() => {

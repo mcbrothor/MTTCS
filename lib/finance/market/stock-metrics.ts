@@ -21,7 +21,7 @@ function todayIso() {
 }
 
 export function marketForUniverse(universe: ScannerUniverse): MarketCode {
-  return universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
+  return universe === 'KOSPI200' || universe === 'KOSDAQ150' || universe === 'KOSDAQALL' ? 'KR' : 'US';
 }
 
 export function benchmarkCandidatesForExchange(exchange: string) {
@@ -33,8 +33,8 @@ export function benchmarkCandidatesForExchange(exchange: string) {
 
 export function macroIndexForUniverse(universe: ScannerUniverse) {
   if (universe === 'KOSPI200') return '^KS200';
-  if (universe === 'KOSDAQ150') return '^KQ150';
-  if (universe === 'NASDAQ100') return 'QQQ';
+  if (universe === 'KOSDAQ150' || universe === 'KOSDAQALL') return '^KQ150';
+  if (universe === 'NASDAQ100' || universe === 'RUSSELL2000') return 'QQQ';
   return 'SPY';
 }
 

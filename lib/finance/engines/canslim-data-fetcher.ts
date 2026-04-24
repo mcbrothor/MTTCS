@@ -40,6 +40,7 @@ interface YahooQuoteSummaryResult {
 type FundamentalSourceKey =
   | 'currentQtrEpsGrowth'
   | 'priorQtrEpsGrowth'
+  | 'nextQtrEpsEstimate'
   | 'epsGrowthLast3Qtrs'
   | 'currentQtrSalesGrowth'
   | 'annualEpsGrowthEachYear'
@@ -47,7 +48,6 @@ type FundamentalSourceKey =
   | 'roe'
   | 'floatShares'
   | 'sharesBuyback'
-  | 'institutionalSponsorshipTrend'
   | 'institutionalOwnershipPct'
   | 'numInstitutionalHolders';
 
@@ -102,6 +102,7 @@ export async function fetchCanslimFundamentals(
     market,
     currentQtrEpsGrowth: null,
     priorQtrEpsGrowth: null,
+    nextQtrEpsEstimate: null,
     epsGrowthLast3Qtrs: [null, null, null],
     currentQtrSalesGrowth: null,
     annualEpsGrowthEachYear: [null, null, null],
@@ -109,7 +110,7 @@ export async function fetchCanslimFundamentals(
     roe: null,
     floatShares: null,
     sharesBuyback: null,
-    institutionalSponsorshipTrend: null,
+    institutionalSponsorshipTrend: null,  // Yahoo 신뢰 불가 — 항상 null 유지
     institutionalOwnershipPct: null,
     numInstitutionalHolders: null,
   };
@@ -142,7 +143,7 @@ export async function fetchCanslimFundamentals(
       response.data?.quoteSummary?.result?.[0] || {};
 
     // ── C: 분기 EPS/매출 성장률 ────────────────────────────────
-    const { currentQtrEpsGrowth, priorQtrEpsGrowth, epsGrowthLast3Qtrs } =
+    const { currentQtrEpsGrowth, priorQtrEpsGrowth, nextQtrEpsEstimate, epsGrowthLast3Qtrs } =
       extractQuarterlyEps(result, warnings);
     const currentQtrSalesGrowth = extractSalesGrowth(result, warnings);
 
@@ -151,7 +152,7 @@ export async function fetchCanslimFundamentals(
       extractAnnualEps(result, warnings);
     const roe = extractRoe(result, warnings);
 
-    // ── I: 기관 보유 ─────────────────────────────────────────
+    // ── I: 기관 보유 (추세 제외 — Yahoo로 신뢰 불가) ───────────
     const institutional = extractInstitutional(result, warnings);
 
     // ── S: Float / 자사주 ────────────────────────────────────
@@ -159,10 +160,11 @@ export async function fetchCanslimFundamentals(
     const sharesBuyback = extractBuyback(result);
     if (floatShares === null) warnings.push(DATA_QUALITY.PARTIAL_LABEL + ':floatShares');
 
-    // Yahoo 데이터로 기본값 업데이트
+    // Yahoo 데이터로 기본값 업데이트 (institutionalSponsorshipTrend는 항상 null 유지)
     Object.assign(fundamentalData, {
       currentQtrEpsGrowth,
       priorQtrEpsGrowth,
+      nextQtrEpsEstimate,
       epsGrowthLast3Qtrs,
       currentQtrSalesGrowth,
       annualEpsGrowthEachYear,
@@ -170,10 +172,12 @@ export async function fetchCanslimFundamentals(
       roe,
       floatShares,
       sharesBuyback,
-      ...institutional,
+      institutionalOwnershipPct: institutional.institutionalOwnershipPct,
+      numInstitutionalHolders: institutional.numInstitutionalHolders,
     });
     if (currentQtrEpsGrowth !== null) sourceMap.currentQtrEpsGrowth = 'Yahoo Finance quoteSummary';
     if (priorQtrEpsGrowth !== null) sourceMap.priorQtrEpsGrowth = 'Yahoo Finance quoteSummary';
+    if (nextQtrEpsEstimate !== null) sourceMap.nextQtrEpsEstimate = 'Yahoo Finance earningsTrend +1q';
     if (epsGrowthLast3Qtrs.some((value) => value !== null)) sourceMap.epsGrowthLast3Qtrs = 'Yahoo Finance earningsHistory';
     if (currentQtrSalesGrowth !== null) sourceMap.currentQtrSalesGrowth = 'Yahoo Finance financialData';
     if (annualEpsGrowthEachYear.some((value) => value !== null)) sourceMap.annualEpsGrowthEachYear = 'Yahoo Finance incomeStatementHistory';
@@ -181,7 +185,6 @@ export async function fetchCanslimFundamentals(
     if (roe !== null) sourceMap.roe = 'Yahoo Finance financialData';
     if (floatShares !== null) sourceMap.floatShares = 'Yahoo Finance defaultKeyStatistics';
     if (sharesBuyback !== null) sourceMap.sharesBuyback = 'Yahoo Finance defaultKeyStatistics';
-    if (institutional.institutionalSponsorshipTrend !== null) sourceMap.institutionalSponsorshipTrend = 'Yahoo Finance institutionOwnership';
     if (institutional.institutionalOwnershipPct !== null) sourceMap.institutionalOwnershipPct = 'Yahoo Finance majorHoldersBreakdown';
     if (institutional.numInstitutionalHolders !== null) sourceMap.numInstitutionalHolders = 'Yahoo Finance institutionOwnership';
     yahooSucceeded = true;
@@ -330,7 +333,6 @@ export function buildPillarSources(
   append('S', sourceMap.floatShares);
   append('S', sourceMap.sharesBuyback);
 
-  append('I', sourceMap.institutionalSponsorshipTrend);
   append('I', sourceMap.institutionalOwnershipPct);
   append('I', sourceMap.numInstitutionalHolders);
 
@@ -351,16 +353,20 @@ function extractQuarterlyEps(
 ): {
   currentQtrEpsGrowth: number | null;
   priorQtrEpsGrowth: number | null;
+  nextQtrEpsEstimate: number | null;
   epsGrowthLast3Qtrs: (number | null)[];
 } {
-  // earningsTrend에서 성장률 직접 확보
   const trends = result.earningsTrend?.trend || [];
   const currentTrend = trends.find((t) => t.period === '0q');
+  const priorTrend = trends.find((t) => t.period === '-1q');
   const nextTrend = trends.find((t) => t.period === '+1q');
 
   const currentQtrEpsGrowth = toPct(rawNum(currentTrend?.growth)) ??
     toPct(rawNum(result.defaultKeyStatistics?.earningsQuarterlyGrowth));
-  const priorQtrEpsGrowth = toPct(rawNum(nextTrend?.growth));
+  // 직전(-1q) 분기 YoY 성장률
+  const priorQtrEpsGrowth = toPct(rawNum(priorTrend?.growth));
+  // 다음(+1q) 분기 추정 성장률 — 참고용, EPS 가속화 판정에 사용 금지
+  const nextQtrEpsEstimate = toPct(rawNum(nextTrend?.growth));
 
   if (currentQtrEpsGrowth === null) {
     warnings.push(DATA_QUALITY.PARTIAL_LABEL + ':currentQtrEpsGrowth');
@@ -374,13 +380,21 @@ function extractQuarterlyEps(
     null, // 2분기 전 — Yahoo에서 직접 제공하지 않는 경우가 많음
   ];
 
-  // history에 4개 이상 분기가 있으면 YoY 성장률 계산 시도
-  if (history.length >= 4) {
-    for (let i = 0; i < Math.min(3, history.length - 1); i++) {
+  // history에 5개 이상 분기가 있으면 정확한 YoY(4분기 전) 성장률 계산
+  if (history.length >= 5) {
+    for (let i = 0; i < Math.min(3, history.length - 4); i++) {
       const current = rawNum(history[i]?.epsActual);
-      const yearAgo = rawNum(history[i + 4 < history.length ? i + 4 : history.length - 1]?.epsActual);
+      const yearAgo = rawNum(history[i + 4]?.epsActual);
       if (current !== null && yearAgo !== null && yearAgo !== 0) {
         epsGrowthLast3Qtrs[i] = round(((current - yearAgo) / Math.abs(yearAgo)) * 100);
+      }
+    }
+    // priorQtrEpsGrowth을 earningsHistory YoY로 보강 (trend 데이터 없을 때)
+    if (priorQtrEpsGrowth === null && history.length >= 5) {
+      const priorEps = rawNum(history[1]?.epsActual);
+      const priorYearAgo = rawNum(history[5 <= history.length ? 5 : history.length - 1]?.epsActual);
+      if (priorEps !== null && priorYearAgo !== null && priorYearAgo !== 0) {
+        epsGrowthLast3Qtrs[1] = round(((priorEps - priorYearAgo) / Math.abs(priorYearAgo)) * 100);
       }
     }
   }
@@ -389,7 +403,7 @@ function extractQuarterlyEps(
     warnings.push(DATA_QUALITY.PARTIAL_LABEL + ':epsGrowthLast3Qtrs');
   }
 
-  return { currentQtrEpsGrowth, priorQtrEpsGrowth, epsGrowthLast3Qtrs };
+  return { currentQtrEpsGrowth, priorQtrEpsGrowth, nextQtrEpsEstimate, epsGrowthLast3Qtrs };
 }
 
 /** 분기 매출 성장률 추출 */

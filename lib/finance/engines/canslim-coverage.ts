@@ -63,17 +63,24 @@ export function buildPillarSources(
   append('S', sourceMap.floatShares);
   append('S', sourceMap.sharesBuyback);
 
-  append('I', sourceMap.institutionalSponsorshipTrend);
   append('I', sourceMap.institutionalOwnershipPct);
   append('I', sourceMap.numInstitutionalHolders);
 
   return pillars;
 }
 
+/**
+ * 데이터 결측으로 pass=false 처리할 핵심 필드만 반환.
+ * - C.currentQtrEpsGrowth: CAN SLIM "C" 판정의 최소 조건
+ * - 나머지(I.*, A.*, C.epsGrowthLast3Qtrs 등)는 WARNING으로만 처리
+ *
+ * 이유: Yahoo 비공식 API 결측이 잦아 커버리지 미달이
+ * 오히려 데이터 좋은 종목보다 쉽게 통과하는 역설을 방지하기 위해 기준을 최소화.
+ */
 export function getBlockingCoverageMissingFields(
   coverage: CanslimAnalysisCoverage
 ) {
-  return coverage.missingFields.filter((field) => !field.startsWith('I.'));
+  return coverage.missingFields.filter((field) => field === 'C.currentQtrEpsGrowth');
 }
 
 export function enforceCanslimAnalysisCoverage(

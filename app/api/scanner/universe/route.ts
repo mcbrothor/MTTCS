@@ -11,6 +11,7 @@ function apiError(message: string, code: string, status = 500) {
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
   if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
+  if (value === 'RUSSELL2000' || value === 'KOSDAQALL') return value;
   if (value === 'KOSPI100') return 'KOSPI200';
   if (value === 'KOSDAQ100') return 'KOSDAQ150';
   return null;

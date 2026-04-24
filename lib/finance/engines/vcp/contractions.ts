@@ -3,8 +3,15 @@ import { type LocalExtremum, MIN_CONTRACTION_DEPTH, clamp, round } from './_shar
 
 /**
  * Peak→Trough 쌍을 찾아 수축 단계를 구성합니다.
- * Minervini 기준: 각 수축은 이전보다 깊이가 얕아야 하며,
- * 수축의 최소 깊이는 종목의 전체 변동성에 따라 적응형으로 결정됩니다.
+ *
+ * Minervini VCP 원전:
+ * - 각 수축은 직전 수축보다 **깊이(depthPct)가 얕아야** 함
+ * - peak 레벨이 반드시 하락할 필요 없음 — 베이스 우측에서 peak는 유지/상승 가능
+ * - trough가 얕아지는 패턴이 핵심 (tightening = supply drying up)
+ *
+ * 구현 원칙:
+ * - 각 peak 뒤의 가장 깊은 trough를 짝짓되 다음 peak 이전에 위치한 것만 사용
+ * - 각 수축은 중복 사용 안 함 (greedy non-overlapping)
  */
 export function detectContractions(data: OHLCData[], extrema: LocalExtremum[]): VcpContraction[] {
   const contractions: VcpContraction[] = [];
@@ -14,28 +21,48 @@ export function detectContractions(data: OHLCData[], extrema: LocalExtremum[]): 
   const avgDailyRange = data.length > 0
     ? data.reduce((sum, d) => sum + ((d.high - d.low) / d.close) * 100, 0) / data.length
     : MIN_CONTRACTION_DEPTH;
-  const adaptiveMinDepth = Math.max(MIN_CONTRACTION_DEPTH, round(avgDailyRange * 1.5));
+  const adaptiveMinDepth = Math.max(MIN_CONTRACTION_DEPTH, round(avgDailyRange * 1.0));
 
-  for (const peak of peaks) {
-    const nextTrough = troughs.find((t) => t.index > peak.index);
-    if (!nextTrough) continue;
+  let lastUsedTroughIndex = -1;
 
-    const depthPct = round(((peak.price - nextTrough.price) / peak.price) * 100);
+  for (let pi = 0; pi < peaks.length; pi++) {
+    const peak = peaks[pi];
+    const nextPeak = peaks[pi + 1];
+
+    // 이번 peak와 다음 peak 사이 구간의 trough만 대상으로 함
+    const candidateTroughs = troughs.filter(
+      (t) =>
+        t.index > peak.index &&
+        (!nextPeak || t.index < nextPeak.index) &&
+        t.index > lastUsedTroughIndex
+    );
+
+    if (candidateTroughs.length === 0) continue;
+
+    // 해당 구간에서 가장 낮은 trough 선택 (가장 의미 있는 저점)
+    const deepestTrough = candidateTroughs.reduce(
+      (min, t) => (t.price < min.price ? t : min),
+      candidateTroughs[0]
+    );
+
+    const depthPct = round(((peak.price - deepestTrough.price) / peak.price) * 100);
     if (depthPct < adaptiveMinDepth) continue;
 
-    const segmentData = data.slice(peak.index, nextTrough.index + 1);
+    const segmentData = data.slice(peak.index, deepestTrough.index + 1);
     const avgVolume = segmentData.length > 0
       ? round(segmentData.reduce((sum, d) => sum + d.volume, 0) / segmentData.length, 0)
       : 0;
 
     contractions.push({
       peakDate: peak.date,
-      troughDate: nextTrough.date,
+      troughDate: deepestTrough.date,
       peakPrice: round(peak.price),
-      troughPrice: round(nextTrough.price),
+      troughPrice: round(deepestTrough.price),
       depthPct,
       avgVolume,
     });
+
+    lastUsedTroughIndex = deepestTrough.index;
   }
 
   return contractions;
@@ -85,13 +112,18 @@ export function scoreContractions(contractions: VcpContraction[]): { score: numb
   return { score, details };
 }
 
+/**
+ * Minervini VCP 핵심 기준: 각 수축의 **깊이(depthPct)가 점진적으로 얕아지는지** 검증.
+ * peak 절대값의 하락 여부는 요구하지 않음 — 베이스 우측에서 peak는 유지/상승 가능.
+ */
 export function validateSequentialLowering(contractions: VcpContraction[]) {
   const pairs = [];
   for (let i = 1; i < contractions.length; i++) {
     const previous = contractions[i - 1];
     const current = contractions[i];
+    // 핵심: 수축 깊이(%)가 줄어들어야 함 (tightening)
     pairs.push({
-      passed: current.peakPrice < previous.peakPrice && current.troughPrice < previous.troughPrice,
+      passed: current.depthPct < previous.depthPct,
     });
   }
 

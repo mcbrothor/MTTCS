@@ -24,7 +24,7 @@ import {
 } from './_shared.ts';
 import { scoreBBSqueeze } from './bollinger-squeeze.ts';
 import { detectContractions, scoreContractions, scoreVolumeDryUp } from './contractions.ts';
-import { findLocalExtrema } from './extrema.ts';
+import { findLocalExtrema, resampleToWeekly } from './extrema.ts';
 import { analyzeHighTightFlag, momentumProfile } from './high-tight-flag.ts';
 import { detectPocketPivots } from './pocket-pivot.ts';
 
@@ -183,11 +183,17 @@ export function analyzeVcp(
   const analysisWindow = Math.max(MIN_BASE_DAYS, Math.min(baseLength + 20, data.length));
   const analysisData = data.slice(-analysisWindow);
 
-  const extrema = findLocalExtrema(analysisData);
-  const contractions = detectContractions(analysisData, extrema);
+  // 주봉으로 리샘플 후 extrema 추출 → 일봉 노이즈 제거
+  // Minervini VCP는 주봉 차트 기반이므로 5주 윈도우가 적절
+  const weeklyData = resampleToWeekly(analysisData);
+  const extrema = findLocalExtrema(weeklyData);
+
+  // 수축 감지는 주봉 데이터 기준 (volume dry-up 계산은 일봉 유지)
+  const contractions = detectContractions(weeklyData, extrema);
   const { score: contractionScore, details: contractionDetails } = scoreContractions(contractions);
   allDetails.push(...contractionDetails);
 
+  // volume dry-up은 일봉 데이터 기준 (주봉 거래량은 합산이므로 상대 비교에 적합하지 않음)
   const { score: volumeDryUpScore, details: volumeDetails } = scoreVolumeDryUp(analysisData, contractions);
   allDetails.push(...volumeDetails);
 
@@ -203,7 +209,7 @@ export function analyzeVcp(
     recommendedEntry,
     entrySource,
     details: pivotDetails,
-  } = determinePivot(data, contractions, breakoutPrice);
+  } = determinePivot(weeklyData, contractions, breakoutPrice);
   allDetails.push(...pivotDetails);
 
   const {

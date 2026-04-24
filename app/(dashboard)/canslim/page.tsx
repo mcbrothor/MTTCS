@@ -58,6 +58,8 @@ const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   SP500: { label: 'S&P 500', desc: 'S&P 500에서 펀더멘털과 기술적 분석을 결합한 주도주를 찾습니다.' },
   KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시가총액 상위 200개 종목 오닐 스캔.' },
   KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시가총액 상위 150개 종목 오닐 스캔.' },
+  RUSSELL2000: { label: 'Russell 2000', desc: '미국 소형주 Russell 2000에서 초기 주도주 후보를 발굴합니다.' },
+  KOSDAQALL: { label: 'KOSDAQ 전체', desc: 'KOSDAQ 시총 상위 전체를 스캔합니다. 차세대 리더는 KOSDAQ150 밖에서 시작합니다.' },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [

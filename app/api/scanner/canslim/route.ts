@@ -83,16 +83,36 @@ async function loadMacroData(market: MarketCode, exchange?: string): Promise<Can
       }
     }
 
-    // FTD 감지 (간이 버전)
+    // FTD 감지 — IBD 원전 기준:
+    // 1) 랠리 시도 시작일(저점) 탐색
+    // 2) 시작일로부터 최소 4거래일 이후
+    // 3) 당일 +1.5% 이상 상승
+    // 4) 당일 거래량 > 전일 거래량 AND > 50일 평균 거래량
     let followThroughDay = false;
     let lastFTDDate: string | null = null;
-    const lookback = mainData.slice(-30);
-    if (lookback.length >= 10) {
-      for (let i = 5; i < lookback.length; i++) {
-        const prev = lookback[i - 1];
-        const curr = lookback[i];
+    const ftdLookback = mainData.slice(-60);
+    const avg50Vol = mainData.length >= 50
+      ? mainData.slice(-50).reduce((sum, d) => sum + d.volume, 0) / 50
+      : 0;
+
+    // 랠리 시도 시작일: 최근 60일 내 최저가 형성 후 당일 낙폭이 전일 대비 줄어드는 첫 날
+    let rallyStartIdx = -1;
+    for (let i = 1; i < ftdLookback.length; i++) {
+      const prev = ftdLookback[i - 1];
+      const curr = ftdLookback[i];
+      if (curr.close > prev.close) {
+        rallyStartIdx = i;
+        break;
+      }
+    }
+
+    if (rallyStartIdx >= 0) {
+      for (let i = rallyStartIdx + MACRO_CRITERIA.FTD_EARLIEST_DAY; i < ftdLookback.length; i++) {
+        const prev = ftdLookback[i - 1];
+        const curr = ftdLookback[i];
         const gainPct = ((curr.close - prev.close) / prev.close) * 100;
-        if (gainPct >= MACRO_CRITERIA.FTD_MIN_GAIN_PCT && curr.volume > prev.volume) {
+        const volumeAboveAvg = avg50Vol > 0 ? curr.volume > avg50Vol : curr.volume > prev.volume;
+        if (gainPct >= MACRO_CRITERIA.FTD_MIN_GAIN_PCT && curr.volume > prev.volume && volumeAboveAvg) {
           followThroughDay = true;
           lastFTDDate = curr.date;
         }
@@ -168,6 +188,7 @@ function buildStockData(
     // 펀더멘털 데이터 (패처에서 확보)
     currentQtrEpsGrowth: fundamentals.currentQtrEpsGrowth ?? null,
     priorQtrEpsGrowth: fundamentals.priorQtrEpsGrowth ?? null,
+    nextQtrEpsEstimate: fundamentals.nextQtrEpsEstimate ?? null,
     epsGrowthLast3Qtrs: fundamentals.epsGrowthLast3Qtrs ?? [null, null, null],
     currentQtrSalesGrowth: fundamentals.currentQtrSalesGrowth ?? null,
     annualEpsGrowthEachYear: fundamentals.annualEpsGrowthEachYear ?? [null, null, null],
@@ -238,6 +259,8 @@ export async function GET(request: Request) {
       },
       preCalculatedRs: dbMetric?.rs_rating ?? undefined,
       rsSourceHint: dbMetric?.rs_rating !== undefined && dbMetric?.rs_rating !== null ? 'DB_BATCH' : undefined,
+      market,
+      exchange: normalizedExchange,
     });
     const vcpAnalysis = analyzeVcp(priceData, breakoutPrice, {
       rsRating: sepaEvidence.metrics.rsRating ?? null,
@@ -257,12 +280,13 @@ export async function GET(request: Request) {
     const basePattern = detectBasePattern(priceData, vcpBasePattern);
 
     // 4. CAN SLIM 평가용 StockData 구성
+    // CAN SLIM RS pass/fail은 유니버스 백분위 DB값만 사용. proxy RS는 info 표시용으로만.
     const stockData = buildStockData(
       ticker,
       market,
       priceData,
       fundamentalResult.data,
-      sepaEvidence.metrics.rsRating,
+      dbMetric?.rs_rating ?? null,
       sepaEvidence.metrics.mansfieldRsFlag ?? null,
       basePattern?.pivotPoint ?? vcpAnalysis.pivotPrice ?? null,
       basePattern?.type ?? null,

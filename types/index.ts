@@ -425,7 +425,7 @@ export interface ProviderAttempt {
   attemptedAt: string;
 }
 
-export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
+export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150' | 'RUSSELL2000' | 'KOSDAQALL';
 export type MarketCode = 'KR' | 'US';
 export type DataQuality = 'FULL' | 'PARTIAL' | 'NA';
 export type MacroActionLevel = 'FULL' | 'REDUCED' | 'HALT';
@@ -743,7 +743,8 @@ export interface CanslimStockData {
 
   // C: Current Quarterly Earnings
   currentQtrEpsGrowth: number | null;
-  priorQtrEpsGrowth: number | null;
+  priorQtrEpsGrowth: number | null;        // 직전(-1q) 분기 YoY 성장률
+  nextQtrEpsEstimate: number | null;       // 다음(+1q) 분기 추정 성장률 (참고용)
   epsGrowthLast3Qtrs: (number | null)[];
   currentQtrSalesGrowth: number | null;
 
