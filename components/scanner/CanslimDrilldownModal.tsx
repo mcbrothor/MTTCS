@@ -5,6 +5,9 @@ import { X, CheckCircle2, XCircle, AlertTriangle, Info, Shield, TrendingUp, BarC
 import type { CanslimScannerResult, CanslimPillarDetail, CanslimPillarKey } from '@/types';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 import { CANSLIM_PILLARS } from '@/lib/finance/engines/canslim-pillars';
+import HistoricalScoreChart from '@/components/analysis/HistoricalScoreChart';
+import AnalysisChartContainer from '@/components/analysis/AnalysisChartContainer';
+import GlossaryTooltip from '@/components/ui/GlossaryTooltip';
 
 interface Props {
   result: CanslimScannerResult;
@@ -63,14 +66,14 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
   const pillarOrder = new Map(CANSLIM_PILLARS.map((pillar, index) => [pillar, index]));
 
   // Pillar를 그룹별로 분류
-  const pillarGroups: { label: string; icon: React.ReactNode; pillars: string[] }[] = [
+  const pillarGroups: { label: string; icon: React.ReactNode; pillars: string[]; termKey?: string }[] = [
     { label: '시장 환경', icon: <BarChart3 className="h-4 w-4 text-purple-400" />, pillars: ['M'] },
-    { label: '분기 실적', icon: <TrendingUp className="h-4 w-4 text-cyan-400" />, pillars: ['C'] },
-    { label: '연간 실적', icon: <TrendingUp className="h-4 w-4 text-indigo-400" />, pillars: ['A'] },
-    { label: '신고가/패턴', icon: <BarChart3 className="h-4 w-4 text-emerald-400" />, pillars: ['N'] },
-    { label: '수급', icon: <BarChart3 className="h-4 w-4 text-amber-400" />, pillars: ['S'] },
-    { label: '상대강도', icon: <Shield className="h-4 w-4 text-cyan-400" />, pillars: ['L'] },
-    { label: '기관 수급', icon: <Shield className="h-4 w-4 text-blue-400" />, pillars: ['I'] },
+    { label: '분기 실적', icon: <TrendingUp className="h-4 w-4 text-cyan-400" />, pillars: ['C'], termKey: 'C' },
+    { label: '연간 실적', icon: <TrendingUp className="h-4 w-4 text-indigo-400" />, pillars: ['A'], termKey: 'A' },
+    { label: '신고가/패턴', icon: <BarChart3 className="h-4 w-4 text-emerald-400" />, pillars: ['N'], termKey: 'N' },
+    { label: '수급', icon: <BarChart3 className="h-4 w-4 text-amber-400" />, pillars: ['S'], termKey: 'S' },
+    { label: '상대강도', icon: <Shield className="h-4 w-4 text-cyan-400" />, pillars: ['L'], termKey: 'L' },
+    { label: '기관 수급', icon: <Shield className="h-4 w-4 text-blue-400" />, pillars: ['I'], termKey: 'I' },
   ];
 
   return (
@@ -113,10 +116,31 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
               </span>
               {result.vcpGrade && (
                 <span className="inline-flex rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300">
-                  VCP: {result.vcpGrade} ({result.vcpScore})
+                  <GlossaryTooltip termKey="VCP">VCP: {result.vcpGrade} ({result.vcpScore})</GlossaryTooltip>
                 </span>
               )}
             </div>
+
+            {/* RS 히스토리 차트 (Phase 3.5) */}
+            <HistoricalScoreChart ticker={result.ticker} market={result.market} />
+
+            {/* 하이브리드 분석 차트 (TradingView / Naver / Lightweight) */}
+            <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden shadow-inner">
+              <div className="border-b border-slate-800 px-5 py-3 bg-slate-900/60 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-black text-white uppercase tracking-wider">
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                  <span>Hybrid Technical Analysis</span>
+                </div>
+              </div>
+              <div className="h-[500px]">
+                <AnalysisChartContainer 
+                  ticker={result.ticker} 
+                  exchange={result.market === 'KR' ? 'KRX' : 'NASDAQ'}
+                  pivotPrice={result.basePattern?.pivotPoint || null}
+                  stopLossPrice={canslimResult.stopLossPrice}
+                />
+              </div>
+            </section>
 
             {/* 손절가 */}
             {canslimResult.stopLossPrice !== null && (
@@ -173,16 +197,20 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
                 const groupDetails = details.filter((d) => group.pillars.includes(d.pillar));
                 if (groupDetails.length === 0) return null;
 
+                const header = (
+                  <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                    {group.icon}
+                    {group.label}
+                  </div>
+                );
+
                 return (
                   <div key={group.label} className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
-                        {group.icon}
-                        {group.label}
-                      </div>
+                      {group.termKey ? <GlossaryTooltip termKey={group.termKey}>{header}</GlossaryTooltip> : header}
                       {group.label === '상대강도' && (
                         <span className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs font-bold text-slate-300">
-                          상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}
+                          <GlossaryTooltip termKey="RS">상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}</GlossaryTooltip>
                         </span>
                       )}
                     </div>

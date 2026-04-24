@@ -29,6 +29,7 @@ export async function GET() {
       spyAbove50ma: macroResult.spyAbove50ma,
       hygIefDiff: macroResult.hygIefDiff,
       vixLevel: macroResult.vixLevel,
+      asOf: new Date().toISOString(),
     });
   } catch (error: unknown) {
     console.error('Fetch Macro Data Error:', error);

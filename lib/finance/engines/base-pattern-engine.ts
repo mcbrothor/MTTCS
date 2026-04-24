@@ -39,7 +39,10 @@ export function dailyToWeekly(data: OHLCData[]): WeeklyOHLCV[] {
   let currentWeek: OHLCData[] = [];
 
   for (const bar of data) {
-    const dayOfWeek = new Date(bar.date).getDay();
+    const formattedDate = bar.date.length === 8 && !bar.date.includes('-')
+      ? `${bar.date.slice(0, 4)}-${bar.date.slice(4, 6)}-${bar.date.slice(6, 8)}`
+      : bar.date;
+    const dayOfWeek = new Date(formattedDate).getDay();
 
     // 월요일(1)이 시작이면 새 주 시작
     if (dayOfWeek === 1 && currentWeek.length > 0) {

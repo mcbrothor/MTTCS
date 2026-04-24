@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import type { ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
 
 async function parseResponse<T>(response: Response) {
@@ -204,6 +205,13 @@ export default function PortfolioPage() {
           </section>
         </>
       ) : null}
+
+      <FlowCtaButton 
+        nextPath="/history" 
+        label="매매 일기 작성하기" 
+        subLabel="Step 6: Review"
+        variant="indigo"
+      />
     </div>
   );
 }

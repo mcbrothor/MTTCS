@@ -38,7 +38,7 @@ export default function MetricWithHelp({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="relative space-y-2">
+    <div className="relative space-y-2 hover:z-50">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">

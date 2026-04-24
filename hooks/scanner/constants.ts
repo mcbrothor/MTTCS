@@ -48,14 +48,6 @@ export const UNIVERSES: Record<ScannerUniverse, { label: string; description: st
     label: 'KOSDAQ 시총 상위 150',
     description: 'KOSDAQ 시가총액 상위 150개를 기준으로 성장주 후보를 확인합니다.',
   },
-  RUSSELL2000: {
-    label: 'Russell 2000',
-    description: '미국 소형주 Russell 2000 전체에서 초기 주도주 후보를 발굴합니다. 주도주는 대형지수 편입 전에 시작합니다.',
-  },
-  KOSDAQALL: {
-    label: 'KOSDAQ 전체',
-    description: 'KOSDAQ 시총 상위 전체(최대 1000개)를 스캔합니다. 차세대 리더는 KOSDAQ150 밖에서 시작합니다.',
-  },
 };
 
 export const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [

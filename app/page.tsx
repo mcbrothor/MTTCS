@@ -12,6 +12,7 @@ import MetricWithHelp from '@/components/ui/MetricWithHelp';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
 import { Search, BarChart3, Shield, BookOpen, TrendingUp } from 'lucide-react';
 import { toTradingViewSymbol } from '@/components/ui/TradingViewWidget';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 
 type DashTab = '성과' | '규율' | '복기' | '차트';
 
@@ -260,6 +261,14 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+
+      {/* 다음 단계 안내 (Phase 2) */}
+      <FlowCtaButton 
+        nextPath="/scanner" 
+        label="주도주 발굴하러 가기" 
+        subLabel="Step 2: Scanner"
+        variant="rose"
+      />
     </div>
   );
 }

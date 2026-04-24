@@ -17,7 +17,7 @@ export default function HelpButton({ label, tooltip, formula, accordion }: HelpB
 
   return (
     <>
-      <div className="relative inline-flex">
+      <div className="relative inline-flex hover:z-50">
         <button
           type="button"
           onMouseEnter={() => setShowTooltip(true)}

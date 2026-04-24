@@ -226,7 +226,13 @@ export default function ScannerTable({
                 {/* 차트 버튼 + 콘테스트 후보 선택 버튼 */}
                 <td className="px-2 py-3">
                   <div className="flex items-center justify-center gap-1">
-                    <TradingViewWidget ticker={result.ticker} exchange={result.exchange ?? 'NAS'} variant="icon" />
+                    <TradingViewWidget 
+                      ticker={result.ticker} 
+                      exchange={result.exchange ?? 'NAS'} 
+                      pivotPrice={result.pivotPrice}
+                      stopLossPrice={(result as any).canslimResult?.stopLossPrice}
+                      variant="icon" 
+                    />
                     {selectionColumn(result)}
                   </div>
                 </td>

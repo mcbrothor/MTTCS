@@ -1,6 +1,8 @@
-import { motion } from 'framer-motion';
-import { Activity, Check, Plus, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Activity, Check, Plus, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import GlossaryTooltip from '@/components/ui/GlossaryTooltip';
 import { getVolumeSignalTier, isContestPoolTier } from '@/lib/scanner-recommendation';
 import {
   formatScannerRs,
@@ -40,13 +42,18 @@ function RsSourceBadge({ source }: { source: ScannerResult['rsSource'] }) {
   return null;
 }
 
-function MetricStat({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-800/90 bg-slate-950/75 px-3 py-2">
+function MetricStat({ label, value, accent, termKey }: { label: string; value: string; accent?: string; termKey?: string }) {
+  const content = (
+    <div className="rounded-2xl border border-slate-800/90 bg-slate-950/75 px-3 py-2 w-full">
       <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{label}</p>
       <p className={`mt-1 text-sm font-semibold ${accent || 'text-slate-100'}`}>{value}</p>
     </div>
   );
+
+  if (termKey) {
+    return <GlossaryTooltip termKey={termKey}>{content}</GlossaryTooltip>;
+  }
+  return content;
 }
 
 function TrendDots({ result }: { result: ScannerResult }) {
@@ -186,6 +193,18 @@ export default function ScannerCardView({
   onToggleSelect,
   onCardClick,
 }: ScannerCardViewProps) {
+  const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (ticker: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedTickers((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticker)) next.delete(ticker);
+      else next.add(ticker);
+      return next;
+    });
+  };
+
   const selectionButton = (result: ScannerResult) => (
     <button
       type="button"
@@ -217,6 +236,7 @@ export default function ScannerCardView({
         const volumeTier = getVolumeSignalTier(result);
         const rsBand = getScannerRsBand(result);
         const sepa = getScannerSepaSummary(result);
+        const isExpanded = expandedTickers.has(result.ticker);
         const pivotText = result.distanceToPivotPct === null
           ? '-'
           : `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct.toFixed(1)}%`;
@@ -237,7 +257,13 @@ export default function ScannerCardView({
             <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.16),transparent_52%)] opacity-80" />
 
             {result.status === 'done' && (
-              <div className="absolute right-4 top-4 z-10">
+              <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+                <button
+                  onClick={(e) => toggleExpand(result.ticker, e)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white transition-colors"
+                >
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
                 {selectionButton(result)}
               </div>
             )}
@@ -260,62 +286,70 @@ export default function ScannerCardView({
                 <>
                   <div className="mt-4 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">RS Strength</p>
+                      <GlossaryTooltip termKey="RS">
+                        <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">상대적 강도</p>
+                      </GlossaryTooltip>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="font-mono text-base font-semibold text-slate-100">{formatScannerRs(result)}</span>
                         <RsSourceBadge source={result.rsSource} />
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">RS Line</p>
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">추세 정렬</p>
                       <p className={`mt-1 text-xs font-semibold ${
                         result.rsLineNewHigh ? 'text-emerald-200' : result.rsLineNearHigh ? 'text-amber-200' : 'text-slate-400'
                       }`}>
-                        {result.rsLineNewHigh ? 'New High' : result.rsLineNearHigh ? 'Near High' : 'Normal'}
+                        {result.rsLineNewHigh ? '신고가 경신' : result.rsLineNearHigh ? '신고가 근접' : '보통'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <TrendDots result={result} />
-                  </div>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-4 border-t border-slate-800/50 pt-4 space-y-4">
+                        <TrendDots result={result} />
+                        <MiniSparkline result={result} />
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          <MetricStat 
+                            label="SEPA 핵심" 
+                            value={sepa.label} 
+                            accent={sepa.corePassed === sepa.coreTotal ? 'text-emerald-100' : 'text-slate-100'} 
+                            termKey="SEPA"
+                          />
+                          <MetricStat 
+                            label="변동성 축소" 
+                            value={`${result.vcpGrade || '-'} · ${getScannerBaseLabel(result)}`} 
+                            termKey="VCP"
+                          />
+                          <MetricStat 
+                            label="거래량 강도" 
+                            value={volumeTier === 'Strong' ? '강력' : volumeTier === 'Watch' ? '주의' : '보통'} 
+                            accent={volumeTier === 'Strong' ? 'text-emerald-100' : volumeTier === 'Watch' ? 'text-amber-100' : 'text-slate-100'} 
+                            termKey="VOLUME"
+                          />
+                          <MetricStat 
+                            label="타점 이격" 
+                            value={pivotText} 
+                            accent={Math.abs(result.distanceToPivotPct || 99) <= 5 ? 'text-emerald-100' : 'text-slate-100'} 
+                            termKey="PIVOT"
+                          />
+                        </div>
 
-                  <div className="mt-4">
-                    <MiniSparkline result={result} />
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <MetricStat label="SEPA Core" value={sepa.label} accent={sepa.corePassed === sepa.coreTotal ? 'text-emerald-100' : 'text-slate-100'} />
-                    <MetricStat label="VCP / Base" value={`${result.vcpGrade || '-'} · ${getScannerBaseLabel(result)}`} />
-                    <MetricStat label="Volume" value={volumeTier} accent={volumeTier === 'Strong' ? 'text-emerald-100' : volumeTier === 'Watch' ? 'text-amber-100' : 'text-slate-100'} />
-                    <MetricStat label="Pivot Gap" value={pivotText} accent={Math.abs(result.distanceToPivotPct || 99) <= 5 ? 'text-emerald-100' : 'text-slate-100'} />
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    {sepa.failedLabels.map((label) => (
-                      <span key={label} className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-medium text-slate-300">
-                        {label}
-                      </span>
-                    ))}
-                    {typeof result.pocketPivotScore === 'number' && (
-                      <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-medium text-slate-300">
-                        PP {result.pocketPivotScore}
-                      </span>
-                    )}
-                    {typeof result.tennisBallCount === 'number' && (
-                      <span className="rounded-full border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-medium text-slate-300">
-                        Defense {result.tennisBallCount}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 rounded-2xl border border-slate-800/90 bg-slate-950/75 px-3 py-3">
-                    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
-                      <Activity className="h-3.5 w-3.5" />
-                      Thesis
-                    </div>
-                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">{result.recommendationReason}</p>
-                  </div>
+                        <div className="rounded-2xl border border-slate-800/90 bg-slate-950/75 px-3 py-3">
+                          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+                            <Activity className="h-3.5 w-3.5" />
+                            투자 가이드 (Thesis)
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-slate-300">{result.recommendationReason}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                 </>
               )}
 

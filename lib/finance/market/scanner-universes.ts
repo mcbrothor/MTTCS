@@ -313,73 +313,12 @@ export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<S
   return Array.from(byTicker.values()).map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
-async function fetchRussell2000(): Promise<ScannerUniverseResponse> {
-  const response = await fetch('https://stockanalysis.com/list/russell-2000-stocks/', {
-    headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' },
-    next: { revalidate: 60 * 30 },
-  });
 
-  if (!response.ok) throw new Error(`StockAnalysis Russell 2000 response error (${response.status})`);
-
-  const html = await response.text();
-  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
-  const items = rows
-    .map((match) => {
-      const row = match[1] || '';
-      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
-      if (!symbolMatch) return null;
-      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
-      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase().replace('.', '-');
-      const name = cells[2] || rawTicker;
-      const marketCap = parseAbbreviatedUsd(cells[3] || '');
-      const currentPrice = parseNumberText(cells[4] || '');
-      return { rank: 0, ticker: rawTicker, exchange: 'NAS', name, marketCap, currency: 'USD' as const, currentPrice, priceAsOf: new Date().toISOString(), priceSource: 'StockAnalysis Russell 2000 table' };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
-    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-    .slice(0, 2000)
-    .map((item, index) => ({ ...item, rank: index + 1 }));
-
-  if (items.length === 0) throw new Error('Russell 2000 constituents could not be parsed.');
-
-  return {
-    universe: 'RUSSELL2000',
-    label: 'Russell 2000',
-    asOf: new Date().toISOString(),
-    source: 'StockAnalysis Russell 2000 table',
-    delayNote: 'Russell 2000 market-cap and price data can be delayed.',
-    items,
-    warnings: items.length < 1000 ? [`Only ${items.length} Russell 2000 rows were parsed.`] : [],
-  };
-}
-
-async function fetchKosdaqAll(): Promise<ScannerUniverseResponse> {
-  const warnings: string[] = [];
-  // 전체 KOSDAQ — Naver 시총 순 최대 1000개 (페이지당 50개, 약 20페이지)
-  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 1000);
-  const ranked = rankKoreaMarketCapItems(ranking, 1000);
-  const items = toKoreaConstituents(ranked, 'KOSDAQ');
-
-  if (items.length === 0) throw new Error('KOSDAQ full universe could not be loaded.');
-  if (items.length < 500) warnings.push(`Only ${items.length} KOSDAQ rows parsed. Naver may have rate-limited.`);
-
-  return {
-    universe: 'KOSDAQALL',
-    label: 'KOSDAQ 전체 (시총 상위)',
-    asOf: new Date().toISOString(),
-    source: 'Naver Finance KOSDAQ market-cap ranking (all pages)',
-    delayNote: 'KOSDAQ 시가총액 순위와 현재가는 Naver Finance 기준이며 지연될 수 있습니다.',
-    items,
-    warnings,
-  };
-}
 
 export async function getScannerUniverse(universe: ScannerUniverse): Promise<ScannerUniverseResponse> {
   if (universe === 'NASDAQ100') return fetchNasdaq100();
   if (universe === 'SP500') return fetchStockAnalysisSp500();
   if (universe === 'KOSPI200') return fetchKospi200();
   if (universe === 'KOSDAQ150') return fetchKosdaq150();
-  if (universe === 'RUSSELL2000') return fetchRussell2000();
-  if (universe === 'KOSDAQALL') return fetchKosdaqAll();
   throw new Error('Unsupported scanner universe.');
 }

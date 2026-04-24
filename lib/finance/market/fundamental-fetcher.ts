@@ -4,7 +4,7 @@ import { getSecFundamentals } from '../providers/sec-edgar-api';
 import type { FundamentalSnapshot } from '@/types';
 import { supabaseServer } from '@/lib/supabase/server';
 
-const CACHE_VALID_DAYS = 90;
+const CACHE_VALID_DAYS = 1; // 24시간 TTL 적용
 
 
 /**

@@ -6,6 +6,9 @@ import Link from 'next/link';
 import type { ScannerResult } from '@/types';
 import Button from '@/components/ui/Button';
 import { getVolumeSignalTier, type VolumeSignalTier } from '@/lib/scanner-recommendation';
+import HistoricalScoreChart from '@/components/analysis/HistoricalScoreChart';
+import AnalysisChartContainer from '@/components/analysis/AnalysisChartContainer';
+import GlossaryTooltip from '@/components/ui/GlossaryTooltip';
 
 interface VcpDrilldownModalProps {
   result: ScannerResult | null;
@@ -140,7 +143,7 @@ export default function VcpDrilldownModal({
                   {translateBaseType(result) !== '-' ? translateBaseType(result) : `VCP ${translateGrade(result.vcpGrade)}`}
                 </span>
                 <span className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs font-bold text-slate-300">
-                  상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}
+                  <GlossaryTooltip termKey="RS">상대강도 {result.rsRating ?? result.benchmarkRelativeScore ?? '-'}</GlossaryTooltip>
                 </span>
               </div>
               <p className="mt-1 text-sm font-medium text-slate-400">{result.name} · {result.exchange}</p>
@@ -168,7 +171,7 @@ export default function VcpDrilldownModal({
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-black text-white uppercase tracking-wider">
                   <TrendingUp className="h-4 w-4 text-rose-500" />
-                  <span>SEPA Trend Template</span>
+                  <GlossaryTooltip termKey="SEPA">SEPA Trend Template</GlossaryTooltip>
                 </div>
                 <div className={`rounded-lg px-2 py-0.5 text-[10px] font-bold ${result.sepaEvidence?.summary.failed === 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`}>
                   {result.sepaEvidence?.summary.failed === 0 ? 'ALL CRITERIA PASSED' : `${result.sepaEvidence?.summary.failed || 0} CRITERIA FAILED`}
@@ -202,9 +205,9 @@ export default function VcpDrilldownModal({
               <div className="grid gap-3 sm:grid-cols-3">
                 {result.fundamentals ? (
                   <>
-                    <FundamentalCard label="분기 EPS 성장률" value={pct(result.fundamentals.epsGrowthPct)} status={result.fundamentals.epsGrowthPct && result.fundamentals.epsGrowthPct >= 25 ? 'strong' : 'neutral'} />
-                    <FundamentalCard label="분기 매출 성장률" value={pct(result.fundamentals.revenueGrowthPct)} status={result.fundamentals.revenueGrowthPct && result.fundamentals.revenueGrowthPct >= 20 ? 'strong' : 'neutral'} />
-                    <FundamentalCard label="자기자본이익률 (ROE)" value={pct(result.fundamentals.roePct)} status={result.fundamentals.roePct && result.fundamentals.roePct >= 17 ? 'strong' : 'neutral'} />
+                    <FundamentalCard label="분기 순이익 성장(EPS)" value={pct(result.fundamentals.epsGrowthPct)} status={result.fundamentals.epsGrowthPct && result.fundamentals.epsGrowthPct >= 25 ? 'strong' : 'neutral'} termKey="EPS" />
+                    <FundamentalCard label="분기 매출 성장" value={pct(result.fundamentals.revenueGrowthPct)} status={result.fundamentals.revenueGrowthPct && result.fundamentals.revenueGrowthPct >= 20 ? 'strong' : 'neutral'} termKey="REVENUE" />
+                    <FundamentalCard label="자기자본이익률(ROE)" value={pct(result.fundamentals.roePct)} status={result.fundamentals.roePct && result.fundamentals.roePct >= 17 ? 'strong' : 'neutral'} termKey="ROE" />
                     <FundamentalCard label="부채비율" value={pct(result.fundamentals.debtToEquityPct)} status="neutral" />
                     <FundamentalCard 
                       label="기관 보유" 
@@ -225,6 +228,9 @@ export default function VcpDrilldownModal({
                 <p className="mt-3 text-[10px] text-slate-500 italic text-right">Source: {result.fundamentals.source}</p>
               )}
             </section>
+
+            {/* RS 히스토리 차트 (Phase 3.5) */}
+            <HistoricalScoreChart ticker={result.ticker} market={result.exchange === 'KRX' ? 'KR' : 'US'} />
 
             {/* 데이터 품질 경고 (v2.1 추가) */}
             {(result.dataWarnings?.length > 0 || (result as ScannerResult & {rsDataQuality?: string}).rsDataQuality === 'PARTIAL') && (
@@ -252,7 +258,7 @@ export default function VcpDrilldownModal({
               <InfoTile label="RS 순위" value={result.rsRank && result.rsUniverseSize ? `${result.rsRank}/${result.rsUniverseSize}` : '-'} />
               <InfoTile label="가중 모멘텀" value={pct(result.weightedMomentumScore)} />
               <InfoTile label="RS 라인" value={translateRsLine(result)} />
-              <InfoTile label="테니스 공 액션" value={`${result.tennisBallCount ?? 0}회 (${result.tennisBallScore ?? 0}점)`} />
+              <InfoTile label="테니스 공 반등" value={`${result.tennisBallCount ?? 0}회 (${result.tennisBallScore ?? 0}점)`} termKey="TENNIS_BALL" />
               <InfoTile label="8주 수익률" value={pct(result.eightWeekReturnPct)} />
               <InfoTile label="50일선 이격" value={pct(result.distanceFromMa50Pct)} />
               <InfoTile label="52주 저점 대비" value={pct(result.low52WeekAdvancePct)} />
@@ -289,7 +295,9 @@ export default function VcpDrilldownModal({
                     <div className="flex items-center justify-between text-xs font-bold">
                       <div className="flex items-center gap-2 text-slate-300">
                         {metric.icon}
-                        <span>{metric.label}</span>
+                        <GlossaryTooltip termKey={metric.label === '포켓 피벗' ? 'POCKET_PIVOT' : metric.label === '수축 구조' ? 'VCP' : ''}>
+                          <span>{metric.label}</span>
+                        </GlossaryTooltip>
                       </div>
                       <span className={theme.text}>{metric.score ?? 0} / 100</span>
                     </div>
@@ -320,6 +328,24 @@ export default function VcpDrilldownModal({
                   </li>
                 )) || <li className="italic text-slate-600">분석 세부 내역이 없습니다.</li>}
               </ul>
+            </section>
+
+            {/* 하이브리드 분석 차트 (TradingView / Naver / Lightweight) */}
+            <section className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden shadow-inner">
+              <div className="border-b border-slate-800 px-5 py-3 bg-slate-900/60 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-black text-white uppercase tracking-wider">
+                  <TrendingUp className="h-4 w-4 text-emerald-400" />
+                  <span>Hybrid Technical Analysis</span>
+                </div>
+              </div>
+              <div className="h-[500px]">
+                <AnalysisChartContainer 
+                  ticker={result.ticker} 
+                  exchange={result.exchange}
+                  pivotPrice={result.pivotPrice}
+                  stopLossPrice={result.highTightFlag?.stopPrice || null}
+                />
+              </div>
             </section>
 
             {/* Metadata Section */}
@@ -412,20 +438,30 @@ function StatItem({
   );
 }
 
-function InfoTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3">
+function InfoTile({ label, value, termKey }: { label: string; value: string; termKey?: string }) {
+  const content = (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3 w-full">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
       <p className="mt-1 truncate text-sm font-semibold text-slate-200">{value}</p>
     </div>
   );
+
+  if (termKey) {
+    return <GlossaryTooltip termKey={termKey}>{content}</GlossaryTooltip>;
+  }
+  return content;
 }
 
-function FundamentalCard({ label, value, status }: { label: string; value: string; status: 'strong' | 'neutral' }) {
-  return (
-    <div className={`rounded-lg border p-3 flex flex-col gap-1 ${status === 'strong' ? 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : 'border-slate-800 bg-slate-950/40'}`}>
+function FundamentalCard({ label, value, status, termKey }: { label: string; value: string; status: 'strong' | 'neutral'; termKey?: string }) {
+  const content = (
+    <div className={`rounded-lg border p-3 flex flex-col gap-1 w-full ${status === 'strong' ? 'border-emerald-500/30 bg-emerald-500/5 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : 'border-slate-800 bg-slate-950/40'}`}>
       <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{label}</span>
       <span className={`font-mono text-sm font-black ${status === 'strong' ? 'text-emerald-400' : 'text-slate-200'}`}>{value}</span>
     </div>
   );
+
+  if (termKey) {
+    return <GlossaryTooltip termKey={termKey}>{content}</GlossaryTooltip>;
+  }
+  return content;
 }

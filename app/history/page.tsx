@@ -8,6 +8,7 @@ import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
 import { filterTradesByMistakeTag } from '@/lib/review-stats';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 
 function HistoryPageContent() {
   const router = useRouter();
@@ -101,19 +102,12 @@ function HistoryPageContent() {
         }
       />
 
-      {/* Next Step CTA */}
-      <div className="flex items-center justify-between rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-sky-400">복기 완료 후</p>
-          <p className="mt-1 text-sm text-slate-300">대시보드에서 내 통계 변화를 확인하세요 — 기대값, 규율 점수, 성장 곡선이 반영됩니다.</p>
-        </div>
-        <Link
-          href="/"
-          className="ml-4 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
-        >
-          대시보드 →
-        </Link>
-      </div>
+      <FlowCtaButton 
+        nextPath="/dashboard" 
+        label="대시보드 통계 확인" 
+        subLabel="Cycle Complete"
+        variant="rose"
+      />
     </div>
   );
 }

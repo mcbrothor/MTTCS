@@ -15,7 +15,7 @@ export default function Term({ code, showAlias = true }: TermProps) {
   if (!entry) return <span>{code}</span>;
 
   return (
-    <span className="relative inline-block">
+    <span className="relative inline-block hover:z-50">
       <button
         type="button"
         className="cursor-help border-b border-dotted border-sky-600 text-inherit transition-colors hover:border-sky-400 hover:text-sky-300"

@@ -12,6 +12,8 @@ import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';
 import MarketBanner from '@/components/ui/MarketBanner';
+import SectorRotationChart from '@/components/analysis/SectorRotationChart';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 
 const MACRO_TONE = {
   HALT: 'border-rose-400/24 bg-rose-500/10 text-rose-50',
@@ -178,6 +180,13 @@ export default function ScannerPage() {
                 </div>
               </div>
             </div>
+
+            {/* 섹터 로테이션 차트 */}
+            {results.length > 0 && (
+              <div className="mt-5">
+                <SectorRotationChart results={results} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -438,6 +447,13 @@ export default function ScannerPage() {
           </div>
         </div>
       )}
+
+      <FlowCtaButton 
+        nextPath="/contest" 
+        label="최고의 차트 선정하기" 
+        subLabel="Step 3: Beauty Contest"
+        variant="emerald"
+      />
 
       <VcpDrilldownModal
         result={selectedResult}

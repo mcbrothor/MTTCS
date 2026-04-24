@@ -12,6 +12,7 @@ import ChecklistForm from '@/components/plan/ChecklistForm';
 import ScannerContextBanner from '@/components/plan/ScannerContextBanner';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import { useMarketData } from '@/hooks/useMarketData';
 
 // useSearchParams는 Suspense 바운더리 내에서만 사용 가능 (Next.js 14+)
@@ -194,6 +195,13 @@ function PlanPageContent() {
           )}
         </>
       )}
+
+      <FlowCtaButton 
+        nextPath="/portfolio" 
+        label="내 포트폴리오 관리" 
+        subLabel="Step 5: Execution"
+        variant="emerald"
+      />
     </div>
   );
 }

@@ -179,7 +179,7 @@ function Metric({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
     >
-      <Card glow className={`group relative h-full border-t-4 text-center transition-all hover:-translate-y-1 hover:shadow-2xl ${border}`}>
+      <Card glow className={`group relative h-full border-t-4 text-center transition-all hover:-translate-y-1 hover:shadow-2xl hover:z-50 ${border}`}>
         <div className="mb-3 flex justify-center">
           <div className="rounded-full bg-white/5 p-2 transition-transform group-hover:scale-110 group-hover:bg-white/10">
             {icon}

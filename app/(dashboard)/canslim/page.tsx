@@ -18,6 +18,8 @@ import {
   Check,
   Activity,
 } from 'lucide-react';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import TradingViewWidget from '@/components/ui/TradingViewWidget';
 
 import { useContestSelection } from '@/hooks/useContestSelection';
 import Button from '@/components/ui/Button';
@@ -25,6 +27,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import MarketBanner from '@/components/ui/MarketBanner';
+import SectorRotationChart from '@/components/analysis/SectorRotationChart';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
 import {
   CANSLIM_PILLARS,
@@ -48,6 +51,7 @@ import type {
 const SCAN_CONCURRENCY = 3;
 const KR_SCAN_CONCURRENCY = 2;
 const STORAGE_PREFIX = 'mtn:canslim-snapshot:v1:';
+const QUOTA_LIMIT = 500; // 무료 티어 일일 API 권장 한도
 
 type ViewMode = 'web' | 'app';
 type FilterKey = 'all' | 'pass' | 'fail' | 'tier1' | 'watchlist' | 'short_term' | 'high_confidence' | 'warnings';
@@ -58,8 +62,6 @@ const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   SP500: { label: 'S&P 500', desc: 'S&P 500에서 펀더멘털과 기술적 분석을 결합한 주도주를 찾습니다.' },
   KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시가총액 상위 200개 종목 오닐 스캔.' },
   KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시가총액 상위 150개 종목 오닐 스캔.' },
-  RUSSELL2000: { label: 'Russell 2000', desc: '미국 소형주 Russell 2000에서 초기 주도주 후보를 발굴합니다.' },
-  KOSDAQALL: { label: 'KOSDAQ 전체', desc: 'KOSDAQ 시총 상위 전체를 스캔합니다. 차세대 리더는 KOSDAQ150 밖에서 시작합니다.' },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -185,6 +187,34 @@ export default function CanslimScannerPage() {
     limitMessage,
   } = useContestSelection(universe);
 
+  const [quota, setQuota] = useState(0);
+
+  // 쿼터 로딩 및 초기화 (매일 초기화)
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const stored = window.localStorage.getItem('mtn:api-quota:v1');
+    if (stored) {
+      const { date, count } = JSON.parse(stored);
+      if (date === today) {
+        setQuota(count);
+      } else {
+        window.localStorage.setItem('mtn:api-quota:v1', JSON.stringify({ date: today, count: 0 }));
+        setQuota(0);
+      }
+    } else {
+      window.localStorage.setItem('mtn:api-quota:v1', JSON.stringify({ date: today, count: 0 }));
+    }
+  }, []);
+
+  const incrementQuota = () => {
+    setQuota(prev => {
+      const next = prev + 1;
+      const today = new Date().toISOString().split('T')[0];
+      window.localStorage.setItem('mtn:api-quota:v1', JSON.stringify({ date: today, count: next }));
+      return next;
+    });
+  };
+
   const toggleSelection = (t: string) => baseToggleSelection(t, universe);
   const clearSelection = () => baseClearSelection(universe);
 
@@ -292,6 +322,8 @@ export default function CanslimScannerPage() {
               const body = await res.json().catch(() => ({})) as { message?: string };
               throw new Error(body.message || `분석 실패 (${res.status})`);
             }
+
+            incrementQuota(); // 성공적인 API 호출 시 쿼터 증가
 
             const payload = await res.json() as {
               result: CanslimScannerResult;
@@ -489,18 +521,27 @@ export default function CanslimScannerPage() {
                   </div>
                 ) : <span className="text-slate-700">-</span>}
               </td>
-              <td className="px-3 py-4 text-center">
-                <button
-                  onClick={(e) => handleToggleSelected(r.ticker, e)}
-                  disabled={r.status !== 'done'}
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all ${
-                    selectedTickers.has(r.ticker)
-                      ? 'border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-500/20'
-                      : 'border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
-                  } disabled:opacity-20`}
-                >
-                  {selectedTickers.has(r.ticker) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                </button>
+              <td className="px-3 py-4">
+                <div className="flex items-center justify-center gap-2">
+                  <TradingViewWidget 
+                    ticker={r.ticker} 
+                    exchange={r.exchange} 
+                    pivotPrice={r.basePattern?.pivotPoint}
+                    stopLossPrice={r.canslimResult.stopLossPrice}
+                    variant="icon"
+                  />
+                  <button
+                    onClick={(e) => handleToggleSelected(r.ticker, e)}
+                    disabled={r.status !== 'done'}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all ${
+                      selectedTickers.has(r.ticker)
+                        ? 'border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+                        : 'border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
+                    } disabled:opacity-20`}
+                  >
+                    {selectedTickers.has(r.ticker) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -539,17 +580,26 @@ export default function CanslimScannerPage() {
                 </div>
                 <span className="truncate text-xs text-slate-500 font-medium">{r.name}</span>
               </div>
-              <button
-                onClick={(e) => handleToggleSelected(r.ticker, e)}
-                disabled={r.status !== 'done'}
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all ${
-                  selectedTickers.has(r.ticker)
-                    ? 'border-rose-500 bg-rose-500 text-white shadow-xl shadow-rose-500/30 ring-2 ring-rose-500/20'
-                    : 'border-slate-800 bg-slate-950 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
-                } disabled:opacity-20`}
-              >
-                {selectedTickers.has(r.ticker) ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
-              </button>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <button
+                  onClick={(e) => handleToggleSelected(r.ticker, e)}
+                  disabled={r.status !== 'done'}
+                  className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
+                    selectedTickers.has(r.ticker)
+                      ? 'border-rose-500 bg-rose-500 text-white shadow-xl shadow-rose-500/30 ring-2 ring-rose-500/20'
+                      : 'border-slate-800 bg-slate-950 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
+                  } disabled:opacity-20`}
+                >
+                  {selectedTickers.has(r.ticker) ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                </button>
+                <TradingViewWidget 
+                  ticker={r.ticker} 
+                  exchange={r.exchange} 
+                  pivotPrice={r.basePattern?.pivotPoint}
+                  stopLossPrice={r.canslimResult.stopLossPrice}
+                  variant="icon"
+                />
+              </div>
             </div>
           </div>
 
@@ -668,6 +718,16 @@ export default function CanslimScannerPage() {
           {limitMessage}
         </div>
       )}
+      
+      {/* API 쿼터 경고 배너 */}
+      {quota > QUOTA_LIMIT * 0.8 && (
+        <div className="mx-6 mt-4 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-[11px] font-bold text-rose-400">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            <span>일일 API 호출 쿼터의 80% 이상을 사용 중입니다 ({quota}/{QUOTA_LIMIT}). 불필요한 재스캔을 자제해 주세요.</span>
+          </div>
+        </div>
+      )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
@@ -773,6 +833,13 @@ export default function CanslimScannerPage() {
                 </div>
               </div>
             </div>
+
+            {/* 섹터 로테이션 차트 */}
+            {results.length > 0 && (
+              <div className="mt-5">
+                <SectorRotationChart results={results as any} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -1017,6 +1084,13 @@ export default function CanslimScannerPage() {
           </div>
         </motion.div>
       )}
+
+      <FlowCtaButton 
+        nextPath="/contest" 
+        label="최고의 차트 선정하기" 
+        subLabel="Step 3: Beauty Contest"
+        variant="emerald"
+      />
 
       {/* 드릴다운 모달 */}
       {selectedResult && (

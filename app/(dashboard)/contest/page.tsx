@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
 import Button from '@/components/ui/Button';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { CONTEST_RESPONSE_SCHEMA_VERSION, extractLlmSessionId } from '@/lib/contest';
@@ -1001,6 +1002,13 @@ export default function ContestPage() {
           </div>
         </section>
       )}
+
+      <FlowCtaButton 
+        nextPath="/plan" 
+        label="매매 계획 수립하기" 
+        subLabel="Step 4: Trading Plan"
+        variant="indigo"
+      />
     </div>
   );
 }

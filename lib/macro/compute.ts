@@ -5,6 +5,8 @@ export interface MacroScoreBreakdown {
   weight: number;
   score: number;
   description: string;
+  rawValue: string;
+  threshold: string;
 }
 
 export interface MacroComputeResult {
@@ -134,13 +136,50 @@ export function computeMacroScore(quotes: Record<string, QuoteData>): MacroCompu
   if (macroScore >= RISK_ON_THRESHOLD) regime = 'RISK_ON';
   else if (macroScore < RISK_OFF_THRESHOLD) regime = 'RISK_OFF';
 
+  const avgBreadthVal = (iwm && spy && rsp)
+    ? ((iwm.regularMarketChangePercent - spy.regularMarketChangePercent) + (rsp.regularMarketChangePercent - spy.regularMarketChangePercent)) / 2
+    : null;
+  const econDiff = (cper && gld) ? cper.regularMarketChangePercent - gld.regularMarketChangePercent : null;
+
   const breakdown: MacroScoreBreakdown[] = [
-    { label: '주가 추세', weight: W_TREND, score: trendScore, description: `SPY 50MA ${spyAbove50ma ? '위' : '아래'} · 일간 모멘텀` },
-    { label: '크레딧 스프레드', weight: W_CREDIT, score: creditScore, description: `HYG/IEF 상대강도 ${hygIefDiff > 0 ? '+' : ''}${hygIefDiff.toFixed(2)}%p` },
-    { label: '변동성', weight: W_VOL, score: volatilityScore, description: `VIX ${vixLevel.toFixed(1)}` },
-    { label: '달러/금리', weight: W_DOLLAR_RATE, score: dollarRateScore, description: `DXY(UUP) + 장기금리(TLT) 방향` },
-    { label: '경기 민감도', weight: W_ECON, score: econSensitivityScore, description: `구리(CPER) vs 금(GLD) 상대강도` },
-    { label: '시장 폭', weight: W_BREADTH, score: breadthScore, description: `IWM/SPY + RSP/SPY 평균 상대강도` },
+    {
+      label: '주가 추세', weight: W_TREND, score: trendScore,
+      description: `SPY 50MA ${spyAbove50ma ? '위' : '아래'} · 일간 모멘텀`,
+      rawValue: spy ? `SPY $${spy.regularMarketPrice.toFixed(1)} / 50MA $${spy.fiftyDayAverage.toFixed(1)}` : '데이터 없음',
+      threshold: '50MA 상회 +15 · 당일 +0% +5 · +0.5% +5 (총 25점)',
+    },
+    {
+      label: '크레딧 스프레드', weight: W_CREDIT, score: creditScore,
+      description: `HYG/IEF 상대강도 ${hygIefDiff > 0 ? '+' : ''}${hygIefDiff.toFixed(2)}%p`,
+      rawValue: `HYG−IEF ${hygIefDiff >= 0 ? '+' : ''}${hygIefDiff.toFixed(2)}%p`,
+      threshold: '>+0.5%p 만점 · >0 +18 · >−0.5% +10 · 이하 0 (총 25점)',
+    },
+    {
+      label: '변동성', weight: W_VOL, score: volatilityScore,
+      description: `VIX ${vixLevel.toFixed(1)}`,
+      rawValue: `VIX ${vixLevel.toFixed(1)}`,
+      threshold: '<15 만점 · <20 +12 · <25 +8 · <30 +4 · 이상 0 (총 15점)',
+    },
+    {
+      label: '달러/금리', weight: W_DOLLAR_RATE, score: dollarRateScore,
+      description: `DXY(UUP) + 장기금리(TLT) 방향`,
+      rawValue: uup && tlt
+        ? `UUP 50MA ${uup.regularMarketPrice > uup.fiftyDayAverage ? '상회' : '하회'} · TLT 50MA ${tlt.regularMarketPrice > tlt.fiftyDayAverage ? '상회' : '하회'}`
+        : '데이터 없음',
+      threshold: 'UUP 50MA 하회 +8 · 상회 +3 | TLT 50MA 하회 +7 · 상회 +2 (총 15점)',
+    },
+    {
+      label: '경기 민감도', weight: W_ECON, score: econSensitivityScore,
+      description: `구리(CPER) vs 금(GLD) 상대강도`,
+      rawValue: econDiff !== null ? `CPER−GLD ${econDiff >= 0 ? '+' : ''}${econDiff.toFixed(2)}%p` : '데이터 없음',
+      threshold: '>+0.3%p 만점 · >0 +6 · 이하 0 (총 10점)',
+    },
+    {
+      label: '시장 폭', weight: W_BREADTH, score: breadthScore,
+      description: `IWM/SPY + RSP/SPY 평균 상대강도`,
+      rawValue: avgBreadthVal !== null ? `IWM·RSP vs SPY 평균 ${avgBreadthVal >= 0 ? '+' : ''}${avgBreadthVal.toFixed(2)}%p` : '데이터 없음',
+      threshold: '평균 >+0.3%p 만점 · >0 +6 · 이하 0 (총 10점)',
+    },
   ];
 
   return {

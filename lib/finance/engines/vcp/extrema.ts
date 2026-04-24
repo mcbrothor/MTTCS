@@ -12,7 +12,11 @@ export function resampleToWeekly(data: OHLCData[]): OHLCData[] {
   let weekCandles: OHLCData[] = [];
 
   const getIsoWeekKey = (date: string) => {
-    const d = new Date(date);
+    // YYYYMMDD -> YYYY-MM-DD (Node.js/V8 호환성)
+    const formatted = date.length === 8 && !date.includes('-')
+      ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+      : date;
+    const d = new Date(formatted);
     const day = d.getUTCDay();
     const monday = new Date(d);
     monday.setUTCDate(d.getUTCDate() - (day === 0 ? 6 : day - 1));

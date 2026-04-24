@@ -425,7 +425,7 @@ export interface ProviderAttempt {
   attemptedAt: string;
 }
 
-export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150' | 'RUSSELL2000' | 'KOSDAQALL';
+export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
 export type MarketCode = 'KR' | 'US';
 export type DataQuality = 'FULL' | 'PARTIAL' | 'NA';
 export type MacroActionLevel = 'FULL' | 'REDUCED' | 'HALT';
