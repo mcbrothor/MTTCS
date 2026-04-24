@@ -7,6 +7,7 @@ interface MarketContextValue {
   data: MasterFilterResponse | null;
   isLoading: boolean;
   error: Error | null;
+  isStale: boolean;
   market: 'US' | 'KR';
   setMarket: (market: 'US' | 'KR') => void;
   bypassRisk: boolean;
@@ -42,6 +43,7 @@ const MarketContext = createContext<MarketContextValue>({
   data: null,
   isLoading: true,
   error: null,
+  isStale: false,
   market: 'US',
   setMarket: () => {},
   bypassRisk: false,
@@ -122,6 +124,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<MasterFilterResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [isStale, setIsStale] = useState(false);
   const [market, setMarket] = useState<'US' | 'KR'>('US');
   const [macroRegime, setMacroRegime] = useState<MacroRegime | null>(null);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -167,12 +170,14 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
           setData({ ...result, market });
           setMacroRegime(regime);
           setConflictWarning(regime ? detectConflict(result.state, regime) : null);
+          setIsStale(result.metrics?.meta?.fallbackUsed === true || (result.metrics?.meta?.warnings?.length ?? 0) > 0);
           setError(null);
         }
       } catch (err) {
         if (mounted) {
           const message = err instanceof DOMException && err.name === 'AbortError' ? '마스터 필터 요청 시간이 초과되었습니다.' : '알 수 없는 오류';
           setError(err instanceof Error ? err : new Error(message));
+          setIsStale(true);
           setData(fallbackMarketData(market));
         }
       } finally {
@@ -191,7 +196,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   }, [market]);
 
   return (
-    <MarketContext.Provider value={{ data, isLoading, error, market, setMarket, bypassRisk, setBypassRisk, macroRegime, conflictWarning }}>
+    <MarketContext.Provider value={{ data, isLoading, error, isStale, market, setMarket, bypassRisk, setBypassRisk, macroRegime, conflictWarning }}>
       {children}
     </MarketContext.Provider>
   );

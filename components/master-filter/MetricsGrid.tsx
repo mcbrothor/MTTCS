@@ -4,8 +4,10 @@ import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
 import HelpButton from '@/components/ui/HelpButton';
+import StatusBadge from '@/components/master-filter/StatusBadge';
 import { useMarket } from '@/contexts/MarketContext';
-import type { MasterFilterMetricDetail, MasterFilterMetrics } from '@/types';
+import { formatDelay, formatTimestamp } from '@/lib/format';
+import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
 const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: string; formula?: string; accordion?: string }> = {
   '추세': {
@@ -57,6 +59,12 @@ function statusClass(status: MasterFilterMetricDetail['status']) {
   return 'border-rose-500/40 bg-rose-500/5 text-rose-300';
 }
 
+function statusToState(status: MasterFilterMetricDetail['status']): MarketState {
+  if (status === 'PASS') return 'GREEN';
+  if (status === 'WARNING') return 'YELLOW';
+  return 'RED';
+}
+
 function MetricCard({ detail, chartData, movingAverageData, compact = false }: MetricCardProps) {
   const tone = statusClass(detail.status);
   const help = getMetricHelp(detail.label);
@@ -86,10 +94,7 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
           </p>
           <p className="mt-1 text-xs text-slate-500">기준: {detail.threshold}</p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-current px-2 py-1 text-xs font-bold">
-          {detail.status === 'PASS' ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldAlert className="h-3.5 w-3.5" />}
-          {detail.status}
-        </div>
+        <StatusBadge state={statusToState(detail.status)} label={detail.status} size="sm" />
       </div>
 
       {typeof detail.score === 'number' && typeof detail.weight === 'number' && (
@@ -160,6 +165,7 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
       </div>
     </Card>
   );
+
 }
 
 function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRows']> }) {
@@ -300,6 +306,9 @@ export default function MetricsGrid() {
               {data.market === 'KR' ? 'KOSPI 200' : 'SPY'} Market Filter
             </p>
             <h2 className="mt-1 text-xl font-bold text-white">근거 기반 시장 점수</h2>
+            <p className="mt-1 font-mono text-[10px] text-slate-500">
+              {formatDelay(metrics.meta)} · {metrics.meta.provider} · {formatTimestamp(metrics.meta.asOf)}
+            </p>
           </div>
           <div className="text-right">
             <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? 0}/100</p>

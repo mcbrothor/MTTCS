@@ -65,7 +65,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
 }
 
 export default function StatusCenter() {
-  const { data, isLoading, error, market, macroRegime, conflictWarning } = useMarket();
+  const { data, isLoading, error, isStale, market, macroRegime, conflictWarning } = useMarket();
   const [history, setHistory] = useState<HistoryPoint[]>([]);
 
   useEffect(() => {
@@ -132,6 +132,17 @@ export default function StatusCenter() {
     >
       <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${config.accent}`} />
 
+      {/* Fail-safe 스트립 */}
+      {isStale && (
+        <div role="alert" className="relative z-10 w-full rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 flex items-start gap-2 text-left mb-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" aria-hidden="true" />
+          <span className="leading-relaxed">
+            데이터 소스 장애 — 최근 정상 값 표시 중
+            {data?.metrics.updatedAt ? ` (마지막 갱신: ${new Date(data.metrics.updatedAt).toLocaleString('ko-KR')})` : ''}
+          </span>
+        </div>
+      )}
+
       {/* 충돌 경고 배너 */}
       {conflictWarning && (
         <div className="relative z-10 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 flex items-start gap-2 text-left mb-2">
@@ -144,8 +155,15 @@ export default function StatusCenter() {
         <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">MARKET STATE</p>
         <h2 className={`text-5xl font-black tracking-tight font-mono ${config.color} drop-shadow-lg mb-2`}>{data.state}</h2>
         
-        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-          <div 
+        <div
+          className="w-full h-2 bg-slate-800 rounded-full overflow-hidden"
+          role="progressbar"
+          aria-valuenow={p3Score}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`P3 종합 점수 ${p3Score}점 만점 100점, 상태 ${data.state}`}
+        >
+          <div
             className="h-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 rounded-full transition-all duration-1000"
             style={{ width: `${Math.min(p3Score, 100)}%` }}
           />
