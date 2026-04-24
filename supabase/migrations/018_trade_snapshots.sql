@@ -11,3 +11,9 @@ create index if not exists trades_contest_snapshot_gin
 
 create index if not exists trades_llm_verdict_gin
   on public.trades using gin (llm_verdict);
+
+-- 보안 취약 정책 클리닝
+DROP POLICY IF EXISTS "Public full access for links" ON public.investment_resources;
+DROP POLICY IF EXISTS "Allow insert/update on fundamental_cache" ON public.fundamental_cache;
+DROP POLICY IF EXISTS "Admin can manage all trades" ON public.trades;
+DROP POLICY IF EXISTS "Admin can manage all watchlist" ON public.watchlist;

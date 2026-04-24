@@ -14,7 +14,16 @@ CREATE TABLE IF NOT EXISTS public.fundamental_cache (
 -- RLS 활성화 및 권한 설정
 ALTER TABLE public.fundamental_cache ENABLE ROW LEVEL SECURITY;
 
--- 모든 사용자에게 읽기/쓰기 허용 (서버에서 관리하므로 public 허용이나 service_role을 권장하지만 
--- 현 시스템의 정책 패턴을 따르기 위해 전체 허용)
+-- 기존 정책 삭제 (멱등성 확보)
+DROP POLICY IF EXISTS "Allow select on fundamental_cache" ON public.fundamental_cache;
+DROP POLICY IF EXISTS "Allow insert/update on fundamental_cache" ON public.fundamental_cache;
+DROP POLICY IF EXISTS "Service role can manage fundamental_cache" ON public.fundamental_cache;
+
+-- 읽기는 모든 사용자 허용
 CREATE POLICY "Allow select on fundamental_cache" ON public.fundamental_cache FOR SELECT USING (true);
-CREATE POLICY "Allow insert/update on fundamental_cache" ON public.fundamental_cache FOR ALL USING (true);
+
+-- 쓰기는 서버(service_role)만 허용
+CREATE POLICY "Service role can manage fundamental_cache" ON public.fundamental_cache
+  FOR ALL TO service_role
+  USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
