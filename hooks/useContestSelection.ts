@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
@@ -13,6 +13,8 @@ const MAX_SELECTION = 10;
  */
 export function useContestSelection(targetUniverse?: string) {
   const [selectedTickers, setSelectedTickers] = useState<Set<string>>(new Set());
+  const [limitMessage, setLimitMessage] = useState<string | null>(null);
+  const limitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 스토리지에서 특정 유니버스의 선택 목록 읽기
   const loadSelection = useCallback((universe?: string) => {
@@ -72,7 +74,9 @@ export function useContestSelection(targetUniverse?: string) {
         next.delete(ticker);
       } else {
         if (next.size >= MAX_SELECTION) {
-          alert(`콘테스트 후보는 최대 ${MAX_SELECTION}개까지 선택할 수 있습니다.`);
+          if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+          setLimitMessage(`콘테스트 후보는 최대 ${MAX_SELECTION}개까지 선택할 수 있습니다.`);
+          limitTimerRef.current = setTimeout(() => setLimitMessage(null), 3000);
           return prev;
         }
         next.add(ticker);
@@ -128,10 +132,17 @@ export function useContestSelection(targetUniverse?: string) {
     setSelectedTickers(new Set());
   }, [targetUniverse]);
 
+  useEffect(() => {
+    return () => {
+      if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+    };
+  }, []);
+
   return {
     selectedTickers,
     toggleSelection,
     clearSelection,
-    MAX_SELECTION
+    MAX_SELECTION,
+    limitMessage,
   };
 }

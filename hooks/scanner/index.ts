@@ -73,6 +73,7 @@ export function useScanner() {
     selectedTickers,
     toggleSelection: baseToggleSelected,
     clearSelection: baseClearSelection,
+    limitMessage,
   } = useContestSelection(universe);
 
   const toggleSelected = useCallback((ticker: string) => {
@@ -389,6 +390,7 @@ export function useScanner() {
     showAllMacroResults, setShowAllMacroResults, handleUniverseChange,
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults,
     stats, dataSourceSummary, isSavingWatchlist,
-    customFilters, setCustomFilters, showCustomFilter, setShowCustomFilter
+    customFilters, setCustomFilters, showCustomFilter, setShowCustomFilter,
+    limitMessage
   };
 }

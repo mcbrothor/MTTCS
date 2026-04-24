@@ -59,6 +59,7 @@ export default function ScannerPage() {
     setCustomFilters,
     showCustomFilter,
     setShowCustomFilter,
+    limitMessage,
   } = useScanner();
 
   const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
@@ -67,6 +68,11 @@ export default function ScannerPage() {
 
   return (
     <div className="space-y-6 pb-12">
+      {limitMessage && (
+        <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
+          {limitMessage}
+        </div>
+      )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
         <ScannerTabNav />
         <MarketBanner compact={true} />
@@ -126,7 +132,7 @@ export default function ScannerPage() {
                       >
                         <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
                         <p className={`text-[8px] font-bold ${universe === u ? 'text-emerald-400' : 'text-slate-600'}`}>
-                          {u.includes('KOS') ? 'KR MARKET' : 'TECH GROWTH'}
+                          {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
                         </p>
                         {universe === u && (
                           /* @ts-ignore - framer-motion layoutId type issue */

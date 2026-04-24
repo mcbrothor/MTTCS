@@ -174,10 +174,11 @@ export default function CanslimScannerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [selectedResult, setSelectedResult] = useState<CanslimScannerResult | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('web');
-  const { 
-    selectedTickers, 
-    toggleSelection: baseToggleSelection, 
-    clearSelection: baseClearSelection 
+  const {
+    selectedTickers,
+    toggleSelection: baseToggleSelection,
+    clearSelection: baseClearSelection,
+    limitMessage,
   } = useContestSelection(universe);
 
   const toggleSelection = (t: string) => baseToggleSelection(t, universe);
@@ -655,6 +656,11 @@ export default function CanslimScannerPage() {
   // === 메인 렌더링 ===
   return (
     <div className="space-y-6 pb-12">
+      {limitMessage && (
+        <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
+          {limitMessage}
+        </div>
+      )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
@@ -715,7 +721,7 @@ export default function CanslimScannerPage() {
                       >
                         <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
                         <p className={`text-[8px] font-bold ${universe === u ? 'text-rose-400' : 'text-slate-700'}`}>
-                          {u.includes('KOS') ? 'KR MARKET' : 'TECH GROWTH'}
+                          {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
                         </p>
                         {universe === u && (
                           /* @ts-ignore - framer-motion layoutId type issue */
