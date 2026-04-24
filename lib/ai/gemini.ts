@@ -127,8 +127,7 @@ function isRateLimit(error: unknown) {
 function buildPrompt(input: MarketAnalysisInput) {
   return [
     'You are MTN Centaur, a concise market-regime analyst for a Mark Minervini SEPA/VCP trader.',
-    'Write in Korean. Explain the current market state, macro risk, and practical trading posture.',
-    'Do not invent live data. Use only the supplied metrics and macro context.',
+    'Write in Korean. Do not invent live data. Use only the supplied metrics and macro context.',
     '',
     `Market State: ${input.marketState} (Score: ${input.metrics.totalScore})`,
     `Trend: ${input.metrics.trend.value} (${input.metrics.trend.status}) - ${input.metrics.trend.description}`,
@@ -142,8 +141,37 @@ function buildPrompt(input: MarketAnalysisInput) {
     'Macro context:',
     JSON.stringify(input.macroData, null, 2),
     '',
-    'Return a short Markdown note with: 1) summary, 2) risk-on/risk-off evidence, 3) action guideline.',
+    'Respond ONLY with a JSON object (no markdown fences) in this exact shape:',
+    '{',
+    '  "headline": "<한 줄 핵심 판단, 20자 이내>",',
+    '  "bullets": ["<핵심 포인트 1>", "<핵심 포인트 2>", "<핵심 포인트 3>"],',
+    '  "detail": "<상세 서술: 시장 추세 근거, 매크로 리스크, 실전 행동 지침>"',
+    '}',
   ].join('\n');
+}
+
+interface StructuredInsight {
+  headline?: string;
+  bullets?: string[];
+  detail?: string;
+}
+
+function parseStructuredInsight(raw: string): { structured: StructuredInsight; text: string } {
+  try {
+    const parsed = extractStructuredJson(raw);
+    if (parsed && typeof parsed === 'object' && 'headline' in parsed) {
+      const s = parsed as StructuredInsight;
+      const fallbackText = [
+        s.headline,
+        ...(s.bullets ?? []).map((b: string) => `• ${b}`),
+        s.detail,
+      ].filter(Boolean).join('\n\n');
+      return { structured: s, text: fallbackText };
+    }
+  } catch {
+    // parsing failed — fall through to raw text
+  }
+  return { structured: {}, text: raw };
 }
 
 async function callGeminiModel(modelId: string, prompt: string, retries = 2): Promise<string> {
@@ -246,8 +274,13 @@ function attemptToInsight(input: {
   status: AiModelInsight['status'];
   priority: number;
   text?: string;
+  headline?: string;
+  bullets?: string[];
+  detail?: string;
+  cachedAt?: string;
   message?: string;
 }): AiModelInsight {
+  const now = new Date().toISOString();
   return {
     id: makeInsightId(input.label, input.model, input.priority),
     provider: input.provider,
@@ -255,10 +288,14 @@ function attemptToInsight(input: {
     model: input.model,
     status: input.status,
     text: input.text,
+    headline: input.headline,
+    bullets: input.bullets,
+    detail: input.detail,
+    cachedAt: input.cachedAt ?? now,
     message: input.message,
     selected: false,
     priority: input.priority,
-    generatedAt: new Date().toISOString(),
+    generatedAt: now,
   };
 }
 
@@ -276,9 +313,10 @@ async function collectGemini(
   }
 
   try {
-    const text = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`);
+    const raw = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`);
+    const { structured, text } = parseStructuredInsight(raw);
     chain.push({ provider: label, model, status: 'success' });
-    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', text, priority });
+    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', text, ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: label, model, status: 'failed', message });
@@ -294,9 +332,10 @@ async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority:
   }
 
   try {
-    const text = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`);
+    const raw = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`);
+    const { structured, text } = parseStructuredInsight(raw);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', text, priority });
+    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', text, ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'failed', message });
@@ -312,9 +351,10 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
   }
 
   try {
-    const text = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`);
+    const raw = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`);
+    const { structured, text } = parseStructuredInsight(raw);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', text, priority });
+    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', text, ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message });

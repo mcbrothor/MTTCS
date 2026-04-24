@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from 'react';
 
-import { AlertCircle, Bot, CheckCircle2, Cpu, Sparkles, XCircle } from 'lucide-react';
+import { AlertCircle, Bot, CheckCircle2, Cpu, RefreshCw, Sparkles, XCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
+import { formatTimestamp } from '@/lib/format';
 import type { AiFallbackAttempt, AiModelInsight } from '@/types';
 
 function chainTone(status: AiFallbackAttempt['status']) {
@@ -35,7 +36,59 @@ function labelFor(insight: AiModelInsight) {
   return 'Rules';
 }
 
-// renderText 함수 삭제 (ReactMarkdown으로 대체)
+function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
+  const rel = formatTimestamp(cachedAt, 'relative');
+  if (!cachedAt || rel === '-') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">
+        <Sparkles className="h-3 w-3" aria-hidden="true" />
+        실시간
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+      <RefreshCw className="h-3 w-3" aria-hidden="true" />
+      {rel} 갱신
+    </span>
+  );
+}
+
+function StructuredContent({ insight, fallbackText }: { insight: AiModelInsight; fallbackText: string }) {
+  if (insight.headline) {
+    return (
+      <div className="space-y-3">
+        <p className="text-base font-bold leading-snug text-white">{insight.headline}</p>
+        {insight.bullets && insight.bullets.length > 0 && (
+          <ul className="space-y-1.5">
+            {insight.bullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {insight.detail && (
+          <details className="group">
+            <summary className="cursor-pointer select-none text-xs text-slate-500 hover:text-slate-300 transition-colors list-none flex items-center gap-1">
+              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+              상세 분석
+            </summary>
+            <div className="mt-2 prose prose-invert prose-sm max-w-none leading-relaxed text-slate-400 border-l-2 border-slate-700 pl-3">
+              {insight.detail}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="prose prose-invert prose-sm max-w-none space-y-3 whitespace-pre-wrap leading-relaxed text-slate-300">
+      <ReactMarkdown>{fallbackText}</ReactMarkdown>
+    </div>
+  );
+}
 
 export default function InsightLog() {
   const { data, isLoading } = useMarket();
@@ -122,9 +175,13 @@ export default function InsightLog() {
               </div>
             </div>
 
-            <div className="prose prose-invert prose-sm max-w-none space-y-3 whitespace-pre-wrap leading-relaxed text-slate-300">
-              <ReactMarkdown>{visibleText}</ReactMarkdown>
-            </div>
+            {selectedInsight ? (
+              <StructuredContent insight={selectedInsight} fallbackText={visibleText} />
+            ) : (
+              <div className="prose prose-invert prose-sm max-w-none space-y-3 whitespace-pre-wrap leading-relaxed text-slate-300">
+                <ReactMarkdown>{visibleText}</ReactMarkdown>
+              </div>
+            )}
 
             {data?.metrics && (
               <div className="mt-4 border-t border-slate-800/70 pt-4">
@@ -174,7 +231,7 @@ export default function InsightLog() {
                         key={insight.id}
                         type="button"
                         onClick={() => setSelectedInsightId(insight.id)}
-                        className={`max-w-full rounded-lg border px-3 py-2 text-left transition-colors hover:border-slate-400 ${insightTone(insight)}`}
+                        className={`max-w-full rounded-lg border px-3 py-2 text-left transition-colors hover:border-slate-400 focus-visible:ring-2 focus-visible:ring-emerald-400 ${insightTone(insight)}`}
                       >
                         <span className="flex items-center gap-1.5 text-[11px] font-bold">
                           {chainIcon(insight.status)}
@@ -182,6 +239,9 @@ export default function InsightLog() {
                           {insight.selected && <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100">router pick</span>}
                         </span>
                         <span className="mt-1 block truncate font-mono text-[10px] opacity-80">{insight.model}</span>
+                        <span className="mt-1.5 block">
+                          <CacheAgeBadge cachedAt={insight.cachedAt} />
+                        </span>
                       </button>
                     ))}
                 </div>
