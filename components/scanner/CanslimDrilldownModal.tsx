@@ -2,8 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, XCircle, AlertTriangle, Info, Shield, TrendingUp, BarChart3 } from 'lucide-react';
-import type { CanslimScannerResult, CanslimPillarDetail } from '@/types';
+import type { CanslimScannerResult, CanslimPillarDetail, CanslimPillarKey } from '@/types';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
+import { CANSLIM_PILLARS } from '@/lib/finance/engines/canslim-pillars';
 
 interface Props {
   result: CanslimScannerResult;
@@ -59,6 +60,7 @@ function TierBadge({ tier }: { tier: CanslimScannerResult['dualTier'] }) {
 export default function CanslimDrilldownModal({ result, onClose }: Props) {
   const { canslimResult } = result;
   const details = canslimResult.pillarDetails;
+  const pillarOrder = new Map(CANSLIM_PILLARS.map((pillar, index) => [pillar, index]));
 
   // Pillar를 그룹별로 분류
   const pillarGroups: { label: string; icon: React.ReactNode; pillars: string[] }[] = [
@@ -165,7 +167,9 @@ export default function CanslimDrilldownModal({ result, onClose }: Props) {
             {/* 7 Pillar 상세 */}
             <div className="space-y-4">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">7 Pillar 평가 상세</h3>
-              {pillarGroups.map((group) => {
+              {[...pillarGroups]
+                .sort((a, b) => (pillarOrder.get(a.pillars[0] as CanslimPillarKey) ?? 999) - (pillarOrder.get(b.pillars[0] as CanslimPillarKey) ?? 999))
+                .map((group) => {
                 const groupDetails = details.filter((d) => group.pillars.includes(d.pillar));
                 if (groupDetails.length === 0) return null;
 

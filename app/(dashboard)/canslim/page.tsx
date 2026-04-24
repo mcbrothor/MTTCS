@@ -26,6 +26,12 @@ import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import MarketBanner from '@/components/ui/MarketBanner';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
+import {
+  CANSLIM_PILLARS,
+  getPillarDisplayStatus,
+  getPillarPassCount,
+  getPillarTooltip,
+} from '@/lib/finance/engines/canslim-pillars';
 import { applyUniverseRsRankings } from '@/lib/scanner-recommendation';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 import type {
@@ -113,10 +119,6 @@ function confidenceSortValue(c: string) {
   if (c === 'HIGH') return 0;
   if (c === 'MEDIUM') return 1;
   return 2;
-}
-
-function pillarPassCount(result: CanslimScannerResult) {
-  return result.canslimResult.pillarDetails.filter((d) => d.status === 'PASS').length;
 }
 
 function tierBadgeClass(tier: DualScreenerTier) {
@@ -360,7 +362,7 @@ export default function CanslimScannerPage() {
       if (sortKey === 'dualTier') return tierSortValue(a.dualTier) - tierSortValue(b.dualTier) || (b.rsRating ?? 0) - (a.rsRating ?? 0);
       if (sortKey === 'confidence') return confidenceSortValue(a.canslimResult.confidence) - confidenceSortValue(b.canslimResult.confidence);
       if (sortKey === 'rs') return (b.rsRating ?? 0) - (a.rsRating ?? 0);
-      if (sortKey === 'pillar') return pillarPassCount(b) - pillarPassCount(a);
+      if (sortKey === 'pillar') return getPillarPassCount(b.canslimResult) - getPillarPassCount(a.canslimResult);
       return 0;
     });
 
@@ -584,13 +586,16 @@ export default function CanslimScannerPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">7 Pillar Score</span>
-                <span className="text-[10px] font-black text-rose-300">{pillarPassCount(r)} / 7 PASS</span>
+                <span className="text-[10px] font-black text-rose-300">{getPillarPassCount(r.canslimResult)} / 7 PASS</span>
               </div>
               <div className="flex gap-1">
-                {['M','C','A','N','S','L','I'].map((p) => {
-                  const detail = r.canslimResult.pillarDetails.find(d => d.pillar === p);
-                  const isPass = detail?.status === 'PASS';
-                  const isFail = detail?.status === 'FAIL';
+                {CANSLIM_PILLARS.map((p) => {
+                  const detail = {
+                    description: getPillarTooltip(r.canslimResult, p),
+                    status: getPillarDisplayStatus(r.canslimResult, p),
+                  };
+                  const isPass = detail.status === 'PASS';
+                  const isFail = detail.status === 'FAIL';
                   return (
                     <div 
                       key={p} 
@@ -604,7 +609,7 @@ export default function CanslimScannerPage() {
                 })}
               </div>
               <div className="flex justify-between px-0.5">
-                {['M','C','A','N','S','L','I'].map(p => (
+                {CANSLIM_PILLARS.map((p) => (
                   <span key={p} className="text-[8px] font-bold text-slate-600">{p}</span>
                 ))}
               </div>
