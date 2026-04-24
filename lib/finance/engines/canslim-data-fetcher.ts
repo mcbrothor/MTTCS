@@ -11,9 +11,10 @@
  */
 
 import axios from 'axios';
-import type { CanslimStockData, MarketCode } from '@/types';
+import type { CanslimAnalysisCoverage, CanslimPillarKey, CanslimStockData, MarketCode } from '@/types';
 import { DATA_QUALITY } from './canslim-criteria';
 import { fetchAggregatedFundamentals } from '../market/fundamental-fetcher';
+import { getSecFundamentals } from '../providers/sec-edgar-api';
 
 
 /** Yahoo quoteSummary에서 추출 가능한 원시 응답 구조 */
@@ -35,6 +36,22 @@ interface YahooQuoteSummaryResult {
   institutionOwnership?: { ownershipList?: { position?: { raw?: number }; reportDate?: { fmt?: string } }[] };
   majorHoldersBreakdown?: Record<string, unknown>;
 }
+
+type FundamentalSourceKey =
+  | 'currentQtrEpsGrowth'
+  | 'priorQtrEpsGrowth'
+  | 'epsGrowthLast3Qtrs'
+  | 'currentQtrSalesGrowth'
+  | 'annualEpsGrowthEachYear'
+  | 'hadNegativeEpsInLast3Yr'
+  | 'roe'
+  | 'floatShares'
+  | 'sharesBuyback'
+  | 'institutionalSponsorshipTrend'
+  | 'institutionalOwnershipPct'
+  | 'numInstitutionalHolders';
+
+type FundamentalSourceMap = Partial<Record<FundamentalSourceKey, string>>;
 
 /** Yahoo raw 필드에서 숫자 추출 */
 function rawNum(value: unknown): number | null {
@@ -64,8 +81,14 @@ const round = (v: number, d = 2) => Number(v.toFixed(d));
 export async function fetchCanslimFundamentals(
   ticker: string, // Yahoo용 풀 티커 (예: 005930.KS)
   market: MarketCode
-): Promise<{ data: Partial<CanslimStockData>; warnings: string[] }> {
+): Promise<{
+  data: Partial<CanslimStockData>;
+  warnings: string[];
+  pillarSources: Partial<Record<CanslimPillarKey, string[]>>;
+  analysisCoverage: CanslimAnalysisCoverage;
+}> {
   const warnings: string[] = [];
+  const sourceMap: FundamentalSourceMap = {};
 
   // DART/EDGAR용 순수 티커 추출 (접미사 제거)
   const baseTicker = ticker.split('.')[0];
@@ -149,6 +172,18 @@ export async function fetchCanslimFundamentals(
       sharesBuyback,
       ...institutional,
     });
+    if (currentQtrEpsGrowth !== null) sourceMap.currentQtrEpsGrowth = 'Yahoo Finance quoteSummary';
+    if (priorQtrEpsGrowth !== null) sourceMap.priorQtrEpsGrowth = 'Yahoo Finance quoteSummary';
+    if (epsGrowthLast3Qtrs.some((value) => value !== null)) sourceMap.epsGrowthLast3Qtrs = 'Yahoo Finance earningsHistory';
+    if (currentQtrSalesGrowth !== null) sourceMap.currentQtrSalesGrowth = 'Yahoo Finance financialData';
+    if (annualEpsGrowthEachYear.some((value) => value !== null)) sourceMap.annualEpsGrowthEachYear = 'Yahoo Finance incomeStatementHistory';
+    if (hadNegativeEpsInLast3Yr !== null) sourceMap.hadNegativeEpsInLast3Yr = 'Yahoo Finance incomeStatementHistory';
+    if (roe !== null) sourceMap.roe = 'Yahoo Finance financialData';
+    if (floatShares !== null) sourceMap.floatShares = 'Yahoo Finance defaultKeyStatistics';
+    if (sharesBuyback !== null) sourceMap.sharesBuyback = 'Yahoo Finance defaultKeyStatistics';
+    if (institutional.institutionalSponsorshipTrend !== null) sourceMap.institutionalSponsorshipTrend = 'Yahoo Finance institutionOwnership';
+    if (institutional.institutionalOwnershipPct !== null) sourceMap.institutionalOwnershipPct = 'Yahoo Finance majorHoldersBreakdown';
+    if (institutional.numInstitutionalHolders !== null) sourceMap.numInstitutionalHolders = 'Yahoo Finance institutionOwnership';
     yahooSucceeded = true;
   } catch (yahooError) {
     // Yahoo 실패 — 경고만 남기고 Phase 2로 계속 진행
@@ -166,19 +201,66 @@ export async function fetchCanslimFundamentals(
       exchange,
       warnings
     );
-
-    if (fundamentalSnapshot) {
-      if (fundamentalSnapshot.epsGrowthPct !== null) {
-        fundamentalData.currentQtrEpsGrowth = fundamentalSnapshot.epsGrowthPct;
-        if (fundamentalData.epsGrowthLast3Qtrs) {
-          fundamentalData.epsGrowthLast3Qtrs[0] = fundamentalSnapshot.epsGrowthPct;
+    const richSecSnapshot = market === 'US'
+      ? await getSecFundamentals(baseTicker)
+      : null;
+    const mergedSnapshot = richSecSnapshot
+      ? {
+          ...fundamentalSnapshot,
+          ...richSecSnapshot,
+          source: richSecSnapshot.source,
         }
+      : fundamentalSnapshot;
+
+    if (mergedSnapshot) {
+      const officialSource = mergedSnapshot.source;
+      if (mergedSnapshot.epsGrowthPct !== null) {
+        fundamentalData.currentQtrEpsGrowth = mergedSnapshot.epsGrowthPct;
+        if (fundamentalData.epsGrowthLast3Qtrs) {
+          fundamentalData.epsGrowthLast3Qtrs[0] = mergedSnapshot.epsGrowthPct;
+        }
+        sourceMap.currentQtrEpsGrowth = officialSource;
+        sourceMap.epsGrowthLast3Qtrs = officialSource;
       }
-      if (fundamentalSnapshot.revenueGrowthPct !== null) {
-        fundamentalData.currentQtrSalesGrowth = fundamentalSnapshot.revenueGrowthPct;
+      if (mergedSnapshot.currentQtrEpsGrowth !== null && mergedSnapshot.currentQtrEpsGrowth !== undefined) {
+        fundamentalData.currentQtrEpsGrowth = mergedSnapshot.currentQtrEpsGrowth;
+        sourceMap.currentQtrEpsGrowth = officialSource;
       }
-      if (fundamentalSnapshot.roePct !== null) {
-        fundamentalData.roe = fundamentalSnapshot.roePct;
+      if (mergedSnapshot.priorQtrEpsGrowth !== null && mergedSnapshot.priorQtrEpsGrowth !== undefined) {
+        fundamentalData.priorQtrEpsGrowth = mergedSnapshot.priorQtrEpsGrowth;
+        sourceMap.priorQtrEpsGrowth = officialSource;
+      }
+      if (mergedSnapshot.epsGrowthLast3Qtrs?.some((value) => value !== null)) {
+        fundamentalData.epsGrowthLast3Qtrs = mergedSnapshot.epsGrowthLast3Qtrs;
+        sourceMap.epsGrowthLast3Qtrs = officialSource;
+      }
+      if (mergedSnapshot.revenueGrowthPct !== null) {
+        fundamentalData.currentQtrSalesGrowth = mergedSnapshot.revenueGrowthPct;
+        sourceMap.currentQtrSalesGrowth = officialSource;
+      }
+      if (mergedSnapshot.currentQtrSalesGrowth !== null && mergedSnapshot.currentQtrSalesGrowth !== undefined) {
+        fundamentalData.currentQtrSalesGrowth = mergedSnapshot.currentQtrSalesGrowth;
+        sourceMap.currentQtrSalesGrowth = officialSource;
+      }
+      if (mergedSnapshot.annualEpsGrowthEachYear?.some((value) => value !== null)) {
+        fundamentalData.annualEpsGrowthEachYear = mergedSnapshot.annualEpsGrowthEachYear;
+        sourceMap.annualEpsGrowthEachYear = officialSource;
+      }
+      if (mergedSnapshot.hadNegativeEpsInLast3Yr !== null && mergedSnapshot.hadNegativeEpsInLast3Yr !== undefined) {
+        fundamentalData.hadNegativeEpsInLast3Yr = mergedSnapshot.hadNegativeEpsInLast3Yr;
+        sourceMap.hadNegativeEpsInLast3Yr = officialSource;
+      }
+      if (mergedSnapshot.floatShares !== null && mergedSnapshot.floatShares !== undefined) {
+        fundamentalData.floatShares = mergedSnapshot.floatShares;
+        sourceMap.floatShares = officialSource;
+      }
+      if (mergedSnapshot.sharesBuyback !== null && mergedSnapshot.sharesBuyback !== undefined) {
+        fundamentalData.sharesBuyback = mergedSnapshot.sharesBuyback;
+        sourceMap.sharesBuyback = officialSource;
+      }
+      if (mergedSnapshot.roePct !== null) {
+        fundamentalData.roe = mergedSnapshot.roePct;
+        sourceMap.roe = officialSource;
       }
     }
   } catch (augmentError) {
@@ -196,7 +278,63 @@ export async function fetchCanslimFundamentals(
   return {
     data: fundamentalData,
     warnings,
+    pillarSources: buildPillarSources(sourceMap),
+    analysisCoverage: assessCanslimFundamentalCoverage(fundamentalData),
   };
+}
+
+export function assessCanslimFundamentalCoverage(data: Partial<CanslimStockData>): CanslimAnalysisCoverage {
+  const missingFields: string[] = [];
+  const quarterlySeries = data.epsGrowthLast3Qtrs ?? [];
+  const validQuarterlySeries = quarterlySeries.filter((value): value is number => value !== null);
+  const annualSeries = data.annualEpsGrowthEachYear ?? [];
+  const validAnnualSeries = annualSeries.filter((value): value is number => value !== null);
+
+  if (data.currentQtrEpsGrowth === null || data.currentQtrEpsGrowth === undefined) missingFields.push('C.currentQtrEpsGrowth');
+  if (data.currentQtrSalesGrowth === null || data.currentQtrSalesGrowth === undefined) missingFields.push('C.currentQtrSalesGrowth');
+  if (validQuarterlySeries.length < 3) missingFields.push('C.epsGrowthLast3Qtrs');
+
+  if (data.hadNegativeEpsInLast3Yr === null || data.hadNegativeEpsInLast3Yr === undefined) missingFields.push('A.hadNegativeEpsInLast3Yr');
+  if (data.roe === null || data.roe === undefined) missingFields.push('A.roe');
+  if (validAnnualSeries.length < 2) missingFields.push('A.annualEpsGrowthEachYear');
+
+  if (data.institutionalOwnershipPct === null || data.institutionalOwnershipPct === undefined) missingFields.push('I.institutionalOwnershipPct');
+  if (data.numInstitutionalHolders === null || data.numInstitutionalHolders === undefined) missingFields.push('I.numInstitutionalHolders');
+
+  return {
+    complete: missingFields.length === 0,
+    missingFields,
+  };
+}
+
+export function buildPillarSources(
+  sourceMap: FundamentalSourceMap
+): Partial<Record<CanslimPillarKey, string[]>> {
+  const pillars: Partial<Record<CanslimPillarKey, string[]>> = {};
+  const append = (pillar: CanslimPillarKey, source?: string) => {
+    if (!source) return;
+    const current = pillars[pillar] ?? [];
+    if (!current.includes(source)) current.push(source);
+    pillars[pillar] = current;
+  };
+
+  append('C', sourceMap.currentQtrEpsGrowth);
+  append('C', sourceMap.priorQtrEpsGrowth);
+  append('C', sourceMap.epsGrowthLast3Qtrs);
+  append('C', sourceMap.currentQtrSalesGrowth);
+
+  append('A', sourceMap.annualEpsGrowthEachYear);
+  append('A', sourceMap.hadNegativeEpsInLast3Yr);
+  append('A', sourceMap.roe);
+
+  append('S', sourceMap.floatShares);
+  append('S', sourceMap.sharesBuyback);
+
+  append('I', sourceMap.institutionalSponsorshipTrend);
+  append('I', sourceMap.institutionalOwnershipPct);
+  append('I', sourceMap.numInstitutionalHolders);
+
+  return pillars;
 }
 
 // === 내부 추출 함수들 ===

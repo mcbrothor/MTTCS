@@ -12,6 +12,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { fetchCanslimFundamentals } from '@/lib/finance/engines/canslim-data-fetcher';
 import { evaluateCanslim, determineDualScreenerTier } from '@/lib/finance/engines/canslim-engine';
+import { enforceCanslimAnalysisCoverage } from '@/lib/finance/engines/canslim-coverage';
 import { detectBasePattern } from '@/lib/finance/engines/base-pattern-engine';
 import { analyzeVcp } from '@/lib/finance/engines/vcp';
 import { analyzeSepa } from '@/lib/finance/core/sepa';
@@ -269,7 +270,10 @@ export async function GET(request: Request) {
     );
 
     // 5. CAN SLIM 7 Pillar 평가
-    const canslimResult = evaluateCanslim(stockData, macro, false, stockData.currentPrice);
+    const canslimResult = enforceCanslimAnalysisCoverage(
+      evaluateCanslim(stockData, macro, false, stockData.currentPrice),
+      fundamentalResult.analysisCoverage
+    );
 
     // 6. 이중 검증 티어
     const dualTier = determineDualScreenerTier(canslimResult.pass, vcpAnalysis.grade);
@@ -278,6 +282,9 @@ export async function GET(request: Request) {
     const dataWarnings = [...fundamentalResult.warnings];
     if (!macro.followThroughDay && macro.distributionDayCount >= 4) {
       dataWarnings.push('MACRO_PRESSURE');
+    }
+    if (!fundamentalResult.analysisCoverage.complete) {
+      dataWarnings.push(`CANSLIM_ANALYSIS_INCOMPLETE:${fundamentalResult.analysisCoverage.missingFields.join(',')}`);
     }
 
     const result: CanslimScannerResult = {
@@ -297,6 +304,18 @@ export async function GET(request: Request) {
       rsSource: sepaEvidence.metrics.rsSource ?? null,
       benchmarkRelativeScore: sepaEvidence.metrics.benchmarkRelativeScore ?? null,
       mansfieldRsFlag: sepaEvidence.metrics.mansfieldRsFlag ?? null,
+      dataSources: {
+        M: [`Yahoo Finance chart ${market === 'KR' ? (normalizedExchange === 'KOSDAQ' ? '^KQ150' : '^KS200') : (normalizedExchange === 'NASDAQ' ? 'QQQ' : 'SPY')}`],
+        C: fundamentalResult.pillarSources.C,
+        A: fundamentalResult.pillarSources.A,
+        N: ['Yahoo Finance chart price history', 'Base pattern engine'],
+        S: [...new Set(['Yahoo Finance chart volume history', ...(fundamentalResult.pillarSources.S ?? [])])],
+        L: [
+          dbMetric?.rs_rating !== undefined && dbMetric?.rs_rating !== null ? 'Supabase stock_metrics.rs_rating' : 'SEPA benchmark-relative RS',
+        ],
+        I: fundamentalResult.pillarSources.I,
+      },
+      analysisCoverage: fundamentalResult.analysisCoverage,
       status: 'done',
       analyzedAt: new Date().toISOString(),
       errorMessage: null,

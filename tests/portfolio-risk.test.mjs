@@ -4,6 +4,8 @@ import { calculatePortfolioRiskSummary, getMaxPositionsForEquity } from '../lib/
 assert.equal(getMaxPositionsForEquity(1_000_000), 2);
 assert.equal(getMaxPositionsForEquity(10_000_000), 5);
 assert.equal(getMaxPositionsForEquity(100_000_000), 10);
+assert.equal(getMaxPositionsForEquity(2_000, 'US'), 2);
+assert.equal(getMaxPositionsForEquity(20_000, 'US'), 10);
 
 const trades = [
   {

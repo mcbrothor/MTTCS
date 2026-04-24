@@ -6,14 +6,14 @@ function finite(value: unknown) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-export function getMaxPositionsForEquity(totalEquity: number, market: 'US' | 'KR') {
+export function getMaxPositionsForEquity(totalEquity: number, market: 'US' | 'KR' = 'KR') {
   if (market === 'KR') {
     if (totalEquity <= 2_000_000) return 2;
     if (totalEquity <= 10_000_000) return 5;
     return 10;
   } else {
     // US
-    if (totalEquity <= 1_000) return 2;
+    if (totalEquity <= 2_000) return 2;
     if (totalEquity <= 10_000) return 5;
     return 10;
   }

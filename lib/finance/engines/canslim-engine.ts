@@ -14,6 +14,7 @@
  */
 
 import type {
+  CanslimAnalysisCoverage,
   CanslimMacroMarketData,
   CanslimNStatus,
   CanslimPillarDetail,
@@ -471,6 +472,38 @@ export function determineDualScreenerTier(
   if (canslimPass && !vcpPass) return 'WATCHLIST';
   if (!canslimPass && vcpPass) return 'SHORT_TERM';
   return 'EXCLUDED';
+}
+
+export function enforceCanslimAnalysisCoverage(
+  result: CanslimResult,
+  coverage: CanslimAnalysisCoverage
+): CanslimResult {
+  if (coverage.complete) return result;
+
+  const warning = `CANSLIM_ANALYSIS_INCOMPLETE:${coverage.missingFields.join(',')}`;
+  const warnings = result.warnings.includes(warning)
+    ? result.warnings
+    : [...result.warnings, warning];
+  const pillarDetails = [
+    ...result.pillarDetails,
+    {
+      pillar: 'DATA',
+      label: '필수 데이터 커버리지',
+      status: 'FAIL' as const,
+      value: coverage.missingFields.join(', '),
+      threshold: '모든 핵심 CAN SLIM 필수 필드 확보',
+      description: '필수 데이터가 비어 있어 7개 지표 전체를 신뢰성 있게 분석하지 못했습니다.',
+    },
+  ];
+
+  return {
+    ...result,
+    pass: false,
+    confidence: 'LOW',
+    failedPillar: result.failedPillar ?? 'DATA_COVERAGE',
+    warnings,
+    pillarDetails,
+  };
 }
 
 /**

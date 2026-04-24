@@ -289,8 +289,16 @@ export interface FundamentalSnapshot {
   revenueGrowthPct: number | null;
   roePct: number | null;
   debtToEquityPct: number | null;
+  currentQtrEpsGrowth?: number | null;
+  priorQtrEpsGrowth?: number | null;
+  epsGrowthLast3Qtrs?: (number | null)[];
+  currentQtrSalesGrowth?: number | null;
+  annualEpsGrowthEachYear?: (number | null)[];
+  hadNegativeEpsInLast3Yr?: boolean | null;
+  numInstitutionalHolders?: number | null;
   institutionalOwnershipPct?: number | null;
   floatShares?: number | null;
+  sharesBuyback?: boolean | null;
   sector?: string | null;
   source: string;
 }
@@ -789,6 +797,13 @@ export interface CanslimResult {
   pillarDetails: CanslimPillarDetail[];
 }
 
+export type CanslimPillarKey = 'M' | 'C' | 'A' | 'N' | 'S' | 'L' | 'I';
+
+export interface CanslimAnalysisCoverage {
+  complete: boolean;
+  missingFields: string[];
+}
+
 export interface CanslimPillarDetail {
   pillar: string;
   label: string;
@@ -818,6 +833,8 @@ export interface CanslimScannerResult {
   benchmarkRelativeScore?: number | null;
   mansfieldRsFlag: boolean | null;
   mansfieldRsScore?: number | null;
+  dataSources?: Partial<Record<CanslimPillarKey, string[]>>;
+  analysisCoverage?: CanslimAnalysisCoverage;
   status: ScannerStatus;
   analyzedAt: string | null;
   errorMessage: string | null;
