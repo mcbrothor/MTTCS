@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type { ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
@@ -188,6 +189,12 @@ export default function PortfolioPage() {
                     <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-100">
                       오픈 리스크 {money(position.openRisk, market)}
                     </span>
+                    <Link
+                      href={`/history?market=${market}`}
+                      className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/20"
+                    >
+                      복기 작성 →
+                    </Link>
                   </div>
                 </div>
               )) : (

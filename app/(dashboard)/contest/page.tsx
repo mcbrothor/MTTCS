@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
@@ -814,7 +815,8 @@ export default function ContestPage() {
                     <th className="py-3 pr-3 text-right">선정일 기준 종가</th>
                     <th className="py-3 pr-3">가격 출처</th>
                     <th className="py-3 pr-3">LLM 순위</th>
-                    <th className="py-3">코멘트</th>
+                    <th className="py-3 pr-3">코멘트</th>
+                    <th className="py-3">다음 단계</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -836,6 +838,14 @@ export default function ContestPage() {
                             ? `${verdict.recommendation}${verdict.confidence !== null ? ` · ${Math.round(verdict.confidence * 100)}%` : ''} · ${verdict.keyStrength || verdict.comment || '-'}`
                             : candidate.llm_comment || candidate.final_pick_note || '-';
                         })()}
+                      </td>
+                      <td className="py-3">
+                        <Link
+                          href={`/plan?ticker=${candidate.ticker}&exchange=${candidate.exchange || 'NAS'}`}
+                          className="whitespace-nowrap rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20"
+                        >
+                          계획 작성 →
+                        </Link>
                       </td>
                     </tr>
                   ))}

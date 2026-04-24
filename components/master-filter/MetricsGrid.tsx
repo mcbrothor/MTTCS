@@ -3,8 +3,46 @@
 import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
+import HelpButton from '@/components/ui/HelpButton';
 import { useMarket } from '@/contexts/MarketContext';
 import type { MasterFilterMetricDetail, MasterFilterMetrics } from '@/types';
+
+const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: string; formula?: string; accordion?: string }> = {
+  '추세': {
+    alias: '추세 강도',
+    icon: '🌊',
+    tooltip: '지수(SPY/KOSPI200)가 50일선 및 200일선 위에 있는지, 이동평균선 배열이 올바른지를 점수화합니다.',
+    accordion: '정의: 50일선 > 150일선 > 200일선 순서일 때 추세 배열 완성. 지수가 200일선 위에 있을 때만 공격적 진입 허용.',
+  },
+  '시장 폭': {
+    alias: '추세 동참률',
+    icon: '🌊',
+    tooltip: '전체 종목 중 200일 이동평균선 위에 있는 비율. 시장 전반의 건강도를 나타냅니다.',
+    accordion: '50% 이상이면 과반 종목이 상승 추세. 30% 이하면 약세장 경계.',
+  },
+  'FTD': {
+    alias: '상승 신호일',
+    icon: '🚀',
+    tooltip: '최근 하락 후 랠리 4일째 이후 +1.5% 이상 거래량 급증 상승이 있었는지. 바닥 반전 신호입니다.',
+    accordion: '윌리엄 오닐의 FTD 개념. FTD가 발생하지 않으면 본격 반등이 아닐 수 있습니다.',
+  },
+  '분산일': {
+    alias: '기관 매도일',
+    icon: '📉',
+    tooltip: '최근 25거래일 기준 기관이 대량 매도한 날의 수. 5개 이상이면 시장 약화 신호.',
+    accordion: '지수가 전일 대비 -0.2% 이상 하락 + 거래량 전일 대비 증가 = 분산일. 5개 초과 시 RED 신호.',
+  },
+  '변동성': {
+    alias: 'VIX 공포 지수',
+    icon: '🌡️',
+    tooltip: 'S&P 500 옵션의 내재변동성으로 계산되는 "공포 지수". 낮을수록 시장이 안정적입니다.',
+    accordion: 'VIX 15 이하: 낮은 변동성, 진입 유리. 20 이상: 위험 증가. 30 이상: 패닉 구간.',
+  },
+};
+
+function getMetricHelp(label: string) {
+  return Object.entries(METRIC_HELP).find(([key]) => label?.includes(key))?.[1];
+}
 
 interface MetricCardProps {
   detail: MasterFilterMetricDetail;
@@ -21,11 +59,27 @@ function statusClass(status: MasterFilterMetricDetail['status']) {
 
 function MetricCard({ detail, chartData, movingAverageData, compact = false }: MetricCardProps) {
   const tone = statusClass(detail.status);
+  const help = getMetricHelp(detail.label);
   return (
     <Card className={`border-2 ${tone} ${compact ? 'min-h-[190px]' : 'min-h-[260px]'}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">{detail.label}</p>
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              {help?.icon ? `${help.icon} ` : ''}{help?.alias ?? detail.label}
+            </p>
+            {help?.alias && (
+              <span className="text-[10px] text-slate-600">({detail.label})</span>
+            )}
+            {help && (
+              <HelpButton
+                label={detail.label}
+                tooltip={help.tooltip}
+                formula={help.formula}
+                accordion={help.accordion ? <span>{help.accordion}</span> : undefined}
+              />
+            )}
+          </div>
           <p className="mt-2 font-mono text-2xl font-black text-white">
             {detail.value}
             {detail.unit && <span className="ml-1 text-xs text-slate-500">{detail.unit}</span>}
@@ -226,6 +280,7 @@ export default function MetricsGrid() {
     );
   }
 
+  const { metrics } = data;
   const displayMetricsList = [
     { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory },
     { detail: metrics.breadth, chartData: metrics.mainHistory },

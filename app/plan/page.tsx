@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import TickerInput from '@/components/plan/TickerInput';
@@ -50,6 +51,7 @@ function PlanPageContent() {
     chk_psychology: boolean;
   } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   // C-6: alert() 대신 인라인 에러 상태
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -83,7 +85,7 @@ function PlanPageContent() {
         entry_targets: analysis.riskPlan.entryTargets,
         trailing_stops: analysis.riskPlan.trailingStops,
       });
-      router.push('/');
+      setSaveSuccess(true);
     } catch (err: unknown) {
       // C-6: alert() 대신 인라인 에러 메시지로 교체
       const message = axios.isAxiosError(err)
@@ -158,14 +160,38 @@ function PlanPageContent() {
             </div>
           )}
 
-          <div className="flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-400">
-              저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.
-            </p>
-            <Button className="px-8 py-3" onClick={handleSavePlan} disabled={saveBlocked}>
-              {saving ? '저장 중...' : '계획 저장'}
-            </Button>
-          </div>
+          {saveSuccess ? (
+            <div className="flex items-center justify-between rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">✓ 계획 저장 완료</p>
+                <p className="mt-1 text-sm text-slate-300">이 포지션이 내 포트폴리오 리스크에 주는 영향을 확인하세요.</p>
+              </div>
+              <div className="ml-4 flex shrink-0 gap-2">
+                <Link
+                  href="/portfolio"
+                  className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
+                >
+                  포트폴리오 확인 →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => { setSaveSuccess(false); router.push('/'); }}
+                  className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+                >
+                  대시보드
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-400">
+                저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.
+              </p>
+              <Button className="px-8 py-3" onClick={handleSavePlan} disabled={saveBlocked}>
+                {saving ? '저장 중...' : '계획 저장'}
+              </Button>
+            </div>
+          )}
         </>
       )}
     </div>

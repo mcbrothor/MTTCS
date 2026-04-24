@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ReviewStatsDashboard from '@/components/dashboard/ReviewStatsDashboard';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
@@ -99,6 +100,20 @@ function HistoryPageContent() {
             : `${market === 'US' ? '미국' : '한국'} 전체 매매 복기`
         }
       />
+
+      {/* Next Step CTA */}
+      <div className="flex items-center justify-between rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-sky-400">복기 완료 후</p>
+          <p className="mt-1 text-sm text-slate-300">대시보드에서 내 통계 변화를 확인하세요 — 기대값, 규율 점수, 성장 곡선이 반영됩니다.</p>
+        </div>
+        <Link
+          href="/"
+          className="ml-4 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
+        >
+          대시보드 →
+        </Link>
+      </div>
     </div>
   );
 }

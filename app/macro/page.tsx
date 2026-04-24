@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import MarketBanner from '@/components/ui/MarketBanner';
 
 const breakdown = [
@@ -141,6 +142,25 @@ export default function MacroPage() {
             </div>
           </div>
         </div>
+      </div>
+      {/* Next Step CTA */}
+      <div className="flex items-center justify-between rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-sky-400">다음 단계</p>
+          <p className="mt-1 text-sm text-slate-300">
+            {score >= 70
+              ? `레짐 ${score}점 — RISK-ON 환경입니다. 공격적 후보를 찾아볼 수 있습니다.`
+              : score >= 40
+                ? `레짐 ${score}점 — 중립 국면입니다. 신중하게 후보를 검토하세요.`
+                : `레짐 ${score}점 — RISK-OFF 환경입니다. 신규 진입을 줄이세요.`}
+          </p>
+        </div>
+        <Link
+          href="/scanner"
+          className="ml-4 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
+        >
+          종목 발굴 →
+        </Link>
       </div>
     </div>
   );
