@@ -162,7 +162,15 @@ export default function StatusCenter() {
       </div>
 
       <div className="relative z-10 mt-3 flex flex-wrap justify-center gap-2">
-        {[data.metrics.trend, data.metrics.breadth, data.metrics.volatility, data.metrics.liquidity].map((m) => (
+        {[
+          data.metrics.trend, 
+          data.metrics.breadth, 
+          data.metrics.volatility, 
+          data.metrics.ftd,
+          data.metrics.distribution,
+          data.metrics.newHighLow,
+          data.metrics.sectorRotation
+        ].map((m) => (
           <span
             key={m.label}
             className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase

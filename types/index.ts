@@ -566,19 +566,67 @@ export interface AiFallbackAttempt {
 }
 
 export interface AiModelInsight {
-  id: string; provider: AiInsightProvider; label: string; model: string; status: 'success' | 'failed' | 'skipped'; text?: string; message?: string; selected: boolean; priority: number; generatedAt: string;
+  id: string;
+  provider: AiInsightProvider;
+  label: string;
+  model: string;
+  status: 'success' | 'failed' | 'skipped';
+  text?: string;
+  message?: string;
+  selected: boolean;
+  priority: number;
+  generatedAt: string;
 }
 
 export interface MasterFilterMetricDetail {
-  value: number | string | null; threshold: number | string; status: 'PASS' | 'FAIL' | 'WARNING'; label: string; unit: string; description: string; source: string; score?: number; weight?: number;
+  value: number | string | null;
+  threshold: number | string;
+  status: 'PASS' | 'FAIL' | 'WARNING';
+  label: string;
+  unit: string;
+  description: string;
+  source: string;
+  score?: number;
+  weight?: number;
 }
 
 export interface MasterFilterMetrics {
-  trend: MasterFilterMetricDetail; breadth: MasterFilterMetricDetail; liquidity: MasterFilterMetricDetail; volatility: MasterFilterMetricDetail; leadership: MasterFilterMetricDetail; ftd?: MasterFilterMetricDetail; distribution?: MasterFilterMetricDetail; newHighLow?: MasterFilterMetricDetail; above200d?: MasterFilterMetricDetail; sectorRotation?: MasterFilterMetricDetail; score: number; p3Score?: number; regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[]; meta: DataSourceMeta; mainPrice?: number; ma50?: number; ma150?: number; ma200?: number; mainHistory?: { date: string; close: number }[]; movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[]; vixHistory?: { date: string; close: number }[]; sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[]; ftdReason?: string | null; distributionDetails?: { date: string, close: number, volume: number, pctChange: number }[]; macroData?: Record<string, unknown>; updatedAt: string;
+  trend: MasterFilterMetricDetail;
+  breadth: MasterFilterMetricDetail;
+  volatility: MasterFilterMetricDetail;
+  ftd: MasterFilterMetricDetail;
+  distribution: MasterFilterMetricDetail;
+  newHighLow: MasterFilterMetricDetail;
+  sectorRotation: MasterFilterMetricDetail;
+  score: number;
+  p3Score: number;
+  regimeHistory?: { date: string; state: MarketState; score: number; reason: string }[];
+  meta: DataSourceMeta;
+  mainPrice?: number;
+  ma50?: number;
+  ma150?: number;
+  ma200?: number;
+  mainHistory?: { date: string; close: number }[];
+  movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[];
+  vixHistory?: { date: string; close: number }[];
+  sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[];
+  ftdReason?: string | null;
+  distributionDetails?: { date: string, close: number, volume: number, pctChange: number }[];
+  macroData?: Record<string, unknown>;
+  updatedAt: string;
 }
 
 export interface MasterFilterResponse {
-  state: MarketState; market: ContestMarket; metrics: MasterFilterMetrics; insightLog: string; isAiGenerated: boolean; aiProviderUsed?: AiInsightProvider; aiModelUsed?: string; aiFallbackChain?: AiFallbackAttempt[]; aiModelInsights?: AiModelInsight[]; aiErrorSummary?: string | null;
+  state: MarketState;
+  market: ContestMarket;
+  metrics: MasterFilterMetrics;
+  insightLog: string;
+  isAiGenerated: boolean;
+  aiProviderUsed?: AiInsightProvider;
+  aiModelUsed?: string;
+  aiFallbackChain?: AiFallbackAttempt[];
+  aiModelInsights?: AiModelInsight[];
+  aiErrorSummary?: string | null;
 }
 
 export type MacroRegime = 'RISK_ON' | 'RISK_OFF' | 'NEUTRAL';

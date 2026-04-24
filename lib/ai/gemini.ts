@@ -17,9 +17,11 @@ export interface MarketAnalysisInput {
   metrics: {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
-    liquidity: MasterFilterMetricDetail;
     volatility: MasterFilterMetricDetail;
-    leadership: MasterFilterMetricDetail;
+    distribution: MasterFilterMetricDetail;
+    ftd: MasterFilterMetricDetail;
+    newHighLow: MasterFilterMetricDetail;
+    sectorRotation: MasterFilterMetricDetail;
     totalScore: number;
   };
   macroData: Record<string, unknown>;
@@ -131,9 +133,11 @@ function buildPrompt(input: MarketAnalysisInput) {
     `Market State: ${input.marketState} (Score: ${input.metrics.totalScore})`,
     `Trend: ${input.metrics.trend.value} (${input.metrics.trend.status}) - ${input.metrics.trend.description}`,
     `Breadth: ${input.metrics.breadth.value} / threshold ${input.metrics.breadth.threshold}`,
-    `Liquidity: ${input.metrics.liquidity.value} distribution days / threshold ${input.metrics.liquidity.threshold}`,
+    `Distribution: ${input.metrics.distribution.value} days / threshold ${input.metrics.distribution.threshold}`,
     `Volatility: ${input.metrics.volatility.value} (${input.metrics.volatility.status})`,
-    `Leadership: ${input.metrics.leadership.value}`,
+    `FTD: ${input.metrics.ftd.value}`,
+    `NH/NL Proxy: ${input.metrics.newHighLow.value}`,
+    `Sector Leadership: ${input.metrics.sectorRotation.value}`,
     '',
     'Macro context:',
     JSON.stringify(input.macroData, null, 2),

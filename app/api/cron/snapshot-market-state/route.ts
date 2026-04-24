@@ -118,11 +118,7 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
       marketState: result.state,
       market,
       metrics: {
-        trend: result.metrics.trend,
-        breadth: result.metrics.breadth,
-        liquidity: result.metrics.liquidity, 
-        volatility: result.metrics.volatility,
-        leadership: result.p3Metrics.sectorRotation,
+        ...result.metrics,
         totalScore: result.p3Score,
       },
       macroData: {
@@ -140,8 +136,6 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
       metrics: {
         ...result,
         ...result.metrics,
-        ...result.p3Metrics,
-        leadership: result.p3Metrics.sectorRotation,
         updatedAt: new Date().toISOString(),
       } as unknown as MasterFilterMetrics,
       insightLog: aiRes.text,
