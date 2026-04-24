@@ -580,6 +580,10 @@ export interface AiModelInsight {
   model: string;
   status: 'success' | 'failed' | 'skipped';
   text?: string;
+  headline?: string;
+  bullets?: string[];
+  detail?: string;
+  cachedAt?: string;
   message?: string;
   selected: boolean;
   priority: number;
