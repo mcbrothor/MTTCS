@@ -34,17 +34,18 @@ interface TradingViewModalProps {
 
 function TradingViewModal({ ticker, exchange, onClose }: TradingViewModalProps) {
   const symbol = toTradingViewSymbol(ticker, exchange);
+  const isKrx = symbol.startsWith('KRX:');
   const externalUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`;
+  const naverUrl = `https://finance.naver.com/item/fchart.naver?code=${ticker}`;
 
   return (
-    // 배경 오버레이 — 클릭 시 모달 닫기
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
         className="relative flex h-[80vh] w-[90vw] max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-        onClick={(e) => e.stopPropagation()} // 내부 클릭 시 모달 유지
+        onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
         <div className="flex items-center justify-between border-b border-slate-700 bg-slate-900 px-4 py-3">
@@ -55,7 +56,17 @@ function TradingViewModal({ ticker, exchange, onClose }: TradingViewModalProps) 
             <span className="text-xs text-slate-500">주봉</span>
           </div>
           <div className="flex items-center gap-2">
-            {/* TradingView에서 전체 화면 열기 */}
+            {isKrx && (
+              <a
+                href={naverUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-emerald-400 transition-colors hover:bg-slate-800 hover:text-emerald-300"
+              >
+                <ExternalLink className="h-3 w-3" />
+                네이버 금융
+              </a>
+            )}
             <a
               href={externalUrl}
               target="_blank"
@@ -76,9 +87,35 @@ function TradingViewModal({ ticker, exchange, onClose }: TradingViewModalProps) 
           </div>
         </div>
 
-        {/* TradingView Advanced Chart */}
+        {/* 차트 영역 */}
         <div className="flex-1 bg-slate-950">
-          <TradingViewAdvancedChart symbol={symbol} />
+          {isKrx ? (
+            <KrxChartFallback ticker={ticker} naverUrl={naverUrl} externalUrl={externalUrl} />
+          ) : (
+            <TradingViewAdvancedChart symbol={symbol} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KrxChartFallback({ ticker, naverUrl, externalUrl }: { ticker: string; naverUrl: string; externalUrl: string }) {
+  return (
+    <div className="flex h-full flex-col">
+      {/* 네이버 금융 플래시 차트 iframe */}
+      <iframe
+        src={naverUrl}
+        className="flex-1 w-full border-0"
+        title={`${ticker} 차트`}
+        sandbox="allow-scripts allow-same-origin allow-forms"
+      />
+      {/* 임베드 제한 안내 */}
+      <div className="flex items-center justify-between border-t border-slate-800 bg-slate-900/80 px-4 py-2 text-xs text-slate-500">
+        <span>KRX 종목은 TradingView 임베드 위젯 미지원 — 네이버 금융 차트로 표시</span>
+        <div className="flex gap-3">
+          <a href={naverUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">네이버 금융 →</a>
+          <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:underline">TradingView →</a>
         </div>
       </div>
     </div>
