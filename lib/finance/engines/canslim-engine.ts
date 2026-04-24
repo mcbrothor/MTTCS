@@ -20,6 +20,10 @@ function minConfidence(
   return rank[next] < rank[current] ? next : current;
 }
 
+function average(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 export function evaluateN(stock: CanslimStockData): CanslimNStatus {
   const distFromHigh =
     (stock.price52WeekHigh - stock.currentPrice) / stock.price52WeekHigh;
@@ -101,29 +105,43 @@ export function evaluateCanslim(
         `시장 약세 구간에서는 RS ${CANSLIM_CRITERIA.PREFERRED_RS_RATING}+ 종목만 통과시킵니다.`
       );
     }
-    warnings.push('시장 50일선 하회 구간이라 RS 90+ 초강세주만 통과시켰습니다.');
+    warnings.push('시장 약세 구간이라 RS 90+ 초강세주만 통과시켰습니다.');
   }
 
   if (stock.currentQtrEpsGrowth !== null) {
-    if (stock.currentQtrEpsGrowth < CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH) {
+    if (stock.currentQtrEpsGrowth < -10) {
       addDetail(
         'C',
         '분기 EPS 성장률',
         'FAIL',
         `${stock.currentQtrEpsGrowth}%`,
-        `>= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`,
-        '최근 분기 EPS 성장률이 기준 미달입니다.'
+        '>= -10%',
+        '최근 분기 EPS 성장률이 크게 역성장했습니다.'
       );
-      return fail('C_EPS', '분기 EPS 부족', `현재 분기 EPS 성장률 ${stock.currentQtrEpsGrowth}%`);
+      return fail('C_EPS', '분기 EPS 급감', `현재 분기 EPS 성장률 ${stock.currentQtrEpsGrowth}%`);
     }
-    addDetail(
-      'C',
-      '분기 EPS 성장률',
-      'PASS',
-      `${stock.currentQtrEpsGrowth}%`,
-      `>= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`,
-      '분기 EPS 성장률이 기준을 충족합니다.'
-    );
+
+    if (stock.currentQtrEpsGrowth < CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH) {
+      confidence = minConfidence(confidence, 'LOW');
+      warnings.push(`분기 EPS 성장률 ${stock.currentQtrEpsGrowth}%로 정통 CAN SLIM 기준보다는 약합니다.`);
+      addDetail(
+        'C',
+        '분기 EPS 성장률',
+        'WARNING',
+        `${stock.currentQtrEpsGrowth}%`,
+        `권장 >= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`,
+        '역성장은 아니지만 공격적 성장주 기준에는 못 미칩니다.'
+      );
+    } else {
+      addDetail(
+        'C',
+        '분기 EPS 성장률',
+        'PASS',
+        `${stock.currentQtrEpsGrowth}%`,
+        `>= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`,
+        '분기 EPS 성장률이 기준을 충족합니다.'
+      );
+    }
   } else {
     addDetail('C', '분기 EPS 성장률', 'INFO', null, `>= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`, '데이터가 없어 판정을 보류했습니다.');
     warnings.push('분기 EPS 데이터가 부족합니다.');
@@ -144,7 +162,7 @@ export function evaluateCanslim(
 
     if (stock.currentQtrSalesGrowth < CANSLIM_CRITERIA.PREFERRED_CURRENT_SALES_GROWTH) {
       confidence = minConfidence(confidence, 'MEDIUM');
-      warnings.push(`분기 매출 성장률 ${stock.currentQtrSalesGrowth}%로 최소 기준은 통과했지만 강한 리더 구간은 아닙니다.`);
+      warnings.push(`분기 매출 성장률 ${stock.currentQtrSalesGrowth}%로 최소 기준은 통과했지만 아주 강한 구간은 아닙니다.`);
       addDetail(
         'C',
         '분기 매출 성장률',
@@ -242,28 +260,54 @@ export function evaluateCanslim(
 
   const validYears = stock.annualEpsGrowthEachYear.filter((value): value is number => value !== null);
   if (validYears.length >= 2) {
-    const allAbove = validYears.every((value) => value >= CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH);
-    if (!allAbove) {
+    const annualAverageGrowth = average(validYears);
+    const hasNegativeYear = validYears.some((value) => value < 0);
+
+    if (hasNegativeYear) {
       addDetail(
         'A',
         '연도별 EPS 성장',
         'FAIL',
         validYears.map((value) => `${value}%`).join(', '),
-        `각 연도 >= ${CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH}%`,
-        '연간 EPS 성장의 일관성이 부족합니다.'
+        '모든 연도 플러스 성장',
+        '최근 연도 중 역성장 구간이 포함되어 있습니다.'
       );
-      return fail('A_ANNUAL', '연간 EPS 부족', '연도별 EPS 성장률이 기준 미달인 해가 있습니다.');
+      return fail('A_ANNUAL', '연간 EPS 역성장', '연도별 EPS 성장률에 음수 구간이 있습니다.');
     }
-    addDetail(
-      'A',
-      '연도별 EPS 성장',
-      'PASS',
-      validYears.map((value) => `${value}%`).join(', '),
-      `각 연도 >= ${CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH}%`,
-      '연도별 EPS 성장률이 기준을 충족합니다.'
-    );
+
+    if (annualAverageGrowth >= CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH) {
+      addDetail(
+        'A',
+        '연평균 EPS 성장',
+        'PASS',
+        `${round(annualAverageGrowth)}%`,
+        `평균 >= ${CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH}%`,
+        '최근 연도들의 평균 EPS 성장률이 기준을 충족합니다.'
+      );
+    } else if (annualAverageGrowth >= 15) {
+      confidence = minConfidence(confidence, 'MEDIUM');
+      warnings.push(`연평균 EPS 성장률 ${round(annualAverageGrowth)}%로 우량 대형주 수준이지만 정통 CAN SLIM보다는 낮습니다.`);
+      addDetail(
+        'A',
+        '연평균 EPS 성장',
+        'WARNING',
+        `${round(annualAverageGrowth)}%`,
+        `권장 평균 >= ${CANSLIM_CRITERIA.MIN_ANNUAL_EPS_GROWTH}%`,
+        '연간 성장의 질은 양호하지만 초고성장 기준에는 못 미칩니다.'
+      );
+    } else {
+      addDetail(
+        'A',
+        '연평균 EPS 성장',
+        'FAIL',
+        `${round(annualAverageGrowth)}%`,
+        '평균 >= 15%',
+        '연평균 EPS 성장률이 너무 낮습니다.'
+      );
+      return fail('A_ANNUAL', '연간 EPS 부족', `연평균 EPS 성장률 ${round(annualAverageGrowth)}%`);
+    }
   } else {
-    addDetail('A', '연도별 EPS 성장', 'INFO', `${validYears.length}개 연도`, '최소 2개 연도', '연간 EPS 검증 데이터가 부족합니다.');
+    addDetail('A', '연평균 EPS 성장', 'INFO', `${validYears.length}개 연도`, '최소 2개 연도', '연간 EPS 검증 데이터가 부족합니다.');
     warnings.push('연간 EPS 성장 데이터가 부족합니다.');
   }
 
@@ -273,18 +317,30 @@ export function evaluateCanslim(
     : CANSLIM_CRITERIA.MAX_DIST_FROM_52W_HIGH;
 
   if (nStatus === 'INVALID') {
-    addDetail(
-      'N',
-      '52주 신고가 근접',
-      'FAIL',
-      `${round(((stock.price52WeekHigh - stock.currentPrice) / stock.price52WeekHigh) * 100)}% 하락`,
-      `<= ${allowedDistanceFromHigh * 100}% 하락`,
-      '52주 신고가에서 너무 멀리 떨어져 있습니다.'
-    );
-    return fail('N_TOO_FAR', '52주 고가 과이탈', '52주 신고가 대비 허용 하락폭을 초과했습니다.');
-  }
-
-  if (nStatus === 'TOO_LATE') {
+    const distanceText = `${round(((stock.price52WeekHigh - stock.currentPrice) / stock.price52WeekHigh) * 100)}% 하락`;
+    if (stock.detectedBasePattern) {
+      confidence = minConfidence(confidence, 'LOW');
+      warnings.push('52주 신고가에서는 멀어졌지만 유효 베이스가 있어 워치리스트 경고로 유지합니다.');
+      addDetail(
+        'N',
+        '52주 신고가 근접',
+        'WARNING',
+        distanceText,
+        `<= ${allowedDistanceFromHigh * 100}% 하락`,
+        '신고가에서는 멀지만 베이스 재정비 구간으로 해석합니다.'
+      );
+    } else {
+      addDetail(
+        'N',
+        '52주 신고가 근접',
+        'FAIL',
+        distanceText,
+        `<= ${allowedDistanceFromHigh * 100}% 하락`,
+        '52주 신고가에서 너무 멀리 떨어져 있습니다.'
+      );
+      return fail('N_TOO_FAR', '52주 고가 과이탈', '52주 신고가 대비 허용 하락폭을 초과했습니다.');
+    }
+  } else if (nStatus === 'TOO_LATE') {
     confidence = minConfidence(confidence, 'LOW');
     warnings.push('피벗 대비 과열 구간이라 추격 매수는 금지합니다.');
     addDetail(
