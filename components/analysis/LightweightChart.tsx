@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, IPriceLine } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, IPriceLine, CandlestickSeries, ISeriesApi } from 'lightweight-charts';
 
 interface LightweightChartProps {
   data: { time: string; open: number; high: number; low: number; close: number }[];
@@ -17,9 +17,9 @@ export default function LightweightChart({
   height = 400 
 }: LightweightChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
-  const pivotLineRef = useRef<any>(null);
-  const stopLineRef = useRef<any>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const pivotLineRef = useRef<IPriceLine | null>(null);
+  const stopLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -40,7 +40,7 @@ export default function LightweightChart({
       },
     });
 
-    const candlestickSeries = (chart as any).addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#f43f5e',
       borderVisible: false,
@@ -48,11 +48,11 @@ export default function LightweightChart({
       wickDownColor: '#f43f5e',
     });
 
-    (candlestickSeries as any).setData(data);
+    candlestickSeries.setData(data as any);
 
     // Pivot Line
     if (pivotPrice) {
-      pivotLineRef.current = (candlestickSeries as any).createPriceLine({
+      pivotLineRef.current = candlestickSeries.createPriceLine({
         price: pivotPrice,
         color: '#fbbf24',
         lineWidth: 2,
@@ -64,7 +64,7 @@ export default function LightweightChart({
 
     // Stop Loss Line
     if (stopLossPrice) {
-      stopLineRef.current = (candlestickSeries as any).createPriceLine({
+      stopLineRef.current = candlestickSeries.createPriceLine({
         price: stopLossPrice,
         color: '#f43f5e',
         lineWidth: 1,
