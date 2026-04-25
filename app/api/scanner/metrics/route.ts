@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics, macroIndexForUniverse, marketForUniverse } from '@/lib/finance/market/stock-metrics';
+import { supabaseServer } from '@/lib/supabase/server';
 import type { ScannerUniverse } from '@/types';
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
@@ -26,15 +27,28 @@ export async function GET(request: Request) {
 
   try {
     const market = marketForUniverse(universe);
-    const [metrics, macroTrend] = await Promise.all([
+    const [metrics, macroTrend, profilesResult] = await Promise.all([
       fetchLatestStockMetrics(tickers, market),
       fetchLatestMacroTrend(market, macroIndexForUniverse(universe)),
+      supabaseServer
+        .from('security_profiles')
+        .select('ticker, sector')
+        .in('ticker', tickers)
+        .then((res) => res.data || []),
     ]);
+
+    const sectorByTicker = new Map<string, string | null>(
+      profilesResult.map((p: { ticker: string; sector: string | null }) => [p.ticker, p.sector])
+    );
 
     return NextResponse.json({
       market,
       macroTrend,
-      metrics: tickers.map((ticker) => ({ ticker, metric: metrics.get(ticker) || null })),
+      metrics: tickers.map((ticker) => ({
+        ticker,
+        metric: metrics.get(ticker) || null,
+        sector: sectorByTicker.get(ticker) ?? null,
+      })),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Scanner metrics could not be loaded.';

@@ -1,50 +1,80 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
   Cell,
-  Legend
 } from 'recharts';
-import type { ScannerResult } from '@/types';
+
+/** ScannerResult 또는 CanslimScannerResult 공통 최소 타입 */
+interface ScannerResultLike {
+  status: string;
+  rsRating?: number | null;
+  benchmarkRelativeScore?: number | null;
+  exchange?: string;
+  /** ScannerResult: fundamentals.sector */
+  fundamentals?: { sector?: string | null } | null;
+  /** CanslimScannerResult: sector (직접 필드) */
+  sector?: string | null;
+}
 
 interface SectorRotationChartProps {
-  results: ScannerResult[];
+  results: ScannerResultLike[];
+}
+
+function getSector(r: ScannerResultLike): string | null {
+  return r.fundamentals?.sector || r.sector || null;
 }
 
 export default function SectorRotationChart({ results }: SectorRotationChartProps) {
   const data = useMemo(() => {
     const doneResults = results.filter(r => r.status === 'done');
-    const sectorMap: Record<string, { name: string; count: number; totalRs: number }> = {};
 
-    doneResults.forEach(r => {
-      const sector = r.fundamentals?.sector || 'Unknown';
-      if (!sectorMap[sector]) {
-        sectorMap[sector] = { name: sector, count: 0, totalRs: 0 };
+    // 섹터 데이터가 없는 경우 거래소(exchange)별로 그룹화
+    const hasSectorData = doneResults.some(r => getSector(r));
+    const groupKey = (r: ScannerResultLike): string => {
+      if (hasSectorData) {
+        return getSector(r) || 'Unknown';
       }
-      sectorMap[sector].count += 1;
-      sectorMap[sector].totalRs += r.rsRating || r.benchmarkRelativeScore || 0;
+      return r.exchange || 'Unknown';
+    };
+
+    const sectorMap: Record<string, { name: string; count: number; totalRs: number }> = {};
+    doneResults.forEach(r => {
+      const key = groupKey(r);
+      if (!sectorMap[key]) {
+        sectorMap[key] = { name: key, count: 0, totalRs: 0 };
+      }
+      sectorMap[key].count += 1;
+      sectorMap[key].totalRs += r.rsRating ?? r.benchmarkRelativeScore ?? 0;
     });
 
     return Object.values(sectorMap)
       .map(s => ({
         name: s.name,
         count: s.count,
-        avgRs: Math.round(s.totalRs / s.count),
+        avgRs: s.count > 0 ? Math.round(s.totalRs / s.count) : 0,
       }))
+      .filter(s => s.count > 0)
       .sort((a, b) => b.avgRs - a.avgRs);
   }, [results]);
+
+  const doneCount = results.filter(r => r.status === 'done').length;
+  const hasSectorData = results.filter(r => r.status === 'done').some(r => getSector(r));
+  const groupLabel = hasSectorData ? '섹터' : '거래소';
 
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/50">
-        <p className="text-sm text-slate-500 font-medium">분석된 섹터 데이터가 없습니다.</p>
+        <p className="text-sm text-slate-500 font-medium">
+          {doneCount === 0 ? '아직 분석 완료된 종목이 없습니다.' : '분석된 섹터 데이터가 없습니다.'}
+        </p>
       </div>
     );
   }
@@ -54,7 +84,7 @@ export default function SectorRotationChart({ results }: SectorRotationChartProp
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-black tracking-tight text-white uppercase">Sector Rotation</h3>
-          <p className="text-xs text-slate-500 font-medium">섹터별 평균 RS 점수 및 종목 수 분포</p>
+          <p className="text-xs text-slate-500 font-medium">{groupLabel}별 평균 RS 점수 및 종목 수 분포</p>
         </div>
         <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider">
           <div className="flex items-center gap-1.5">
@@ -125,7 +155,7 @@ export default function SectorRotationChart({ results }: SectorRotationChartProp
       <div className="mt-4 grid grid-cols-3 gap-3">
         {data.slice(0, 3).map((s, i) => (
           <div key={s.name} className="rounded-lg bg-slate-950/50 p-3 border border-slate-800/50">
-            <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 truncate">TOP {i+1} Sector</div>
+            <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 truncate">TOP {i+1} {groupLabel}</div>
             <div className="text-xs font-bold text-white truncate">{s.name}</div>
             <div className="mt-1 flex items-center justify-between">
               <span className="text-[10px] font-mono text-emerald-400">RS {s.avgRs}</span>

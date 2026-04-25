@@ -1,4 +1,4 @@
-import type { RecommendationTier, ScannerResult } from '../types/index.ts';
+import type { CanslimScannerResult, RecommendationTier, ScannerResult } from '../types/index.ts';
 
 export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
 
@@ -76,6 +76,48 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
       rsRank: ranked.rank,
       rsUniverseSize: universeSize,
       rsPercentile: ranked.percentile,
+    };
+  });
+}
+
+/**
+ * 오닐(CANSLIM) 스캐너 전용 RS 유니버스 랭킹 부여
+ * weightedMomentumScore가 없는 CanslimScannerResult에 대해
+ * benchmarkRelativeScore를 기준으로 RS 백분위를 계산합니다.
+ */
+export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]): CanslimScannerResult[] {
+  const analyzable = results
+    .filter((item) => item.status === 'done' && typeof (item.benchmarkRelativeScore ?? item.rsRating) === 'number')
+    .sort((a, b) => {
+      const scoreA = a.benchmarkRelativeScore ?? a.rsRating ?? -9999;
+      const scoreB = b.benchmarkRelativeScore ?? b.rsRating ?? -9999;
+      return scoreB - scoreA;
+    });
+
+  const universeSize = analyzable.length;
+  const rankByTicker = new Map<string, { rank: number; rating: number; percentile: number }>();
+
+  analyzable.forEach((item, index) => {
+    const rank = index + 1;
+    const rating = universeSize <= 1
+      ? 50
+      : Math.round(99 - ((rank - 1) / (universeSize - 1)) * 98);
+    const percentile = universeSize <= 1
+      ? 50
+      : Math.round((1 - ((rank - 1) / (universeSize - 1))) * 100);
+    rankByTicker.set(item.ticker, { rank, rating, percentile });
+  });
+
+  return results.map((item) => {
+    const ranked = rankByTicker.get(item.ticker);
+    if (!ranked) return item;
+    // DB에서 가져온 공식 RS가 있으면 우선 사용, 없으면 유니버스 내 랭킹 적용
+    const externalRsRating = item.rsSource === 'DB_BATCH' ? (item.rsRating ?? null) : null;
+    const internalRsRating = ranked.rating;
+    return {
+      ...item,
+      rsRating: externalRsRating ?? internalRsRating,
+      rsSource: externalRsRating !== null ? ('DB_BATCH' as const) : ('UNIVERSE' as const),
     };
   });
 }

@@ -28,7 +28,7 @@ export interface StoredScannerSnapshot {
 export interface ScannerMetricsResponse {
   market: 'KR' | 'US';
   macroTrend: MacroTrend | null;
-  metrics: { ticker: string; metric: StockMetric | null }[];
+  metrics: { ticker: string; metric: StockMetric | null; sector?: string | null }[];
 }
 
 export const UNIVERSES: Record<ScannerUniverse, { label: string; description: string }> = {

@@ -40,6 +40,15 @@ export async function writeScannerSnapshot(universeMeta: ScannerUniverseResponse
   await set(scannerStorageKey(universeMeta.universe, SCANNER_STORAGE_PREFIX), snapshot);
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
   window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, universeMeta.universe);
+  // 콘테스트 페이지는 localStorage에서 스냅샷을 읽으므로 동기화
+  try {
+    window.localStorage.setItem(
+      `${SCANNER_STORAGE_PREFIX}${universeMeta.universe}`,
+      JSON.stringify(snapshot)
+    );
+  } catch {
+    // localStorage 용량 초과 시 무시
+  }
 }
 
 export async function getInitialRestoredUniverse(): Promise<ScannerUniverse> {
@@ -62,12 +71,22 @@ export async function getInitialRestoredUniverse(): Promise<ScannerUniverse> {
   return lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
 }
 
-function mergeStandardMetrics(results: ScannerResult[], rows: { ticker: string; metric: StockMetric | null }[], macroTrend: MacroTrend | null) {
-  const byTicker = new Map(rows.map((row) => [row.ticker, row.metric]));
+function mergeStandardMetrics(
+  results: ScannerResult[],
+  rows: { ticker: string; metric: StockMetric | null; sector?: string | null }[],
+  macroTrend: MacroTrend | null
+) {
+  const byTicker = new Map(rows.map((row) => [row.ticker, row]));
   return results.map((item) => {
-    const metric = byTicker.get(item.ticker) || null;
+    const row = byTicker.get(item.ticker);
+    const metric = row?.metric || null;
+    const sector = row?.sector ?? null;
+    const mergedFundamentals = sector
+      ? { ...(item.fundamentals ?? { source: 'Scanner metrics', epsGrowthPct: null, revenueGrowthPct: null, roePct: null, debtToEquityPct: null }), sector }
+      : item.fundamentals;
     return withRecommendation({
       ...item,
+      fundamentals: mergedFundamentals,
       rsRating: metric?.rs_rating ?? item.rsRating,
       externalRsRating: metric?.rs_rating ?? item.externalRsRating,
       rsSource: metric?.rs_rating !== null && metric?.rs_rating !== undefined ? 'DB_BATCH' : item.rsSource,

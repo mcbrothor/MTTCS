@@ -35,13 +35,12 @@ import {
   getPillarPassCount,
   getPillarTooltip,
 } from '@/lib/finance/engines/canslim-pillars';
-import { applyUniverseRsRankings } from '@/lib/scanner-recommendation';
+import { applyCanslimUniverseRsRankings } from '@/lib/scanner-recommendation';
 import { dualTierLabel } from '@/lib/finance/engines/canslim-engine';
 import type {
   CanslimMacroMarketData,
   CanslimScannerResult,
   DualScreenerTier,
-  ScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
 } from '@/types';
@@ -107,9 +106,90 @@ function readSnapshot(universe: ScannerUniverse): StoredSnapshot | null {
   }
 }
 
+function dualTierToRecommendationTier(tier: DualScreenerTier): 'Recommended' | 'Partial' | 'Low Priority' | 'Error' {
+  if (tier === 'TIER_1') return 'Recommended';
+  if (tier === 'WATCHLIST' || tier === 'SHORT_TERM') return 'Partial';
+  return 'Low Priority';
+}
+
 function writeSnapshot(snapshot: StoredSnapshot) {
   window.localStorage.setItem(storageKey(snapshot.universe), JSON.stringify(snapshot));
   window.localStorage.setItem('mtn:scanner:latest-scan-universe:v1', snapshot.universe);
+
+  // 콘테스트 페이지가 읽는 mtn:scanner-snapshot:v3: 형식으로도 저장
+  try {
+    const compatResults = snapshot.results.map((r, index) => ({
+      // ScannerConstituent
+      rank: index + 1,
+      ticker: r.ticker,
+      exchange: r.exchange,
+      name: r.name,
+      marketCap: r.marketCap,
+      currency: r.currency,
+      currentPrice: r.currentPrice,
+      priceAsOf: r.analyzedAt,
+      priceSource: 'O\'Neil Scanner',
+      // ScannerResult 핵심 필드
+      status: r.status,
+      recommendationTier: dualTierToRecommendationTier(r.dualTier),
+      recommendationReason: `CANSLIM ${r.dualTier} · Confidence: ${r.canslimResult.confidence}`,
+      sepaMissingCount: null,
+      exceptionSignals: [] as string[],
+      sepaStatus: r.canslimResult.pass ? 'pass' : 'fail',
+      sepaPassed: null,
+      sepaFailed: null,
+      sepaCriteria: null,
+      vcpScore: r.vcpScore,
+      vcpGrade: r.vcpGrade,
+      pivotPrice: r.basePattern?.pivotPoint ?? null,
+      recommendedEntry: r.basePattern?.pivotPoint ?? null,
+      distanceToPivotPct: r.currentPrice && r.basePattern?.pivotPoint
+        ? Number((((r.currentPrice - r.basePattern.pivotPoint) / r.basePattern.pivotPoint) * 100).toFixed(2))
+        : null,
+      breakoutVolumeStatus: null,
+      baseType: null,
+      momentumBranch: null,
+      rsRating: r.rsRating,
+      rsSource: r.rsSource,
+      benchmarkRelativeScore: r.benchmarkRelativeScore,
+      mansfieldRsFlag: r.mansfieldRsFlag,
+      mansfieldRsScore: r.mansfieldRsScore,
+      rsDataQuality: 'OK' as const,
+      analyzedAt: r.analyzedAt,
+      errorMessage: r.errorMessage,
+      dataWarnings: r.dataWarnings,
+      fundamentals: r.sector
+        ? { sector: r.sector, source: 'O\'Neil Scanner', epsGrowthPct: null, revenueGrowthPct: null, roePct: null, debtToEquityPct: null }
+        : null,
+    }));
+
+    const compatSnapshot = {
+      savedAt: snapshot.savedAt,
+      universeMeta: {
+        universe: snapshot.universe,
+        label: UNIVERSES[snapshot.universe]?.label || snapshot.universe,
+        asOf: snapshot.savedAt,
+        source: 'O\'Neil Scanner',
+        delayNote: null,
+        items: compatResults.map(r => ({
+          rank: r.rank,
+          ticker: r.ticker,
+          exchange: r.exchange,
+          name: r.name,
+          marketCap: r.marketCap,
+          currency: r.currency,
+          currentPrice: r.currentPrice,
+          priceAsOf: r.priceAsOf,
+          priceSource: r.priceSource,
+        })),
+        warnings: [],
+      },
+      results: compatResults,
+    };
+    window.localStorage.setItem(`mtn:scanner-snapshot:v3:${snapshot.universe}`, JSON.stringify(compatSnapshot));
+  } catch {
+    // localStorage 용량 초과 시 무시
+  }
 }
 
 function tierSortValue(tier: DualScreenerTier) {
@@ -353,10 +433,32 @@ export default function CanslimScannerPage() {
 
       await Promise.all(workers);
 
-      // 이슈 1 해결: 스캔 완료 후 유니버스 전체에 대해 RS 랭킹 산정 적용
+      // RS 유니버스 랭킹 산정 (CanslimScannerResult 전용 함수 사용)
       if (!abort.signal.aborted) {
-        current = applyUniverseRsRankings(current as unknown as ScannerResult[]) as unknown as CanslimScannerResult[];
+        current = applyCanslimUniverseRsRankings(current);
         setResults([...current]);
+
+        // 섹터 데이터 보강 (security_profiles → sector 필드)
+        try {
+          const tickers = current.map(r => r.ticker).filter(Boolean).join(',');
+          const sectorQuery = new URLSearchParams({ universe, tickers });
+          const sectorResp = await fetch(`/api/scanner/metrics?${sectorQuery.toString()}`);
+          if (sectorResp.ok) {
+            const sectorPayload = await sectorResp.json() as {
+              metrics: { ticker: string; sector?: string | null }[];
+            };
+            const sectorByTicker = new Map(
+              sectorPayload.metrics.map(m => [m.ticker, m.sector ?? null])
+            );
+            current = current.map(r => ({
+              ...r,
+              sector: sectorByTicker.get(r.ticker) ?? r.sector ?? null,
+            }));
+            setResults([...current]);
+          }
+        } catch {
+          // 섹터 보강 실패 시 무시 — RS 랭킹만으로 진행
+        }
 
         const now = new Date().toISOString();
         setLastScannedAt(now);
@@ -837,7 +939,7 @@ export default function CanslimScannerPage() {
             {/* 섹터 로테이션 차트 */}
             {results.length > 0 && (
               <div className="mt-5">
-                <SectorRotationChart results={results as any} />
+                <SectorRotationChart results={results} />
               </div>
             )}
           </div>

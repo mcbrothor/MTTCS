@@ -838,6 +838,7 @@ export interface CanslimScannerResult {
   benchmarkRelativeScore?: number | null;
   mansfieldRsFlag: boolean | null;
   mansfieldRsScore?: number | null;
+  sector?: string | null;
   dataSources?: Partial<Record<CanslimPillarKey, string[]>>;
   analysisCoverage?: CanslimAnalysisCoverage;
   status: ScannerStatus;
