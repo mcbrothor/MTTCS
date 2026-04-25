@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .from('beauty_contest_sessions')
       .update(update)
       .eq('id', id)
-      .select('*, contest_candidates(*, contest_reviews(*))')
+      .select('*, candidates:contest_candidates(*, reviews:contest_reviews(*))')
       .single();
 
     if (error) throw error;

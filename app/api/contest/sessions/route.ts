@@ -15,7 +15,7 @@ export async function GET() {
   try {
     const { data, error } = await supabaseServer
       .from('beauty_contest_sessions')
-      .select('*, contest_candidates(*, contest_reviews(*))')
+      .select('*, candidates:contest_candidates(*, reviews:contest_reviews(*))')
       .order('selected_at', { ascending: false })
       .limit(20);
 
@@ -129,7 +129,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseServer
       .from('beauty_contest_sessions')
-      .select('*, contest_candidates(*, contest_reviews(*))')
+      .select('*, candidates:contest_candidates(*, reviews:contest_reviews(*))')
       .eq('id', session.id)
       .single();
     if (error) throw error;
