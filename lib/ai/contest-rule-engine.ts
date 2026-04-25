@@ -16,6 +16,10 @@ interface ScoreBreakdown {
   total: number;     // 0-100
 }
 
+function hasNum(v: unknown): boolean {
+  return typeof v === 'number' && isFinite(v) && v > 0;
+}
+
 function scoreCandidate(snap: Record<string, unknown>): ScoreBreakdown {
   const n = (v: unknown, fallback = 0) => (typeof v === 'number' && isFinite(v) ? v : fallback);
 
@@ -23,7 +27,13 @@ function scoreCandidate(snap: Record<string, unknown>): ScoreBreakdown {
   const vcpPts = Math.min(25, (n(snap.vcp_score) / 100) * 25);
 
   // RS leadership (25pts)
-  const rsBase = Math.min(20, (n(snap.rs_rating) / 99) * 20);
+  // fallback chain: rs_rating → internal_rs_rating → external_rs_rating
+  // 데이터 없음(null)이면 중립 10점 부여 (페널티 없음)
+  const rsVal = hasNum(snap.rs_rating) ? n(snap.rs_rating)
+    : hasNum(snap.internal_rs_rating) ? n(snap.internal_rs_rating)
+    : hasNum(snap.external_rs_rating) ? n(snap.external_rs_rating)
+    : null;
+  const rsBase = rsVal !== null ? Math.min(20, (rsVal / 99) * 20) : 10;
   const rsNewHigh = snap.rs_line_new_high ? 3 : snap.rs_line_near_high ? 1 : 0;
   const rsPercentileBonus = n(snap.rs_percentile) >= 90 ? 2 : 0;
   const rsPts = Math.min(25, rsBase + rsNewHigh + rsPercentileBonus);
@@ -35,8 +45,11 @@ function scoreCandidate(snap: Record<string, unknown>): ScoreBreakdown {
   const sepaPts = sepaTotal > 0 ? Math.min(20, (sepaPass / sepaTotal) * 20) : 10;
 
   // Momentum (15pts)
-  const ibd = n(snap.ibd_proxy_score, n(snap.weighted_momentum_score));
-  const ibdPts = Math.min(10, (ibd / 100) * 10);
+  // ibd/weighted 모두 없으면 중립 5점 부여
+  const ibdRaw = hasNum(snap.ibd_proxy_score) ? n(snap.ibd_proxy_score)
+    : hasNum(snap.weighted_momentum_score) ? n(snap.weighted_momentum_score)
+    : null;
+  const ibdPts = ibdRaw !== null ? Math.min(10, (ibdRaw / 100) * 10) : 5;
   const mansBonus = snap.mansfield_rs_flag ? 5 : n(snap.mansfield_rs_score) > 1.0 ? 3 : 0;
   const momentumPts = Math.min(15, ibdPts + mansBonus);
 
@@ -74,9 +87,16 @@ function deriveConfidence(score: number): number {
   return Math.min(0.98, Math.max(0.30, Math.round((0.30 + (score / 100) * 0.68) * 100) / 100));
 }
 
+function resolveRs(snap: Record<string, unknown>): number | null {
+  const n = (v: unknown) => (typeof v === 'number' && isFinite(v) && v > 0 ? v : null);
+  return n(snap.rs_rating) ?? n(snap.internal_rs_rating) ?? n(snap.external_rs_rating) ?? null;
+}
+
 function buildKeyStrength(snap: Record<string, unknown>, scores: ScoreBreakdown): string {
   const n = (v: unknown, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
-  const rs = n(snap.rs_rating);
+  const rsResolved = resolveRs(snap);
+  const rs = rsResolved ?? 0;
+  const hasRs = rsResolved !== null;
   const vcp = n(snap.vcp_score);
   const sepaPass = n(snap.sepa_passed);
   const sepaFail = n(snap.sepa_failed);
@@ -86,20 +106,22 @@ function buildKeyStrength(snap: Record<string, unknown>, scores: ScoreBreakdown)
   const htf = snap.high_tight_flag as Record<string, unknown> | null | undefined;
 
   if (htf?.detected) return `High Tight Flag 패턴 감지 — 폭발적 상승 구조`;
-  if (snap.rs_line_new_high && rs >= 85) return `RS 라인 신고가 돌파 (RS ${rs}), 유니버스 상대강도 최상위권`;
+  if (snap.rs_line_new_high && hasRs && rs >= 85) return `RS 라인 신고가 돌파 (RS ${rs}), 유니버스 상대강도 최상위권`;
   if (vcp >= 75 && pivotDist <= 5) return `VCP ${vcp}점 고품질 수축 + 피벗 ${pivotDist.toFixed(1)}% 이격, 진입 적기`;
-  if (rs >= 90) return `RS 등급 ${rs} — 유니버스 내 최상위 상대강도`;
+  if (hasRs && rs >= 90) return `RS 등급 ${rs} — 유니버스 내 최상위 상대강도`;
   if (sepaRate >= 0.8 && sepaTotal >= 5) return `SEPA ${sepaPass}/${sepaTotal} 충족, 기술적 품질 최상위`;
-  if (snap.mansfield_rs_flag && rs >= 80) return `Mansfield RS 양성 + RS ${rs}, 모멘텀 연속성 확인`;
+  if (snap.mansfield_rs_flag && hasRs && rs >= 80) return `Mansfield RS 양성 + RS ${rs}, 모멘텀 연속성 확인`;
   if (vcp >= 65) return `VCP ${vcp}점 수축 구조 형성, 변동성 압축 진행 중`;
-  if (rs >= 80) return `RS 등급 ${rs}, 상대강도 상위권 유지`;
+  if (hasRs && rs >= 80) return `RS 등급 ${rs}, 상대강도 상위권 유지`;
   if (pivotDist <= 5) return `피벗 ${pivotDist.toFixed(1)}% 이격, 매수 진입 가능 구간`;
   return `기술적 종합 점수 ${scores.total.toFixed(0)}점, 후보군 내 상대적 우위`;
 }
 
 function buildKeyRisk(snap: Record<string, unknown>, scores: ScoreBreakdown): string {
   const n = (v: unknown, d = 0) => (typeof v === 'number' && isFinite(v) ? v : d);
-  const rs = n(snap.rs_rating);
+  const rsResolved = resolveRs(snap);
+  const rs = rsResolved ?? 0;
+  const hasRs = rsResolved !== null;
   const pivotDist = Math.abs(n(snap.distance_to_pivot_pct, 999));
   const sepaPass = n(snap.sepa_passed);
   const sepaFail = n(snap.sepa_failed);
@@ -108,7 +130,8 @@ function buildKeyRisk(snap: Record<string, unknown>, scores: ScoreBreakdown): st
 
   if (pivotDist > 15) return `피벗 이격 ${pivotDist.toFixed(0)}% 초과, 추격 진입 시 손절 폭 과대`;
   if (sepaRate < 0.5 && sepaTotal >= 5) return `SEPA ${sepaPass}/${sepaTotal} 충족에 그침, 기술적 완성도 미흡`;
-  if (rs < 70) return `RS 등급 ${rs} — 유니버스 대비 상대강도 부진`;
+  if (hasRs && rs < 70) return `RS 등급 ${rs} — 유니버스 대비 상대강도 부진`;
+  if (!hasRs) return `RS 데이터 미확보 — 유니버스 상대강도 확인 필요`;
   if (n(snap.volume_dry_up_score) < 30 && n(snap.vcp_score) > 50) return `거래량 수축 부족, VCP 완성도 미달`;
   if (pivotDist > 8) return `피벗 이격 ${pivotDist.toFixed(1)}%, 최적 진입 구간 초과 가능성`;
   if (rs < 80) return `RS ${rs}, 상대강도 중위권 — 유니버스 내 리더십 미확인`;
