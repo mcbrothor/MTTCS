@@ -321,10 +321,13 @@ function coerceRankingItem(item: unknown, fallbackSessionId: string | null): Par
     ? fallbackSessionId
     : String(row.session_id);
   const rank = Number(row.rank ?? row.llm_rank);
-  const overall = normalizeOverall(row.overall);
-  const recommendation = normalizeRecommendation(row.recommendation) || inferRecommendation(overall);
+  const compositeScore = Number(row.composite_score || row.score_composite || 0);
+  const overall = normalizeOverall(row.overall) || (compositeScore >= 70 ? 'POSITIVE' : compositeScore >= 40 ? 'NEUTRAL' : 'NEGATIVE');
+  const recommendation = normalizeRecommendation(row.recommendation) || ((row.recommendation as any)?.action ? normalizeRecommendation((row.recommendation as any).action) : null) || inferRecommendation(overall);
+  
   const keyStrength = stringOrNull(row.key_strength, 1000)
     || stringOrNull(row.investment_thesis, 1000)
+    || (Array.isArray(row.rationale) ? row.rationale[0] : stringOrNull(row.rationale, 1000))
     || stringOrNull(row.comment, 1000);
   const keyRisk = stringOrNull(row.key_risk, 1000)
     || (Array.isArray(row.risks) ? stringOrNull(row.risks[0], 1000) : stringOrNull(row.risks, 1000));
@@ -381,7 +384,9 @@ export function normalizeContestLlmResponse(
     ? parsed
     : Array.isArray(root?.rankings)
       ? (root?.rankings as unknown[])
-      : null;
+      : Array.isArray(root?.universe)
+        ? (root?.universe as unknown[])
+        : null;
 
   if (!rankingsSource) {
     throw new Error('LLM response must include a rankings array.');
@@ -448,6 +453,7 @@ export function normalizeContestLlmResponse(
       ? responseSchemaVersion
       : CONTEST_RESPONSE_SCHEMA_VERSION,
     session_id: resolvedSessionId,
+    executive_summary: stringOrNull(root?.executive_summary, 4000) || '',
     rankings: rankings
       .map((row) => ({
         ...row,

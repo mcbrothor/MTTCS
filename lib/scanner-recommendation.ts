@@ -65,17 +65,50 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
   return results.map((item) => {
     const ranked = rankByTicker.get(item.ticker);
     if (!ranked) return item;
-    const externalRsRating = item.externalRsRating ?? (item.rsSource === 'BENCHMARK_PROXY' ? item.rsRating ?? null : null);
+    const externalRsRating = item.externalRsRating ?? (item.rsSource === 'DB_BATCH' ? item.rsRating ?? null : null);
     const internalRsRating = ranked.rating;
+    const rsRating = externalRsRating ?? internalRsRating ?? item.benchmarkRelativeScore ?? null;
+    const rsSource = externalRsRating !== null ? (item.rsSource ?? 'DB_BATCH') : 'UNIVERSE';
+
+    // sepaEvidence 내부의 RS 기준 동기화
+    let sepaEvidence = item.sepaEvidence;
+    if (sepaEvidence) {
+      const rsCriterion = sepaEvidence.criteria.find(c => c.id === 'rs_rating');
+      if (rsCriterion) {
+        rsCriterion.status = rsRating !== null && rsRating >= 70 ? 'pass' : (rsRating !== null ? 'fail' : 'info');
+        rsCriterion.actual = rsRating !== null ? `${rsRating}점 (${rsSource === 'DB_BATCH' ? '공식' : '실시간 유니버스'} RS)` : '데이터 없음';
+        rsCriterion.description = rsSource === 'DB_BATCH' 
+          ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
+          : '현재 스캔된 유니버스 내 실시간 랭킹 기준 RS입니다.';
+      }
+      
+      // summary 업데이트 (info -> pass/fail 이동)
+      const passed = sepaEvidence.criteria.filter(c => c.status === 'pass').length;
+      const failed = sepaEvidence.criteria.filter(c => c.status === 'fail').length;
+      const info = sepaEvidence.criteria.filter(c => c.status === 'info').length;
+      sepaEvidence.summary = { ...sepaEvidence.summary, passed, failed, info };
+      
+      // metrics 업데이트
+      sepaEvidence.metrics = {
+        ...sepaEvidence.metrics,
+        rsRating,
+        rsSource,
+        rsRank: ranked.rank,
+        rsUniverseSize: universeSize,
+        rsPercentile: ranked.percentile
+      };
+    }
+
     return {
       ...item,
       internalRsRating,
       externalRsRating,
-      rsRating: externalRsRating ?? internalRsRating ?? item.benchmarkRelativeScore ?? null,
-      rsSource: externalRsRating !== null ? (item.rsSource ?? 'BENCHMARK_PROXY') : 'UNIVERSE',
+      rsRating,
+      rsSource,
       rsRank: ranked.rank,
       rsUniverseSize: universeSize,
       rsPercentile: ranked.percentile,
+      sepaEvidence
     };
   });
 }
@@ -114,10 +147,16 @@ export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]):
     // DB에서 가져온 공식 RS가 있으면 우선 사용, 없으면 유니버스 내 랭킹 적용
     const externalRsRating = item.rsSource === 'DB_BATCH' ? (item.rsRating ?? null) : null;
     const internalRsRating = ranked.rating;
+    const rsRating = externalRsRating ?? internalRsRating;
+    const rsSource = externalRsRating !== null ? ('DB_BATCH' as const) : ('UNIVERSE' as const);
+
     return {
       ...item,
-      rsRating: externalRsRating ?? internalRsRating,
-      rsSource: externalRsRating !== null ? ('DB_BATCH' as const) : ('UNIVERSE' as const),
+      rsRating,
+      rsSource,
+      rsRank: ranked.rank,
+      rsUniverseSize: universeSize,
+      rsPercentile: ranked.percentile
     };
   });
 }

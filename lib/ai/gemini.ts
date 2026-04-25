@@ -174,7 +174,7 @@ function parseStructuredInsight(raw: string): { structured: StructuredInsight; t
   return { structured: {}, text: raw };
 }
 
-async function callGeminiModel(modelId: string, prompt: string, retries = 2): Promise<string> {
+export async function callGeminiModel(modelId: string, prompt: string, retries = 2): Promise<string> {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: modelId });
 
@@ -195,7 +195,7 @@ async function callGeminiModel(modelId: string, prompt: string, retries = 2): Pr
   throw new Error(`Gemini model ${modelId} failed after ${retries} retries.`);
 }
 
-async function callGroqModel(modelId: string, prompt: string): Promise<string> {
+export async function callGroqModel(modelId: string, prompt: string): Promise<string> {
   const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
     method: 'POST',
     headers: {
@@ -224,7 +224,7 @@ async function callGroqModel(modelId: string, prompt: string): Promise<string> {
   return text;
 }
 
-async function callCerebrasModel(modelId: string, prompt: string): Promise<string> {
+export async function callCerebrasModel(modelId: string, prompt: string): Promise<string> {
   const response = await fetch(CEREBRAS_CHAT_COMPLETIONS_URL, {
     method: 'POST',
     headers: {

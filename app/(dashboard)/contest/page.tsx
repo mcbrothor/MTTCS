@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, Clipboard, RefreshCw, Save, Trophy } from 'lucide-react';
+import { BarChart3, CheckCircle2, ChevronDown, ChevronUp, Clipboard, Crown, Medal, RefreshCw, Save, Star, Trophy, Zap } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
@@ -53,6 +53,7 @@ interface ReviewDraft {
 
 type ReviewDrafts = Record<string, ReviewDraft>;
 type Horizon = 'W1' | 'M1';
+type ContestStep = 'selection' | 'analyzing' | 'result';
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
   if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
@@ -303,7 +304,6 @@ export default function ContestPage() {
   const [transferInfo, setTransferInfo] = useState<TransferSelection | null>(null);
   const [sessions, setSessions] = useState<BeautyContestSession[]>([]);
   const [activeSession, setActiveSession] = useState<BeautyContestSession | null>(null);
-  const [llmJson, setLlmJson] = useState('');
   const [reviewDrafts, setReviewDrafts] = useState<ReviewDrafts>({});
   const [meta, setMeta] = useState<DataSourceMeta | null>(null);
   const [busy, setBusy] = useState(false);
@@ -312,6 +312,7 @@ export default function ContestPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [llmSaveMessage, setLlmSaveMessage] = useState<string | null>(null);
   const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
+  const [step, setStep] = useState<ContestStep>('selection');
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
@@ -381,7 +382,6 @@ export default function ContestPage() {
   const activeCandidates = orderedCandidates(activeSession);
   const w1Summary = performanceSummary(activeCandidates, 'W1');
   const m1Summary = performanceSummary(activeCandidates, 'M1');
-  const pastedResultSessionId = useMemo(() => extractLlmSessionId(llmJson), [llmJson]);
   const finalPicks = useMemo(() => activeCandidates
     .filter((candidate) => candidate.actual_invested)
     .sort((a, b) => (a.final_pick_rank || 99) - (b.final_pick_rank || 99) || a.user_rank - b.user_rank), [activeCandidates]);
@@ -405,8 +405,8 @@ export default function ContestPage() {
     });
   };
 
-  const createSession = async () => {
-    setBusy(true);
+  const createSession = async (silent = false) => {
+    if (!silent) setBusy(true);
     setError(null);
     setNotice(null);
     try {
@@ -424,55 +424,74 @@ export default function ContestPage() {
       });
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
-      await navigator.clipboard.writeText(result.data.llm_prompt);
-      setNotice('콘테스트 세션을 저장했고 LLM 프롬프트를 클립보드에 복사했습니다.');
+      if (!silent) {
+        await navigator.clipboard.writeText(result.data.llm_prompt);
+        setNotice('콘테스트 세션을 저장했고 LLM 프롬프트를 클립보드에 복사했습니다.');
+      }
       await loadSessions(result.data.id);
+      return result.data;
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '콘테스트 세션 저장에 실패했습니다.');
+      const msg = err instanceof Error ? err.message : '콘테스트 세션 저장에 실패했습니다.';
+      setError(msg);
+      throw new Error(msg);
     } finally {
-      setBusy(false);
+      if (!silent) setBusy(false);
     }
   };
 
-  const saveLlmResult = async () => {
-    const pastedSessionId = pastedResultSessionId;
-    const targetSessionId = pastedSessionId || activeSession?.id;
-    if (!targetSessionId) {
-      setError('LLM 결과를 저장할 콘테스트 세션을 찾지 못했습니다. 결과 JSON에 session_id가 포함되어 있는지 확인해 주세요.');
-      setLlmSaveMessage('저장 실패: session_id 또는 활성 세션이 없습니다.');
+  const runAiAnalysis = async (sessionToAnalyze?: BeautyContestSession) => {
+    const targetSession = sessionToAnalyze || activeSession;
+    if (!targetSession) {
+      setError('먼저 세션을 저장한 뒤 분석을 실행해 주세요.');
       return;
     }
+    
     setBusy(true);
     setError(null);
     setNotice(null);
-    setLlmSaveMessage('LLM 결과 저장 중...');
+    setLlmSaveMessage('인앱 AI 분석 엔진 가동 중 (Gemini 1.5 Pro)...');
+
     try {
-      const response = await fetch(`/api/contest/sessions/${targetSessionId}/llm-result`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ llm_raw_response: llmJson, llm_provider: 'external' }),
+      const response = await fetch(`/api/contest/sessions/${targetSession.id}/analyze`, {
+        method: 'POST'
       });
-      const result = await parseResponse<BeautyContestSession>(response);
-      setActiveSession(result.data);
-      setLlmJson('');
-      const targetNote = pastedSessionId && activeSession?.id !== pastedSessionId
-        ? `붙여넣은 session_id(${pastedSessionId}) 기준으로 저장했습니다.`
-        : '현재 세션에 저장했습니다.';
-      setNotice(`LLM 분석 결과를 저장했습니다. ${targetNote}`);
-      setLlmSaveMessage(`저장 완료: ${result.data.candidates?.length || 0}개 후보의 LLM 순위와 분석을 반영했습니다.`);
-      await loadSessions(result.data.id);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'LLM 결과 저장에 실패했습니다.';
-      setError(message);
-      setLlmSaveMessage(`저장 실패: ${message}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setNotice('인앱 AI 분석이 완료되었습니다. 결과가 자동으로 반영되었습니다.');
+        setLlmSaveMessage(`분석 완료: ${result.data.candidates_updated}개 종목의 헤지펀드 등급 판정 완료.`);
+        await loadSessions(targetSession.id);
+        return true;
+      } else {
+        throw new Error(result.error || 'AI 분석 중 오류가 발생했습니다.');
+      }
+    } catch (err: any) {
+      setError(err.message);
+      setLlmSaveMessage(`분석 실패: ${err.message}`);
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const copyPrompt = async () => {
-    if (!activeSession) return;
-    await navigator.clipboard.writeText(activeSession.llm_prompt);
+  const handleStartAnalysis = async () => {
+    setBusy(true);
+    setStep('analyzing');
+    try {
+      const newSession = await createSession(true);
+      const success = await runAiAnalysis(newSession);
+      if (success) {
+        setStep('result');
+      } else {
+        setStep('selection');
+      }
+    } catch (err) {
+      setStep('selection');
+    } finally {
+      setBusy(false);
+    }
+  };
+
     setNotice('프롬프트를 클립보드에 복사했습니다.');
   };
 
@@ -552,6 +571,38 @@ export default function ContestPage() {
     }
   };
 
+  const runAiAnalysis = async () => {
+    if (!activeSession) {
+      setError('먼저 세션을 저장한 뒤 분석을 실행해 주세요.');
+      return;
+    }
+    
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    setLlmSaveMessage('인앱 AI 분석 엔진 가동 중 (Gemini 1.5 Pro)...');
+
+    try {
+      const response = await fetch(`/api/contest/sessions/${activeSession.id}/analyze`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        setNotice('인앱 AI 분석이 완료되었습니다. 결과가 자동으로 반영되었습니다.');
+        setLlmSaveMessage(`분석 완료: ${result.data.candidates_updated}개 종목의 헤지펀드 등급 판정 완료.`);
+        await loadSessions(activeSession.id);
+      } else {
+        throw new Error(result.error || 'AI 분석 중 오류가 발생했습니다.');
+      }
+    } catch (err: any) {
+      setError(err.message);
+      setLlmSaveMessage(`분석 실패: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const summaryCard = (horizon: Horizon, summary: ReturnType<typeof performanceSummary>) => {
     const label = horizon === 'W1' ? '1주' : '1개월';
     const tone = summary.status === 'PASS'
@@ -578,34 +629,45 @@ export default function ContestPage() {
     );
   };
 
-  return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-12">
-
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Contest</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">스캐너 후보 비교와 성과 복기</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-            Recommended와 Partial 후보를 최대 10개까지 골라 외부 LLM에 분석시키고, 결과와 1주/1개월 상대 성과를 DB에 축적합니다.
-          </p>
-        </div>
+  const renderHeader = () => (
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">MTN Beauty Contest</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
+          {step === 'selection' ? '분석 대상 종목 선정' : step === 'analyzing' ? 'AI 가치 평가 중' : 'AI 추천 및 상세 분석'}
+        </h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+          {step === 'selection' 
+            ? '스캐너에서 필터링된 후보 중 가장 유망한 10개를 선택해 AI 분석을 의뢰합니다.' 
+            : step === 'analyzing' 
+              ? '헤지펀드 스타일의 다각도 분석 엔진이 종목별 기술적/기본적 우위를 판정하고 있습니다.' 
+              : 'AI가 선정한 Top 3 종목과 상세 분석 리포트를 확인하고 최종 투자 계획을 수립하세요.'}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button 
+          variant="ghost" 
+          onClick={() => setStep('selection')} 
+          className={`text-xs ${step !== 'selection' ? 'text-slate-400' : 'hidden'}`}
+        >
+          새 분석 시작
+        </Button>
         <DataSourceBadge meta={meta} />
       </div>
+    </div>
+  );
 
-      {(error || notice) && (
-        <div className="space-y-2">
-          {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>}
-          {notice && <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">{notice}</div>}
-        </div>
-      )}
-
-      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white">1. 스캐너 후보 풀에서 분석 대상 선택</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              스캐너의 Recommended/Partial 후보를 우선 불러옵니다. Low Priority도 수동 선택할 수 있습니다.
+  const renderSelection = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 shadow-2xl backdrop-blur-xl">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
+              1. 분석 후보 선택
+            </h2>
+            <p className="text-sm text-slate-400">
+              최대 10개까지 선택 가능합니다. 선택된 순서대로 AI에게 전달됩니다.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -616,34 +678,36 @@ export default function ContestPage() {
                 setUniverse(next);
                 loadSnapshot(next);
               }}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+              className="rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
             >
               {UNIVERSES.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <Button type="button" variant="ghost" onClick={() => loadSnapshot(universe)} className="gap-2">
-              <RefreshCw className="h-4 w-4" /> 새로고침
+            <Button type="button" variant="ghost" onClick={() => loadSnapshot(universe)} className="gap-2 rounded-xl">
+              <RefreshCw className="h-4 w-4" /> 리로드
             </Button>
           </div>
         </div>
 
         {!snapshot ? (
-          <div className="mt-5 rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400">
-            저장된 스캔 결과가 없습니다. 스캐너에서 {universe} 스캔을 먼저 실행해 주세요.
+          <div className="mt-6 rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
+            <p>저장된 스캔 결과가 없습니다.</p>
+            <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">스캐너로 이동하기 &rarr;</Link>
           </div>
         ) : (
           <>
-            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-              {transferInfo && (
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-200">
-                  스캐너 전달 후보 {transferInfo.tickers.length}개 · {new Date(transferInfo.savedAt).toLocaleString('ko-KR')}
+            <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500">
+              <span className="flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5">
+                <div className={`h-2 w-2 rounded-full ${selected.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
+                {selected.length} / 10 선택됨
+              </span>
+              {marketContext && (
+                <span className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-indigo-300">
+                  시장 국면: {marketContext.state} (P3: {marketContext.metrics.p3Score ?? '-'})
                 </span>
               )}
-              <span>스냅샷 {new Date(snapshot.savedAt).toLocaleString('ko-KR')}</span>
-              <span>스캐너 풀 {candidatePool.length}</span>
-              <span>선택 {selected.length}/10</span>
-              {marketContext && <span>마스터 필터 {marketContext.state} · P3 {marketContext.metrics.p3Score ?? '-'}/100</span>}
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {visibleSelectionRows.map((item) => {
                 const checked = selected.includes(item.ticker);
                 return (
@@ -651,364 +715,335 @@ export default function ContestPage() {
                     key={item.ticker}
                     type="button"
                     onClick={() => toggleCandidateSelection(item.ticker)}
-                    className={`rounded-lg border p-4 text-left transition-colors ${
-                      checked ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'
+                    className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
+                      checked 
+                        ? 'border-emerald-500/50 bg-emerald-500/5 shadow-[0_0_20px_rgba(16,185,129,0.1)]' 
+                        : 'border-slate-800 bg-slate-900/40 hover:border-slate-600'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-mono text-lg font-bold text-white">{item.ticker}</p>
-                        <p className="mt-1 truncate text-sm text-slate-400">{item.name}</p>
+                    {checked && (
+                      <div className="absolute right-3 top-3">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
                       </div>
-                      <span className={`rounded-lg border px-2 py-1 text-xs font-bold ${tierClass(item.recommendationTier)}`}>
+                    )}
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-mono text-xl font-black tracking-tight text-white group-hover:text-emerald-400 transition-colors">{item.ticker}</p>
+                        <p className="mt-1 truncate text-xs text-slate-500 font-medium">{item.name}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                       <span className={`rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${tierClass(item.recommendationTier)}`}>
                         {item.recommendationTier}
                       </span>
+                      {item.vcpScore && (
+                        <span className="rounded-lg border border-slate-700 bg-slate-800/50 px-2 py-1 text-[10px] font-bold text-slate-300">
+                          VCP {item.vcpScore}
+                        </span>
+                      )}
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-400">
-                      <span>SEPA 미충족 {item.sepaMissingCount ?? '-'}</span>
-                      <span>VCP {item.vcpScore ?? '-'}</span>
-                      <span>피벗 {item.distanceToPivotPct ?? '-'}%</span>
+                    <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-800/50 pt-4 text-[11px]">
+                      <div className="space-y-1">
+                        <p className="text-slate-500">피벗 거리</p>
+                        <p className={`font-mono font-bold ${Math.abs(item.distanceToPivotPct || 0) < 5 ? 'text-emerald-400' : 'text-white'}`}>
+                          {item.distanceToPivotPct ?? '-'}%
+                        </p>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <p className="text-slate-500">SEPA 미충족</p>
+                        <p className="font-mono font-bold text-white">{item.sepaMissingCount ?? '0'}</p>
+                      </div>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-xs text-slate-500">{item.recommendationReason}</p>
                   </button>
                 );
               })}
             </div>
-            {visibleSelectionRows.length === 0 && (
-              <div className="mt-5 rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400">
-                스캐너에서 후보로 체크한 종목만 이 화면에 표시됩니다. 스캐너에서 후보를 선택한 뒤 콘테스트로 이동해 주세요.
-              </div>
-            )}
+
+            <div className="mt-10 flex justify-center">
+              <Button 
+                size="lg" 
+                onClick={handleStartAnalysis} 
+                disabled={busy || selected.length === 0}
+                className="h-14 w-full max-w-md gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 font-bold text-lg shadow-xl hover:from-emerald-500 hover:to-teal-500 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {busy ? <LoadingSpinner /> : <Zap className="h-6 w-6 fill-white" />}
+                AI 분석 시작 (Gemini 1.5 Pro)
+              </Button>
+            </div>
           </>
         )}
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-          <h2 className="text-lg font-bold text-white">2. LLM 프롬프트 생성</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            세션 저장 후 후보 ID와 마스터 필터 컨텍스트가 포함된 한국어 프롬프트를 복사합니다.
-          </p>
-          <Button type="button" onClick={createSession} disabled={busy || selectedCandidates.length === 0 || selectedCandidates.length > 10} className="mt-4 gap-2">
-            {busy ? <LoadingSpinner size="sm" /> : <Trophy className="h-4 w-4" />}
-            세션 저장 및 프롬프트 복사
-          </Button>
-
-          {activeSession && (
-            <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-200">생성 프롬프트</p>
-                <button type="button" onClick={copyPrompt} className="inline-flex items-center gap-1 text-xs text-emerald-300">
-                  <Clipboard className="h-3.5 w-3.5" /> 복사
-                </button>
-              </div>
-              <textarea
-                readOnly
-                value={activeSession.llm_prompt}
-                rows={12}
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-300"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-          <h2 className="text-lg font-bold text-white">3. 외부 LLM 결과 등록</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            JSON만 붙여넣어도 되고, LLM 리포트 전문을 붙여넣어도 MTN이 JSON 코드블록 또는 객체를 추출합니다.
-          </p>
-          <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/6 p-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 font-semibold text-emerald-200">
-                Schema {CONTEST_RESPONSE_SCHEMA_VERSION}
-              </span>
-              <span className="text-slate-400">Required: `session_id`, `rank`, `overall`, `key_strength`, `key_risk`, `recommendation`, `confidence`</span>
-            </div>
-            <p className="mt-2 text-xs leading-5 text-slate-400">
-              `overall`은 `POSITIVE/NEUTRAL/NEGATIVE`, `recommendation`은 `PROCEED/WATCH/SKIP`, `confidence`는 `0.0~1.0` 범위여야 합니다.
-            </p>
-          </div>
-          <textarea
-            value={llmJson}
-            onChange={(event) => setLlmJson(event.target.value)}
-            rows={12}
-            placeholder='LLM 전체 리포트 또는 {"rankings":[...]} JSON을 붙여넣으세요.'
-            className="mt-4 w-full rounded-lg border border-slate-800 bg-slate-950 p-3 font-mono text-xs text-slate-200 outline-none focus:border-emerald-400"
-          />
-          {pastedResultSessionId && activeSession?.id !== pastedResultSessionId && (
-            <p className="mt-2 text-xs text-amber-300">
-              붙여넣은 결과의 session_id가 현재 선택된 세션과 다릅니다. 저장 시 입력값의 session_id로 자동 저장합니다.
-            </p>
-          )}
-          <Button type="button" onClick={saveLlmResult} disabled={!llmJson.trim() || busy || (!activeSession && !pastedResultSessionId)} className="mt-3 gap-2">
-            <Save className="h-4 w-4" /> LLM 분석 저장
-          </Button>
-          {llmSaveMessage && (
-            <div className={`mt-3 rounded-lg border p-3 text-sm ${
-              llmSaveMessage.startsWith('저장 실패')
-                ? 'border-red-500/30 bg-red-500/10 text-red-100'
-                : llmSaveMessage.startsWith('저장 완료')
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-                  : 'border-slate-700 bg-slate-900/60 text-slate-300'
-            }`}>
-              {llmSaveMessage}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-        <h2 className="text-lg font-bold text-white">4. 최근 콘테스트</h2>
-        <div className="mt-4 space-y-3">
-          {sessions.length === 0 ? (
-            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-400">아직 저장된 콘테스트가 없습니다.</div>
-          ) : sessions.map((session) => (
-            <button
-              key={session.id}
-              type="button"
-              onClick={() => setActiveSession(session)}
-              className={`w-full rounded-lg border p-4 text-left ${
-                activeSession?.id === session.id ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/60'
-              }`}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-semibold text-white">{session.market} | {session.universe} | {formatDate(session.selected_at)}</p>
-                  <p className="mt-1 text-xs text-slate-400">{session.candidates?.length || 0} candidates | {session.status} | {session.response_schema_version || 'legacy'}</p>
+      {/* 히스토리 섹션 */}
+      <div className="grid gap-6">
+        <section className="rounded-2xl border border-slate-800 bg-slate-950/30 p-6">
+          <h3 className="text-lg font-bold text-white mb-4">최근 콘테스트 세션</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {sessions.slice(0, 6).map((session) => (
+              <button
+                key={session.id}
+                onClick={() => {
+                  setActiveSession(session);
+                  setStep('result');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="group flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-600 transition-all text-left"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    {session.universe}
+                  </p>
+                  <span className="text-[10px] text-slate-500">{formatDate(session.selected_at)}</span>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {orderedCandidates(session).slice(0, 10).map((candidate) => (
-                    <span key={candidate.id} className="rounded-lg border border-slate-700 px-2 py-1 text-slate-300">
-                      {candidate.llm_rank ? `${candidate.llm_rank}. ` : ''}{candidate.ticker}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {activeSession && (
-        <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white">5. 선정 종목 요약</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                콘테스트에서 최종 선택한 종목과 선정일 기준 종가를 먼저 확인합니다.
-              </p>
-            </div>
-            <span className="text-xs text-slate-500">최종 선택 {finalPicks.length}개</span>
-          </div>
-
-          {finalPicks.length === 0 ? (
-            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-900/60 p-5 text-sm text-slate-400">
-              아직 최종 선택된 종목이 없습니다. 아래 후보 목록에서 실제 투자 대상으로 표시하면 이 영역에 누적됩니다.
-            </div>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
-                <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="py-3 pr-3">최종 순위</th>
-                    <th className="py-3 pr-3">종목</th>
-                    <th className="py-3 pr-3">선정일</th>
-                    <th className="py-3 pr-3 text-right">선정일 기준 종가</th>
-                    <th className="py-3 pr-3">가격 출처</th>
-                    <th className="py-3 pr-3">LLM 순위</th>
-                    <th className="py-3 pr-3">코멘트</th>
-                    <th className="py-3">다음 단계</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {finalPicks.map((candidate) => (
-                    <tr key={candidate.id} className="border-b border-slate-800">
-                      <td className="py-3 pr-3 font-mono text-emerald-300">#{candidate.final_pick_rank || '-'}</td>
-                      <td className="py-3 pr-3">
-                        <p className="font-mono font-bold text-white">{candidate.ticker}</p>
-                        <p className="text-xs text-slate-500">{candidate.name || candidate.exchange}</p>
-                      </td>
-                      <td className="py-3 pr-3 text-slate-400">{formatDate(activeSession.selected_at)}</td>
-                      <td className="py-3 pr-3 text-right font-mono text-slate-200">{formatPrice(basePriceFor(candidate), candidate.exchange)}</td>
-                      <td className="py-3 pr-3 text-xs text-slate-500">{baseSourceFor(candidate)}</td>
-                      <td className="py-3 pr-3 font-mono text-slate-300">{candidate.llm_rank ? `#${candidate.llm_rank}` : '-'}</td>
-                      <td className="py-3 text-xs text-slate-400">
-                        {(() => {
-                          const verdict = getContestStructuredVerdict(candidate);
-                          return verdict.recommendation
-                            ? `${verdict.recommendation}${verdict.confidence !== null ? ` · ${Math.round(verdict.confidence * 100)}%` : ''} · ${verdict.keyStrength || verdict.comment || '-'}`
-                            : candidate.llm_comment || candidate.final_pick_note || '-';
-                        })()}
-                      </td>
-                      <td className="py-3">
-                        <Link
-                          href={`/plan?ticker=${candidate.ticker}&exchange=${candidate.exchange || 'NAS'}`}
-                          className="whitespace-nowrap rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/20"
-                        >
-                          계획 작성 →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      {activeSession && (
-        <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white">6. 최종 선정과 1주/1개월 성과 판정</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                실제 선정 종목 수에는 제한이 없습니다. 선택군 평균이 미선택군보다 낮으면 해당 사이클은 실패로 표시합니다.
-              </p>
-            </div>
-            <p className="text-xs text-slate-500">선정 {activeCandidates.filter((item) => item.actual_invested).length} / 미선정 {activeCandidates.filter((item) => !item.actual_invested).length}</p>
-          </div>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {summaryCard('W1', w1Summary)}
-            {summaryCard('M1', m1Summary)}
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {activeCandidates.map((candidate) => {
-              const verdict = getContestStructuredVerdict(candidate);
-              return (
-              <article key={candidate.id} className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xl font-bold text-white">{candidate.ticker}</span>
-                      <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">사용자 #{candidate.user_rank}</span>
-                      {candidate.llm_rank && <span className="rounded-lg border border-emerald-500/30 px-2 py-1 text-xs text-emerald-300">LLM #{candidate.llm_rank}</span>}
-                      {candidate.final_pick_rank && <span className="rounded-lg border border-sky-500/30 px-2 py-1 text-xs text-sky-300">최종 #{candidate.final_pick_rank}</span>}
-                      {candidate.recommendation_tier && <span className={`rounded-lg border px-2 py-1 text-xs ${tierClass(candidate.recommendation_tier)}`}>{candidate.recommendation_tier}</span>}
-                      {verdict.overall && <span className={`rounded-lg border px-2 py-1 text-xs ${verdictOverallClass(verdict.overall)}`}>{verdict.overall}</span>}
-                      {verdict.recommendation && <span className={`rounded-lg border px-2 py-1 text-xs ${verdictRecommendationClass(verdict.recommendation)}`}>{verdict.recommendation}</span>}
-                      {verdict.confidence !== null && <span className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300">Confidence {Math.round(verdict.confidence * 100)}%</span>}
-                      <span className={`rounded-lg border px-2 py-1 text-xs ${candidate.actual_invested ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 text-slate-400'}`}>
-                        {candidate.actual_invested ? '선정' : '미선정'}
-                      </span>
+                <div className="flex -space-x-2">
+                  {orderedCandidates(session).slice(0, 5).map((c) => (
+                    <div key={c.id} className="h-7 w-7 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-[9px] font-bold text-white">
+                      {c.ticker.slice(0, 2)}
                     </div>
-                    <p className="mt-2 text-sm text-slate-400">{candidate.name || candidate.exchange}</p>
-                    {verdict.comment && <p className="mt-2 text-sm leading-6 text-slate-300">{verdict.comment}</p>}
-                    {!verdict.hasStructuredData && typeof candidate.llm_analysis?.investment_thesis === 'string' && (
-                      <p className="mt-2 text-xs leading-5 text-slate-400">Thesis: {candidate.llm_analysis.investment_thesis}</p>
-                    )}
-                    {verdict.hasStructuredData && (
-                      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/6 p-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300">Key Strength</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-200">{verdict.keyStrength || '-'}</p>
-                        </div>
-                        <div className="rounded-lg border border-rose-500/20 bg-rose-500/6 p-3">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-300">Key Risk</p>
-                          <p className="mt-2 text-sm leading-6 text-slate-200">{verdict.keyRisk || '-'}</p>
-                        </div>
-                      </div>
-                    )}
+                  ))}
+                  {(session.candidates?.length || 0) > 5 && (
+                    <div className="h-7 w-7 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-[9px] font-bold text-slate-400">
+                      +{(session.candidates?.length || 0) - 5}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+
+  const renderAnalyzing = () => (
+    <div className="flex flex-col items-center justify-center py-24 space-y-8 animate-in zoom-in-95 duration-500">
+      <div className="relative">
+        <div className="h-32 w-32 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Zap className="h-10 w-10 text-emerald-400 animate-pulse" />
+        </div>
+        <div className="absolute -top-4 -right-4 h-12 w-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center shadow-xl animate-bounce">
+          <Crown className="h-6 w-6 text-amber-400" />
+        </div>
+      </div>
+      <div className="text-center space-y-2">
+        <h2 className="text-2xl font-bold text-white">심층 분석 진행 중</h2>
+        <p className="text-slate-400 max-w-sm mx-auto">
+          {llmSaveMessage || '10여 개의 지표를 결합하여 최적의 투자 후보를 선별하고 있습니다. 잠시만 기다려 주세요.'}
+        </p>
+      </div>
+      <div className="w-full max-w-md bg-slate-900 rounded-full h-1.5 overflow-hidden">
+        <div className="bg-emerald-500 h-full animate-progress-indeterminate" />
+      </div>
+    </div>
+  );
+
+  const renderResult = () => {
+    const top3 = activeCandidates.slice(0, 3);
+    const others = activeCandidates.slice(3);
+
+    return (
+      <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* Top 3 Section */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {top3.map((candidate, idx) => {
+            const verdict = getContestStructuredVerdict(candidate);
+            const rankIcon = idx === 0 ? <Crown className="h-8 w-8 text-amber-400" /> : idx === 1 ? <Medal className="h-8 w-8 text-slate-300" /> : <Medal className="h-8 w-8 text-amber-700" />;
+            const rankLabel = idx === 0 ? 'Best Choice' : idx === 1 ? 'Strong Buy' : 'Solid Pick';
+            const bgClass = idx === 0 ? 'border-amber-500/50 bg-amber-500/[0.03] shadow-[0_0_40px_rgba(245,158,11,0.1)]' : 'border-slate-800 bg-slate-950/50';
+
+            return (
+              <div key={candidate.id} className={`relative flex flex-col rounded-3xl border p-8 transition-all hover:translate-y-[-4px] ${bgClass}`}>
+                <div className="absolute -top-4 -right-4 h-12 w-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-xl">
+                  <span className="text-xl font-black text-white">#{idx + 1}</span>
+                </div>
+                
+                <div className="flex items-center gap-4 mb-6">
+                  {rankIcon}
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">{rankLabel}</p>
+                    <p className="text-3xl font-black tracking-tight text-white">{candidate.ticker}</p>
                   </div>
+                </div>
+
+                <div className="space-y-4 flex-1">
+                  <div className="rounded-2xl bg-slate-900/80 p-5 space-y-3">
+                    <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Investment Thesis</p>
+                    <p className="text-sm leading-relaxed text-slate-200">
+                      {verdict.keyStrength || candidate.llm_comment || '분석 요약 제공 불가'}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+                      <p className="text-[10px] text-slate-500 font-bold mb-1">Confidence</p>
+                      <p className="text-lg font-black text-white">
+                        {verdict.confidence !== null ? `${Math.round(verdict.confidence * 100)}%` : '-'}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
+                      <p className="text-[10px] text-slate-500 font-bold mb-1">Verdict</p>
+                      <p className={`text-sm font-black ${verdictRecommendationClass(verdict.recommendation)}`}>
+                        {verdict.recommendation || '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-slate-800/50">
                   <button
-                    type="button"
-                    disabled={busyId === candidate.id}
                     onClick={() => updateCandidate(candidate, !candidate.actual_invested)}
-                    className="rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
+                    className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-bold transition-all ${
+                      candidate.actual_invested 
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
+                        : 'border border-slate-700 text-slate-300 hover:bg-slate-900'
+                    }`}
                   >
-                    {busyId === candidate.id ? '저장 중...' : candidate.actual_invested ? '미선정으로 변경' : '최종 선정'}
+                    {busyId === candidate.id ? <LoadingSpinner size="sm" /> : candidate.actual_invested ? <CheckCircle2 className="h-5 w-5" /> : null}
+                    {candidate.actual_invested ? '최종 선정됨' : '이 종목 선정하기'}
                   </button>
                 </div>
+              </div>
+            );
+          })}
+        </div>
 
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                  {(candidate.reviews || []).sort((a, b) => a.horizon.localeCompare(b.horizon)).map((review) => {
-                    const draft = getReviewDraft(review);
-                    return (
-                      <div key={review.id} className={`rounded-lg border p-4 ${reviewTone(review)}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-white">{review.horizon === 'W1' ? '1주 복기' : '1개월 복기'}</p>
-                            <p className="mt-1 text-xs opacity-80">예정일 {formatDate(review.due_date)} | {review.status}</p>
-                          </div>
-                          <div className="text-right font-mono text-sm">
-                            <p>{review.return_pct === null ? '-' : `${review.return_pct > 0 ? '+' : ''}${review.return_pct}%`}</p>
-                            <p className="mt-1 text-xs opacity-70">{formatPrice(review.review_price, candidate.exchange)}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          <label className="block">
-                            <span className="mb-1 block text-xs font-semibold opacity-80">복기 가격</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.0001"
-                              value={draft.review_price}
-                              onChange={(event) => updateReviewDraft(review, { review_price: event.target.value })}
-                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                            />
-                          </label>
-                          <div>
-                            <span className="mb-1 block text-xs font-semibold opacity-80">기준 가격</span>
-                            <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300">
-                              {formatPrice(review.base_price, candidate.exchange)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {MISTAKE_TAGS.map((tag) => (
-                            <button
-                              key={tag}
-                              type="button"
-                              onClick={() => toggleReviewTag(review, tag)}
-                              className={`rounded-lg border px-2 py-1 text-xs font-semibold ${
-                                draft.mistake_tags.includes(tag)
-                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                                  : 'border-slate-700 text-slate-400'
-                              }`}
-                            >
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-
-                        <textarea
-                          value={draft.user_review_note}
-                          onChange={(event) => updateReviewDraft(review, { user_review_note: event.target.value })}
-                          rows={3}
-                          placeholder="다음 콘테스트를 위한 교훈"
-                          className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-400"
-                        />
-
-                        <div className="mt-3 flex justify-end">
-                          <button
-                            type="button"
-                            disabled={busyId === review.id || !draft.review_price}
-                            onClick={() => saveManualReview(review)}
-                            className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:opacity-50"
-                          >
-                            {busyId === review.id ? '저장 중...' : '수동 복기 저장'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </article>
-            );})}
+        {/* Other Results Table */}
+        <section className="rounded-3xl border border-slate-800 bg-slate-950/50 overflow-hidden">
+          <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white">상세 분석 및 기타 후보</h3>
+            <p className="text-xs text-slate-500 font-medium">{others.length + top3.length}개 분석 리포트</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-300">
+              <thead className="bg-slate-900/50 text-[10px] uppercase font-black tracking-widest text-slate-500">
+                <tr>
+                  <th className="px-6 py-4">순위</th>
+                  <th className="px-6 py-4">종목</th>
+                  <th className="px-6 py-4">AI 판정</th>
+                  <th className="px-6 py-4">핵심 리스크</th>
+                  <th className="px-6 py-4 text-right">최종 결정</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {activeCandidates.map((candidate) => {
+                  const verdict = getContestStructuredVerdict(candidate);
+                  return (
+                    <tr key={candidate.id} className={`group transition-colors hover:bg-slate-900/40 ${candidate.actual_invested ? 'bg-emerald-500/[0.02]' : ''}`}>
+                      <td className="px-6 py-4">
+                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono font-bold ${candidate.llm_rank <= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                          {candidate.llm_rank || '-'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-white">{candidate.ticker}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">{candidate.name || candidate.exchange}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                         <div className="flex items-center gap-2">
+                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${verdictRecommendationClass(verdict.recommendation)}`}>
+                             {verdict.recommendation || '-'}
+                           </span>
+                           <span className="text-xs text-slate-400">{Math.round((verdict.confidence || 0) * 100)}%</span>
+                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="max-w-xs truncate text-xs text-slate-400">{verdict.keyRisk || '-'}</p>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => updateCandidate(candidate, !candidate.actual_invested)}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
+                            candidate.actual_invested 
+                              ? 'border-emerald-500 bg-emerald-500 text-white' 
+                              : 'border-slate-700 text-slate-500 hover:border-slate-500'
+                          }`}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </section>
+
+        {/* Performance & History Section */}
+        <section className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">성과 판정 및 복기</h3>
+              <div className="flex gap-2">
+                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-bold text-emerald-400">W1</span>
+                <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-[10px] font-bold text-indigo-400">M1</span>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {summaryCard('W1', w1Summary)}
+              {summaryCard('M1', m1Summary)}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-8 flex flex-col justify-center items-center text-center space-y-6 shadow-2xl shadow-indigo-500/5">
+            <div className="h-20 w-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+              <BarChart3 className="h-10 w-10 text-white" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-white">분석 완료 및 종목 확정</h3>
+              <p className="text-sm text-slate-400 max-w-sm">
+                최종 선정된 {finalPicks.length}개 종목에 대한 구체적인 매매 계획(진입가, 손절가, 비중)을 수립하러 이동하시겠습니까?
+              </p>
+            </div>
+            <div className="flex flex-col w-full max-w-xs gap-3">
+              <Link 
+                href="/plan"
+                className="inline-flex h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 font-black text-white shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                매매 계획 수립하러 가기
+              </Link>
+              <Button 
+                variant="ghost" 
+                onClick={() => {
+                  setStep('selection');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }} 
+                className="text-slate-500 hover:text-slate-300"
+              >
+                다른 종목 추가 분석하기
+              </Button>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-8 pb-12 px-4">
+      {renderHeader()}
+
+      {(error || notice) && (
+        <div className="space-y-2 animate-in fade-in duration-300">
+          {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-red-500" />
+            {error}
+          </div>}
+          {notice && <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100 flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            {notice}
+          </div>}
+        </div>
       )}
 
-      <FlowCtaButton 
-        nextPath="/plan" 
-        label="매매 계획 수립하기" 
-        subLabel="Step 4: Trading Plan"
-        variant="indigo"
-      />
+      {step === 'selection' && renderSelection()}
+      {step === 'analyzing' && renderAnalyzing()}
+      {step === 'result' && renderResult()}
+      
+      {/* Footer / CTA is now integrated in result step or selection step */}
     </div>
   );
 }

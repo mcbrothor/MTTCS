@@ -298,6 +298,7 @@ export interface FundamentalSnapshot {
   numInstitutionalHolders?: number | null;
   institutionalOwnershipPct?: number | null;
   floatShares?: number | null;
+  sharesOutstanding?: number | null;
   sharesBuyback?: boolean | null;
   sector?: string | null;
   source: string;
@@ -695,6 +696,7 @@ export interface ContestLlmRanking {
 export interface ContestLlmResponse {
   response_schema_version: string;
   session_id: string | null;
+  executive_summary?: string;
   rankings: ContestLlmRanking[];
 }
 

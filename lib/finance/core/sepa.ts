@@ -292,14 +292,27 @@ export function analyzeSepa(
     (() => {
       const float = options.fundamentals?.floatShares;
       const price = lastClose;
-      const dollarFloat = float && price ? float * price : null;
+      const rawFloatValue = float && price ? float * price : null;
+      const isKR = options.market === 'KR';
+      
+      // 시장별 기준치 및 라벨 설정
+      const threshold = isKR ? 1_000_000_000_000 : 5_000_000_000;
+      const thresholdLabel = isKR ? '₩1조 이하' : '$5B 이하';
+      
+      let actualLabel = '데이터 부족';
+      if (rawFloatValue !== null) {
+        actualLabel = isKR 
+          ? `₩${(rawFloatValue / 1_000_000_000_000).toFixed(2)}조` 
+          : `$${(rawFloatValue / 1_000_000_000).toFixed(2)}B`;
+      }
+
       return evaluableCriterion(
         'dollar_float',
-        '유동 시총 (Dollar Float)',
-        dollarFloat ? `$${(dollarFloat / 1_000_000_000).toFixed(2)}B` : '데이터 부족',
-        Boolean(dollarFloat),
-        Boolean(dollarFloat && dollarFloat <= 5_000_000_000),
-        '$5B 이하 (매물 가벼움)',
+        isKR ? '유동 시총' : '유동 시총 (Dollar Float)',
+        actualLabel,
+        Boolean(rawFloatValue),
+        Boolean(rawFloatValue && rawFloatValue <= threshold),
+        thresholdLabel,
         '유동물량이 너무 무거우면 상승에 큰 에너지가 필요합니다.',
         '펀더멘털 지표(유동주식수)가 부족해 정보 항목으로만 표시합니다.'
       );

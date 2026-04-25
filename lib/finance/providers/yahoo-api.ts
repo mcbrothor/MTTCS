@@ -99,6 +99,8 @@ export async function getYahooFundamentals(ticker: string): Promise<FundamentalS
       revenueGrowthPct: toPct(rawNumber(financialData.revenueGrowth)),
       roePct: toPct(rawNumber(financialData.returnOnEquity)),
       debtToEquityPct: rawNumber(financialData.debtToEquity),
+      floatShares: rawNumber(defaultKeyStatistics.floatShares),
+      sharesOutstanding: rawNumber(defaultKeyStatistics.sharesOutstanding),
       source: 'Yahoo Finance quoteSummary',
     };
   } catch {

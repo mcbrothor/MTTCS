@@ -41,6 +41,8 @@ export async function fetchAggregatedFundamentals(
             revenueGrowthPct: cacheData.revenue_growth_pct !== null ? Number(cacheData.revenue_growth_pct) : null,
             roePct: cacheData.roe_pct !== null ? Number(cacheData.roe_pct) : null,
             debtToEquityPct: cacheData.debt_to_equity_pct !== null ? Number(cacheData.debt_to_equity_pct) : null,
+            floatShares: cacheData.float_shares !== null ? Number(cacheData.float_shares) : null,
+            sharesOutstanding: cacheData.shares_outstanding !== null ? Number(cacheData.shares_outstanding) : null,
             source: cacheData.source || 'Cache',
           };
         }
@@ -63,7 +65,7 @@ export async function fetchAggregatedFundamentals(
     const finalResult = augmented || yahoo;
 
     // 4. 캐시에 저장
-    if (finalResult && (finalResult.epsGrowthPct !== null || finalResult.revenueGrowthPct !== null || finalResult.roePct !== null)) {
+    if (finalResult && (finalResult.epsGrowthPct !== null || finalResult.revenueGrowthPct !== null || finalResult.roePct !== null || finalResult.floatShares !== null)) {
       try {
         await supabaseServer.from('fundamental_cache').upsert({
           ticker,
@@ -72,6 +74,8 @@ export async function fetchAggregatedFundamentals(
           revenue_growth_pct: finalResult.revenueGrowthPct,
           roe_pct: finalResult.roePct,
           debt_to_equity_pct: finalResult.debtToEquityPct,
+          float_shares: finalResult.floatShares,
+          shares_outstanding: finalResult.sharesOutstanding,
           source: finalResult.source,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'ticker,market' });

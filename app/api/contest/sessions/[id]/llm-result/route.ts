@@ -48,6 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .from('beauty_contest_sessions')
       .update({
         llm_raw_response: canonicalRaw,
+        llm_report_summary: normalized.executive_summary || '',
         llm_provider: body.llm_provider ? String(body.llm_provider).slice(0, 100) : null,
         response_schema_version: normalized.response_schema_version,
         status: 'REVIEW_READY',
