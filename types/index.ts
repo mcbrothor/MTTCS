@@ -701,7 +701,7 @@ export interface ContestLlmResponse {
 }
 
 export interface BeautyContestSession {
-  id: string; created_at: string; updated_at: string; market: ContestMarket; universe: ScannerUniverse | string; selected_at: string; prompt_payload: ContestPromptCandidate[]; prompt_version?: string | null; response_schema_version?: string | null; market_context?: Record<string, unknown> | null; candidate_pool_snapshot?: unknown[] | null; llm_prompt: string; llm_raw_response: string | null; llm_provider: string | null; status: BeautyContestStatus; candidates?: ContestCandidate[];
+  id: string; created_at: string; updated_at: string; market: ContestMarket; universe: ScannerUniverse | string; selected_at: string; prompt_payload: ContestPromptCandidate[]; prompt_version?: string | null; response_schema_version?: string | null; market_context?: Record<string, unknown> | null; candidate_pool_snapshot?: unknown[] | null; llm_prompt: string; llm_raw_response: string | null; llm_provider: string | null; llm_report_summary?: string | null; status: BeautyContestStatus; ib_raw_response?: string | null; ib_analysis?: Record<string, unknown> | null; ib_provider?: string | null; candidates?: ContestCandidate[];
 }
 
 export interface ContestCandidate {

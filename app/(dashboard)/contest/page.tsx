@@ -2,7 +2,28 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, CheckCircle2, ChevronDown, ChevronUp, Clipboard, Crown, Medal, RefreshCw, Save, Star, Trophy, Zap } from 'lucide-react';
+import {
+  BarChart3,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  RefreshCw,
+  Save,
+  Star,
+  Trophy,
+  Users,
+} from 'lucide-react';
+
+// lucide-react@1.8.0 bundler resolution에서 일부 아이콘의 named export 타입 누락을 보완
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { BrainCircuit, Copy, Crown, Medal, Zap } = require('lucide-react') as {
+  BrainCircuit: React.FC<React.SVGProps<SVGSVGElement>>;
+  Copy: React.FC<React.SVGProps<SVGSVGElement>>;
+  Crown: React.FC<React.SVGProps<SVGSVGElement>>;
+  Medal: React.FC<React.SVGProps<SVGSVGElement>>;
+  Zap: React.FC<React.SVGProps<SVGSVGElement>>;
+};
 import Button from '@/components/ui/Button';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
@@ -54,6 +75,45 @@ interface ReviewDraft {
 type ReviewDrafts = Record<string, ReviewDraft>;
 type Horizon = 'W1' | 'M1';
 type ContestStep = 'selection' | 'analyzing' | 'result';
+
+interface IbCandidateAnalysis {
+  ticker: string;
+  mtn_rank: number;
+  ib_rank: number;
+  ib_verdict: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
+  price_target_12m?: string | null;
+  eps_growth_estimate?: string | null;
+  revenue_growth_estimate?: string | null;
+  catalyst_events?: string[];
+  key_risks_fundamental?: string[];
+  moat_assessment?: 'WIDE' | 'NARROW' | 'NONE' | 'UNKNOWN';
+  committee_notes?: {
+    portfolio_construction?: string;
+    equity_research?: string;
+    quant_validation?: string;
+    risk_assessment?: string;
+    execution_note?: string;
+  };
+  mtn_alignment?: 'CONFIRMS' | 'UPGRADES' | 'DOWNGRADES';
+  final_narrative?: string;
+}
+
+interface IbCommitteeAnalysis {
+  committee_consensus?: {
+    executive_summary?: string;
+    top3_tickers?: string[];
+    mtn_alignment?: 'CONFIRMS' | 'PARTIAL_RERANK' | 'SIGNIFICANT_RERANK';
+    regime_assessment?: string;
+  };
+  candidate_analyses?: IbCandidateAnalysis[];
+  dissenting_views?: { analyst: string; ticker: string; view: string }[];
+  sector_context?: string;
+  macro_overlay?: string;
+  generated_at?: string;
+  prompt_version?: string;
+  parse_failed?: boolean;
+  raw_text?: string;
+}
 
 function parseUniverse(value: string | null): ScannerUniverse | null {
   if (value === 'NASDAQ100' || value === 'SP500' || value === 'KOSPI200' || value === 'KOSDAQ150') return value;
@@ -313,6 +373,11 @@ export default function ContestPage() {
   const [llmSaveMessage, setLlmSaveMessage] = useState<string | null>(null);
   const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
   const [step, setStep] = useState<ContestStep>('selection');
+  const [ibBusy, setIbBusy] = useState(false);
+  const [ibError, setIbError] = useState<string | null>(null);
+  const [ibAnalysis, setIbAnalysis] = useState<IbCommitteeAnalysis | null>(null);
+  const [ibPromptOpen, setIbPromptOpen] = useState(false);
+  const [ibPromptText, setIbPromptText] = useState<string | null>(null);
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
@@ -360,6 +425,14 @@ export default function ContestPage() {
   useEffect(() => {
     fetchMarketContext(market).then(setMarketContext);
   }, [market]);
+
+  useEffect(() => {
+    if (activeSession?.ib_analysis && typeof activeSession.ib_analysis === 'object') {
+      setIbAnalysis(activeSession.ib_analysis as IbCommitteeAnalysis);
+    } else {
+      setIbAnalysis(null);
+    }
+  }, [activeSession?.id]);
 
   const rankedResults = useMemo(() => sortScannerPool(snapshot?.results || []), [snapshot]);
   const candidatePool = useMemo(() => rankedResults.filter((item) => isContestPoolTier(item.recommendationTier)), [rankedResults]);
@@ -492,9 +565,6 @@ export default function ContestPage() {
     }
   };
 
-    setNotice('프롬프트를 클립보드에 복사했습니다.');
-  };
-
   const nextFinalPickRank = () => {
     const ranks = activeCandidates
       .filter((candidate) => candidate.actual_invested)
@@ -571,35 +641,43 @@ export default function ContestPage() {
     }
   };
 
-  const runAiAnalysis = async () => {
-    if (!activeSession) {
-      setError('먼저 세션을 저장한 뒤 분석을 실행해 주세요.');
-      return;
-    }
-    
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    setLlmSaveMessage('인앱 AI 분석 엔진 가동 중 (Gemini 1.5 Pro)...');
-
+  const copyIbPrompt = async () => {
+    if (!activeSession) return;
     try {
-      const response = await fetch(`/api/contest/sessions/${activeSession.id}/analyze`, {
-        method: 'POST'
-      });
+      const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`);
       const result = await response.json();
-      
       if (result.success) {
-        setNotice('인앱 AI 분석이 완료되었습니다. 결과가 자동으로 반영되었습니다.');
-        setLlmSaveMessage(`분석 완료: ${result.data.candidates_updated}개 종목의 헤지펀드 등급 판정 완료.`);
-        await loadSessions(activeSession.id);
+        await navigator.clipboard.writeText(result.data.prompt);
+        setIbPromptText(result.data.prompt);
+        setNotice('IB 검증 프롬프트를 클립보드에 복사했습니다. 외부 LLM에 붙여넣어 사용하세요.');
       } else {
-        throw new Error(result.error || 'AI 분석 중 오류가 발생했습니다.');
+        throw new Error(result.error);
       }
     } catch (err: any) {
-      setError(err.message);
-      setLlmSaveMessage(`분석 실패: ${err.message}`);
+      setIbError(err.message);
+    }
+  };
+
+  const runIbValidation = async () => {
+    if (!activeSession) return;
+    setIbBusy(true);
+    setIbError(null);
+    try {
+      const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`, {
+        method: 'POST',
+      });
+      const result = await response.json();
+      if (result.success) {
+        setIbAnalysis(result.data.ib_analysis as IbCommitteeAnalysis);
+        setNotice(`IB 검증 완료 (${result.data.provider} / ${result.data.model}). 위원회 분석이 반영되었습니다.`);
+        await loadSessions(activeSession.id);
+      } else {
+        throw new Error(result.error || 'IB 검증 중 오류가 발생했습니다.');
+      }
+    } catch (err: any) {
+      setIbError(err.message);
     } finally {
-      setBusy(false);
+      setIbBusy(false);
     }
   };
 
@@ -629,6 +707,41 @@ export default function ContestPage() {
     );
   };
 
+  const renderProcessSteps = () => {
+    const steps = [
+      { num: 1, label: '후보 선정', active: step === 'selection' },
+      { num: 2, label: '정량 분석', active: step === 'analyzing' || (step === 'result' && !ibAnalysis) },
+      { num: 3, label: 'IB 검증', active: step === 'result' && !!ibAnalysis },
+      { num: 4, label: '매매 계획', active: false },
+    ];
+    const currentStepNum = step === 'selection' ? 1 : step === 'analyzing' ? 2 : ibAnalysis ? 3 : 2;
+    return (
+      <div className="flex items-center gap-0 text-xs font-bold">
+        {steps.map((s, i) => (
+          <div key={s.num} className="flex items-center">
+            <div className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-all ${
+              s.num === currentStepNum
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : s.num < currentStepNum
+                  ? 'bg-slate-800 text-emerald-400'
+                  : 'bg-slate-900 text-slate-600'
+            }`}>
+              <span className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-black ${
+                s.num < currentStepNum ? 'bg-emerald-500/20' : ''
+              }`}>
+                {s.num < currentStepNum ? '✓' : `${s.num}`}
+              </span>
+              <span className="hidden sm:inline">{s.label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={`h-px w-4 lg:w-8 ${s.num < currentStepNum ? 'bg-emerald-500/40' : 'bg-slate-800'}`} />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderHeader = () => (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
@@ -637,22 +750,25 @@ export default function ContestPage() {
           {step === 'selection' ? '분석 대상 종목 선정' : step === 'analyzing' ? 'AI 가치 평가 중' : 'AI 추천 및 상세 분석'}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          {step === 'selection' 
-            ? '스캐너에서 필터링된 후보 중 가장 유망한 10개를 선택해 AI 분석을 의뢰합니다.' 
-            : step === 'analyzing' 
-              ? '헤지펀드 스타일의 다각도 분석 엔진이 종목별 기술적/기본적 우위를 판정하고 있습니다.' 
+          {step === 'selection'
+            ? '스캐너에서 필터링된 후보 중 가장 유망한 10개를 선택해 AI 분석을 의뢰합니다.'
+            : step === 'analyzing'
+              ? '헤지펀드 스타일의 다각도 분석 엔진이 종목별 기술적/기본적 우위를 판정하고 있습니다.'
               : 'AI가 선정한 Top 3 종목과 상세 분석 리포트를 확인하고 최종 투자 계획을 수립하세요.'}
         </p>
       </div>
-      <div className="flex items-center gap-3">
-        <Button 
-          variant="ghost" 
-          onClick={() => setStep('selection')} 
-          className={`text-xs ${step !== 'selection' ? 'text-slate-400' : 'hidden'}`}
-        >
-          새 분석 시작
-        </Button>
-        <DataSourceBadge meta={meta} />
+      <div className="flex flex-col items-end gap-3">
+        {renderProcessSteps()}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            onClick={() => setStep('selection')}
+            className={`text-xs ${step !== 'selection' ? 'text-slate-400' : 'hidden'}`}
+          >
+            새 분석 시작
+          </Button>
+          <DataSourceBadge meta={meta} />
+        </div>
       </div>
     </div>
   );
@@ -663,8 +779,8 @@ export default function ContestPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Star className="h-5 w-5 text-amber-400 fill-amber-400" />
-              1. 분석 후보 선택
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/30">1</div>
+              분석 후보 선택
             </h2>
             <p className="text-sm text-slate-400">
               최대 10개까지 선택 가능합니다. 선택된 순서대로 AI에게 전달됩니다.
@@ -840,12 +956,294 @@ export default function ContestPage() {
     </div>
   );
 
+  const ibVerdictColor = (verdict: IbCandidateAnalysis['ib_verdict'] | undefined) => {
+    if (verdict === 'STRONG_BUY') return 'text-emerald-300 bg-emerald-500/20 border-emerald-500/30';
+    if (verdict === 'BUY') return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+    if (verdict === 'HOLD') return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+    if (verdict === 'SELL') return 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+    if (verdict === 'STRONG_SELL') return 'text-rose-300 bg-rose-500/20 border-rose-500/30';
+    return 'text-slate-400 bg-slate-800 border-slate-700';
+  };
+
+  const ibAlignmentBadge = (align: IbCandidateAnalysis['mtn_alignment'] | undefined) => {
+    if (align === 'CONFIRMS') return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] font-black text-emerald-400">MTN 확인</span>;
+    if (align === 'UPGRADES') return <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[9px] font-black text-sky-400">MTN 상향</span>;
+    if (align === 'DOWNGRADES') return <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[9px] font-black text-rose-400">MTN 하향</span>;
+    return null;
+  };
+
+  const renderIbSection = () => {
+    const hasResult = ibAnalysis && !ibAnalysis.parse_failed;
+
+    return (
+      <section className="rounded-3xl border border-indigo-500/20 bg-indigo-950/20 overflow-hidden shadow-2xl shadow-indigo-500/5">
+        {/* Header */}
+        <div className="flex flex-col gap-4 border-b border-indigo-500/20 bg-indigo-950/30 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 shadow-lg shadow-indigo-500/20">
+              <Users className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Step 3 — 외부 IB 검증</p>
+              <h3 className="text-xl font-black text-white">글로벌 IB 투자 위원회</h3>
+              <p className="mt-0.5 text-xs text-slate-400">
+                Goldman Sachs / Morgan Stanley 수준 5인 전문가 패널의 독립 검증
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copyIbPrompt}
+              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-300 transition-all hover:border-slate-600 hover:text-white"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              프롬프트 복사
+            </button>
+            <button
+              onClick={runIbValidation}
+              disabled={ibBusy}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-2.5 text-xs font-black text-white shadow-lg shadow-indigo-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+            >
+              {ibBusy ? (
+                <>
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  분석 중…
+                </>
+              ) : (
+                <>
+                  <BrainCircuit className="h-3.5 w-3.5" />
+                  {hasResult ? '재검증 실행' : '외부 LLM 검증 실행'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {ibError && (
+          <div className="mx-6 mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+            {ibError}
+          </div>
+        )}
+
+        {/* 프롬프트 미리보기 (토글) */}
+        <div className="border-b border-indigo-500/10">
+          <button
+            onClick={() => setIbPromptOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-6 py-3 text-xs font-bold text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Clipboard className="h-3.5 w-3.5" />
+              검증 프롬프트 미리보기 (외부 LLM에 직접 사용 가능)
+            </span>
+            {ibPromptOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {ibPromptOpen && ibPromptText && (
+            <div className="px-6 pb-4">
+              <pre className="max-h-64 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-4 text-[10px] leading-relaxed text-slate-400 whitespace-pre-wrap">
+                {ibPromptText}
+              </pre>
+            </div>
+          )}
+          {ibPromptOpen && !ibPromptText && (
+            <div className="px-6 pb-4 text-xs text-slate-500">"프롬프트 복사" 버튼을 먼저 클릭하면 여기에 내용이 표시됩니다.</div>
+          )}
+        </div>
+
+        {/* 분석 결과 */}
+        {!hasResult && !ibBusy && (
+          <div className="p-12 text-center text-slate-500">
+            <BrainCircuit className="mx-auto h-10 w-10 mb-3 opacity-30" />
+            <p className="text-sm">외부 LLM 검증 결과가 아직 없습니다.</p>
+            <p className="text-xs mt-1">위의 버튼으로 자동 실행하거나, 프롬프트를 복사해 직접 사용하세요.</p>
+          </div>
+        )}
+
+        {ibBusy && (
+          <div className="flex flex-col items-center gap-4 p-12 text-center">
+            <div className="relative h-16 w-16">
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Users className="h-6 w-6 text-indigo-400 animate-pulse" />
+              </div>
+            </div>
+            <div>
+              <p className="font-bold text-white">위원회 토론 진행 중</p>
+              <p className="mt-1 text-xs text-slate-400">글로벌 IB 5인 패널이 각 종목을 심도 있게 논의하고 있습니다...</p>
+            </div>
+          </div>
+        )}
+
+        {hasResult && ibAnalysis && (
+          <div className="p-6 space-y-8">
+            {/* Executive Summary */}
+            {ibAnalysis.committee_consensus?.executive_summary && (
+              <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/30 p-6">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mb-3">위원회 종합 결론</p>
+                <p className="text-sm leading-relaxed text-slate-200">{ibAnalysis.committee_consensus.executive_summary}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {ibAnalysis.committee_consensus.top3_tickers?.map((t, i) => (
+                    <span key={t} className="rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-black text-indigo-300">
+                      IB #{i + 1} {t}
+                    </span>
+                  ))}
+                  {ibAnalysis.committee_consensus.mtn_alignment && (
+                    <span className={`rounded-full px-3 py-1 text-xs font-black ${
+                      ibAnalysis.committee_consensus.mtn_alignment === 'CONFIRMS'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {ibAnalysis.committee_consensus.mtn_alignment === 'CONFIRMS' ? 'MTN 순위 일치' :
+                       ibAnalysis.committee_consensus.mtn_alignment === 'PARTIAL_RERANK' ? '부분 재순위' : '순위 재조정'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Per-Candidate IB Analysis */}
+            {ibAnalysis.candidate_analyses && ibAnalysis.candidate_analyses.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="text-sm font-black text-white">종목별 위원회 심층 분석</h4>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {[...(ibAnalysis.candidate_analyses)].sort((a, b) => a.ib_rank - b.ib_rank).map((ca) => (
+                    <div key={ca.ticker} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-5 space-y-4">
+                      {/* Ticker header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/20 text-xs font-black text-indigo-300">
+                            #{ca.ib_rank}
+                          </span>
+                          <div>
+                            <p className="text-lg font-black text-white">{ca.ticker}</p>
+                            <p className="text-[10px] text-slate-500">MTN #{ca.mtn_rank} → IB #{ca.ib_rank}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-black ${ibVerdictColor(ca.ib_verdict)}`}>
+                            {ca.ib_verdict?.replace('_', ' ')}
+                          </span>
+                          {ibAlignmentBadge(ca.mtn_alignment)}
+                        </div>
+                      </div>
+
+                      {/* Price & earnings */}
+                      {(ca.price_target_12m || ca.eps_growth_estimate) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {ca.price_target_12m && (
+                            <div className="rounded-xl bg-slate-900/60 p-3">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase">12M Target</p>
+                              <p className="text-base font-black text-white">{ca.price_target_12m}</p>
+                            </div>
+                          )}
+                          {ca.eps_growth_estimate && (
+                            <div className="rounded-xl bg-slate-900/60 p-3">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase">EPS 성장</p>
+                              <p className="text-base font-black text-emerald-400">{ca.eps_growth_estimate}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Final narrative */}
+                      {ca.final_narrative && (
+                        <p className="text-xs leading-relaxed text-slate-300">{ca.final_narrative}</p>
+                      )}
+
+                      {/* Committee notes (collapsible) */}
+                      {ca.committee_notes && (
+                        <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 space-y-2.5">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">위원 의견</p>
+                          {Object.entries({
+                            '① Portfolio': ca.committee_notes.portfolio_construction,
+                            '② Research': ca.committee_notes.equity_research,
+                            '③ Quant': ca.committee_notes.quant_validation,
+                            '④ Risk': ca.committee_notes.risk_assessment,
+                            '⑤ Execution': ca.committee_notes.execution_note,
+                          }).filter(([, v]) => v).map(([role, note]) => (
+                            <div key={role} className="flex gap-2 text-xs">
+                              <span className="shrink-0 font-bold text-slate-500 w-20">{role}</span>
+                              <span className="text-slate-400 leading-relaxed">{note}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Catalysts & Risks */}
+                      {(ca.catalyst_events?.length || ca.key_risks_fundamental?.length) && (
+                        <div className="grid grid-cols-2 gap-3">
+                          {ca.catalyst_events && ca.catalyst_events.length > 0 && (
+                            <div>
+                              <p className="text-[9px] font-black uppercase text-emerald-500 mb-1.5">촉매</p>
+                              <ul className="space-y-1">
+                                {ca.catalyst_events.map((ev, i) => (
+                                  <li key={i} className="text-[10px] text-slate-400 flex gap-1"><span className="text-emerald-500">+</span>{ev}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {ca.key_risks_fundamental && ca.key_risks_fundamental.length > 0 && (
+                            <div>
+                              <p className="text-[9px] font-black uppercase text-rose-500 mb-1.5">리스크</p>
+                              <ul className="space-y-1">
+                                {ca.key_risks_fundamental.map((r, i) => (
+                                  <li key={i} className="text-[10px] text-slate-400 flex gap-1"><span className="text-rose-500">−</span>{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Macro & Sector overlay */}
+            {(ibAnalysis.macro_overlay || ibAnalysis.sector_context) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {ibAnalysis.macro_overlay && (
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">매크로 오버레이</p>
+                    <p className="text-xs leading-relaxed text-slate-300">{ibAnalysis.macro_overlay}</p>
+                  </div>
+                )}
+                {ibAnalysis.sector_context && (
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
+                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">섹터 컨텍스트</p>
+                    <p className="text-xs leading-relaxed text-slate-300">{ibAnalysis.sector_context}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Provider badge */}
+            {activeSession?.ib_provider && (
+              <p className="text-center text-[10px] text-slate-600">
+                분석 제공: {activeSession.ib_provider} · {ibAnalysis.generated_at ? new Date(ibAnalysis.generated_at).toLocaleString('ko-KR') : ''}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   const renderResult = () => {
     const top3 = activeCandidates.slice(0, 3);
     const others = activeCandidates.slice(3);
 
     return (
       <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {/* Step 2 Label */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/30">2</div>
+          <div>
+            <p className="text-sm font-black text-white">내부 정량 분석 결과</p>
+            <p className="text-xs text-slate-400">MTN Rule Engine · VCP/RS/SEPA 기반 종합 채점</p>
+          </div>
+        </div>
+
         {/* Top 3 Section */}
         <div className="grid gap-6 lg:grid-cols-3">
           {top3.map((candidate, idx) => {
@@ -933,7 +1331,7 @@ export default function ContestPage() {
                   return (
                     <tr key={candidate.id} className={`group transition-colors hover:bg-slate-900/40 ${candidate.actual_invested ? 'bg-emerald-500/[0.02]' : ''}`}>
                       <td className="px-6 py-4">
-                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono font-bold ${candidate.llm_rank <= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono font-bold ${(candidate.llm_rank ?? 99) <= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
                           {candidate.llm_rank || '-'}
                         </span>
                       </td>
@@ -971,6 +1369,25 @@ export default function ContestPage() {
             </table>
           </div>
         </section>
+
+        {/* Step 3: IB Validation Section */}
+        <div className="flex items-center gap-3">
+          <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black text-white shadow-lg ${ibAnalysis ? 'bg-indigo-500 shadow-indigo-500/30' : 'bg-slate-700 shadow-transparent'}`}>3</div>
+          <div>
+            <p className="text-sm font-black text-white">외부 IB 검증</p>
+            <p className="text-xs text-slate-400">글로벌 IB 위원회 5인 심층 분석 — 펀더멘털·뉴스·해자 보완</p>
+          </div>
+        </div>
+        {renderIbSection()}
+
+        {/* Step 4 Label */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-700 text-xs font-black text-white">4</div>
+          <div>
+            <p className="text-sm font-black text-white">최종 매매 계획 수립</p>
+            <p className="text-xs text-slate-400">진입가 · 손절가 · 포지션 비중 확정</p>
+          </div>
+        </div>
 
         {/* Performance & History Section */}
         <section className="grid gap-6 lg:grid-cols-2">

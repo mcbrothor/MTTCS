@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import { buildContestPrompt, normalizeContestLlmResponse } from '@/lib/contest';
-import { runContestAnalysis } from '@/lib/ai/contest-analysis';
+import { runRuleEngine, RULE_ENGINE_PROVIDER, RULE_ENGINE_VERSION } from '@/lib/ai/contest-rule-engine';
 import { supabaseServer } from '@/lib/supabase/server';
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: sessionId } = await params;
 
   try {
@@ -18,49 +17,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const candidates = session.candidates || [];
+    const candidates: Array<{ id: string; ticker: string; snapshot: Record<string, unknown> | null; user_rank: number }> =
+      (session.candidates ?? []).map((c: any) => ({
+        id: c.id,
+        ticker: c.ticker,
+        snapshot: (c.snapshot ?? null) as Record<string, unknown> | null,
+        user_rank: c.user_rank ?? 0,
+      }));
 
-    // 2. 프롬프트 빌드
-    const { llmPrompt } = buildContestPrompt({
-      market: session.market,
-      universe: session.universe,
-      candidates: candidates.map((c: any) => ({
-        ...c,
-        fundamental_snapshot: c.snapshot?.fundamental || {},
-        news_headlines: c.snapshot?.news || []
-      })),
-      marketContext: session.market_context || '상태 정보 없음',
-      sessionId: session.id
-    });
-
-    // 3. AI 분석 실행 (폴백 메커니즘 적용: Gemini -> Groq -> Cerebras)
-    const { 
-      rawResponse: raw, 
-      providerUsed, 
-      modelUsed,
-      fallbackChain
-    } = await runContestAnalysis(llmPrompt);
-
-    // 4. 데이터 정규화 및 파싱
-    const normalized = normalizeContestLlmResponse(
-      raw,
-      candidates.map((c: any) => ({ id: c.id, ticker: c.ticker })),
-      sessionId
-    );
-    
+    // 2. 인앱 룰 엔진으로 분석 (외부 LLM 호출 없음)
+    const normalized = runRuleEngine(candidates, sessionId);
     const rankings = normalized.rankings;
     const canonicalRaw = JSON.stringify(normalized, null, 2);
-    const idByTicker = new Map(candidates.map((c: any) => [String(c.ticker).toUpperCase(), c.id]));
-    const idByCandidateId = new Map(candidates.map((c: any) => [String(c.id), c.id]));
 
-    // 5. 종목별 분석 결과 업데이트
+    const idByCandidateId = new Map(candidates.map(c => [c.id, c.id]));
+    const idByTicker = new Map(candidates.map(c => [c.ticker.toUpperCase(), c.id]));
+
+    // 3. 종목별 분석 결과 업데이트
     for (const ranking of rankings) {
-      const candidateId = ranking.candidate_id 
-        ? idByCandidateId.get(String(ranking.candidate_id)) 
-        : idByTicker.get(String(ranking.ticker).toUpperCase());
-      
+      const candidateId = ranking.candidate_id
+        ? idByCandidateId.get(ranking.candidate_id)
+        : idByTicker.get(ranking.ticker.toUpperCase());
+
       if (!candidateId) continue;
-      
+
       await supabaseServer
         .from('contest_candidates')
         .update({
@@ -73,13 +53,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq('id', candidateId);
     }
 
-    // 6. 세션 요약 및 상태 업데이트
+    // 4. 세션 요약 및 상태 업데이트
     const { error: updateError } = await supabaseServer
       .from('beauty_contest_sessions')
       .update({
         llm_raw_response: canonicalRaw,
-        llm_report_summary: normalized.executive_summary || '',
-        llm_provider: `${providerUsed} (${modelUsed})`,
+        llm_report_summary: '',
+        llm_provider: `${RULE_ENGINE_PROVIDER} (${RULE_ENGINE_VERSION})`,
         response_schema_version: normalized.response_schema_version,
         status: 'REVIEW_READY',
         updated_at: new Date().toISOString(),
@@ -88,19 +68,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (updateError) throw updateError;
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: {
-        provider: providerUsed,
-        model: modelUsed,
-        summary: normalized.executive_summary,
+        provider: RULE_ENGINE_PROVIDER,
+        model: RULE_ENGINE_VERSION,
+        summary: '',
         candidates_updated: rankings.length,
-        fallback_chain: fallbackChain
-      }
+        fallback_chain: [],
+      },
     });
-
   } catch (error: any) {
-    console.error('AI Analysis Error:', error);
+    console.error('Rule Engine Analysis Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
