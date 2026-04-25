@@ -360,7 +360,7 @@ export default function MetricsGrid() {
         </div>
         <div className="grid gap-3 text-sm leading-6 text-slate-400 md:grid-cols-3">
           <p><strong className="text-emerald-300">GREEN</strong>: 돌파 후보를 적극 검토하되 피벗 근처 거래량을 확인합니다.</p>
-          <p><strong className="text-amber-300">YELLOW</strong>: 신규 진입 크기를 줄이고 실패 돌파는 빠르게 정리합니다.</p>
+          <p><strong className="text-amber-300">신규 진입 보류</strong>: 기존 포지션만 유지하고 신규 진입은 금지합니다. 추세가 GREEN으로 회복될 때까지 대기하세요.</p>
           <p><strong className="text-rose-300">RED</strong>: 현금 비중과 기존 포지션 방어를 우선합니다.</p>
         </div>
       </section>

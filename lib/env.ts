@@ -68,3 +68,13 @@ export function telegramWebhookSecret(): string {
 export function secUserAgent(): string {
   return optional('SEC_USER_AGENT', 'MTN/4.0 contact@mtn.local');
 }
+
+// --- FRED ---
+
+export function fredApiKey(): string {
+  return required('FRED_API_KEY');
+}
+
+export function fredApiKeyOptional(): string | null {
+  return process.env['FRED_API_KEY'] || null;
+}

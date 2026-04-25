@@ -3,6 +3,8 @@
 import InsightLog from '@/components/master-filter/InsightLog';
 import MetricsGrid from '@/components/master-filter/MetricsGrid';
 import StatusCenter from '@/components/master-filter/StatusCenter';
+import DecisionBox from '@/components/master-filter/DecisionBox';
+import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
 import MarketBanner from '@/components/ui/MarketBanner';
 import { useMarket } from '@/contexts/MarketContext';
 
@@ -36,12 +38,20 @@ export default function MasterFilterPage() {
               🇺🇸 미국
             </button>
             <button
-              onClick={() => setMarket('KR')}
+              onClick={() => setMarket('KR_KOSPI')}
               className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
-                market === 'KR' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
+                (market === 'KR' || market === 'KR_KOSPI') ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              🇰🇷 한국
+              🇰🇷 KOSPI
+            </button>
+            <button
+              onClick={() => setMarket('KR_KOSDAQ')}
+              className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
+                market === 'KR_KOSDAQ' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
+              }`}
+            >
+              🇰🇷 KOSDAQ
             </button>
           </div>
           
@@ -54,27 +64,31 @@ export default function MasterFilterPage() {
         </div>
       </header>
 
+      {/* Decision Box — 가장 먼저, 오늘의 진입 결정 */}
+      <DecisionBox />
+
       <MarketBanner />
 
       <div className="flex flex-col gap-6 lg:flex-row">
-        {/* Left Sidebar: Status, Log, Guidelines */}
+        {/* Left Sidebar: Status, Log, Macro Widget, Guidelines */}
         <div className="flex flex-col gap-6 lg:w-[320px] xl:w-[360px] shrink-0">
           <StatusCenter />
+          <MacroCompactWidget />
           <InsightLog />
           <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
             <h3 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
             <ul className="space-y-3 text-sm text-[var(--text-secondary)]">
               <li className="flex gap-2">
                 <span className="font-semibold text-emerald-300">GREEN:</span>
-                공격적 진입과 후보 확장에 가장 우호적인 구간입니다.
+                신규 진입 가능. 매크로 레짐에 따라 비중(50–100%)을 조절하세요.
               </li>
               <li className="flex gap-2">
-                <span className="font-semibold text-amber-300">YELLOW:</span>
-                신규 진입 비중을 줄이고 리스크 관리를 우선합니다.
+                <span className="font-semibold text-amber-300 whitespace-nowrap">신규 진입 보류:</span>
+                기존 포지션만 유지하고 손절선을 점검하세요. GREEN 회복 시 재진입을 준비합니다.
               </li>
               <li className="flex gap-2">
                 <span className="font-semibold text-rose-300">RED:</span>
-                신규 매수보다 현금 방어와 기존 포지션 정리가 우선입니다.
+                신규 매수 금지. 현금 비중 확대와 보유 종목 손절선 준수가 최우선입니다.
               </li>
             </ul>
           </div>

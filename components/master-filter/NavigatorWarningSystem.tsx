@@ -43,7 +43,7 @@ export default function NavigatorWarningSystem() {
           <div className="flex items-center gap-2 text-slate-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="text-xs font-bold leading-tight uppercase tracking-tight">
-              Navigator Warning: 시장의 힘이 분배되고 있습니다. 신규 진입 시 비중을 50% 이하로 제한하고 방어적으로 운용하십시오.
+              Navigator Warning: 신규 진입 금지 구간 — 기존 포지션만 유지하고 손절선을 점검하세요.
             </span>
           </div>
           <button 

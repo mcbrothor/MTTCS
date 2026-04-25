@@ -34,23 +34,42 @@ export function statusFromScore(score: number): 'PASS' | 'WARNING' | 'FAIL' {
   return 'FAIL';
 }
 
+// O'Neil 분산일 기준: 0.2% 이상 하락 + 전일 대비 거래량 증가
+const DISTRIBUTION_MIN_DECLINE_PCT = 0.2;
+// 6일 이상 누적(가중) 시 자동 RED veto
+const DISTRIBUTION_VETO_THRESHOLD = 6;
+
 export function calculateDistributionDays(
   data: { date: string; close: number; volume: number }[],
   lookback = 25
 ) {
   let count = 0;
-  const details: { date: string; close: number; volume: number; pctChange: number }[] = [];
+  let weightedCount = 0;
+  const details: { date: string; close: number; volume: number; pctChange: number; weight: number }[] = [];
+  const startIdx = Math.max(1, data.length - lookback);
 
-  for (let i = Math.max(1, data.length - lookback); i < data.length; i++) {
+  for (let i = startIdx; i < data.length; i++) {
     const prev = data[i - 1];
     const curr = data[i];
     const pctChange = ((curr.close - prev.close) / prev.close) * 100;
-    if (curr.close < prev.close && curr.volume > prev.volume) {
+
+    // 0.2% 이상 하락 + 전일 대비 거래량 증가 = 분산일
+    if (pctChange <= -DISTRIBUTION_MIN_DECLINE_PCT && curr.volume > prev.volume) {
+      // 시간 감쇠: 최근일 = 1.0, lookback일 전 = 0.0 (선형)
+      const daysFromStart = i - startIdx;
+      const weight = Number((daysFromStart / (lookback - 1)).toFixed(2));
       count++;
-      details.push({ date: curr.date, close: curr.close, volume: curr.volume, pctChange: Number(pctChange.toFixed(2)) });
+      weightedCount += weight;
+      details.push({
+        date: curr.date,
+        close: curr.close,
+        volume: curr.volume,
+        pctChange: Number(pctChange.toFixed(2)),
+        weight,
+      });
     }
   }
-  return { count, details };
+  return { count, weightedCount: Number(weightedCount.toFixed(2)), details };
 }
 
 export function detectFollowThroughDay(data: Pick<OHLCData, 'close' | 'high' | 'low' | 'volume'>[]) {
@@ -104,7 +123,7 @@ export function detectFollowThroughDay(data: Pick<OHLCData, 'close' | 'high' | '
 export interface P3ComputeInput {
   mainData: OHLCData[];
   vixData: OHLCData[];
-  breadthRows: { symbol: string; above200: boolean; return20: number }[];
+  breadthRows: { symbol: string; above200: boolean; return20: number; nearHigh52?: boolean; nearLow52?: boolean }[];
   sectorRows: { symbol: string; return20: number; riskOn: boolean }[];
 }
 
@@ -126,11 +145,16 @@ export interface P3ComputeResult {
   ma150: number;
   ma200: number;
   currentVix: number;
+  currentVix3m: number | null;
+  vixTermRatio: number | null;
   above200Pct: number;
   newHighLowProxy: number;
   distributionDays: number;
-  distributionDetails: { date: string; close: number; volume: number; pctChange: number }[];
+  distributionWeighted: number;
+  distributionDetails: { date: string; close: number; volume: number; pctChange: number; weight: number }[];
   ftd: { found: boolean; daysAgo: number | null; reason: string };
+  foreignNetBuy5d: number | null;
+  foreignNetBuyScore: number;
   metrics: {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
@@ -146,33 +170,69 @@ export interface P3ComputeResult {
   movingAverageHistory: { date: string; ma50: number | null; ma200: number | null }[];
 }
 
+// VIX/VIX3M 비율 > 1.0 (백워데이션) = 단기 공포 급등 신호 → GREEN → YELLOW 강등
+const VIX_TERM_BACKWARDATION_THRESHOLD = 1.0;
+
+// 외국인 순매수 임계값 (억원). KR 전용 신호.
+const FOREIGN_NET_BUY_THRESHOLD = 500;
+
 export function computeP3(
   mainData: OHLCData[],
   vixData: OHLCData[],
-  breadthRows: { symbol: string; above200: boolean; return20: number }[],
+  breadthRows: { symbol: string; above200: boolean; return20: number; nearHigh52?: boolean; nearLow52?: boolean }[],
   sectorRows: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[],
   mainSymbol: string,
-  breadthEtfs: string[]
+  breadthEtfs: string[],
+  vix3mData?: OHLCData[],
+  foreignNetBuy5d?: number
 ): P3ComputeResult {
   const lastClose = mainData.at(-1)!.close;
   const ma50 = movingAverage(mainData, 50) ?? 0;
   const ma150 = movingAverage(mainData, 150) ?? 0;
   const ma200 = movingAverage(mainData, 200) ?? 0;
   const currentVix = vixData.at(-1)?.close ?? 20;
+  const currentVix3m = vix3mData?.at(-1)?.close ?? null;
+  // VIX/VIX3M 비율: 1.0 초과(백워데이션)은 단기 공포 급등 신호
+  const vixTermRatio = currentVix3m && currentVix3m > 0 ? currentVix / currentVix3m : null;
 
   const distributionInfo = calculateDistributionDays(
     mainData as { date: string; close: number; volume: number }[]
   );
   const distributionDays = distributionInfo.count;
+  const distributionWeighted = distributionInfo.weightedCount;
   const ftd = detectFollowThroughDay(mainData);
 
   const above200Pct = breadthRows.length
     ? (breadthRows.filter((r) => r.above200).length / breadthRows.length) * 100
     : 0;
-  const newHighLowProxy = Math.max(
-    0,
-    Math.min(3, above200Pct / 33 + ((percentReturn(mainData, 20) ?? 0) > 0 ? 0.5 : -0.5))
-  );
+
+  // NH/NL: 실제 52주 고/저가 데이터가 있으면 사용, 없으면 proxy
+  const hasRealNHNL = breadthRows.some((r) => r.nearHigh52 !== undefined);
+  let newHighLowProxy: number;
+  if (hasRealNHNL && breadthRows.length > 0) {
+    const nearHighCount = breadthRows.filter((r) => r.nearHigh52).length;
+    const nearLowCount = breadthRows.filter((r) => r.nearLow52).length;
+    // 비율 차이를 0-3 스케일로 변환: 모두 고가권=3, 균형=1.5, 모두 저가권=0
+    newHighLowProxy = Math.max(
+      0,
+      Math.min(3, ((nearHighCount - nearLowCount) / breadthRows.length) * 1.5 + 1.5)
+    );
+  } else {
+    newHighLowProxy = Math.max(
+      0,
+      Math.min(3, above200Pct / 33 + ((percentReturn(mainData, 20) ?? 0) > 0 ? 0.5 : -0.5))
+    );
+  }
+
+  // 외국인 순매수 5일 누적 점수 (KR 시장 전용 신호)
+  // +500억원 초과 → 강한 수급 호재, -500억원 미만 → 강한 수급 악재
+  let foreignNetBuyScore = 0;
+  if (foreignNetBuy5d !== undefined && foreignNetBuy5d !== null) {
+    if (foreignNetBuy5d > FOREIGN_NET_BUY_THRESHOLD) foreignNetBuyScore = 3;
+    else if (foreignNetBuy5d > 0) foreignNetBuyScore = 1;
+    else if (foreignNetBuy5d < -FOREIGN_NET_BUY_THRESHOLD) foreignNetBuyScore = -3;
+    else if (foreignNetBuy5d < 0) foreignNetBuyScore = -1;
+  }
   const leadingSectors = sectorRows.slice(0, 3);
   const sectorRiskOnCount = leadingSectors.filter((r) => r.riskOn).length;
 
@@ -182,14 +242,16 @@ export function computeP3(
   const volatilityScoreScaled = currentVix < 20 ? 20 : currentVix < 25 ? 12 : 5;
 
   const ftdScore = ftd.found ? 20 : 8;
-  const distributionScore = distributionDays <= 3 ? 20 : distributionDays <= 5 ? 12 : 4;
+  // 점수 산정은 시간 가중 카운트 사용 (최근 분산일에 더 높은 가중치)
+  const distributionScore = distributionWeighted <= 3 ? 20 : distributionWeighted <= 5 ? 12 : 4;
   const newHighLowScore = newHighLowProxy >= 1.8 ? 20 : newHighLowProxy >= 1.2 ? 12 : 5;
   const above200Score = above200Pct >= 60 ? 20 : above200Pct >= 40 ? 12 : 5;
   const sectorScore = sectorRiskOnCount >= 2 ? 20 : sectorRiskOnCount === 1 ? 12 : 5;
 
   // 7개 항목 합산 (각 20점, 총 140점) 후 100점 만점으로 환산
+  // 외국인 순매수는 소폭 보정 (+/-3점): KR 시장 수급 신호
   const totalRawScore = ftdScore + distributionScore + newHighLowScore + above200Score + sectorScore + trendScoreScaled + volatilityScoreScaled;
-  const p3Score = Math.round((totalRawScore / 140) * 100);
+  const p3Score = Math.min(100, Math.max(0, Math.round((totalRawScore / 140) * 100) + foreignNetBuyScore));
 
   const legacyScore =
     trendScore +
@@ -198,9 +260,24 @@ export function computeP3(
     volatilityScore +
     (sectorRiskOnCount >= 1 ? 0.5 : 0);
 
+  // Trend Veto: 가격이 200MA 아래거나 50MA가 200MA 아래면 무조건 RED (추세추종 핵심 조건)
+  // Distribution Veto: O'Neil 기준 6일+ 누적 분산일 시 자동 RED
   let state: MarketState = 'RED';
-  if (p3Score >= 75) state = 'GREEN';
-  else if (p3Score >= 50) state = 'YELLOW';
+  if (lastClose < ma200 || ma50 < ma200) {
+    state = 'RED'; // Trend veto
+  } else if (distributionDays >= DISTRIBUTION_VETO_THRESHOLD) {
+    state = 'RED'; // Distribution veto
+  } else if (p3Score >= 75) {
+    state = 'GREEN';
+  } else if (p3Score >= 50) {
+    state = 'YELLOW';
+  }
+
+  // VIX 텀 구조 강등: GREEN인 경우에만 적용 (YELLOW로만 강등, RED로는 강등 안 함)
+  // VIX/VIX3M 백워데이션(>1.0) = 단기 공포가 장기보다 큼 → 진입 신중
+  if (state === 'GREEN' && vixTermRatio !== null && vixTermRatio > VIX_TERM_BACKWARDATION_THRESHOLD) {
+    state = 'YELLOW';
+  }
 
   const metrics = {
     trend: {
@@ -293,8 +370,9 @@ export function computeP3(
   return {
     p3Score, state, ftdScore, distributionScore, newHighLowScore, above200Score, sectorScore,
     trendScore, breadthScore: above200Pct, volatilityScore, liquidityScore: distributionDays,
-    legacyScore, lastClose, ma50, ma150, ma200, currentVix, above200Pct, newHighLowProxy,
-    distributionDays, distributionDetails: distributionInfo.details, ftd,
+    legacyScore, lastClose, ma50, ma150, ma200, currentVix, currentVix3m, vixTermRatio, above200Pct, newHighLowProxy,
+    distributionDays, distributionWeighted, distributionDetails: distributionInfo.details, ftd,
+    foreignNetBuy5d: foreignNetBuy5d ?? null, foreignNetBuyScore,
     metrics, mainHistory, vixHistory, movingAverageHistory,
   };
 }

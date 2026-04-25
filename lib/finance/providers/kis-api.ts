@@ -388,3 +388,83 @@ export async function getKisKospiMarketCapRanking(limit = 100): Promise<KisMarke
     .slice(0, limit)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }
+
+// ─── 외국인 순매수 (시장별 투자자 매매동향) ────────────────────────────────
+
+export interface KisForeignNetBuyRow {
+  date: string;          // YYYYMMDD
+  netBuyAmount: number;  // 외국인 순매수 금액 (백만원, 양수=순매수, 음수=순매도)
+  netBuyVolume: number;  // 외국인 순매수 수량 (주)
+}
+
+/**
+ * 시장별 외국인 투자자 순매수 동향 조회
+ * KIS TR: FHKST01010400 (국내주식 일별주가)
+ *
+ * 주의: KIS API는 시장 전체 외국인 순매수를 직접 제공하지 않으므로,
+ * KOSPI/KOSDAQ 지수 ETF(069500.KS / 122630.KS)의 외국인 거래동향을
+ * 시장 전체 방향의 proxy로 사용합니다.
+ *
+ * 실패 시 빈 배열 반환 (non-throwing).
+ */
+export async function getKisMarketForeignNetBuy(
+  market: 'KOSPI' | 'KOSDAQ',
+  days = 20
+): Promise<KisForeignNetBuyRow[]> {
+  try {
+    const token = await getKisToken();
+    const KIS_APP_KEY = kisAppKey();
+    const KIS_APP_SECRET = kisAppSecret();
+    const KIS_BASE_URL = kisBaseUrl();
+
+    // KOSPI: 069500(KODEX 200) / KOSDAQ: 229200(KODEX 코스닥150)
+    const proxyTicker = market === 'KOSPI' ? '069500' : '229200';
+
+    const today = getTodayString();
+    const startDate = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - days * 2); // 주말 포함 여유분
+      return d.toISOString().slice(0, 10).replace(/-/g, '');
+    })();
+
+    const response = await axios.get(
+      `${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`,
+      {
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          authorization: `Bearer ${token}`,
+          appkey: KIS_APP_KEY,
+          appsecret: KIS_APP_SECRET,
+          tr_id: 'FHKST03010100',
+          custtype: 'P',
+        },
+        params: {
+          FID_COND_MRKT_DIV_CODE: 'J',
+          FID_INPUT_ISCD: proxyTicker,
+          FID_INPUT_DATE_1: startDate,
+          FID_INPUT_DATE_2: today,
+          FID_PERIOD_DIV_CODE: 'D',
+          FID_ORG_ADJ_PRC: '0',
+        },
+      }
+    );
+
+    if (response.data.rt_cd !== '0') {
+      console.warn(`KIS 외국인 순매수 조회 실패 (${proxyTicker}):`, response.data.msg1);
+      return [];
+    }
+
+    const output: Record<string, string>[] = response.data.output2 ?? [];
+    return output
+      .filter((row) => row.stck_bsop_date && row.frgn_ntby_qty)
+      .map((row) => ({
+        date: row.stck_bsop_date,
+        netBuyAmount: Number(row.frgn_ntby_tr_pbmn ?? 0),
+        netBuyVolume: Number(row.frgn_ntby_qty ?? 0),
+      }))
+      .slice(0, days);
+  } catch (err) {
+    console.warn('KIS 외국인 순매수 조회 오류:', err instanceof Error ? err.message : err);
+    return [];
+  }
+}

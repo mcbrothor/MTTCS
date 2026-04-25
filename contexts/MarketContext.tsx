@@ -2,39 +2,46 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { DataSourceMeta, MacroRegime, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
+import type { MacroScoreBreakdown } from '@/lib/macro/compute';
+
+export type MarketSelection = 'US' | 'KR' | 'KR_KOSPI' | 'KR_KOSDAQ';
 
 interface MarketContextValue {
   data: MasterFilterResponse | null;
   isLoading: boolean;
   error: Error | null;
   isStale: boolean;
-  market: 'US' | 'KR';
-  setMarket: (market: 'US' | 'KR') => void;
+  market: MarketSelection;
+  setMarket: (market: MarketSelection) => void;
   bypassRisk: boolean;
   setBypassRisk: (value: boolean) => void;
   macroRegime: MacroRegime | null;
+  macroScore: number | null;
+  macroBreakdown: MacroScoreBreakdown[];
   conflictWarning: string | null;
 }
 
 const STATE_ORDER = { GREEN: 0, YELLOW: 1, RED: 2 } as const;
 const REGIME_ORDER = { RISK_ON: 0, NEUTRAL: 1, RISK_OFF: 2 } as const;
 
+/**
+ * 마스터필터와 매크로 사이 신호 불일치 감지
+ *
+ * 위계 원칙: 마스터필터 RED/YELLOW면 매크로 무관 NO-GO.
+ * 진입 권유 어조는 사용하지 않는다.
+ */
 function detectConflict(mfState: 'GREEN' | 'YELLOW' | 'RED', regime: MacroRegime): string | null {
-  const mfLevel = STATE_ORDER[mfState];
-  const macroLevel = REGIME_ORDER[regime];
-  // 마스터필터가 낙관적(GREEN)인데 매크로가 비관적(RISK_OFF)이거나, 반대 방향
+  // GREEN + RISK_OFF: 게이트는 통과했으나 글로벌 자금흐름이 위험회피 — 비중 50%로 제한
   if (mfState === 'GREEN' && regime === 'RISK_OFF') {
-    return '마스터필터 GREEN이지만 매크로 Risk-OFF 상태입니다 — 보수적 접근 권장 (포지션 축소, 신규 진입 신중)';
+    return '마스터필터 GREEN이지만 매크로 RISK-OFF — 신규 진입 시 비중 50%로 제한하고 손절선을 강화하세요.';
   }
+  // RED + RISK_ON: 매크로 환경이 좋아도 시장 게이트 미통과 → 신규 진입 금지
   if (mfState === 'RED' && regime === 'RISK_ON') {
-    return '마스터필터 RED이지만 매크로 Risk-ON 상태입니다 — 개별 종목 약세 가능성, 섹터 선별 필요';
+    return '마스터필터 RED 상태 — 매크로 RISK-ON이라도 신규 진입 보류. 시장 게이트 미통과.';
   }
-  // 1단계 차이 경고
-  if (mfLevel === 0 && macroLevel === 1) {
-    return '마스터필터 GREEN, 매크로 Neutral — 공격적 진입 전 매크로 개선 여부를 확인하세요.';
-  }
-  if (mfLevel === 1 && macroLevel === 2) {
-    return '마스터필터 YELLOW, 매크로 Risk-OFF — 신규 진입 자제, 기존 포지션 방어에 집중하세요.';
+  // YELLOW + RISK_OFF: 이중 부정 신호
+  if (mfState === 'YELLOW' && regime === 'RISK_OFF') {
+    return '마스터필터 YELLOW + 매크로 RISK-OFF — 신규 진입 금지. 기존 포지션 방어에 집중하세요.';
   }
   return null;
 }
@@ -44,11 +51,13 @@ const MarketContext = createContext<MarketContextValue>({
   isLoading: true,
   error: null,
   isStale: false,
-  market: 'US',
+  market: 'US' as MarketSelection,
   setMarket: () => {},
   bypassRisk: false,
   setBypassRisk: () => {},
   macroRegime: null,
+  macroScore: null,
+  macroBreakdown: [],
   conflictWarning: null,
 });
 
@@ -64,7 +73,7 @@ const createEmptyMetric = (label: string, threshold: string | number, unit: stri
   weight: 20,
 });
 
-function fallbackMarketData(market: 'US' | 'KR'): MasterFilterResponse {
+function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
   const updatedAt = new Date().toISOString();
   const meta: DataSourceMeta = {
     asOf: updatedAt,
@@ -125,8 +134,10 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [isStale, setIsStale] = useState(false);
-  const [market, setMarket] = useState<'US' | 'KR'>('US');
+  const [market, setMarket] = useState<MarketSelection>('US');
   const [macroRegime, setMacroRegime] = useState<MacroRegime | null>(null);
+  const [macroScore, setMacroScore] = useState<number | null>(null);
+  const [macroBreakdown, setMacroBreakdown] = useState<MacroScoreBreakdown[]>([]);
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
   const [bypassRisk, setBypassRiskState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -159,16 +170,20 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
         const result = (await (mfResponse as PromiseFulfilledResult<Response>).value.json()) as MasterFilterResponse;
 
         let regime: MacroRegime | null = null;
+        let score: number | null = null;
+        let breakdown: MacroScoreBreakdown[] = [];
         if (macroResponse.status === 'fulfilled' && macroResponse.value.ok) {
           const macroJson = await macroResponse.value.json().catch(() => null);
-          if (macroJson?.regime) {
-            regime = macroJson.regime as MacroRegime;
-          }
+          if (macroJson?.regime) regime = macroJson.regime as MacroRegime;
+          if (typeof macroJson?.score === 'number') score = macroJson.score;
+          if (Array.isArray(macroJson?.breakdown)) breakdown = macroJson.breakdown;
         }
 
         if (mounted) {
           setData({ ...result, market });
           setMacroRegime(regime);
+          setMacroScore(score);
+          setMacroBreakdown(breakdown);
           setConflictWarning(regime ? detectConflict(result.state, regime) : null);
           setIsStale(result.metrics?.meta?.fallbackUsed === true || (result.metrics?.meta?.warnings?.length ?? 0) > 0);
           setError(null);
@@ -196,7 +211,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
   }, [market]);
 
   return (
-    <MarketContext.Provider value={{ data, isLoading, error, isStale, market, setMarket, bypassRisk, setBypassRisk, macroRegime, conflictWarning }}>
+    <MarketContext.Provider value={{ data, isLoading, error, isStale, market, setMarket, bypassRisk, setBypassRisk, macroRegime, macroScore, macroBreakdown, conflictWarning }}>
       {children}
     </MarketContext.Provider>
   );

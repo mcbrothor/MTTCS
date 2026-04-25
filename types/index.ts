@@ -666,7 +666,7 @@ export interface DataSourceMeta {
 export interface ApiSuccess<T> { data: T; meta: DataSourceMeta; }
 export interface ApiFailure { message: string; code: ApiErrorCode | string; details?: unknown; recoverable: boolean; lastSuccessfulAt?: string | null; }
 
-export type ContestMarket = 'US' | 'KR';
+export type ContestMarket = 'US' | 'KR' | 'KR_KOSPI' | 'KR_KOSDAQ';
 export type BeautyContestStatus = 'OPEN' | 'REVIEW_READY' | 'COMPLETED';
 export type ContestReviewHorizon = 'W1' | 'M1';
 export type ContestReviewStatus = 'PENDING' | 'UPDATED' | 'ERROR' | 'MANUAL';

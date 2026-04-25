@@ -105,9 +105,9 @@ export default function StatusCenter() {
       bg: 'bg-amber-500/10',
       border: 'border-amber-500/20',
       icon: <AlertTriangle className="h-10 w-10 text-amber-400" />,
-      title: 'YELLOW 구간',
-      subtitle: '중립 또는 경계',
-      description: '상승 시도는 가능하지만 일부 지표가 불완전합니다. 신규 진입 규모를 줄이고 손절선과 실패 조건을 더 촘촘하게 관리하세요.',
+      title: '신규 진입 보류',
+      subtitle: '기존 포지션만 유지',
+      description: '일부 추세 조건이 불완전합니다. 신규 진입은 금지하고 기존 포지션만 유지하세요. 손절선을 점검하고 추가 약화 시 비중 축소를 준비하세요.',
       accent: 'bg-amber-500/30',
     },
     RED: {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
+import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import type { MasterFilterResponse, OHLCData } from '@/types';
 
@@ -27,16 +28,31 @@ const US_SECTOR_NAMES: Record<string, string> = {
   XLP: 'Consumer Staples', XLU: 'Utilities', XLB: 'Materials',
 };
 
-const KR_SECTOR_ETFS = ['455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
-const KR_BREADTH_ETFS = ['^KS200', '^KQ150', '069500.KS'];
-const KR_SECTOR_NAMES: Record<string, string> = {
+// KOSPI 전용
+const KOSPI_SECTOR_ETFS = ['455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
+const KOSPI_BREADTH_ETFS = ['^KS200', '^KQ150', '069500.KS'];
+const KOSPI_SECTOR_NAMES: Record<string, string> = {
   '455850.KS': '반도체', '305720.KS': '2차전지', '123310.KS': '자동차',
   '244580.KS': '바이오', '091220.KS': '은행', '117680.KS': '철강',
   '117700.KS': '화학/건설', '139260.KS': 'IT',
 };
 
+// KOSDAQ 전용
+const KOSDAQ_SECTOR_ETFS = ['244580.KS', '455850.KS', '305720.KS', '139260.KS', '091220.KS'];
+const KOSDAQ_BREADTH_ETFS = ['^KQ150', '^KQ11', '229200.KS'];
+const KOSDAQ_SECTOR_NAMES: Record<string, string> = {
+  '244580.KS': '바이오', '455850.KS': '반도체', '305720.KS': '2차전지',
+  '139260.KS': 'IT', '091220.KS': '은행',
+};
+
+// 하위 호환: 'KR' → KOSPI
+const KR_SECTOR_ETFS = KOSPI_SECTOR_ETFS;
+const KR_BREADTH_ETFS = KOSPI_BREADTH_ETFS;
+const KR_SECTOR_NAMES = KOSPI_SECTOR_NAMES;
+
 const US_RISK_ON_SECTORS = new Set(['XLK', 'XLY', 'XLC', 'XLI', 'XLF']);
 const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '123310.KS', '139260.KS']);
+const KOSDAQ_RISK_ON_SECTORS = new Set(['244580.KS', '455850.KS', '305720.KS', '139260.KS']);
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
   return getYahooDailyPrice(symbol).catch(() => []);
@@ -45,36 +61,59 @@ async function safeDaily(symbol: string): Promise<OHLCData[]> {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const market = (searchParams.get('market')?.toUpperCase() || 'US') as 'US' | 'KR';
+    const rawMarket = (searchParams.get('market')?.toUpperCase() || 'US');
+    // 'KR'은 하위 호환: KOSPI로 처리
+    const market = (rawMarket === 'KR' ? 'KR_KOSPI' : rawMarket) as 'US' | 'KR_KOSPI' | 'KR_KOSDAQ';
+    const isKR = market === 'KR_KOSPI' || market === 'KR_KOSDAQ';
+    const isKosdaq = market === 'KR_KOSDAQ';
 
-    const symbols = market === 'KR' ? KR_MACRO_SYMBOLS : US_MACRO_SYMBOLS;
-    const sectorEtfs = market === 'KR' ? KR_SECTOR_ETFS : US_SECTOR_ETFS;
-    const breadthEtfs = market === 'KR' ? KR_BREADTH_ETFS : US_BREADTH_ETFS;
-    const riskOnSectors = market === 'KR' ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
-    const sectorNames = market === 'KR' ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
-    const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
+    const symbols = isKR ? KR_MACRO_SYMBOLS : US_MACRO_SYMBOLS;
+    const sectorEtfs = isKosdaq ? KOSDAQ_SECTOR_ETFS : isKR ? KR_SECTOR_ETFS : US_SECTOR_ETFS;
+    const breadthEtfs = isKosdaq ? KOSDAQ_BREADTH_ETFS : isKR ? KR_BREADTH_ETFS : US_BREADTH_ETFS;
+    const riskOnSectors = isKosdaq ? KOSDAQ_RISK_ON_SECTORS : isKR ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
+    const sectorNames = isKosdaq ? KOSDAQ_SECTOR_NAMES : isKR ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
+    const mainSymbol = isKosdaq ? '^KQ11' : isKR ? '^KS200' : 'SPY';
     const vixSymbol = '^VIX';
 
-    const [mainData, vixData, macroQuotes, breadthSeries, sectorSeries] = await Promise.all([
+    const kisMarket = isKosdaq ? 'KOSDAQ' : 'KOSPI';
+    const [mainData, vixData, vix3mData, macroQuotes, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
       safeDaily(mainSymbol),
       safeDaily(vixSymbol),
+      safeDaily('^VIX3M'),
       getYahooQuotes(symbols).catch(() => []),
       Promise.all(breadthEtfs.map(async (sym) => [sym, await safeDaily(sym)] as const)),
       Promise.all(sectorEtfs.map(async (sym) => [sym, await safeDaily(sym)] as const)),
+      // KR 시장에서만 외국인 순매수 조회, US는 빈 배열
+      isKR ? getKisMarketForeignNetBuy(kisMarket, 20).catch(() => []) : Promise.resolve([]),
     ]);
 
     if (mainData.length < 200) {
       throw new Error(`${mainSymbol} 200일 가격 데이터를 충분히 확보하지 못했습니다.`);
     }
 
+    // 외국인 순매수 5일 누적 (양수=순매수, 음수=순매도)
+    const foreignNetBuy5d = foreignNetBuy.slice(0, 5).reduce((sum, r) => sum + r.netBuyAmount, 0);
+
     // 1. 공통 로직으로 계산 위임
     const breadthRows = breadthSeries
       .filter(([, data]) => data.length >= 200)
-      .map(([sym, data]) => ({
-        symbol: sym,
-        above200: data.at(-1)!.close > (data.slice(-200).reduce((s, d) => s + d.close, 0) / 200),
-        return20: ((data.at(-1)!.close - data[data.length - 21].close) / data[data.length - 21].close) * 100,
-      }));
+      .map(([sym, data]) => {
+        const last = data.at(-1)!.close;
+        const ma200 = data.slice(-200).reduce((s, d) => s + d.close, 0) / 200;
+        // 52주 고가/저가 (실제 데이터 사용)
+        const year = data.slice(-252);
+        const high52 = Math.max(...year.map((d) => d.high ?? d.close));
+        const low52 = Math.min(...year.map((d) => d.low ?? d.close));
+        return {
+          symbol: sym,
+          above200: last > ma200,
+          return20: data.length > 21
+            ? ((last - data[data.length - 21].close) / data[data.length - 21].close) * 100
+            : 0,
+          nearHigh52: last >= high52 * 0.97,  // 52주 고가 3% 이내
+          nearLow52: last <= low52 * 1.03,    // 52주 저가 3% 이내
+        };
+      });
 
     const sectorRows = sectorSeries
       .filter(([, data]) => data.length >= 21)
@@ -88,7 +127,7 @@ export async function GET(request: Request) {
       .sort((a, b) => b.return20 - a.return20)
       .map((row, idx) => ({ ...row, rank: idx + 1 }));
 
-    const res = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs);
+    const res = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs, vix3mData, foreignNetBuy5d);
 
     // 2. 외부 연동을 위한 매핑 (AI 인사이트용)
     const macroMap = macroQuotes.reduce<Record<string, YahooQuote>>((acc, quote) => {

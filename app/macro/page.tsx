@@ -152,6 +152,19 @@ export default function MacroPage() {
         </p>
       </header>
 
+      {/* 위계 안내 배너 — 매크로는 사이즈 조절용, 진입 게이트는 마스터 필터 */}
+      <div className="flex items-start gap-3 rounded-xl border border-sky-700/40 bg-sky-900/15 px-4 py-3">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-sky-400 mt-0.5" aria-hidden="true" />
+        <p className="text-xs text-sky-300 leading-relaxed">
+          <strong className="text-sky-200">이 화면은 포지션 사이즈 조절용입니다.</strong>{' '}
+          신규 진입 가능 여부는 반드시{' '}
+          <Link href="/master-filter" className="underline underline-offset-2 hover:text-sky-100">
+            마스터 필터
+          </Link>
+          에서 먼저 확인하세요. 마스터 필터가 RED/YELLOW이면 매크로 점수와 관계없이 신규 진입은 금지입니다.
+        </p>
+      </div>
+
       <MarketBanner />
 
       {isLoading && (
@@ -304,18 +317,18 @@ export default function MacroPage() {
         </div>
       )}
 
-      {/* Next Step CTA */}
+      {/* Next Step CTA — 매크로는 사이즈 조절용. 진입 결정은 마스터 필터에서 */}
       {!isLoading && (
         <div className="flex items-center justify-between gap-4 rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400 mb-1">다음 단계</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-sky-400 mb-1">진입 결정</p>
             <p className="text-sm text-slate-300">{nextStepText}</p>
           </div>
           <Link
-            href="/scanner"
+            href="/master-filter"
             className="flex items-center gap-1.5 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
           >
-            종목 발굴
+            마스터 필터
             <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>
