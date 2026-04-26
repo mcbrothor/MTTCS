@@ -32,6 +32,13 @@ function valueOrDash(value: number | null | undefined) {
   return typeof value === 'number' ? value.toLocaleString() : '-';
 }
 
+function mddColor(value: number | null | undefined) {
+  if (typeof value !== 'number') return 'text-slate-400';
+  if (value < 20) return 'text-emerald-400';
+  if (value <= 35) return 'text-amber-400';
+  return 'text-red-400';
+}
+
 function translateBaseType(result: ScannerResult) {
   if (result.baseType === 'High_Tight_Flag') return '하이 타이트 플래그';
   if (result.baseType === 'Standard_VCP') return '표준 VCP';
@@ -263,6 +270,11 @@ export default function VcpDrilldownModal({
               <InfoTile label="50일선 이격" value={pct(result.distanceFromMa50Pct)} />
               <InfoTile label="52주 저점 대비" value={pct(result.low52WeekAdvancePct)} />
               <InfoTile label="모멘텀 분기" value={translateMomentumBranch(result.momentumBranch)} />
+              <InfoTile
+                label="MDD 52주"
+                value={typeof result.mdd52wPct === 'number' ? `${result.mdd52wPct}%` : '—'}
+                valueClassName={mddColor(result.mdd52wPct)}
+              />
             </section>
 
             {/* High Tight Flag details if applicable */}
@@ -449,11 +461,11 @@ function StatItem({
   );
 }
 
-function InfoTile({ label, value, termKey }: { label: string; value: string; termKey?: string }) {
+function InfoTile({ label, value, termKey, valueClassName }: { label: string; value: string; termKey?: string; valueClassName?: string }) {
   const content = (
     <div className="rounded-lg border border-slate-800 bg-slate-950/30 p-3 w-full">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold text-slate-200">{value}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${valueClassName ?? 'text-slate-200'}`}>{value}</p>
     </div>
   );
 

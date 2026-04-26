@@ -3,6 +3,7 @@ import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { calculateMacroTrendFromData, calculateMansfieldFromData, calculateRSRating, calculateWeightedMomentum } from '@/lib/finance/market/rs-proxy';
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
+import { computeMdd52w } from '@/lib/finance/core/mdd';
 import type { DataQuality, MacroActionLevel, MacroTrend, MarketCode, OHLCData, ScannerConstituent, ScannerUniverse, StockMetric } from '@/types';
 
 interface MetricInput {
@@ -85,6 +86,7 @@ function emptyMetric(item: ScannerConstituent, market: MarketCode, calcDate: str
     rs_universe_size: null,
     mansfield_rs_flag: null,
     mansfield_rs_score: null,
+    mdd_52w_pct: null,
     data_quality: 'NA',
     price_source: item.priceSource || null,
     error_message: message.slice(0, 1000),
@@ -97,6 +99,7 @@ export async function computeStockMetric(item: ScannerConstituent, market: Marke
     const benchmark = await fetchBenchmarkBars(item.exchange, benchmarkCache);
     const momentum = calculateWeightedMomentum(data);
     const mansfield = calculateMansfieldFromData(data, benchmark);
+    const mdd52wPct = computeMdd52w(data.map((d) => d.close));
     const dataQuality = (momentum.rsDataQuality || 'NA') as DataQuality;
     return {
       ticker: item.ticker,
@@ -108,6 +111,7 @@ export async function computeStockMetric(item: ScannerConstituent, market: Marke
       rs_universe_size: null,
       mansfield_rs_flag: mansfield.mansfieldRsFlag,
       mansfield_rs_score: mansfield.mansfieldRsScore,
+      mdd_52w_pct: mdd52wPct,
       data_quality: dataQuality,
       price_source: source,
       error_message: dataQuality === 'NA' ? 'Insufficient price history for IBD Proxy score.' : null,
@@ -253,6 +257,7 @@ export async function finalizeRsMetrics(market: MarketCode, calcDate = todayIso(
     rs_universe_size: row.rs_universe_size,
     mansfield_rs_flag: row.mansfield_rs_flag,
     mansfield_rs_score: row.mansfield_rs_score,
+    mdd_52w_pct: row.mdd_52w_pct ?? null,
     data_quality: row.data_quality,
     price_source: row.price_source,
     error_message: row.error_message,

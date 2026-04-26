@@ -159,8 +159,9 @@ export function analyzeSepa(
   const low52Week = data.length >= 252 ? round(Math.min(...data.slice(-252).map((d) => d.low))) : null;
   const distanceFromLow52WeekPct =
     lastClose && low52Week && low52Week > 0 ? round(((lastClose - low52Week) / low52Week) * 100) : null;
-  const { avgDollarVolume } = calculateAvgVolume(data);
+  const { avgDollarVolume, dataQuality: advDataQuality } = calculateAvgVolume(data);
   const rs = calculateRsProxy(data, options.benchmarkData);
+  const mdd52wPct = computeMdd52w(data.map((d) => d.close));
 
   const benchmarkLabel = (options.benchmarkTicker || 'SPY').replace('^KS200', 'KOSPI 200').replace('^KQ150', 'KOSDAQ 150').replace('^GSPC', 'S&P 500');
 
@@ -354,6 +355,7 @@ export function analyzeSepa(
       low52Week,
       distanceFromLow52WeekPct,
       avgDollarVolume20: avgDollarVolume || null,
+      avgDollarVolumeDataQuality: advDataQuality,
       rsRating: options.preCalculatedRs ?? rs.rsScore,
       rsSource: options.rsSourceHint ?? (options.preCalculatedRs !== undefined ? 'UNIVERSE' : (rs.rsScore !== null ? 'BENCHMARK_PROXY' : null)),
       internalRsRating: null,
@@ -378,6 +380,7 @@ export function analyzeSepa(
       return12m: rs.return12m,
       benchmarkReturn26Week: rs.benchmarkReturn,
       stockReturn26Week: rs.stockReturn,
+      mdd52wPct,
     },
   };
 }

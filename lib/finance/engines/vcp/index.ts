@@ -229,8 +229,8 @@ export function analyzeVcp(
 
   let grade: VcpAnalysis['grade'];
   if (score >= 70) grade = 'strong';
-  else if (score >= 50) grade = 'forming';
-  else if (score >= 25) grade = 'weak';
+  else if (score >= 25) grade = 'forming'; // 25점 이상: 수축이 부족해도 잠재적 형성 중으로 간주
+  else if (score >= 10) grade = 'weak';    // 10~24점: 부분적 신호 존재 (A-2 개선)
   else grade = 'none';
 
   const highTightFlag = momentum.momentumBranch === 'EXTENDED'

@@ -178,6 +178,7 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
     return6m: analysis.sepaEvidence.metrics.return6m ?? null,
     return9m: analysis.sepaEvidence.metrics.return9m ?? null,
     return12m: analysis.sepaEvidence.metrics.return12m ?? null,
+    mdd52wPct: analysis.sepaEvidence.metrics.mdd52wPct ?? null,
     analyzedAt: new Date().toISOString(),
     breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
     errorMessage: null,

@@ -22,14 +22,32 @@ export function calculateATR(data: OHLCData[], period: number = 20): number {
   return round(average(trueRanges.slice(-period)));
 }
 
+// 단일 거래일 달러 거래량 상한: $100B 초과는 Yahoo Finance 데이터 오류로 간주
+const ADV_DAILY_OUTLIER_THRESHOLD = 100_000_000_000;
+
 export function calculateAvgVolume(data: OHLCData[], period: number = 20): {
   avgDollarVolume: number;
   passesFilter: boolean;
+  dataQuality: 'OK' | 'OUTLIER_FILTERED' | 'INSUFFICIENT_DATA';
 } {
-  if (data.length < period) return { avgDollarVolume: 0, passesFilter: false };
+  if (data.length < period) return { avgDollarVolume: 0, passesFilter: false, dataQuality: 'INSUFFICIENT_DATA' };
 
-  const avgDollarVolume = average(data.slice(-period).map((d) => d.close * d.volume));
-  return { avgDollarVolume: round(avgDollarVolume, 0), passesFilter: avgDollarVolume >= 10_000_000 };
+  const slice = data.slice(-period);
+  const dailyDollarVolumes = slice.map((d) => d.close * d.volume);
+  const filtered = dailyDollarVolumes.filter((v) => v <= ADV_DAILY_OUTLIER_THRESHOLD);
+  const hasOutliers = filtered.length < dailyDollarVolumes.length;
+
+  // 필터 후 유효 데이터가 period의 절반 미만이면 불충분
+  if (filtered.length < Math.ceil(period / 2)) {
+    return { avgDollarVolume: 0, passesFilter: false, dataQuality: 'INSUFFICIENT_DATA' };
+  }
+
+  const avgDollarVolume = average(filtered);
+  return {
+    avgDollarVolume: round(avgDollarVolume, 0),
+    passesFilter: avgDollarVolume >= 10_000_000,
+    dataQuality: hasOutliers ? 'OUTLIER_FILTERED' : 'OK',
+  };
 }
 
 export function calculateEntryPrice(data: OHLCData[], period: number = 50): number {

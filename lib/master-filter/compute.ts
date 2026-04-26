@@ -242,8 +242,10 @@ export function computeP3(
   const volatilityScoreScaled = currentVix < 20 ? 20 : currentVix < 25 ? 12 : 5;
 
   const ftdScore = ftd.found ? 20 : 8;
-  // 점수 산정은 시간 가중 카운트 사용 (최근 분산일에 더 높은 가중치)
-  const distributionScore = distributionWeighted <= 3 ? 20 : distributionWeighted <= 5 ? 12 : 4;
+  // 데이터 부족 시 만점 방지 (A-8): 20거래일 미만이면 중립 점수(12) 부여
+  const distributionScore = mainData.length < 20 
+    ? 12 
+    : (distributionWeighted <= 3 ? 20 : distributionWeighted <= 5 ? 12 : 4);
   const newHighLowScore = newHighLowProxy >= 1.8 ? 20 : newHighLowProxy >= 1.2 ? 12 : 5;
   const above200Score = above200Pct >= 60 ? 20 : above200Pct >= 40 ? 12 : 5;
   const sectorScore = sectorRiskOnCount >= 2 ? 20 : sectorRiskOnCount === 1 ? 12 : 5;
