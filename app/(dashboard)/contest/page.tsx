@@ -45,6 +45,7 @@ import type {
 
 const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
+const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
 
@@ -101,8 +102,9 @@ function getInitialUniverse(): ScannerUniverse {
   } catch (e) {
     console.error('Failed to scan initial selections:', e);
   }
-  const storedLatest = parseUniverse(window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY));
-  return storedLatest || 'NASDAQ100';
+  const lastSelected = window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY);
+  const storedLatest = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+  return parseUniverse(lastSelected) || parseUniverse(storedLatest) || 'NASDAQ100';
 }
 
 function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {

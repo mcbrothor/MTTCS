@@ -251,20 +251,8 @@ export function useScanner() {
         setLastScannedAt(now);
         setScanStage('스캔 완료');
 
-        // 3. Recommended 등급 종목 자동 콘테스트 후보 선택
-        const recommendedTickers = normalized
-          .filter((item) => passesScannerMacroPolicy(item, merged.macroTrend?.action_level, false))
-          .filter(item => item.recommendationTier === 'Recommended')
-          .map(item => item.ticker);
-
-        if (recommendedTickers.length > 0) {
-          recommendedTickers.forEach(ticker => {
-            if (!selectedTickers.has(ticker)) {
-              toggleSelected(ticker);
-            }
-          });
-        }
-
+        // 3. (제거) Recommended 등급 종목 자동 콘테스트 후보 선택 - 사용자 혼란 방지를 위해 제거
+        // 4. 스냅샷 저장
         writeScannerSnapshot(meta, normalized, now);
       }
     } catch (err) {
