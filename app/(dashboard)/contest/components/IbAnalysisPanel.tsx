@@ -101,14 +101,36 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                   </p>
                 </div>
               </div>
-              <Button 
-                onClick={() => setIbPromptOpen(!ibPromptOpen)} 
-                variant="ghost" 
-                className="text-slate-500 hover:text-slate-300 gap-2 h-10"
-              >
-                {ibPromptOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                {ibPromptOpen ? '리포트 닫기' : '리포트 상세 보기'}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button 
+                  onClick={copyIbPrompt} 
+                  variant="outline" 
+                  size="sm"
+                  className="gap-2 rounded-xl border-slate-700 h-9 px-3 text-xs text-slate-300"
+                >
+                  <Copy className="h-3.5 w-3.5" /> 프롬프트 복사
+                </Button>
+                <Button 
+                  onClick={runIbValidation} 
+                  disabled={ibBusy}
+                  size="sm"
+                  className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-2 text-xs shadow-lg shadow-indigo-600/20 border-none"
+                >
+                  {ibBusy ? <LoadingSpinner /> : <BrainCircuit className="h-4 w-4" />}
+                  인앱 재분석
+                </Button>
+                <div className="w-px h-4 bg-slate-800 mx-1 hidden sm:block" />
+                <Button 
+                  onClick={() => setIbPromptOpen(!ibPromptOpen)} 
+                  variant="ghost" 
+                  size="sm"
+                  className="text-slate-500 hover:text-slate-300 gap-2 h-9 px-3 text-xs"
+                >
+                  {ibPromptOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {ibPromptOpen ? '리포트 닫기' : '리포트 보기'}
+                </Button>
+              </div>
+              {ibError && <p className="text-[10px] text-rose-400 font-medium text-right mt-1">오류: {ibError}</p>}
             </div>
           </div>
 
