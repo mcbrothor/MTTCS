@@ -77,7 +77,7 @@ console.log('=== SEPA Core Tests ===\n');
 {
   let data = makeUptrendBars(260, 0.6);
   const lastIndex = data.length - 1;
-  const deepClose = data[lastIndex].close * 0.82;
+  const deepClose = data[lastIndex].close * 0.70;
   data = replaceBar(data, lastIndex, {
     close: deepClose,
     high: deepClose * 1.01,

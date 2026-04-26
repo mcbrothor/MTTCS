@@ -80,7 +80,8 @@ export function buildPillarSources(
 export function getBlockingCoverageMissingFields(
   coverage: CanslimAnalysisCoverage
 ) {
-  return coverage.missingFields.filter((field) => field === 'C.currentQtrEpsGrowth');
+  const blocking = ['C.currentQtrEpsGrowth', 'C.currentQtrSalesGrowth', 'A.roe'];
+  return coverage.missingFields.filter((field) => blocking.includes(field));
 }
 
 export function enforceCanslimAnalysisCoverage(

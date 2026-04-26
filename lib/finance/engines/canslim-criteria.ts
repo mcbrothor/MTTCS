@@ -19,7 +19,7 @@ export const CANSLIM_CRITERIA = {
 
   // N: New high / base pattern (Minervini Trend Template 원전: 25% 이내)
   MAX_DIST_FROM_52W_HIGH: 0.25,
-  LOOSE_DIST_FROM_52W_HIGH: 0.35,
+  LOOSE_DIST_FROM_52W_HIGH: 0.25,
   PIVOT_BUY_ZONE_MAX: 0.06,
   PIVOT_EXTENDED_MAX: 0.10,
 

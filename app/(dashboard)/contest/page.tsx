@@ -88,16 +88,22 @@ interface IbCandidateMeta {
   revenue_growth_estimate?: string | null;
   moat_assessment?: 'WIDE' | 'NARROW' | 'NONE' | 'UNKNOWN';
   mtn_alignment?: 'CONFIRMS' | 'UPGRADES' | 'DOWNGRADES';
+  final_decision_impact?: 'LOW' | 'MEDIUM' | 'HIGH';
+  override_reason?: string | null;
 }
 
 interface IbCommitteeAnalysis {
   schema_version?: string;
   session_id?: string;
   analysis_date?: string;
+  mtn_role?: 'PRELIMINARY_SCREEN';
+  committee_role?: 'DECISION_INFLUENCING_REVIEW';
+  final_decision_impact?: 'LOW' | 'MEDIUM' | 'HIGH';
   committee_consensus?: {
     top3_tickers?: string[];
     mtn_alignment?: 'CONFIRMS' | 'PARTIAL_RERANK' | 'SIGNIFICANT_RERANK';
     regime_label?: string;
+    override_reason?: string | null;
   };
   candidates?: IbCandidateMeta[];
   report_markdown?: string;
@@ -234,7 +240,7 @@ function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCa
     pocket_pivot_score: item.pocketPivotScore ?? null,
     pivot_price: item.pivotPrice,
     distance_to_pivot_pct: item.distanceToPivotPct,
-    avg_dollar_volume: item.marketCap,
+    avg_dollar_volume: item.sepaEvidence?.metrics.avgDollarVolume20 || null,
     price: item.currentPrice,
     price_as_of: item.priceAsOf,
     source: item.priceSource || 'MTN scanner',
@@ -702,8 +708,8 @@ export default function ContestPage() {
   const renderProcessSteps = () => {
     const steps = [
       { num: 1, label: '후보 선정', active: step === 'selection' },
-      { num: 2, label: '정량 분석', active: step === 'analyzing' || (step === 'result' && !ibAnalysis) },
-      { num: 3, label: 'IB 검증', active: step === 'result' && !!ibAnalysis },
+      { num: 2, label: '1차 정량 평가', active: step === 'analyzing' || (step === 'result' && !ibAnalysis) },
+      { num: 3, label: '투자 계획 영향 평가', active: step === 'result' && !!ibAnalysis },
       { num: 4, label: '매매 계획', active: false },
     ];
     const currentStepNum = step === 'selection' ? 1 : step === 'analyzing' ? 2 : ibAnalysis ? 3 : 2;
@@ -739,14 +745,14 @@ export default function ContestPage() {
       <div>
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">MTN Beauty Contest</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">
-          {step === 'selection' ? '분석 대상 종목 선정' : step === 'analyzing' ? 'AI 가치 평가 중' : 'AI 추천 및 상세 분석'}
+          {step === 'selection' ? '분석 대상 종목 선정' : step === 'analyzing' ? '1차 정량 평가 중' : '1차 평가 및 상세 투자 검토'}
         </h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
           {step === 'selection'
-            ? '스캐너에서 필터링된 후보 중 가장 유망한 10개를 선택해 AI 분석을 의뢰합니다.'
+            ? '스캐너에서 필터링된 후보 중 상세 투자 검토에 올릴 10개를 선택합니다.'
             : step === 'analyzing'
-              ? '헤지펀드 스타일의 다각도 분석 엔진이 종목별 기술적/기본적 우위를 판정하고 있습니다.'
-              : 'AI가 선정한 Top 3 종목과 상세 분석 리포트를 확인하고 최종 투자 계획을 수립하세요.'}
+              ? 'MTN Rule Engine이 종목별 기술 신호를 1차 정량 평가로 정리하고 있습니다.'
+              : 'MTN 1차 정량 평가와 외부 LLM 상세 투자 검토를 함께 확인하고 투자 계획을 수립하세요.'}
         </p>
       </div>
       <div className="flex flex-col items-end gap-3">
@@ -939,7 +945,7 @@ export default function ContestPage() {
       <div className="text-center space-y-2">
         <h2 className="text-2xl font-bold text-white">심층 분석 진행 중</h2>
         <p className="text-slate-400 max-w-sm mx-auto">
-          {llmSaveMessage || '10여 개의 지표를 결합하여 최적의 투자 후보를 선별하고 있습니다. 잠시만 기다려 주세요.'}
+          {llmSaveMessage || '10여 개의 지표를 결합해 1차 정량 평가 후보를 정리하고 있습니다. 잠시만 기다려 주세요.'}
         </p>
       </div>
       <div className="w-full max-w-md bg-slate-900 rounded-full h-1.5 overflow-hidden">
@@ -976,10 +982,10 @@ export default function ContestPage() {
               <Users className="h-6 w-6 text-white" />
             </div>
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Step 3 — 외부 IB 검증</p>
-              <h3 className="text-xl font-black text-white">글로벌 IB 투자 위원회</h3>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Step 3 — 외부 LLM 상세 투자 검토</p>
+              <h3 className="text-xl font-black text-white">투자 계획 영향 평가</h3>
               <p className="mt-0.5 text-xs text-slate-400">
-                Goldman Sachs / Morgan Stanley 수준 5인 전문가 패널의 독립 검증
+                MTN 1차 평가를 독립적으로 재검토하고 rerank/upgrade/downgrade 근거를 확인
               </p>
             </div>
           </div>
@@ -1170,8 +1176,8 @@ export default function ContestPage() {
         <div className="flex items-center gap-3">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/30">2</div>
           <div>
-            <p className="text-sm font-black text-white">내부 정량 분석 결과</p>
-            <p className="text-xs text-slate-400">MTN Rule Engine · VCP/RS/SEPA 기반 종합 채점</p>
+            <p className="text-sm font-black text-white">MTN 1차 정량 평가</p>
+            <p className="text-xs text-slate-400">Rule Engine · VCP/RS/가격 패턴 기반 SEPA 예비 신호</p>
           </div>
         </div>
 
@@ -1180,7 +1186,7 @@ export default function ContestPage() {
           {top3.map((candidate, idx) => {
             const verdict = getContestStructuredVerdict(candidate);
             const rankIcon = idx === 0 ? <Crown className="h-8 w-8 text-amber-400" /> : idx === 1 ? <Medal className="h-8 w-8 text-slate-300" /> : <Medal className="h-8 w-8 text-amber-700" />;
-            const rankLabel = idx === 0 ? 'Best Choice' : idx === 1 ? 'Strong Buy' : 'Solid Pick';
+            const rankLabel = idx === 0 ? 'MTN Screen #1' : idx === 1 ? 'MTN Screen #2' : 'MTN Screen #3';
             const bgClass = idx === 0 ? 'border-amber-500/50 bg-amber-500/[0.03] shadow-[0_0_40px_rgba(245,158,11,0.1)]' : 'border-slate-800 bg-slate-950/50';
 
             return (
@@ -1199,7 +1205,7 @@ export default function ContestPage() {
 
                 <div className="space-y-4 flex-1">
                   <div className="rounded-2xl bg-slate-900/80 p-5 space-y-3">
-                    <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Investment Thesis</p>
+                    <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Preliminary Quant View</p>
                     <p className="text-sm leading-relaxed text-slate-200">
                       {verdict.keyStrength || candidate.llm_comment || '분석 요약 제공 불가'}
                     </p>
@@ -1213,7 +1219,7 @@ export default function ContestPage() {
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
-                      <p className="text-[10px] text-slate-500 font-bold mb-1">Verdict</p>
+                      <p className="text-[10px] text-slate-500 font-bold mb-1">MTN Signal</p>
                       <p className={`text-sm font-black ${verdictRecommendationClass(verdict.recommendation)}`}>
                         {verdict.recommendation || '-'}
                       </p>
@@ -1231,7 +1237,7 @@ export default function ContestPage() {
                     }`}
                   >
                     {busyId === candidate.id ? <LoadingSpinner size="sm" /> : candidate.actual_invested ? <CheckCircle2 className="h-5 w-5" /> : null}
-                    {candidate.actual_invested ? '최종 선정됨' : '이 종목 선정하기'}
+                    {candidate.actual_invested ? '계획 후보 표시됨' : '계획 후보로 표시'}
                   </button>
                 </div>
               </div>
@@ -1242,8 +1248,8 @@ export default function ContestPage() {
         {/* Other Results Table */}
         <section className="rounded-3xl border border-slate-800 bg-slate-950/50 overflow-hidden">
           <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">상세 분석 및 기타 후보</h3>
-            <p className="text-xs text-slate-500 font-medium">{others.length + top3.length}개 분석 리포트</p>
+            <h3 className="text-lg font-bold text-white">1차 평가 및 기타 후보</h3>
+            <p className="text-xs text-slate-500 font-medium">{others.length + top3.length}개 정량 평가 결과</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-300">
@@ -1251,9 +1257,9 @@ export default function ContestPage() {
                 <tr>
                   <th className="px-6 py-4">순위</th>
                   <th className="px-6 py-4">종목</th>
-                  <th className="px-6 py-4">AI 판정</th>
+                  <th className="px-6 py-4">MTN 1차 신호</th>
                   <th className="px-6 py-4">핵심 리스크</th>
-                  <th className="px-6 py-4 text-right">최종 결정</th>
+                  <th className="px-6 py-4 text-right">계획 후보</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
@@ -1305,8 +1311,8 @@ export default function ContestPage() {
         <div className="flex items-center gap-3">
           <div className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black text-white shadow-lg ${ibAnalysis ? 'bg-indigo-500 shadow-indigo-500/30' : 'bg-slate-700 shadow-transparent'}`}>3</div>
           <div>
-            <p className="text-sm font-black text-white">외부 IB 검증</p>
-            <p className="text-xs text-slate-400">글로벌 IB 위원회 5인 심층 분석 — 펀더멘털·뉴스·해자 보완</p>
+            <p className="text-sm font-black text-white">외부 LLM 상세 투자 검토</p>
+            <p className="text-xs text-slate-400">투자 계획 영향 평가 — 펀더멘털·이벤트·해자·집행 가능성 보완</p>
           </div>
         </div>
         {renderIbSection()}

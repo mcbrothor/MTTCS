@@ -78,7 +78,12 @@ export function analyzeHighTightFlag(data: OHLCData[], entryReference: number): 
   const drawdownOk = maxDrawdownPct !== null && maxDrawdownPct >= HTF_MIN_DRAWDOWN && maxDrawdownPct <= HTF_MAX_DRAWDOWN;
   const volumeDryUpOk = rightSideVolumeRatio !== null && rightSideVolumeRatio <= HTF_MAX_VOLUME_RATIO;
   const passed = baseDaysOk && drawdownOk && volumeDryUpOk;
-  const stopPrice = round(Math.max(baseLow, entryReference * 0.93));
+  const stopPrice = passed ? round(Math.max(baseLow, entryReference * 0.93)) : null;
+  const stopReliability = passed
+    ? 'RELIABLE'
+    : baseDays < HTF_MIN_BASE_DAYS
+      ? 'INSUFFICIENT_BASE'
+      : 'PATTERN_NOT_CONFIRMED';
 
   return {
     passed,
@@ -88,11 +93,14 @@ export function analyzeHighTightFlag(data: OHLCData[], entryReference: number): 
     tightnessScore,
     baseHigh: round(baseHigh),
     baseLow: round(baseLow),
+    stopReliability,
     stopPrice,
-    stopPlan: [
-      `Initial stop: max(base low ${round(baseLow)}, 7% cap ${round(entryReference * 0.93)}) = ${stopPrice}.`,
-      'At +5%, move stop to breakeven.',
-      'At +10%, trail with MA10 or the recent 10-day low.',
-    ],
+    stopPlan: passed
+      ? [
+          `Initial stop: max(base low ${round(baseLow)}, 7% cap ${round(entryReference * 0.93)}) = ${stopPrice}.`,
+          'At +5%, move stop to breakeven.',
+          'At +10%, trail with MA10 or the recent 10-day low.',
+        ]
+      : [],
   };
 }

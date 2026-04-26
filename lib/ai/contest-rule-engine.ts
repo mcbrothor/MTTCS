@@ -16,6 +16,14 @@ interface ScoreBreakdown {
   total: number;     // 0-100
 }
 
+type RuleRiskFlag =
+  | 'RS_DATA_MISSING'
+  | 'STOP_PLAN_BLOCKED_INSUFFICIENT_BASE'
+  | 'HTF_PATTERN_NOT_CONFIRMED'
+  | 'EXTREME_12M_RETURN'
+  | 'LOW_AVG_DOLLAR_VOLUME'
+  | 'PRICE_PATTERN_SEPA_ONLY';
+
 function hasNum(v: unknown): boolean {
   return typeof v === 'number' && isFinite(v) && v > 0;
 }
@@ -70,21 +78,39 @@ function scoreCandidate(snap: Record<string, unknown>): ScoreBreakdown {
   };
 }
 
-function deriveOverall(score: number): ContestLlmOverall {
+function deriveOverall(score: number, riskFlags: RuleRiskFlag[]): ContestLlmOverall {
+  if (riskFlags.includes('STOP_PLAN_BLOCKED_INSUFFICIENT_BASE')) return 'NEUTRAL';
   if (score >= 62) return 'POSITIVE';
   if (score >= 40) return 'NEUTRAL';
   return 'NEGATIVE';
 }
 
-function deriveRecommendation(overall: ContestLlmOverall): ContestLlmRecommendation {
-  if (overall === 'POSITIVE') return 'PROCEED';
-  if (overall === 'NEGATIVE') return 'SKIP';
+function deriveRecommendation(
+  score: number,
+  rank: number,
+  totalCandidates: number,
+  riskFlags: RuleRiskFlag[],
+): ContestLlmRecommendation {
+  const topCutoff = Math.max(1, Math.ceil(totalCandidates * 0.2));
+  const bottomCutoff = Math.max(topCutoff + 1, Math.ceil(totalCandidates * 0.8));
+  const stopBlocked = riskFlags.includes('STOP_PLAN_BLOCKED_INSUFFICIENT_BASE');
+  const rsMissing = riskFlags.includes('RS_DATA_MISSING');
+  const extremeRun = riskFlags.includes('EXTREME_12M_RETURN');
+
+  if (score < 40 || rank >= bottomCutoff) return 'SKIP';
+  if (!stopBlocked && !rsMissing && !extremeRun && (score >= 62 || (rank <= topCutoff && score >= 55))) {
+    return 'PROCEED';
+  }
   return 'WATCH';
 }
 
-function deriveConfidence(score: number): number {
-  // Linear map: score 0 → 0.30, score 100 → 0.98
-  return Math.min(0.98, Math.max(0.30, Math.round((0.30 + (score / 100) * 0.68) * 100) / 100));
+function deriveConfidence(score: number, riskFlags: RuleRiskFlag[]): number {
+  const penalty =
+    (riskFlags.includes('RS_DATA_MISSING') ? 0.08 : 0) +
+    (riskFlags.includes('STOP_PLAN_BLOCKED_INSUFFICIENT_BASE') ? 0.06 : 0) +
+    (riskFlags.includes('EXTREME_12M_RETURN') ? 0.05 : 0);
+  const raw = 0.30 + (score / 100) * 0.68 - penalty;
+  return Math.min(0.98, Math.max(0.30, Math.round(raw * 100) / 100));
 }
 
 function resolveRs(snap: Record<string, unknown>): number | null {
@@ -105,16 +131,36 @@ function buildKeyStrength(snap: Record<string, unknown>, scores: ScoreBreakdown)
   const pivotDist = Math.abs(n(snap.distance_to_pivot_pct, 999));
   const htf = snap.high_tight_flag as Record<string, unknown> | null | undefined;
 
-  if (htf?.detected) return `High Tight Flag 패턴 감지 — 폭발적 상승 구조`;
+  if (htf?.passed) return `High Tight Flag 패턴 감지 — 폭발적 상승 구조`;
   if (snap.rs_line_new_high && hasRs && rs >= 85) return `RS 라인 신고가 돌파 (RS ${rs}), 유니버스 상대강도 최상위권`;
   if (vcp >= 75 && pivotDist <= 5) return `VCP ${vcp}점 고품질 수축 + 피벗 ${pivotDist.toFixed(1)}% 이격, 진입 적기`;
   if (hasRs && rs >= 90) return `RS 등급 ${rs} — 유니버스 내 최상위 상대강도`;
-  if (sepaRate >= 0.8 && sepaTotal >= 5) return `SEPA ${sepaPass}/${sepaTotal} 충족, 기술적 품질 최상위`;
+  if (sepaRate >= 0.8 && sepaTotal >= 5) return `가격 패턴 기반 SEPA ${sepaPass}/${sepaTotal} 통과, 펀더멘털은 외부 LLM 상세 검토 필요`;
   if (snap.mansfield_rs_flag && hasRs && rs >= 80) return `Mansfield RS 양성 + RS ${rs}, 모멘텀 연속성 확인`;
   if (vcp >= 65) return `VCP ${vcp}점 수축 구조 형성, 변동성 압축 진행 중`;
   if (hasRs && rs >= 80) return `RS 등급 ${rs}, 상대강도 상위권 유지`;
   if (pivotDist <= 5) return `피벗 ${pivotDist.toFixed(1)}% 이격, 매수 진입 가능 구간`;
   return `기술적 종합 점수 ${scores.total.toFixed(0)}점, 후보군 내 상대적 우위`;
+}
+
+function buildRiskFlags(snap: Record<string, unknown>): RuleRiskFlag[] {
+  const n = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : null);
+  const flags: RuleRiskFlag[] = [];
+  const htf = snap.high_tight_flag as Record<string, unknown> | null | undefined;
+  const sepaPass = n(snap.sepa_passed);
+  const sepaFail = n(snap.sepa_failed);
+
+  if (resolveRs(snap) === null) flags.push('RS_DATA_MISSING');
+  if (htf?.stopReliability === 'INSUFFICIENT_BASE' || (typeof htf?.baseDays === 'number' && htf.baseDays < 5)) {
+    flags.push('STOP_PLAN_BLOCKED_INSUFFICIENT_BASE');
+  } else if (htf && htf.passed === false) {
+    flags.push('HTF_PATTERN_NOT_CONFIRMED');
+  }
+  if ((n(snap.return_12m) ?? 0) >= 500) flags.push('EXTREME_12M_RETURN');
+  if ((n(snap.avg_dollar_volume) ?? Infinity) < 10_000_000) flags.push('LOW_AVG_DOLLAR_VOLUME');
+  if (sepaPass !== null && sepaFail !== null && sepaPass + sepaFail > 0) flags.push('PRICE_PATTERN_SEPA_ONLY');
+
+  return flags;
 }
 
 function buildKeyRisk(snap: Record<string, unknown>, scores: ScoreBreakdown): string {
@@ -164,9 +210,10 @@ export function runRuleEngine(
 
   const rankings = scored.map((item, idx) => {
     const rank = idx + 1;
-    const overall = deriveOverall(item.scores.total);
-    const recommendation = deriveRecommendation(overall);
-    const confidence = deriveConfidence(item.scores.total);
+    const riskFlags = buildRiskFlags(item.snap);
+    const overall = deriveOverall(item.scores.total, riskFlags);
+    const recommendation = deriveRecommendation(item.scores.total, rank, scored.length, riskFlags);
+    const confidence = deriveConfidence(item.scores.total, riskFlags);
     const key_strength = buildKeyStrength(item.snap, item.scores);
     const key_risk = buildKeyRisk(item.snap, item.scores);
 
@@ -183,11 +230,23 @@ export function runRuleEngine(
       comment: key_strength,
       scores: item.scores as unknown as Record<string, unknown>,
       analysis: {
+        mtn_role: 'PRELIMINARY_SCREEN',
+        committee_role: 'DECISION_INFLUENCING_REVIEW',
         overall,
         key_strength,
         key_risk,
         recommendation,
         confidence,
+        risk_flags: riskFlags,
+        data_quality: {
+          rs_available: !riskFlags.includes('RS_DATA_MISSING'),
+          stop_plan_available: !riskFlags.includes('STOP_PLAN_BLOCKED_INSUFFICIENT_BASE'),
+          sepa_scope: 'PRICE_PATTERN_ONLY',
+        },
+        disclaimers: [
+          'MTN Rule Engine 결과는 최종 투자 결정이 아니라 1차 정량 평가입니다.',
+          '최종 투자 계획은 외부 LLM의 펀더멘털, 리스크, 이벤트, 집행 가능성 평가와 결합해야 합니다.',
+        ],
         scores: item.scores,
       },
     };

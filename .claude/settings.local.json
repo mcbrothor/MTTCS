@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git diff *)",
+      "Bash(node --experimental-strip-types tests/high-tight-flag-safety.test.mjs)",
+      "Bash(node --experimental-strip-types tests/contest-rule-engine-sir.test.mjs)",
+      "Bash(node --experimental-strip-types tests/contest-ib-prompt-sir.test.mjs)",
+      "Bash(node --experimental-strip-types tests/sepa-core.test.mjs)",
+      "Bash(node --experimental-strip-types tests/vcp-engine.test.mjs)"
+    ]
+  }
+}

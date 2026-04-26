@@ -18,6 +18,41 @@ export interface IbCandidateInput {
   snapshot: Record<string, unknown>;
 }
 
+const SYSTEM_LIMITATION_DISCLOSURE = `
+[SYSTEM-LIMITATION DISCLOSURE - 반드시 평가에 반영하라]
+
+MTN 정량 점수(VCP, RS, SEPA, Momentum, Technical Quality)는 다음 구조적 한계를 가진다.
+이는 일부 데이터 결함이 아니라 정량 엔진의 의도된 범위(scope)이므로, 위원회는 외부 LLM 상세 평가에서 반드시 보강해야 한다.
+
+(L-1) SEPA 점수는 가격 패턴 기반이다. EPS 컨센서스 리비전, 가이던스 톤, 백로그/매출 비율은 자동 반영되지 않는다.
+(L-2) RS는 universe-relative proxy이며 IBD Official RS Rating이 아니다.
+(L-3) Moat / 경쟁우위 자동 평가가 없다.
+(L-4) 회계 품질과 earnings quality 점수(Beneish, Altman, Piotroski)가 없다.
+(L-5) 향후 30일 이벤트 리스크 캘린더가 없다.
+(L-6) Fama-French/Barra 팩터 노출도와 momentum vs mean-reversion regime classifier가 없다.
+(L-7) 테마 / 매크로 클러스터 집중도 자동 경고가 제한적이다.
+(L-8) 외부 LLM 판단은 최종 투자 계획에 중대한 영향을 주는 상세 평가 레이어다. MTN 점수와 충돌하면 위원회 판단의 근거와 최종 채택 기준을 명시하라.
+`.trim();
+
+const DECISION_HIERARCHY = `
+[DECISION HIERARCHY - MTN은 1차 평가, 외부 LLM은 상세 투자 판단 레이어]
+
+MTN Rule Engine의 순위, 점수, 추천, confidence는 최종 투자 결정이 아니라
+후보를 걸러내기 위한 1차 정량 평가(preliminary quantitative screen)다.
+
+위원회는 MTN 결과를 존중하되 그대로 승인하지 말고, 펀더멘털·이벤트 리스크·
+회계 품질·경쟁우위·테마 집중·집행 가능성을 독립적으로 검토해야 한다.
+
+최종 투자 계획 결정에는 위원회의 상세 평가가 중대한 영향을 미친다.
+따라서 위원회는 다음을 반드시 수행하라.
+
+1. MTN 순위와 자신의 최종 순위가 일치하는지 명시하라.
+2. 일치하지 않으면 upgrade/downgrade/rerank 사유를 구체적으로 설명하라.
+3. MTN 점수는 높지만 외부 검토상 투자 부적합한 후보를 명시적으로 걸러내라.
+4. MTN 점수는 낮지만 외부 검토상 투자 가치가 있는 후보가 있으면 근거를 제시하라.
+5. 최종 투자 계획에 대한 위원회 판단 영향도를 LOW / MEDIUM / HIGH로 표시하라.
+`.trim();
+
 function extractScores(candidate: ContestCandidate): IbCandidateInput['score_breakdown'] {
   const scores = candidate.llm_scores as Record<string, unknown> | null | undefined;
   if (scores && typeof scores === 'object') {
@@ -40,7 +75,9 @@ function compactSnapshot(snap: Record<string, unknown> | null): Record<string, u
   if (!snap) return {};
   return {
     rs_rating: snap.rs_rating,
+    rs_source: snap.rs_source,
     rs_percentile: snap.rs_percentile,
+    rs_data_quality: snap.rs_data_quality,
     rs_line_new_high: snap.rs_line_new_high,
     vcp_score: snap.vcp_score,
     vcp_status: snap.vcp_status,
@@ -99,6 +136,11 @@ export function buildIbValidationPrompt(
   } : null;
 
   const dataPayload = JSON.stringify({
+    decision_context: {
+      mtn_role: 'PRELIMINARY_SCREEN',
+      committee_role: 'DECISION_INFLUENCING_REVIEW',
+      final_decision_note: 'MTN 정량 결과는 1차 후보 선별이며, 외부 LLM 상세 평가는 최종 투자 계획 결정에 중대한 영향을 준다.',
+    },
     universe: session.universe,
     market: session.market,
     selected_at: session.selected_at,
@@ -109,10 +151,14 @@ export function buildIbValidationPrompt(
   const tickerList = ranked.map(c => c.ticker).join(', ');
 
   return [
+    SYSTEM_LIMITATION_DISCLOSURE,
+    ``,
+    DECISION_HIERARCHY,
+    ``,
     `# 역할 (Role)`,
     ``,
     `당신은 **Goldman Sachs · Morgan Stanley 수준의 글로벌 IB(Investment Bank) 투자 심의 위원회(Investment Committee)** 입니다.`,
-    `오늘 위원회는 MTN 내부 정량 시스템이 1차 선별한 후보 종목군에 대해 펀더멘털·매크로·집행·리스크 측면의 독립 검증을 수행하고, 최종 투자 의견을 담은 **공식 위원회 리포트(Investment Committee Memorandum)** 를 작성합니다.`,
+    `오늘 위원회는 MTN 내부 정량 시스템이 1차 선별한 후보 종목군에 대해 펀더멘털·매크로·집행·리스크 측면의 독립 검증을 수행하고, 투자 계획 결정에 중대한 영향을 주는 **공식 위원회 리포트(Investment Committee Memorandum)** 를 작성합니다.`,
     ``,
     `리포트는 실제 IB의 시니어 PM, 연기금/패밀리오피스의 투자위원회 의사결정자에게 전달되는 수준이어야 하며, 다음 요건을 충족해야 합니다:`,
     ``,
@@ -168,10 +214,14 @@ export function buildIbValidationPrompt(
     `  "schema_version": "${IB_RESPONSE_SCHEMA_VERSION}",`,
     `  "session_id": "${session.id}",`,
     `  "analysis_date": "<YYYY-MM-DD>",`,
+    `  "mtn_role": "PRELIMINARY_SCREEN",`,
+    `  "committee_role": "DECISION_INFLUENCING_REVIEW",`,
+    `  "final_decision_impact": "LOW | MEDIUM | HIGH",`,
     `  "committee_consensus": {`,
     `    "top3_tickers": ["...", "...", "..."],`,
     `    "mtn_alignment": "CONFIRMS | PARTIAL_RERANK | SIGNIFICANT_RERANK",`,
-    `    "regime_label": "<현재 시장 국면 한 줄>"`,
+    `    "regime_label": "<현재 시장 국면 한 줄>",`,
+    `    "override_reason": "<MTN 결과와 다르면 필수. 같으면 null>"`,
     `  },`,
     `  "candidates": [`,
     `    {`,
@@ -183,7 +233,9 @@ export function buildIbValidationPrompt(
     `      "eps_growth_estimate": "+XX% or null",`,
     `      "revenue_growth_estimate": "+XX% or null",`,
     `      "moat_assessment": "WIDE | NARROW | NONE | UNKNOWN",`,
-    `      "mtn_alignment": "CONFIRMS | UPGRADES | DOWNGRADES"`,
+    `      "mtn_alignment": "CONFIRMS | UPGRADES | DOWNGRADES",`,
+    `      "final_decision_impact": "LOW | MEDIUM | HIGH",`,
+    `      "override_reason": "<MTN 순위/추천과 다르면 필수. 같으면 null>"`,
     `    }`,
     `    // … 입력된 모든 후보 (${ranked.length}개) 포함`,
     `  ]`,
@@ -228,9 +280,9 @@ export function buildIbValidationPrompt(
     `- (펀더멘털·거시·집행 리스크 각 1개 이상)`,
     `- ...`,
     ``,
-    `**Technical Confirmation (MTN Cross-Check)** — (MTN의 정량 점수와 위원회 시각이 어떻게 정합/배치되는지 1~2문장.)`,
+    `**Technical Confirmation (MTN Cross-Check)** — (MTN의 1차 정량 평가와 위원회 시각이 어떻게 정합/배치되는지 1~2문장.)`,
     ``,
-    `**MTN System Alignment**: CONFIRMS / UPGRADES / DOWNGRADES — (이유)`,
+    `**MTN System Alignment**: CONFIRMS / UPGRADES / DOWNGRADES — (이유와 final decision impact)`,
     ``,
     `### Pick #2 — <TICKER> (<회사명>)`,
     `(동일 구조)`,
@@ -240,11 +292,11 @@ export function buildIbValidationPrompt(
     ``,
     `## IV. Other Candidates — Summary Assessment`,
     ``,
-    `(Top3 외 종목들에 대해 ticker 별로 1~2문장의 위원회 의견. 표 형식 권장.)`,
+    `(Top3 외 종목들에 대해 ticker 별로 1~2문장의 위원회 의견. MTN 정량 점수 대비 외부 LLM의 최종 판단 영향을 반드시 포함. 표 형식 권장.)`,
     ``,
-    `| Ticker | IB Rank | Verdict | 핵심 의견 |`,
-    `| --- | --- | --- | --- |`,
-    `| ... | ... | ... | ... |`,
+    `| Ticker | IB Rank | Verdict | MTN 대비 판단 영향 | 핵심 의견 |`,
+    `| --- | --- | --- | --- | --- |`,
+    `| ... | ... | ... | ... | ... |`,
     ``,
     `## V. Sector Rotation & Final Conclusion`,
     ``,
@@ -286,7 +338,7 @@ export function buildIbValidationPrompt(
     ``,
     `# 별첨 C — 데이터 소스 및 면책 조항 (Data Sources & Disclaimer)`,
     ``,
-    `본 리포트는 MTN Rule Engine v1 정량 결과 및 LLM 기반 펀더멘털 추정으로 구성되었으며, 일부 수치는 추정치(estimate)로서 실제 컨센서스와 다를 수 있습니다. 투자 의사결정의 최종 책임은 투자자 본인에게 있습니다.`,
+    `본 리포트는 MTN Rule Engine v1의 1차 정량 평가와 외부 LLM 기반 상세 검토로 구성됩니다. MTN 점수는 최종 투자 결정의 충분조건이 아니며, 위원회 판단은 투자 계획 결정에 중대한 영향을 주는 2차 평가입니다. 단, 본 위원회 의견은 단일 LLM 호출의 페르소나 시뮬레이션 결과이며 일부 수치는 추정치(estimate)로서 실제 컨센서스와 다를 수 있습니다. 투자 의사결정의 최종 책임은 투자자 본인에게 있습니다.`,
     '```',
     ``,
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -297,7 +349,7 @@ export function buildIbValidationPrompt(
     `2. **톤**: 전문 IB 리포트 톤. "추측됩니다" 같은 약한 표현 대신 "위원회는 …로 판단합니다" "리스크는 …이다" 와 같이 단정적·분석적.`,
     `3. **숫자**: 가능한 한 구체적 수치(목표가, EPS%, 매출%, 거래량 등)를 명시. 추정치는 "Est." 라벨.`,
     `4. **차별화**: 위원 5인의 의견은 반드시 서로 다른 관점을 보여야 함. 같은 말 반복 금지.`,
-    `5. **MTN 정량과의 관계**: MTN 점수를 그대로 복창하지 말고, 그 위에 펀더멘털·매크로 레이어를 얹어 보강하거나 도전.`,
+    `5. **MTN 정량과의 관계**: MTN 점수를 그대로 복창하지 말고, 1차 평가로 취급한 뒤 펀더멘털·매크로 레이어를 얹어 보강하거나 도전.`,
     `6. **언어**: 모든 narrative는 한국어. 영어 고유명사·티커·수치는 영문 그대로.`,
     `7. **금지**: 마크다운 본문 안에 또 다른 JSON 블록을 넣지 말 것. 메타데이터 블록은 응답 맨 처음 단 1회만.`,
     ``,

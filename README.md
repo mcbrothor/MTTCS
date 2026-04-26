@@ -58,6 +58,14 @@ Required environment:
 - `MTN_BASE_URL`: target app URL. Defaults to `https://mttcs.vercel.app`.
 - `CRON_SECRET` or `MTN_CRON_SECRET`: sent as `Authorization: Bearer ...` when configured.
 
+## MTN Decision Model
+
+MTN Rule Engine output is a preliminary quantitative screen. It ranks and scores candidates so the user can focus review time, but it is not a sufficient condition for a final investment plan.
+
+The external LLM/IB committee review is the decision-influencing second layer. It must independently evaluate fundamentals, event risk, accounting quality, moat, theme concentration, and execution feasibility before confirming, upgrading, downgrading, or reranking MTN candidates. Final investment planning should combine MTN's first-pass signal, the external LLM's detailed review, and the user's own judgment.
+
+MTN is a setup screener, not an order execution management system. Execution timing, order routing, and final risk acceptance remain the user's responsibility.
+
 ## 보안 가이드: 환경 변수 키 로테이션 (Key Rotation)
 
 `.env.local` 파일에는 민감한 API 키와 데이터베이스 접속 정보가 포함되어 있습니다. 주기적으로 키 로테이션을 수행해야 합니다.

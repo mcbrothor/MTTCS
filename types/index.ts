@@ -281,6 +281,7 @@ export interface SepaEvidence {
     return12m?: number | null;
     benchmarkReturn26Week: number | null;
     stockReturn26Week: number | null;
+    mdd52wPct: number | null;
   };
 }
 
@@ -363,7 +364,8 @@ export interface HighTightFlagAnalysis {
   tightnessScore: number;
   baseHigh: number;
   baseLow: number;
-  stopPrice: number;
+  stopPrice: number | null;
+  stopReliability: 'RELIABLE' | 'INSUFFICIENT_BASE' | 'PATTERN_NOT_CONFIRMED';
   stopPlan: string[];
 }
 
@@ -441,6 +443,7 @@ export interface StockMetric {
   rs_universe_size: number | null;
   mansfield_rs_flag: boolean | null;
   mansfield_rs_score: number | null;
+  mdd_52w_pct: number | null;
   data_quality: DataQuality;
   price_source: string | null;
   error_message: string | null;
@@ -549,6 +552,7 @@ export interface ScannerResult extends ScannerConstituent {
   return6m?: number | null;
   return9m?: number | null;
   return12m?: number | null;
+  mdd52wPct?: number | null;
   analyzedAt: string | null;
   errorMessage: string | null;
   dataWarnings: string[];

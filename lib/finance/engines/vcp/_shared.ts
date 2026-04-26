@@ -5,7 +5,7 @@ export const clamp = (value: number, min: number, max: number) => Math.min(Math.
 export const MIN_BASE_DAYS = 20;
 export const MAX_BASE_DAYS = 325;
 export const MIN_CONTRACTION_DEPTH = 3;
-export const PEAK_TROUGH_WINDOW = 5;  // 주봉 기준 5주 윈도우 (resampleToWeekly 후 적용)
+export const PEAK_TROUGH_WINDOW = 2;  // 주봉 기준 2주 윈도우 (resampleToWeekly 후 적용)
 export const BB_PERIOD = 20;
 export const BB_SQUEEZE_PERCENTILE = 20;
 export const POCKET_PIVOT_LOOKBACK = 10;

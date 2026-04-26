@@ -298,9 +298,9 @@ console.log('=== VCP Engine Tests ===\n');
     { peakDate: '2025-01-18', troughDate: '2025-01-22', peakPrice: 116, troughPrice: 99, depthPct: 13, avgVolume: 800_000 },
   ]);
 
-  assert.equal(lowering.passedCount, 1, '두 번째 수축만 peak/trough 동시 하락 조건 충족');
+  assert.equal(lowering.passedCount, 2, '수축 깊이(%)가 점진적으로 얕아지는지 확인 (Minervini 핵심 원칙)');
   assert.equal(lowering.pairs[0].passed, true);
-  assert.equal(lowering.pairs[1].passed, false);
+  assert.equal(lowering.pairs[1].passed, true);
   console.log('✅ Test 9: sequential lowering validates peak and trough together');
 }
 

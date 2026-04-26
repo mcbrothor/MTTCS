@@ -278,11 +278,22 @@ export default function VcpDrilldownModal({
                   <InfoTile label="최대 낙폭" value={pct(result.highTightFlag.maxDrawdownPct)} />
                   <InfoTile label="우측 거래량" value={result.highTightFlag.rightSideVolumeRatio === null ? '-' : `50일 평균의 ${result.highTightFlag.rightSideVolumeRatio}배`} />
                   <InfoTile label="타이트니스" value={`${result.highTightFlag.tightnessScore}/100`} />
-                  <InfoTile label="손절 기준" value={valueOrDash(result.highTightFlag.stopPrice)} />
+                  <InfoTile
+                    label="손절 기준"
+                    value={
+                      result.highTightFlag.stopReliability === 'RELIABLE'
+                        ? valueOrDash(result.highTightFlag.stopPrice)
+                        : 'Base 미형성'
+                    }
+                  />
                 </div>
-                <ul className="mt-3 space-y-1 text-xs text-slate-400">
-                  {result.highTightFlag.stopPlan.map((item) => <li key={item}>- {translateStopPlan(item)}</li>)}
-                </ul>
+                {result.highTightFlag.stopPlan.length > 0 ? (
+                  <ul className="mt-3 space-y-1 text-xs text-slate-400">
+                    {result.highTightFlag.stopPlan.map((item) => <li key={item}>- {translateStopPlan(item)}</li>)}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-xs text-amber-300">Base 미형성으로 손절 기준선 산출 보류</p>
+                )}
               </section>
             )}
 

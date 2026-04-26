@@ -8,6 +8,7 @@ import type {
 } from '../../../types/index.ts';
 import { calculateRsMetrics } from '../market/rs-proxy.ts';
 import { round } from './_shared.ts';
+import { computeMdd52w } from './mdd.ts';
 import { calculateAvgVolume, calculateMovingAverage } from './moving-average.ts';
 
 function criterion(
@@ -264,16 +265,16 @@ export function analyzeSepa(
       return criterion(
         'rs_rating',
         '상대강도 RS',
-        hasRealRs ? passFail(options.preCalculatedRs! >= 70) : 'info',
+        rsValue !== null ? passFail(rsValue >= 70) : 'info',
         rsValue !== null
           ? hasRealRs
             ? `${rsValue}점 (유니버스 백분위 공식 RS)`
-            : `${rsValue}점 (참고 — ${benchmarkLabel} 대비 상대수익률 추정, 유니버스 랭킹 아님)`
+            : `${rsValue}점 (참고 — ${benchmarkLabel} 대비 상대수익률 추정)`
           : '데이터 없음',
-        '70점 이상 (유니버스 백분위 기준, DB 배치 실행 후 활성화)',
+        '70점 이상 (유니버스 백분위 또는 벤치마크 상대수익률)',
         hasRealRs
           ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
-          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률 추정치를 참고값으로 표시합니다. pass/fail 판정에 반영되지 않습니다.`
+          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률 추정치를 기준으로 판정합니다. (공식 RS 조회 시 갱신됨)`
       );
     })(),
     evaluableCriterion(
