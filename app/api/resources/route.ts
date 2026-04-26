@@ -84,6 +84,11 @@ export async function PATCH(request: Request) {
       return apiError('수정할 링크 ID가 필요합니다.', 'MISSING_ID');
     }
 
+    const session = await getServerSession();
+    if (!session) {
+      return apiError('인증이 필요합니다.', 'UNAUTHORIZED', 401);
+    }
+
     const update: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -116,6 +121,11 @@ export async function DELETE(request: Request) {
 
   if (!id) {
     return apiError('삭제할 링크 ID가 필요합니다.', 'MISSING_ID');
+  }
+
+  const session = await getServerSession();
+  if (!session) {
+    return apiError('인증이 필요합니다.', 'UNAUTHORIZED', 401);
   }
 
   try {

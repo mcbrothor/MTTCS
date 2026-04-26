@@ -250,6 +250,7 @@ export interface SepaEvidence {
     low52Week: number | null;
     distanceFromLow52WeekPct: number | null;
     avgDollarVolume20: number | null;
+    avgDollarVolumeDataQuality?: DataQuality | null;
     rsRating: number | null;
     /**
      * RS Rating의 출처를 명시합니다.
@@ -430,8 +431,14 @@ export interface ProviderAttempt {
 
 export type ScannerUniverse = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
 export type MarketCode = 'KR' | 'US';
-export type DataQuality = 'FULL' | 'PARTIAL' | 'NA';
+export type DataQuality = 'FULL' | 'PARTIAL' | 'NA' | 'OK' | 'OUTLIER_FILTERED' | 'INSUFFICIENT_DATA';
 export type MacroActionLevel = 'FULL' | 'REDUCED' | 'HALT';
+
+export interface StoredScannerSnapshot {
+  savedAt: string;
+  universeMeta: ScannerUniverseResponse;
+  results: ScannerResult[];
+}
 
 export interface StockMetric {
   ticker: string;

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import axios from 'axios';
-import { ExternalLink, Globe, Plus, Trash2, X } from 'lucide-react';
+import { ExternalLink, Globe, Plus, Shield, Trash2, X } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -21,7 +21,16 @@ export default function LinkHubPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
+  const checkAuth = useCallback(async () => {
+    try {
+      const { data } = await axios.get('/api/auth/session');
+      setIsAuthenticated(data.authenticated);
+    } catch {
+      setIsAuthenticated(false);
+    }
+  }, []);
   const fetchLinks = useCallback(async () => {
     try {
       setLoading(true);
@@ -38,7 +47,8 @@ export default function LinkHubPage() {
 
   useEffect(() => {
     fetchLinks();
-  }, [fetchLinks]);
+    checkAuth();
+  }, [fetchLinks, checkAuth]);
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`'${title}' 링크를 삭제할까요?`)) return;
@@ -89,13 +99,32 @@ export default function LinkHubPage() {
       )}
 
       {showAddForm && (
-        <AddLinkForm
-          onAdded={(newLink) => {
-            setLinks((prev) => [newLink, ...prev]);
-            setShowAddForm(false);
-          }}
-          onError={setError}
-        />
+        isAuthenticated ? (
+          <AddLinkForm
+            onAdded={(newLink) => {
+              setLinks((prev) => [newLink, ...prev]);
+              setShowAddForm(false);
+            }}
+            onError={setError}
+          />
+        ) : (
+          <Card className="border-amber-500/30 bg-amber-500/10">
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <Shield className="mb-3 h-10 w-10 text-amber-500" />
+              <h3 className="text-lg font-bold text-white">인증이 필요합니다</h3>
+              <p className="mt-1 text-sm text-amber-200/70">
+                링크를 등록하거나 관리하려면 로그인이 필요합니다.
+              </p>
+              <Button 
+                variant="primary" 
+                className="mt-4 px-6"
+                onClick={() => window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`}
+              >
+                로그인하러 가기
+              </Button>
+            </div>
+          </Card>
+        )
       )}
 
       {loading ? (
