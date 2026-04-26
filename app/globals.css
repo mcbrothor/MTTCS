@@ -135,4 +135,86 @@
   .tracking-tightest {
     letter-spacing: -0.05em;
   }
+
+  /* IB Investment Committee Report — markdown typography (dark) */
+  .ib-report {
+    font-size: 0.9375rem;
+    line-height: 1.75;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: rgb(255, 255, 255);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.25);
+  }
+  .ib-report h1:first-child { margin-top: 0; }
+  .ib-report h2 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: rgb(199, 210, 254);
+    margin-top: 2rem;
+    margin-bottom: 0.875rem;
+  }
+  .ib-report h3 {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: rgb(255, 255, 255);
+    margin-top: 1.5rem;
+    margin-bottom: 0.625rem;
+  }
+  .ib-report h4 {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: rgb(203, 213, 225);
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+  .ib-report p { margin: 0.75rem 0; color: rgb(203, 213, 225); }
+  .ib-report strong { color: rgb(255, 255, 255); font-weight: 700; }
+  .ib-report em { color: rgb(165, 180, 252); }
+  .ib-report ul, .ib-report ol { margin: 0.75rem 0 0.75rem 1.25rem; }
+  .ib-report ul { list-style: disc; }
+  .ib-report ol { list-style: decimal; }
+  .ib-report li { margin: 0.25rem 0; color: rgb(203, 213, 225); }
+  .ib-report blockquote {
+    margin: 1rem 0;
+    padding: 0.875rem 1rem;
+    border-left: 3px solid rgb(99, 102, 241);
+    background: rgba(99, 102, 241, 0.08);
+    border-radius: 0 0.5rem 0.5rem 0;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report blockquote p { margin: 0.25rem 0; }
+  .ib-report hr {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px dashed rgba(148, 163, 184, 0.25);
+  }
+  .ib-report code {
+    background: rgba(15, 23, 42, 0.8);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .ib-report thead { background: rgba(99, 102, 241, 0.12); }
+  .ib-report th, .ib-report td {
+    padding: 0.625rem 0.875rem;
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    text-align: left;
+  }
+  .ib-report th { font-weight: 700; color: rgb(199, 210, 254); }
+  .ib-report tbody tr:nth-child(even) { background: rgba(15, 23, 42, 0.4); }
+  .ib-report a { color: rgb(129, 140, 248); text-decoration: underline; }
 }

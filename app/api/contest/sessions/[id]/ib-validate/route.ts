@@ -1,9 +1,41 @@
 import { NextResponse } from 'next/server';
 import { buildIbValidationPrompt, IB_PROMPT_VERSION, IB_RESPONSE_SCHEMA_VERSION } from '@/lib/ai/contest-ib-prompt';
 import { runContestAnalysis } from '@/lib/ai/contest-analysis';
-import { extractStructuredJson } from '@/lib/ai/gemini';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } from '@/types';
+
+/**
+ * 응답에서 첫 ```json ... ``` 펜스 블록을 메타데이터로 추출하고,
+ * 그 이후의 모든 텍스트(마크다운 본문)를 report_markdown으로 반환.
+ */
+function parseIbResponse(raw: string): {
+  metadata: Record<string, unknown> | null;
+  reportMarkdown: string;
+  parseFailed: boolean;
+} {
+  const trimmed = raw.trim();
+  // 첫 ```json 펜스 매칭 (필요 시 후행 언어 식별자 변형 허용)
+  const fenceRegex = /```json\s*\n([\s\S]*?)\n```/;
+  const match = trimmed.match(fenceRegex);
+
+  if (!match) {
+    // 메타블록이 없으면 본문 전체를 마크다운으로 처리
+    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+  }
+
+  const jsonStr = match[1];
+  const fenceEnd = (match.index ?? 0) + match[0].length;
+  const reportMarkdown = trimmed.slice(fenceEnd).trim();
+
+  let metadata: Record<string, unknown> | null = null;
+  try {
+    metadata = JSON.parse(jsonStr) as Record<string, unknown>;
+  } catch {
+    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+  }
+
+  return { metadata, reportMarkdown, parseFailed: false };
+}
 
 // GET: 프롬프트만 반환 (LLM 호출 없음, 클립보드 복사용)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -77,25 +109,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const { rawResponse, providerUsed, modelUsed, fallbackChain } =
       await runContestAnalysis(prompt);
 
-    // 3. JSON 파싱
-    let ibAnalysis: Record<string, unknown>;
-    try {
-      ibAnalysis = extractStructuredJson(rawResponse) as Record<string, unknown>;
-    } catch {
-      ibAnalysis = { raw_text: rawResponse, parse_failed: true };
-    }
+    // 3. 메타데이터 + 마크다운 리포트 분리 파싱
+    const { metadata, reportMarkdown, parseFailed } = parseIbResponse(rawResponse);
+
+    const ibAnalysis: Record<string, unknown> = {
+      ...(metadata ?? {}),
+      report_markdown: reportMarkdown,
+      schema_version: IB_RESPONSE_SCHEMA_VERSION,
+      prompt_version: IB_PROMPT_VERSION,
+      generated_at: new Date().toISOString(),
+      parse_failed: parseFailed,
+      ...(parseFailed ? { raw_text: rawResponse } : {}),
+    };
 
     // 4. 세션에 IB 분석 결과 저장
     const { error: updateError } = await supabaseServer
       .from('beauty_contest_sessions')
       .update({
         ib_raw_response: rawResponse,
-        ib_analysis: {
-          ...ibAnalysis,
-          schema_version: IB_RESPONSE_SCHEMA_VERSION,
-          prompt_version: IB_PROMPT_VERSION,
-          generated_at: new Date().toISOString(),
-        },
+        ib_analysis: ibAnalysis,
         ib_provider: `${providerUsed} (${modelUsed})`,
         updated_at: new Date().toISOString(),
       })

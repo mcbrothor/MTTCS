@@ -24,6 +24,8 @@ const { BrainCircuit, Copy, Crown, Medal, Zap } = require('lucide-react') as {
   Medal: React.FC<React.SVGProps<SVGSVGElement>>;
   Zap: React.FC<React.SVGProps<SVGSVGElement>>;
 };
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import Button from '@/components/ui/Button';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
@@ -76,39 +78,29 @@ type ReviewDrafts = Record<string, ReviewDraft>;
 type Horizon = 'W1' | 'M1';
 type ContestStep = 'selection' | 'analyzing' | 'result';
 
-interface IbCandidateAnalysis {
+interface IbCandidateMeta {
   ticker: string;
-  mtn_rank: number;
-  ib_rank: number;
-  ib_verdict: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
+  mtn_rank?: number;
+  ib_rank?: number;
+  ib_verdict?: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
   price_target_12m?: string | null;
   eps_growth_estimate?: string | null;
   revenue_growth_estimate?: string | null;
-  catalyst_events?: string[];
-  key_risks_fundamental?: string[];
   moat_assessment?: 'WIDE' | 'NARROW' | 'NONE' | 'UNKNOWN';
-  committee_notes?: {
-    portfolio_construction?: string;
-    equity_research?: string;
-    quant_validation?: string;
-    risk_assessment?: string;
-    execution_note?: string;
-  };
   mtn_alignment?: 'CONFIRMS' | 'UPGRADES' | 'DOWNGRADES';
-  final_narrative?: string;
 }
 
 interface IbCommitteeAnalysis {
+  schema_version?: string;
+  session_id?: string;
+  analysis_date?: string;
   committee_consensus?: {
-    executive_summary?: string;
     top3_tickers?: string[];
     mtn_alignment?: 'CONFIRMS' | 'PARTIAL_RERANK' | 'SIGNIFICANT_RERANK';
-    regime_assessment?: string;
+    regime_label?: string;
   };
-  candidate_analyses?: IbCandidateAnalysis[];
-  dissenting_views?: { analyst: string; ticker: string; view: string }[];
-  sector_context?: string;
-  macro_overlay?: string;
+  candidates?: IbCandidateMeta[];
+  report_markdown?: string;
   generated_at?: string;
   prompt_version?: string;
   parse_failed?: boolean;
@@ -956,7 +948,7 @@ export default function ContestPage() {
     </div>
   );
 
-  const ibVerdictColor = (verdict: IbCandidateAnalysis['ib_verdict'] | undefined) => {
+  const ibVerdictColor = (verdict: IbCandidateMeta['ib_verdict'] | undefined) => {
     if (verdict === 'STRONG_BUY') return 'text-emerald-300 bg-emerald-500/20 border-emerald-500/30';
     if (verdict === 'BUY') return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
     if (verdict === 'HOLD') return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
@@ -965,7 +957,7 @@ export default function ContestPage() {
     return 'text-slate-400 bg-slate-800 border-slate-700';
   };
 
-  const ibAlignmentBadge = (align: IbCandidateAnalysis['mtn_alignment'] | undefined) => {
+  const ibAlignmentBadge = (align: IbCandidateMeta['mtn_alignment'] | undefined) => {
     if (align === 'CONFIRMS') return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] font-black text-emerald-400">MTN 확인</span>;
     if (align === 'UPGRADES') return <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[9px] font-black text-sky-400">MTN 상향</span>;
     if (align === 'DOWNGRADES') return <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[9px] font-black text-rose-400">MTN 하향</span>;
@@ -973,7 +965,7 @@ export default function ContestPage() {
   };
 
   const renderIbSection = () => {
-    const hasResult = ibAnalysis && !ibAnalysis.parse_failed;
+    const hasResult = ibAnalysis && !ibAnalysis.parse_failed && (ibAnalysis.report_markdown || (ibAnalysis.candidates?.length ?? 0) > 0);
 
     return (
       <section className="rounded-3xl border border-indigo-500/20 bg-indigo-950/20 overflow-hidden shadow-2xl shadow-indigo-500/5">
@@ -1074,13 +1066,12 @@ export default function ContestPage() {
         )}
 
         {hasResult && ibAnalysis && (
-          <div className="p-6 space-y-8">
-            {/* Executive Summary */}
-            {ibAnalysis.committee_consensus?.executive_summary && (
-              <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/30 p-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mb-3">위원회 종합 결론</p>
-                <p className="text-sm leading-relaxed text-slate-200">{ibAnalysis.committee_consensus.executive_summary}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
+          <div className="p-6 space-y-6">
+            {/* 메타 카드: Top3 + 종목별 한 줄 메타 */}
+            {ibAnalysis.committee_consensus && (
+              <div className="rounded-2xl border border-indigo-500/20 bg-indigo-950/30 p-5">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 mb-3">위원회 합의 (Committee Consensus)</p>
+                <div className="flex flex-wrap items-center gap-2">
                   {ibAnalysis.committee_consensus.top3_tickers?.map((t, i) => (
                     <span key={t} className="rounded-full bg-indigo-500/20 px-3 py-1 text-xs font-black text-indigo-300">
                       IB #{i + 1} {t}
@@ -1096,125 +1087,53 @@ export default function ContestPage() {
                        ibAnalysis.committee_consensus.mtn_alignment === 'PARTIAL_RERANK' ? '부분 재순위' : '순위 재조정'}
                     </span>
                   )}
+                  {ibAnalysis.committee_consensus.regime_label && (
+                    <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-bold text-slate-300">
+                      국면: {ibAnalysis.committee_consensus.regime_label}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Per-Candidate IB Analysis */}
-            {ibAnalysis.candidate_analyses && ibAnalysis.candidate_analyses.length > 0 && (
-              <div className="space-y-4">
-                <h4 className="text-sm font-black text-white">종목별 위원회 심층 분석</h4>
-                <div className="grid gap-4 lg:grid-cols-2">
-                  {[...(ibAnalysis.candidate_analyses)].sort((a, b) => a.ib_rank - b.ib_rank).map((ca) => (
-                    <div key={ca.ticker} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-5 space-y-4">
-                      {/* Ticker header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/20 text-xs font-black text-indigo-300">
-                            #{ca.ib_rank}
-                          </span>
-                          <div>
-                            <p className="text-lg font-black text-white">{ca.ticker}</p>
-                            <p className="text-[10px] text-slate-500">MTN #{ca.mtn_rank} → IB #{ca.ib_rank}</p>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1.5">
-                          <span className={`rounded-lg border px-2.5 py-1 text-[11px] font-black ${ibVerdictColor(ca.ib_verdict)}`}>
-                            {ca.ib_verdict?.replace('_', ' ')}
-                          </span>
-                          {ibAlignmentBadge(ca.mtn_alignment)}
-                        </div>
+            {/* 종목별 메타 미니 그리드 */}
+            {ibAnalysis.candidates && ibAnalysis.candidates.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[...ibAnalysis.candidates].sort((a, b) => (a.ib_rank ?? 99) - (b.ib_rank ?? 99)).map((ca) => (
+                  <div key={ca.ticker} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-indigo-500/20 text-[10px] font-black text-indigo-300">
+                          #{ca.ib_rank ?? '-'}
+                        </span>
+                        <p className="font-mono text-sm font-black text-white truncate">{ca.ticker}</p>
                       </div>
-
-                      {/* Price & earnings */}
-                      {(ca.price_target_12m || ca.eps_growth_estimate) && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {ca.price_target_12m && (
-                            <div className="rounded-xl bg-slate-900/60 p-3">
-                              <p className="text-[9px] font-bold text-slate-500 uppercase">12M Target</p>
-                              <p className="text-base font-black text-white">{ca.price_target_12m}</p>
-                            </div>
-                          )}
-                          {ca.eps_growth_estimate && (
-                            <div className="rounded-xl bg-slate-900/60 p-3">
-                              <p className="text-[9px] font-bold text-slate-500 uppercase">EPS 성장</p>
-                              <p className="text-base font-black text-emerald-400">{ca.eps_growth_estimate}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Final narrative */}
-                      {ca.final_narrative && (
-                        <p className="text-xs leading-relaxed text-slate-300">{ca.final_narrative}</p>
-                      )}
-
-                      {/* Committee notes (collapsible) */}
-                      {ca.committee_notes && (
-                        <div className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 space-y-2.5">
-                          <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">위원 의견</p>
-                          {Object.entries({
-                            '① Portfolio': ca.committee_notes.portfolio_construction,
-                            '② Research': ca.committee_notes.equity_research,
-                            '③ Quant': ca.committee_notes.quant_validation,
-                            '④ Risk': ca.committee_notes.risk_assessment,
-                            '⑤ Execution': ca.committee_notes.execution_note,
-                          }).filter(([, v]) => v).map(([role, note]) => (
-                            <div key={role} className="flex gap-2 text-xs">
-                              <span className="shrink-0 font-bold text-slate-500 w-20">{role}</span>
-                              <span className="text-slate-400 leading-relaxed">{note}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Catalysts & Risks */}
-                      {(ca.catalyst_events?.length || ca.key_risks_fundamental?.length) && (
-                        <div className="grid grid-cols-2 gap-3">
-                          {ca.catalyst_events && ca.catalyst_events.length > 0 && (
-                            <div>
-                              <p className="text-[9px] font-black uppercase text-emerald-500 mb-1.5">촉매</p>
-                              <ul className="space-y-1">
-                                {ca.catalyst_events.map((ev, i) => (
-                                  <li key={i} className="text-[10px] text-slate-400 flex gap-1"><span className="text-emerald-500">+</span>{ev}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {ca.key_risks_fundamental && ca.key_risks_fundamental.length > 0 && (
-                            <div>
-                              <p className="text-[9px] font-black uppercase text-rose-500 mb-1.5">리스크</p>
-                              <ul className="space-y-1">
-                                {ca.key_risks_fundamental.map((r, i) => (
-                                  <li key={i} className="text-[10px] text-slate-400 flex gap-1"><span className="text-rose-500">−</span>{r}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-black ${ibVerdictColor(ca.ib_verdict)}`}>
+                        {ca.ib_verdict?.replace('_', ' ') ?? '-'}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+                      {ca.price_target_12m && <span className="text-slate-300">12M <span className="font-bold text-white">{ca.price_target_12m}</span></span>}
+                      {ca.eps_growth_estimate && <span className="text-slate-300">EPS <span className="font-bold text-emerald-400">{ca.eps_growth_estimate}</span></span>}
+                      {ca.moat_assessment && ca.moat_assessment !== 'UNKNOWN' && (
+                        <span className="text-slate-500">Moat <span className="font-bold text-slate-300">{ca.moat_assessment}</span></span>
+                      )}
+                      {ibAlignmentBadge(ca.mtn_alignment)}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Macro & Sector overlay */}
-            {(ibAnalysis.macro_overlay || ibAnalysis.sector_context) && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {ibAnalysis.macro_overlay && (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">매크로 오버레이</p>
-                    <p className="text-xs leading-relaxed text-slate-300">{ibAnalysis.macro_overlay}</p>
-                  </div>
-                )}
-                {ibAnalysis.sector_context && (
-                  <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-2">섹터 컨텍스트</p>
-                    <p className="text-xs leading-relaxed text-slate-300">{ibAnalysis.sector_context}</p>
-                  </div>
-                )}
-              </div>
+            {/* 마크다운 리포트 본문 */}
+            {ibAnalysis.report_markdown && (
+              <article className="rounded-2xl border border-slate-800 bg-slate-950/40 p-6 lg:p-8">
+                <div className="ib-report text-slate-200">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {ibAnalysis.report_markdown}
+                  </ReactMarkdown>
+                </div>
+              </article>
             )}
 
             {/* Provider badge */}
@@ -1223,6 +1142,18 @@ export default function ContestPage() {
                 분석 제공: {activeSession.ib_provider} · {ibAnalysis.generated_at ? new Date(ibAnalysis.generated_at).toLocaleString('ko-KR') : ''}
               </p>
             )}
+          </div>
+        )}
+
+        {/* parse_failed 시 raw text 표시 */}
+        {ibAnalysis?.parse_failed && ibAnalysis.raw_text && (
+          <div className="p-6">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 mb-4 text-xs text-amber-200">
+              메타데이터 블록 파싱에 실패했습니다. 원본 응답을 그대로 표시합니다.
+            </div>
+            <pre className="max-h-[600px] overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4 text-[11px] leading-relaxed text-slate-300 whitespace-pre-wrap">
+              {ibAnalysis.raw_text}
+            </pre>
           </div>
         )}
       </section>
