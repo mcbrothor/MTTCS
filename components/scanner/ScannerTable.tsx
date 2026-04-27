@@ -75,6 +75,25 @@ function volumeSignalClass(tier: VolumeSignalTier) {
   return 'border-slate-800 bg-slate-950 text-slate-500';
 }
 
+function getSectorLabel(result: ScannerResult): string | null {
+  return result.fundamentals?.sector ?? null;
+}
+
+function sectorColorClass(sector: string): string {
+  const s = sector.toLowerCase();
+  if (s.includes('반도체') || s.includes('semiconductor')) return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
+  if (s.includes('방산') || s.includes('defense') || s.includes('aerospace')) return 'bg-red-500/15 text-red-300 border-red-500/30';
+  if (s.includes('통신') || s.includes('telecom') || s.includes('communication')) return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+  if (s.includes('증권') || s.includes('금융') || s.includes('financial') || s.includes('bank')) return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+  if (s.includes('조선') || s.includes('shipbuilding')) return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+  if (s.includes('소프트웨어') || s.includes('software') || s.includes('technology') || s.includes('tech')) return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30';
+  if (s.includes('바이오') || s.includes('제약') || s.includes('health') || s.includes('biotech')) return 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+  if (s.includes('에너지') || s.includes('energy')) return 'bg-orange-500/15 text-orange-300 border-orange-500/30';
+  if (s.includes('자동차') || s.includes('auto') || s.includes('consumer')) return 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30';
+  if (s.includes('철강') || s.includes('소재') || s.includes('material')) return 'bg-stone-500/15 text-stone-300 border-stone-500/30';
+  return 'bg-slate-700/40 text-slate-400 border-slate-600/40';
+}
+
 function volumeSignalDetail(result: ScannerResult) {
   const dryUp = result.volumeDryUpScore ?? '-';
   const pocket = result.pocketPivotScore ?? '-';
@@ -170,7 +189,14 @@ export default function ScannerTable({
                 <td className="px-2 py-3 font-mono text-slate-400">{result.rank}</td>
                 <td className="px-2 py-3">
                   <p className="truncate font-mono font-bold text-white">{result.ticker}</p>
-                  <p className="truncate text-[11px] text-slate-500">{result.name}</p>
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {getSectorLabel(result) && (
+                      <span className={`shrink-0 rounded border px-1 py-0.5 text-[9px] font-semibold leading-none ${sectorColorClass(getSectorLabel(result)!)}`}>
+                        {getSectorLabel(result)}
+                      </span>
+                    )}
+                    <p className="truncate text-[11px] text-slate-500">{result.name}</p>
+                  </div>
                 </td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency, result.ticker)}</td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency, result.ticker)}</td>
