@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
@@ -65,7 +66,7 @@ function statusToState(status: MasterFilterMetricDetail['status']): MarketState 
   return 'RED';
 }
 
-function MetricCard({ detail, chartData, movingAverageData, compact = false }: MetricCardProps) {
+const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageData, compact = false }: MetricCardProps) {
   const tone = statusClass(detail.status);
   const help = getMetricHelp(detail.label);
   return (
@@ -165,8 +166,7 @@ function MetricCard({ detail, chartData, movingAverageData, compact = false }: M
       </div>
     </Card>
   );
-
-}
+});
 
 function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRows']> }) {
   if (rows.length === 0) return null;

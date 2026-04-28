@@ -38,10 +38,16 @@ export default function MarketStrip() {
   useEffect(() => {
     let mounted = true;
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let currentController: AbortController | null = null;
 
     const load = async () => {
+      currentController?.abort();
+      currentController = new AbortController();
       try {
-        const response = await fetch('/api/macro', { cache: 'no-store' });
+        const response = await fetch('/api/macro', {
+          cache: 'no-store',
+          signal: currentController.signal,
+        });
         if (!response.ok) return;
 
         const json = (await response.json()) as MacroStripResponse;
@@ -50,19 +56,27 @@ export default function MarketStrip() {
         startTransition(() => {
           setQuotes(json.data ?? {});
         });
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         // Ignore transient market-strip failures and keep the last good snapshot.
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     void load();
     intervalId = setInterval(() => {
-      void load();
+      if (document.visibilityState === 'visible') void load();
     }, 15_000);
 
     return () => {
       mounted = false;
       if (intervalId) clearInterval(intervalId);
+      currentController?.abort();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

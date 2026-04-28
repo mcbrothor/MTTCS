@@ -231,12 +231,20 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { data, error } = await supabaseServer
+    const { searchParams } = new URL(request.url);
+    const limit = searchParams.has('limit') ? Math.max(1, parseInt(searchParams.get('limit')!, 10)) : null;
+    const offset = searchParams.has('offset') ? Math.max(0, parseInt(searchParams.get('offset')!, 10)) : 0;
+
+    let query = supabaseServer
       .from('trades')
       .select('*, trade_executions(*)')
       .order('created_at', { ascending: false });
+
+    if (limit !== null) query = query.range(offset, offset + limit - 1);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

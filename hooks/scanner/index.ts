@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, startTransition, useState } from 'react';
 import { useContestSelection } from '../useContestSelection';
 import {
   applyUniverseRsRankings,
@@ -108,8 +108,10 @@ export function useScanner() {
         setLastScannedAt(snapshot.savedAt);
         loadScannerMetrics(initial, snapshot.results).then((merged) => {
           if (!active) return;
-          setResults(merged.results);
-          setMacroTrend(merged.macroTrend);
+          startTransition(() => {
+            setResults(merged.results);
+            setMacroTrend(merged.macroTrend);
+          });
         });
       }
     };
@@ -125,8 +127,10 @@ export function useScanner() {
       setResults(snapshot.results);
       setLastScannedAt(snapshot.savedAt);
       loadScannerMetrics(newUniverse, snapshot.results).then((merged) => {
-        setResults(merged.results);
-        setMacroTrend(merged.macroTrend);
+        startTransition(() => {
+          setResults(merged.results);
+          setMacroTrend(merged.macroTrend);
+        });
       });
     } else {
       setResults([]);

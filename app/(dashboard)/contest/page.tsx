@@ -42,6 +42,7 @@ import type {
   ScannerUniverseResponse,
   StoredScannerSnapshot,
 } from '@/types';
+import { readScannerSnapshot } from '@/hooks/scanner/storage';
 
 const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
@@ -89,34 +90,39 @@ function parseUniverse(value: string | null): ScannerUniverse | null {
 
 function getInitialUniverse(): ScannerUniverse {
   if (typeof window === 'undefined') return 'NASDAQ100';
+  
+  const lastSelected = window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY);
+  const storedLatest = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+  const preferred = parseUniverse(lastSelected) || parseUniverse(storedLatest);
+
   try {
     const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
     const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
     if (mapRaw) {
       const map = JSON.parse(mapRaw);
-      const universes: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
-      for (const u of universes) {
-        if (map[u]?.tickers?.length > 0) return u;
+      // 1. Prefer the most recently used universe if it has selections
+      if (preferred && map[preferred]?.tickers?.length > 0) {
+        return preferred;
+      }
+      
+      // 2. Otherwise find any universe with selections (most recently saved first)
+      const selections = Object.values(map)
+        .filter((s: any) => s && Array.isArray(s.tickers) && s.tickers.length > 0)
+        .sort((a: any, b: any) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+        
+      if (selections.length > 0) {
+        const u = parseUniverse(selections[0].universe);
+        if (u) return u;
       }
     }
   } catch (e) {
     console.error('Failed to scan initial selections:', e);
   }
-  const lastSelected = window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY);
-  const storedLatest = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
-  return parseUniverse(lastSelected) || parseUniverse(storedLatest) || 'NASDAQ100';
+  
+  return preferred || 'NASDAQ100';
 }
 
-function readSnapshot(universe: ScannerUniverse): StoredScannerSnapshot | null {
-  try {
-    const raw = window.localStorage.getItem(`${SNAPSHOT_PREFIX}${universe}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredScannerSnapshot;
-    return Array.isArray(parsed.results) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+// Removed readSnapshot as we use readScannerSnapshot from storage
 
 function readTransferSelection(targetUniverse: ScannerUniverse): TransferSelection | null {
   try {
@@ -276,8 +282,8 @@ export default function ContestPage() {
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
-  const loadSnapshot = useCallback((nextUniverse: ScannerUniverse) => {
-    const next = readSnapshot(nextUniverse);
+  const loadSnapshot = useCallback(async (nextUniverse: ScannerUniverse) => {
+    const next = await readScannerSnapshot(nextUniverse);
     setSnapshot(next);
     if (!next) {
       setSelected([]);

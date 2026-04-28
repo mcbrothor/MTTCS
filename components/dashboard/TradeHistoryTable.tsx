@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import StatusBadge from '@/components/ui/StatusBadge';
 import Card from '@/components/ui/Card';
@@ -38,9 +38,12 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
 
   const visibleRows = useMemo(() => (limit ? rows.slice(0, limit) : rows), [rows, limit]);
 
+  const securityNamesRef = useRef(securityNames);
+  securityNamesRef.current = securityNames;
+
   useEffect(() => {
     const tickers = Array.from(new Set(visibleRows.map((trade) => trade.ticker).filter(Boolean)));
-    const missing = tickers.filter((ticker) => securityNames[ticker] === undefined);
+    const missing = tickers.filter((ticker) => securityNamesRef.current[ticker] === undefined);
     if (missing.length === 0) return;
 
     let cancelled = false;
@@ -71,7 +74,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     return () => {
       cancelled = true;
     };
-  }, [securityNames, visibleRows]);
+  }, [visibleRows]);
 
   const replaceRow = (trade: Trade) => {
     setRows((prev) => prev.map((item) => (item.id === trade.id ? trade : item)));

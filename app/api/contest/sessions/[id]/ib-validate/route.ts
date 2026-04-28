@@ -17,27 +17,67 @@ function parseIbResponse(raw: string): {
   parseFailed: boolean;
 } {
   const trimmed = raw.trim();
-  // 첫 ```json 펜스 매칭 (필요 시 후행 언어 식별자 변형 허용)
-  const fenceRegex = /```json\s*\n([\s\S]*?)\n```/;
+  
+  // 1. Try fence regex first
+  const fenceRegex = /```(?:json)?\s*\n([\s\S]*?)\n```/i;
   const match = trimmed.match(fenceRegex);
 
-  if (!match) {
-    // 메타블록이 없으면 본문 전체를 마크다운으로 처리
-    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+  if (match) {
+    const jsonStr = match[1];
+    const fenceEnd = (match.index ?? 0) + match[0].length;
+    const reportMarkdown = trimmed.slice(fenceEnd).trim();
+    
+    try {
+      const metadata = JSON.parse(jsonStr) as Record<string, unknown>;
+      return { metadata, reportMarkdown, parseFailed: false };
+    } catch {
+      // Fall through to brace matching if JSON parse fails
+    }
   }
 
-  const jsonStr = match[1];
-  const fenceEnd = (match.index ?? 0) + match[0].length;
-  const reportMarkdown = trimmed.slice(fenceEnd).trim();
+  // 2. Fallback to bracket matching
+  for (let start = 0; start < trimmed.length; start += 1) {
+    const open = trimmed[start];
+    if (open !== '{') continue;
+    
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-  let metadata: Record<string, unknown> | null = null;
-  try {
-    metadata = JSON.parse(jsonStr) as Record<string, unknown>;
-  } catch {
-    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+    for (let index = start; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      
+      if (char === '{') depth += 1;
+      if (char === '}') depth -= 1;
+      
+      if (depth === 0) {
+        const jsonStr = trimmed.slice(start, index + 1);
+        const reportMarkdown = trimmed.slice(index + 1).trim();
+        
+        try {
+          const metadata = JSON.parse(jsonStr) as Record<string, unknown>;
+          return { metadata, reportMarkdown, parseFailed: false };
+        } catch {
+          break; // Try another starting brace if this one failed
+        }
+      }
+    }
   }
 
-  return { metadata, reportMarkdown, parseFailed: false };
+  return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
 }
 
 // GET: 프롬프트만 반환 (LLM 호출 없음, 클립보드 복사용)

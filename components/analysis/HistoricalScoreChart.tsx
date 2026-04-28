@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -26,7 +26,7 @@ interface MetricPoint {
   rs_rating: number;
 }
 
-export default function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
+function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
   const [data, setData] = useState<MetricPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,3 +159,5 @@ export default function HistoricalScoreChart({ ticker, market }: HistoricalScore
     </div>
   );
 }
+
+export default memo(HistoricalScoreChart);
