@@ -494,7 +494,7 @@ export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>
           authorization: `Bearer ${token}`,
           appkey: KIS_APP_KEY,
           appsecret: KIS_APP_SECRET,
-          tr_id: 'FHKUP03500100',
+          tr_id: 'FHPUP02100000',
           custtype: 'P',
         },
         params: {
@@ -503,10 +503,21 @@ export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>
         },
       });
       if (response.data.rt_cd === '0' && response.data.output) {
+        const output = response.data.output;
+        const sign = output.prdy_vrss_sign;
+        let changePercent = Number(output.bstp_nmix_prdy_ctrt);
+        if (sign === '4' || sign === '5') {
+          changePercent = -Math.abs(changePercent);
+        } else if (sign === '1' || sign === '2') {
+          changePercent = Math.abs(changePercent);
+        } else {
+          changePercent = 0;
+        }
+
         results[yahooSymbol] = {
           symbol: yahooSymbol,
-          regularMarketPrice: Number(response.data.output.bstp_nmix_prpr),
-          regularMarketChangePercent: Number(response.data.output.bstp_nmix_prdy_ctrt), // 전일 대비율(등락율)
+          regularMarketPrice: Number(output.bstp_nmix_prpr),
+          regularMarketChangePercent: changePercent,
         };
       } else {
         console.warn(`KIS Index fetch failed for ${iscd}:`, response.data.msg1);
