@@ -468,3 +468,58 @@ export async function getKisMarketForeignNetBuy(
     return [];
   }
 }
+
+// ─── 지수 현재가 (Market Indices) ────────────────────────────────
+
+export interface KisIndexQuote {
+  symbol: string;
+  regularMarketPrice: number;
+  regularMarketChangePercent: number;
+}
+
+export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>> {
+  const token = await getKisToken();
+  const KIS_APP_KEY = kisAppKey();
+  const KIS_APP_SECRET = kisAppSecret();
+  const KIS_BASE_URL = kisBaseUrl();
+
+  const results: Record<string, KisIndexQuote> = {};
+
+  // 국내 지수 조회 (KOSPI: 0001, KOSDAQ: 1001)
+  const fetchDomesticIndex = async (iscd: string, yahooSymbol: string) => {
+    try {
+      const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-index-price`, {
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          authorization: `Bearer ${token}`,
+          appkey: KIS_APP_KEY,
+          appsecret: KIS_APP_SECRET,
+          tr_id: 'FHKUP03500100',
+          custtype: 'P',
+        },
+        params: {
+          FID_COND_MRKT_DIV_CODE: 'U',
+          FID_INPUT_ISCD: iscd,
+        },
+      });
+      if (response.data.rt_cd === '0' && response.data.output) {
+        results[yahooSymbol] = {
+          symbol: yahooSymbol,
+          regularMarketPrice: Number(response.data.output.bstp_nmix_prpr),
+          regularMarketChangePercent: Number(response.data.output.bstp_nmix_prdy_ctrt), // 전일 대비율(등락율)
+        };
+      } else {
+        console.warn(`KIS Index fetch failed for ${iscd}:`, response.data.msg1);
+      }
+    } catch (error) {
+      console.warn(`KIS Index fetch failed for ${iscd}:`, error);
+    }
+  };
+
+  await Promise.allSettled([
+    fetchDomesticIndex('0001', '^KS11'), // KOSPI
+    fetchDomesticIndex('1001', '^KQ11'), // KOSDAQ
+  ]);
+
+  return results;
+}

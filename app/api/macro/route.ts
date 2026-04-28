@@ -30,9 +30,30 @@ export async function GET() {
     ]);
 
     const macroData = quotes.reduce((acc, quote) => {
-      acc[quote.symbol] = quote;
+      acc[quote.symbol] = {
+        ...quote,
+        source: 'Yahoo'
+      };
       return acc;
-    }, {} as Record<string, YahooQuote>);
+    }, {} as Record<string, YahooQuote & { source?: string }>);
+
+    // KIS API에서 최우선으로 지수 정보를 가져와 덮어씌움 (Yahoo 데이터 오류 방지)
+    const kisIndexQuotes = await import('@/lib/finance/providers/kis-api').then((m) => m.getKisIndexQuotes()).catch(() => ({}));
+    for (const [symbol, kisQuote] of Object.entries(kisIndexQuotes)) {
+      if (macroData[symbol]) {
+        macroData[symbol].regularMarketPrice = kisQuote.regularMarketPrice;
+        macroData[symbol].regularMarketChangePercent = kisQuote.regularMarketChangePercent;
+        macroData[symbol].source = 'KIS';
+      } else {
+        macroData[symbol] = {
+          symbol,
+          regularMarketPrice: kisQuote.regularMarketPrice,
+          regularMarketChangePercent: kisQuote.regularMarketChangePercent,
+          fiftyDayAverage: kisQuote.regularMarketPrice,
+          source: 'KIS',
+        };
+      }
+    }
 
     const historiesMap: Record<string, OHLCData[]> = {};
     HISTORY_SYMBOLS.forEach((sym, i) => {
@@ -46,6 +67,8 @@ export async function GET() {
 
     const macroResult = computeMacroScore(macroData, historiesMap, fredData);
 
+    const asOfTime = new Date().toISOString();
+
     return NextResponse.json({
       data: macroData,
       score: macroResult.macroScore,
@@ -54,7 +77,8 @@ export async function GET() {
       spyAbove50ma: macroResult.spyAbove50ma,
       hygIefDiff: macroResult.hygIefDiff,
       vixLevel: macroResult.vixLevel,
-      asOf: new Date().toISOString(),
+      asOf: asOfTime, // 업데이트 시간 표시용
+      updatedAt: asOfTime,
     });
   } catch (error: unknown) {
     console.error('Fetch Macro Data Error:', error);

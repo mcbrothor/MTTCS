@@ -5,6 +5,7 @@ import { startTransition, useEffect, useState } from 'react';
 interface StripQuote {
   regularMarketPrice?: number;
   regularMarketChangePercent?: number;
+  source?: string;
 }
 
 interface MacroStripResponse {
@@ -34,6 +35,7 @@ function formatChange(value?: number) {
 
 export default function MarketStrip() {
   const [quotes, setQuotes] = useState<Record<string, StripQuote>>({});
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -50,15 +52,29 @@ export default function MarketStrip() {
         });
         if (!response.ok) return;
 
-        const json = (await response.json()) as MacroStripResponse;
+        const json = (await response.json()) as MacroStripResponse & { asOf?: string };
         if (!mounted || !json.data) return;
 
         startTransition(() => {
           setQuotes(json.data ?? {});
+          if (json.asOf) {
+            const d = new Date(json.asOf);
+            const dateStr = d.toLocaleDateString('ko-KR', { 
+              year: 'numeric', 
+              month: '2-digit', 
+              day: '2-digit' 
+            }).replace(/\s/g, '').replace(/\.$/, '.');
+            const timeStr = d.toLocaleTimeString('ko-KR', { 
+              hour12: false, 
+              hour: '2-digit', 
+              minute: '2-digit', 
+              second: '2-digit' 
+            });
+            setUpdatedAt(`${dateStr} ${timeStr}`);
+          }
         });
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        // Ignore transient market-strip failures and keep the last good snapshot.
       }
     };
 
@@ -68,9 +84,10 @@ export default function MarketStrip() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     void load();
+    // 업데이트 주기를 1시간(3,600,000ms)으로 변경
     intervalId = setInterval(() => {
       if (document.visibilityState === 'visible') void load();
-    }, 15_000);
+    }, 3_600_000);
 
     return () => {
       mounted = false;
@@ -94,7 +111,7 @@ export default function MarketStrip() {
         return (
           <div
             key={item.symbol}
-            className={`flex min-w-[102px] shrink-0 flex-col rounded-2xl border px-3 py-2 ${tone}`}
+            className={`flex min-w-[108px] shrink-0 flex-col rounded-2xl border px-3 py-2 ${tone} relative`}
           >
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               {item.label}
@@ -102,12 +119,23 @@ export default function MarketStrip() {
             <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
               {formatPrice(quote?.regularMarketPrice, item.digits)}
             </span>
-            <span className="font-mono text-[11px] font-medium">
-              {formatChange(quote?.regularMarketChangePercent)}
-            </span>
+            <div className="flex justify-between items-center mt-0.5">
+              <span className="font-mono text-[11px] font-medium">
+                {formatChange(quote?.regularMarketChangePercent)}
+              </span>
+              <span className="text-[8px] font-bold tracking-wider text-[var(--text-tertiary)] uppercase opacity-70">
+                {quote?.source || (item.symbol === 'KRW=X' ? 'Yahoo' : 'KIS')}
+              </span>
+            </div>
           </div>
         );
       })}
+      
+      {updatedAt && (
+        <div className="ml-auto shrink-0 flex items-center pr-2 text-[10px] text-[var(--text-tertiary)] font-mono">
+          Last Updated: {updatedAt}
+        </div>
+      )}
     </div>
   );
 }
