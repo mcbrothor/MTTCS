@@ -107,9 +107,13 @@ export function buildIbValidationPrompt(
   marketContext?: MasterFilterResponse | null,
   includeJsonMetadata: boolean = true
 ): string {
-  const ranked = [...candidates].sort(
+  const allRanked = [...candidates].sort(
     (a, b) => (a.llm_rank ?? 99) - (b.llm_rank ?? 99),
   );
+
+  // 인앱 리포트 생성 시 Token Quota Limit(Rate Limit) 방지를 위해 Top 10 종목으로 제한
+  // 외부 프롬프트 복사 시에는 그대로 전체 전달
+  const ranked = includeJsonMetadata ? allRanked.slice(0, 10) : allRanked;
 
   const candidateBlock = ranked.map((c) => {
     const snap = compactSnapshot((c.snapshot ?? {}) as Record<string, unknown>);
