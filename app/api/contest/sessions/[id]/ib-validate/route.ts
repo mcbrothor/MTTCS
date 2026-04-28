@@ -4,6 +4,9 @@ import { runContestAnalysis } from '@/lib/ai/contest-analysis';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } from '@/types';
 
+// IB 프롬프트는 대형 컨텍스트 + 긴 마크다운 리포트 생성 필요 → 충분한 실행 시간 확보
+export const maxDuration = 120;
+
 /**
  * 응답에서 첫 ```json ... ``` 펜스 블록을 메타데이터로 추출하고,
  * 그 이후의 모든 텍스트(마크다운 본문)를 report_markdown으로 반환.

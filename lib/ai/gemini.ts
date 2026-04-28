@@ -174,9 +174,17 @@ function parseStructuredInsight(raw: string): { structured: StructuredInsight; t
   return { structured: {}, text: raw };
 }
 
-export async function callGeminiModel(modelId: string, prompt: string, retries = 2): Promise<string> {
+export async function callGeminiModel(
+  modelId: string,
+  prompt: string,
+  retries = 2,
+  maxOutputTokens?: number,
+): Promise<string> {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: modelId });
+  const model = genAI.getGenerativeModel({
+    model: modelId,
+    ...(maxOutputTokens ? { generationConfig: { maxOutputTokens } } : {}),
+  });
 
   for (let index = 0; index <= retries; index += 1) {
     try {

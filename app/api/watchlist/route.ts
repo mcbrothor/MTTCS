@@ -4,7 +4,12 @@ import { getServerSession } from '@/lib/auth/session';
 import type { WatchlistPriority } from '@/types';
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : '알 수 없는 오류';
+  if (error instanceof Error) return error.message;
+  // Supabase PostgrestError는 Error 인스턴스가 아니지만 message 필드를 가짐
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return '알 수 없는 오류';
 }
 
 function apiError(message: string, code: string, status = 400) {

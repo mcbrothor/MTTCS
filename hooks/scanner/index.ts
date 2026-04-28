@@ -164,7 +164,7 @@ export function useScanner() {
       setProgress({ current: 0, total: initialResults.length });
       setScanStage('KIS 가격 조회 → Yahoo fallback → 벤치마크 → SEPA/VCP 계산');
 
-      const batchSize = 10;
+      const batchSize = 20; // API MAX_BATCH_SIZE와 동일하게 — 라운드트립 절반으로 감소
       let completedCount = 0;
 
       for (let i = 0; i < initialResults.length; i += batchSize) {

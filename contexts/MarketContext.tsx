@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { DataSourceMeta, MacroRegime, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 import type { MacroScoreBreakdown } from '@/lib/macro/compute';
 
-export type MarketSelection = 'US' | 'KR' | 'KR_KOSPI' | 'KR_KOSDAQ';
+export type MarketSelection = 'US' | 'KR';
 
 interface MarketContextValue {
   data: MasterFilterResponse | null;

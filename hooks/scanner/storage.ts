@@ -56,8 +56,8 @@ export async function getInitialRestoredUniverse(): Promise<ScannerUniverse> {
   const latestScannedUniverse = readStoredUniverse(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
   const lastSelectedUniverse = readStoredUniverse(LAST_UNIVERSE_STORAGE_KEY);
   const candidates = uniqueUniverses([
-    latestScannedUniverse,
-    lastSelectedUniverse,
+    lastSelectedUniverse,   // 사용자가 마지막으로 선택한 유니버스를 최우선 복원
+    latestScannedUniverse,  // 그 다음: 마지막으로 스캔 완료된 유니버스
     'NASDAQ100',
     'SP500',
     'KOSPI200',

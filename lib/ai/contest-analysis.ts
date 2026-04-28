@@ -10,6 +10,10 @@ const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-pro';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama3.1-70b';
 
+// IB 레포트는 JSON 메타블록 + 긴 마크다운 본문을 함께 생성해야 함
+// 기본 출력 한도(일반적으로 2048~4096)로는 잘릴 수 있어 8192로 명시
+const IB_MAX_OUTPUT_TOKENS = 8192;
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
@@ -28,7 +32,7 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
   // 1. Gemini (우선순위 1)
   if (GEMINI_API_KEY) {
     try {
-      const response = await callGeminiModel(GEMINI_PRIMARY_MODEL, prompt);
+      const response = await callGeminiModel(GEMINI_PRIMARY_MODEL, prompt, 2, IB_MAX_OUTPUT_TOKENS);
       const analysis = extractStructuredJson(response);
       fallbackChain.push({ provider: 'gemini', model: GEMINI_PRIMARY_MODEL, status: 'success' });
       return {

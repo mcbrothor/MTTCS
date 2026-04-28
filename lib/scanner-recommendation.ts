@@ -76,8 +76,12 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
       const rsCriterion = sepaEvidence.criteria.find(c => c.id === 'rs_rating');
       if (rsCriterion) {
         rsCriterion.status = rsRating !== null && rsRating >= 70 ? 'pass' : (rsRating !== null ? 'fail' : 'info');
-        rsCriterion.actual = rsRating !== null ? `${rsRating}점 (${rsSource === 'DB_BATCH' ? '공식' : '실시간 유니버스'} RS)` : '데이터 없음';
-        rsCriterion.description = rsSource === 'DB_BATCH' 
+        rsCriterion.actual = rsRating !== null
+          ? rsSource === 'DB_BATCH'
+            ? `${rsRating}점 (공식 RS)`
+            : `${ranked.rank}위 / ${rsRating}점 (실시간 유니버스 RS)` // 랭킹(위)과 점수를 함께 표시
+          : '데이터 없음';
+        rsCriterion.description = rsSource === 'DB_BATCH'
           ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
           : '현재 스캔된 유니버스 내 실시간 랭킹 기준 RS입니다.';
       }

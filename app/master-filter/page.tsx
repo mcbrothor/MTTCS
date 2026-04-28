@@ -38,20 +38,12 @@ export default function MasterFilterPage() {
               🇺🇸 미국
             </button>
             <button
-              onClick={() => setMarket('KR_KOSPI')}
+              onClick={() => setMarket('KR')}
               className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
-                (market === 'KR' || market === 'KR_KOSPI') ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
+                market === 'KR' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              🇰🇷 KOSPI
-            </button>
-            <button
-              onClick={() => setMarket('KR_KOSDAQ')}
-              className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
-                market === 'KR_KOSDAQ' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
-              }`}
-            >
-              🇰🇷 KOSDAQ
+              🇰🇷 한국
             </button>
           </div>
           

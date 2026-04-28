@@ -27,7 +27,6 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import CanslimDrilldownModal from '@/components/scanner/CanslimDrilldownModal';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import MarketBanner from '@/components/ui/MarketBanner';
-import SectorRotationChart from '@/components/analysis/SectorRotationChart';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
 import {
   CANSLIM_PILLARS,
@@ -936,12 +935,6 @@ export default function CanslimScannerPage() {
               </div>
             </div>
 
-            {/* 섹터 로테이션 차트 */}
-            {results.length > 0 && (
-              <div className="mt-5">
-                <SectorRotationChart results={results} />
-              </div>
-            )}
           </div>
         </div>
 

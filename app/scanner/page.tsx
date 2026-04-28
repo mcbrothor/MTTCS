@@ -12,7 +12,6 @@ import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';
 import MarketBanner from '@/components/ui/MarketBanner';
-import SectorRotationChart from '@/components/analysis/SectorRotationChart';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 
 const MACRO_TONE = {
@@ -181,12 +180,6 @@ export default function ScannerPage() {
               </div>
             </div>
 
-            {/* 섹터 로테이션 차트 */}
-            {results.length > 0 && (
-              <div className="mt-5">
-                <SectorRotationChart results={results} />
-              </div>
-            )}
           </div>
         </div>
 
