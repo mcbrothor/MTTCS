@@ -58,7 +58,12 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
   // 2. Groq (우선순위 2)
   if (GROQ_API_KEY) {
     try {
-      const response = await callGroqModel(GROQ_MODEL, prompt);
+      const response = await callGroqModel(
+        GROQ_MODEL, 
+        prompt, 
+        'You are a Senior Investment Bank Committee Member.', 
+        Math.min(IB_MAX_OUTPUT_TOKENS, 5000) // Groq Free Tier TPM(8000) 한도 방어
+      );
       const analysis = extractStructuredJson(response);
       fallbackChain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
       return {
@@ -84,7 +89,12 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
   // 3. Cerebras (우선순위 3)
   if (CEREBRAS_API_KEY) {
     try {
-      const response = await callCerebrasModel(CEREBRAS_MODEL, prompt);
+      const response = await callCerebrasModel(
+        CEREBRAS_MODEL, 
+        prompt,
+        'You are a Senior Investment Bank Committee Member.',
+        Math.min(IB_MAX_OUTPUT_TOKENS, 5000) // Cerebras 한도 방어
+      );
       const analysis = extractStructuredJson(response);
       fallbackChain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
       return {

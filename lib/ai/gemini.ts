@@ -203,7 +203,12 @@ export async function callGeminiModel(
   throw new Error(`Gemini model ${modelId} failed after ${retries} retries.`);
 }
 
-export async function callGroqModel(modelId: string, prompt: string): Promise<string> {
+export async function callGroqModel(
+  modelId: string,
+  prompt: string,
+  systemPrompt = 'You are a concise Korean market-regime analyst.',
+  maxOutputTokens = 900
+): Promise<string> {
   const response = await fetch(GROQ_CHAT_COMPLETIONS_URL, {
     method: 'POST',
     headers: {
@@ -213,11 +218,11 @@ export async function callGroqModel(modelId: string, prompt: string): Promise<st
     body: JSON.stringify({
       model: modelId,
       messages: [
-        { role: 'system', content: 'You are a concise Korean market-regime analyst.' },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
       temperature: 0.2,
-      max_tokens: 900,
+      max_tokens: maxOutputTokens,
     }),
   });
 
@@ -232,7 +237,12 @@ export async function callGroqModel(modelId: string, prompt: string): Promise<st
   return text;
 }
 
-export async function callCerebrasModel(modelId: string, prompt: string): Promise<string> {
+export async function callCerebrasModel(
+  modelId: string,
+  prompt: string,
+  systemPrompt = 'You are a concise Korean market-regime analyst.',
+  maxOutputTokens = 900
+): Promise<string> {
   const response = await fetch(CEREBRAS_CHAT_COMPLETIONS_URL, {
     method: 'POST',
     headers: {
@@ -242,11 +252,11 @@ export async function callCerebrasModel(modelId: string, prompt: string): Promis
     body: JSON.stringify({
       model: modelId,
       messages: [
-        { role: 'system', content: 'You are a concise Korean market-regime analyst.' },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
       temperature: 0.2,
-      max_tokens: 900,
+      max_tokens: maxOutputTokens,
     }),
   });
 
