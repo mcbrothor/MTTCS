@@ -108,7 +108,8 @@ function getInitialUniverse(): ScannerUniverse {
       // 2. Otherwise find any universe with selections (most recently saved first)
       const selections = Object.values(map)
         .filter((s: any) => s && Array.isArray(s.tickers) && s.tickers.length > 0)
-        .sort((a: any, b: any) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+        .sort((a: any, b: any) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()) as any[];
+
         
       if (selections.length > 0) {
         const u = parseUniverse(selections[0].universe);

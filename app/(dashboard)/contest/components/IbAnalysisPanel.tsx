@@ -81,7 +81,7 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
               className="h-12 px-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-2 shadow-lg shadow-indigo-600/20 border-none"
             >
               {ibBusy ? <LoadingSpinner /> : <BrainCircuit className="h-5 w-5" />}
-              인앱 분석 실행
+              인앱 리포트 생성
             </Button>
           </div>
           {ibError && <p className="text-xs text-rose-400 font-medium">오류: {ibError}</p>}
@@ -117,7 +117,7 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                   className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold gap-2 text-xs shadow-lg shadow-indigo-600/20 border-none"
                 >
                   {ibBusy ? <LoadingSpinner /> : <BrainCircuit className="h-4 w-4" />}
-                  인앱 재분석
+                  인앱 리포트 생성
                 </Button>
                 <div className="w-px h-4 bg-slate-800 mx-1 hidden sm:block" />
                 <Button 

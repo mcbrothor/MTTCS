@@ -31,7 +31,8 @@ function parseIbResponse(raw: string): {
       const metadata = JSON.parse(jsonStr) as Record<string, unknown>;
       return { metadata, reportMarkdown, parseFailed: false };
     } catch {
-      // Fall through to brace matching if JSON parse fails
+      // Even if parsing fails, strip the invalid JSON from the report markdown
+      return { metadata: null, reportMarkdown, parseFailed: true };
     }
   }
 
@@ -71,7 +72,8 @@ function parseIbResponse(raw: string): {
           const metadata = JSON.parse(jsonStr) as Record<string, unknown>;
           return { metadata, reportMarkdown, parseFailed: false };
         } catch {
-          break; // Try another starting brace if this one failed
+          // Even if parsing fails, strip the invalid JSON from the report markdown
+          return { metadata: null, reportMarkdown, parseFailed: true };
         }
       }
     }
@@ -101,6 +103,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       session as BeautyContestSession,
       candidates,
       marketContext,
+      false // 프롬프트 복사용이므로 메타데이터 JSON 제외
     );
 
     return NextResponse.json({
