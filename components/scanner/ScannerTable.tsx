@@ -143,16 +143,18 @@ export default function ScannerTable({
       <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
         <colgroup>
           <col className="w-[3%]" />
-          <col className="w-[14%]" />
+          <col className="w-[12%]" />
+          <col className="w-[6%]" />
           <col className="w-[7%]" />
-          <col className="w-[8%]" />
+          <col className="w-[5%]" />
+          <col className="w-[5%]" />
+          <col className="w-[6%]" />
+          <col className="w-[6%]" />
+          <col className="w-[6%]" />
+          <col className="w-[9%]" />
           <col className="w-[7%]" />
           <col className="w-[7%]" />
           <col className="w-[7%]" />
-          <col className="w-[10%]" />
-          <col className="w-[8%]" />
-          <col className="w-[8%]" />
-          <col className="w-[8%]" />
           <col className="w-[6%]" />
         </colgroup>
         <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
@@ -161,6 +163,8 @@ export default function ScannerTable({
             <th className="px-2 py-3 text-left">종목</th>
             <th className="px-2 py-3 text-right">시총</th>
             <th className="px-2 py-3 text-right">현재가</th>
+            <th className="px-2 py-3 text-right">등락률</th>
+            <th className="px-2 py-3 text-right">ADR%</th>
             <th className="px-2 py-3 text-left">SEPA</th>
             <th className="px-2 py-3 text-right">RS</th>
             <th className="px-2 py-3 text-right">VCP</th>
@@ -194,6 +198,20 @@ export default function ScannerTable({
                 </td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency, result.ticker)}</td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency, result.ticker)}</td>
+                <td className="px-2 py-3 text-right font-mono">
+                  {typeof result.changePercent === 'number' ? (
+                    <span className={result.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      {result.changePercent >= 0 ? '+' : ''}{result.changePercent.toFixed(2)}%
+                    </span>
+                  ) : <span className="text-slate-600">—</span>}
+                </td>
+                <td className="px-2 py-3 text-right font-mono">
+                  {typeof result.adrPct === 'number' ? (
+                    <span className={result.adrPct >= 5 ? 'text-amber-300' : 'text-slate-300'}>
+                      {result.adrPct.toFixed(1)}%
+                    </span>
+                  ) : <span className="text-slate-600">—</span>}
+                </td>
                 <td className="px-2 py-3">
                   <span className="text-slate-300">{sepaLabel(result)}</span>
                   {result.sepaEvidence?.summary.corePassed !== undefined && (
