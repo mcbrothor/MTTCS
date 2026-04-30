@@ -109,6 +109,8 @@ export function initialResult(item: ScannerConstituent): ScannerResult {
     return6m: null,
     return9m: null,
     return12m: null,
+    changePercent: null,
+    adrPct: null,
     analyzedAt: null,
     errorMessage: null,
     dataWarnings: [],
@@ -117,6 +119,7 @@ export function initialResult(item: ScannerConstituent): ScannerResult {
 
 export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analysis: MarketAnalysisResponse): ScannerResult {
   const latestBar = analysis.priceData.at(-1);
+  const prevBar = analysis.priceData.at(-2);
   const latestClose = latestBar?.close ?? null;
   const currentPrice = item.currentPrice ?? latestClose;
   const priceAsOf = item.currentPrice !== null ? item.priceAsOf : latestBar?.date ?? item.priceAsOf;
@@ -125,6 +128,20 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
   const distanceToPivotPct =
     currentPrice && recommendedEntry
       ? round(((currentPrice - recommendedEntry) / recommendedEntry) * 100)
+      : null;
+
+  const changePercent =
+    latestClose !== null && prevBar?.close
+      ? round(((latestClose - prevBar.close) / prevBar.close) * 100)
+      : null;
+
+  const adrBars = analysis.priceData.slice(-20);
+  const adrPct =
+    adrBars.length >= 5
+      ? round(
+          (adrBars.reduce((s, b) => s + (b.high - b.low), 0) / adrBars.length) /
+          (adrBars.reduce((s, b) => s + (b.high + b.low) / 2, 0) / adrBars.length) * 100
+        )
       : null;
 
   return withRecommendation({
@@ -179,6 +196,8 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
     return9m: analysis.sepaEvidence.metrics.return9m ?? null,
     return12m: analysis.sepaEvidence.metrics.return12m ?? null,
     mdd52wPct: analysis.sepaEvidence.metrics.mdd52wPct ?? null,
+    changePercent,
+    adrPct,
     analyzedAt: new Date().toISOString(),
     breakoutVolumeStatus: analysis.vcpAnalysis.breakoutVolumeStatus,
     errorMessage: null,

@@ -30,6 +30,9 @@ function PlanPageContent() {
   const searchParams = useSearchParams();
   const initialTicker = searchParams.get('ticker') || '';
   const initialExchange = searchParams.get('exchange') || 'NAS';
+  const [planMarket, setPlanMarket] = useState<'US' | 'KR'>(
+    (initialExchange === 'KOSPI' || initialExchange === 'KOSDAQ') ? 'KR' : 'US'
+  );
 
   // 스캐너에서 전달받은 컨텍스트 데이터 — 계획서 수립 시 참고용
   const scannerContext = {
@@ -110,15 +113,37 @@ function PlanPageContent() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
-      <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">New Trade Plan</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">신규 매매 계획</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          SEPA 후보 검증 → VCP 피벗 분석 → 패턴 무효화 기반 수량 산출 → Centaur 체크리스트를 한 흐름으로 실행합니다.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">New Trade Plan</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">신규 매매 계획</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+            SEPA 후보 검증 → VCP 피벗 분석 → 패턴 무효화 기반 수량 산출 → Centaur 체크리스트를 한 흐름으로 실행합니다.
+          </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-[7px] border border-slate-700 bg-slate-900 p-1">
+          <button
+            type="button"
+            onClick={() => setPlanMarket('US')}
+            className={`rounded-[5px] px-3.5 py-1.5 text-[11px] font-semibold transition-colors ${planMarket === 'US' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            🇺🇸 미국
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlanMarket('KR')}
+            className={`rounded-[5px] px-3.5 py-1.5 text-[11px] font-semibold transition-colors ${planMarket === 'KR' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            🇰🇷 한국
+          </button>
+        </div>
       </div>
 
-      <TickerInput onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={initialExchange} />
+      <div className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-semibold ${planMarket === 'US' ? 'border-blue-500/30 bg-blue-500/8 text-blue-300' : 'border-rose-500/30 bg-rose-500/8 text-rose-300'}`}>
+        {planMarket === 'US' ? '🇺🇸 미국 계좌 — 통화: USD ($)' : '🇰🇷 한국 계좌 — 통화: KRW (₩)'}
+      </div>
+
+      <TickerInput key={planMarket} onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange} />
 
       {/* 스캐너에서 넘어온 경우 컨텍스트 데이터 배너 표시 */}
       {(scannerContext.pivot || scannerContext.rs) && (

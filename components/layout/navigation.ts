@@ -25,17 +25,8 @@ export interface FlowStep {
 
 export const FLOW_STEPS: FlowStep[] = [
   {
-    key: 'dashboard',
-    step: '01',
-    label: '대시보드',
-    sub: '커맨드 센터',
-    href: '/',
-    matchers: ['/'],
-    tabs: [],
-  },
-  {
     key: 'market',
-    step: '02',
+    step: '01',
     label: '시장 분석',
     sub: '진입 조건 확인',
     href: '/master-filter',
@@ -47,20 +38,29 @@ export const FLOW_STEPS: FlowStep[] = [
   },
   {
     key: 'scanner',
-    step: '03',
+    step: '02',
     label: '종목 발굴',
-    sub: '미너비니 · 오닐',
+    sub: 'SEPA/VCP · CAN SLIM',
     href: '/scanner',
     matchers: ['/scanner', '/canslim'],
     tabs: [
-      { href: '/scanner', label: '미너비니 스캐너' },
-      { href: '/canslim', label: '오닐 스캐너' },
+      { href: '/scanner', label: '미너비니 스크리닝' },
+      { href: '/canslim', label: '윌리엄 오닐 스크리닝' },
     ],
+  },
+  {
+    key: 'contest',
+    step: '03',
+    label: '콘테스트',
+    sub: 'LLM 비교 분석',
+    href: '/contest',
+    matchers: ['/contest'],
+    tabs: [],
   },
   {
     key: 'watchlist',
     step: '04',
-    label: '관심 종목',
+    label: '관심종목',
     sub: '후보 추적',
     href: '/watchlist',
     matchers: ['/watchlist'],
@@ -85,22 +85,16 @@ export const FLOW_STEPS: FlowStep[] = [
     tabs: [],
   },
   {
-    key: 'contest',
-    step: '07',
-    label: '콘테스트',
-    sub: 'LLM 비교 분석',
-    href: '/contest',
-    matchers: ['/contest'],
-    tabs: [],
-  },
-  {
     key: 'review',
-    step: '08',
+    step: '07',
     label: '성과 복기',
-    sub: '히스토리',
+    sub: '결과 축적',
     href: '/history',
-    matchers: ['/history'],
-    tabs: [],
+    matchers: ['/', '/history'],
+    tabs: [
+      { href: '/', label: '대시보드' },
+      { href: '/history', label: '매매 복기' },
+    ],
   },
 ];
 

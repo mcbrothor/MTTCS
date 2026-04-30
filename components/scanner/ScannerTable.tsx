@@ -143,19 +143,16 @@ export default function ScannerTable({
       <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
         <colgroup>
           <col className="w-[3%]" />
-          <col className="w-[13%]" />
+          <col className="w-[14%]" />
           <col className="w-[7%]" />
-          <col className="w-[7%]" />
-          <col className="w-[5%]" />
-          <col className="w-[8%]" />
-          <col className="w-[5%]" />
           <col className="w-[8%]" />
           <col className="w-[7%]" />
-          <col className="w-[9%]" />
-          <col className="w-[6%]" />
-          {/* 새 컬럼: RS신고가, PP점수, 차트 */}
-          <col className="w-[6%]" />
-          <col className="w-[5%]" />
+          <col className="w-[7%]" />
+          <col className="w-[7%]" />
+          <col className="w-[10%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
           <col className="w-[6%]" />
         </colgroup>
         <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
@@ -165,16 +162,13 @@ export default function ScannerTable({
             <th className="px-2 py-3 text-right">시총</th>
             <th className="px-2 py-3 text-right">현재가</th>
             <th className="px-2 py-3 text-left">SEPA</th>
-            <th className="px-2 py-3 text-left">추천 등급</th>
+            <th className="px-2 py-3 text-right">RS</th>
             <th className="px-2 py-3 text-right">VCP</th>
-            <th className="px-2 py-3 text-left">상대강도</th>
-            <th className="px-2 py-3 text-left">패턴</th>
             <th className="px-2 py-3 text-left">거래량</th>
-            <th className="px-2 py-3 text-right">피벗</th>
-            {/* 신규: RS신고가·PP는 드릴다운 없이 테이블에서 바로 확인 */}
-            <th className="px-2 py-3 text-center" title="RS Line 신고가 여부">RS↑</th>
-            <th className="px-2 py-3 text-right" title="Pocket Pivot Score">PP</th>
-            <th className="px-2 py-3 text-center">차트/후보</th>
+            <th className="px-2 py-3 text-right">피벗 포인트</th>
+            <th className="px-2 py-3 text-left">등급</th>
+            <th className="px-2 py-3 text-left">패턴</th>
+            <th className="px-2 py-3 text-center">후보선택</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800 bg-slate-950/40">
@@ -208,19 +202,14 @@ export default function ScannerTable({
                     </p>
                   )}
                 </td>
-                <td className="px-2 py-3">{tierBadge(result)}</td>
-                <td className="px-2 py-3 text-right font-mono text-slate-300">
-                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
-                </td>
                 <td className="px-2 py-3 font-mono text-slate-200">
                   <span className="flex items-center">
                     {formatRs(result)}
                     <RsSourceBadge source={result.rsSource} />
                   </span>
                 </td>
-                <td className="px-2 py-3 text-[11px] text-slate-300">
-                  <p className="truncate">{baseTypeLabel(result)}</p>
-                  {result.momentumBranch === 'EXTENDED' && <p className="text-[10px] text-amber-300">확장</p>}
+                <td className="px-2 py-3 text-right font-mono text-slate-300">
+                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
                 </td>
                 <td className="px-2 py-3">
                   <span className={`inline-flex rounded-lg border px-2 py-1 text-[11px] font-bold ${volumeSignalClass(volumeTier)}`}>
@@ -231,33 +220,19 @@ export default function ScannerTable({
                 <td className="px-2 py-3 text-right font-mono text-slate-300">
                   {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
                 </td>
-                {/* RS Line 신고가 — 이미 계산된 데이터를 테이블에 표시 */}
-                <td className="px-2 py-3 text-center">
-                  {result.rsLineNewHigh === true ? (
-                    <span title="RS Line 신고가" className="text-emerald-400 text-sm">✦</span>
-                  ) : result.rsLineNearHigh === true ? (
-                    <span title="RS Line 신고가 근접" className="text-amber-400 text-sm">△</span>
-                  ) : (
-                    <span className="text-slate-600">—</span>
-                  )}
+                <td className="px-2 py-3">{tierBadge(result)}</td>
+                <td className="px-2 py-3 text-[11px] text-slate-300">
+                  <p className="truncate">{baseTypeLabel(result)}</p>
+                  {result.momentumBranch === 'EXTENDED' && <p className="text-[10px] text-amber-300">확장</p>}
                 </td>
-                {/* Pocket Pivot Score — 이미 계산된 데이터를 테이블에 표시 */}
-                <td className="px-2 py-3 text-right font-mono">
-                  {typeof result.pocketPivotScore === 'number' ? (
-                    <span className={result.pocketPivotScore >= 50 ? 'text-emerald-400' : 'text-slate-400'}>
-                      {result.pocketPivotScore}
-                    </span>
-                  ) : <span className="text-slate-600">—</span>}
-                </td>
-                {/* 차트 버튼 + 콘테스트 후보 선택 버튼 */}
                 <td className="px-2 py-3">
                   <div className="flex items-center justify-center gap-1">
-                    <TradingViewWidget 
-                      ticker={result.ticker} 
-                      exchange={result.exchange ?? 'NAS'} 
+                    <TradingViewWidget
+                      ticker={result.ticker}
+                      exchange={result.exchange ?? 'NAS'}
                       pivotPrice={result.pivotPrice}
                       stopLossPrice={(result as any).canslimResult?.stopLossPrice}
-                      variant="icon" 
+                      variant="icon"
                     />
                     {selectionColumn(result)}
                   </div>

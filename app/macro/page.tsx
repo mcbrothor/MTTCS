@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import MarketBanner from '@/components/ui/MarketBanner';
+import LLMBriefing from '@/components/ui/LLMBriefing';
 import RegimeHeroCard from '@/components/macro/RegimeHeroCard';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 
@@ -151,6 +152,8 @@ export default function MacroPage() {
           글로벌 자금 흐름과 리스크 선호도를 6개 컴포넌트로 점수화합니다. 마스터 필터와 함께 확인해 진입 공격성을 조절하세요.
         </p>
       </header>
+
+      <LLMBriefing />
 
       {/* 위계 안내 배너 — 매크로는 사이즈 조절용, 진입 게이트는 마스터 필터 */}
       <div className="flex items-start gap-3 rounded-xl border border-sky-700/40 bg-sky-900/15 px-4 py-3">

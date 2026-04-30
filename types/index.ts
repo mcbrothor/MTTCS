@@ -560,6 +560,8 @@ export interface ScannerResult extends ScannerConstituent {
   return9m?: number | null;
   return12m?: number | null;
   mdd52wPct?: number | null;
+  changePercent?: number | null;
+  adrPct?: number | null;
   analyzedAt: string | null;
   errorMessage: string | null;
   dataWarnings: string[];

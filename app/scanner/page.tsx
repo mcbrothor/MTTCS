@@ -86,7 +86,7 @@ export default function ScannerPage() {
                 <div className="rounded-2xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
                   <ScanSearch className="h-6 w-6 text-emerald-300" />
                 </div>
-                미너비니 스캐너
+                미너비니 스크리닝
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
                 미너비니의 SEPA 전략과 VCP(변동성 축소 패턴)를 기반으로 최적의 진입 시점을 발굴합니다. 스캔 실행 전 '시장 분석' 메뉴에서 현재 마스터 필터 수치와 매크로 환경을 먼저 확인하는 것이 원칙입니다.

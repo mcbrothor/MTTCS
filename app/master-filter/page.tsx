@@ -6,6 +6,7 @@ import StatusCenter from '@/components/master-filter/StatusCenter';
 import DecisionBox from '@/components/master-filter/DecisionBox';
 import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
 import MarketBanner from '@/components/ui/MarketBanner';
+import LLMBriefing from '@/components/ui/LLMBriefing';
 import { useMarket } from '@/contexts/MarketContext';
 
 export default function MasterFilterPage() {
@@ -55,6 +56,8 @@ export default function MasterFilterPage() {
           </div>
         </div>
       </header>
+
+      <LLMBriefing />
 
       {/* Decision Box — 가장 먼저, 오늘의 진입 결정 */}
       <DecisionBox />

@@ -350,7 +350,7 @@ export default function CanslimScannerPage() {
 
       const items = meta.items;
       setProgress({ current: 0, total: items.length });
-      setScanStage('오닐 스캐너 평가 실행 중');
+      setScanStage('윌리엄 오닐 스크리닝 평가 실행 중');
 
       let current: CanslimScannerResult[] = items.map((item) => ({
         ticker: item.ticker,
@@ -537,7 +537,7 @@ export default function CanslimScannerPage() {
             <th className="px-3 py-4 text-right">시가총액</th>
             <th className="px-3 py-4 text-right">현재가</th>
             <th className="px-3 py-4 text-left">이중 검증</th>
-            <th className="px-3 py-4 text-left">오닐 스캐너</th>
+            <th className="px-3 py-4 text-left">7 PILLAR</th>
             <th className="px-3 py-4 text-left">신뢰도</th>
             <th className="px-3 py-4 text-right">RS</th>
             <th className="px-3 py-4 text-left">패턴</th>
@@ -842,7 +842,7 @@ export default function CanslimScannerPage() {
                 <div className="rounded-2xl bg-rose-500/20 p-2.5 ring-1 ring-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.1)]">
                   <ScanSearch className="h-6 w-6 text-rose-500" />
                 </div>
-                오닐 스캐너
+                윌리엄 오닐 스크리닝
               </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-500 font-medium">
                 윌리엄 오닐의 CANSLIM 원칙을 기반으로 강력한 실적 성장과 기술적 주도력을 가진 종목을 발굴합니다. 7 Pillar 필터와 VCP 패턴의 이중 검증을 통해 신뢰도 높은 투자 후보를 선별합니다.
@@ -991,7 +991,7 @@ export default function CanslimScannerPage() {
           {macro.actionLevel === 'HALT' && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 px-3 py-2 text-rose-300">
               <AlertTriangle className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
-              <p className="text-xs font-bold tracking-tight">오닐 스캐너 신규 진입 보류 — 하락 추세 또는 분배일 과다 상태</p>
+              <p className="text-xs font-bold tracking-tight">윌리엄 오닐 스크리닝 신규 진입 보류 — 하락 추세 또는 분배일 과다 상태</p>
             </div>
           )}
         </motion.div>
