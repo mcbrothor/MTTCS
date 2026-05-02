@@ -24,6 +24,13 @@ const STATE_STYLE = {
     title: 'Capital Defense',
     description: '신규 진입보다 현금 방어와 기존 포지션 관리가 우선입니다.',
   },
+  GREY: {
+    icon: '?',
+    shell: 'border-slate-400/24 bg-slate-500/10 text-slate-50',
+    badge: 'border-slate-400/25 bg-slate-500/16 text-slate-200',
+    title: 'Data Unavailable',
+    description: '시장 데이터를 수집 중이거나 일시적인 장애가 발생했습니다.',
+  },
 } as const;
 
 export default function MarketBanner({ compact = false }: { compact?: boolean }) {

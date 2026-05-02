@@ -9,6 +9,7 @@ const STATE_TONE = {
   GREEN: 'bg-emerald-400',
   YELLOW: 'bg-amber-400',
   RED: 'bg-rose-400',
+  GREY: 'bg-slate-400',
 } as const;
 
 export default function ScannerTabNav() {

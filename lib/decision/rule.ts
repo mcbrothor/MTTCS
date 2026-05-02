@@ -18,7 +18,7 @@ interface ReasonContext {
 }
 
 function buildReason(
-  mfState: 'GREEN' | 'YELLOW' | 'RED',
+  mfState: 'GREEN' | 'YELLOW' | 'RED' | 'GREY',
   macroRegime: MacroRegime | null,
   ctx?: ReasonContext
 ): string {
@@ -39,17 +39,29 @@ function buildReason(
  * 결정 매트릭스:
  *   MF RED            → NO_GO    (0x)   — Macro 무관
  *   MF YELLOW         → NO_GO_HOLD (0x) — 신규 진입 금지, 기존 포지션만 유지
+ *   MF GREY           → NO_GO_HOLD (0x) — 데이터 부족/지연, 신규 진입 보류
  *   MF GREEN + RISK_ON  → GO_FULL (1.0x)
  *   MF GREEN + NEUTRAL  → GO_75   (0.75x)
  *   MF GREEN + RISK_OFF → GO_50   (0.5x)
  *   MF GREEN + null     → GO_75   (0.75x, 보수적 기본)
  */
 export function computeDecision(
-  mfState: 'GREEN' | 'YELLOW' | 'RED',
+  mfState: 'GREEN' | 'YELLOW' | 'RED' | 'GREY',
   macroRegime: MacroRegime | null,
   ctx?: ReasonContext
 ): DecisionResult {
   const reason = buildReason(mfState, macroRegime, ctx);
+
+  if (mfState === 'GREY') {
+    return {
+      decision: 'NO_GO_HOLD',
+      sizeMultiplier: 0,
+      headline: 'NO-GO · 데이터 부족',
+      reason,
+      blockingFactors: ['마스터 필터 GREY — 데이터 분석 불가'],
+      actionLabel: '신규 진입 보류 · 관망',
+    };
+  }
 
   if (mfState === 'RED') {
     return {

@@ -49,11 +49,22 @@ const CandidateResultTable: React.FC<CandidateResultTableProps> = ({
                     <p className="text-[10px] text-slate-500 uppercase">{candidate.name || candidate.exchange}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${verdictRecommendationClass(verdict.recommendation)}`}>
-                        {verdict.recommendation || '-'}
-                      </span>
-                      <span className="text-xs text-slate-400">{Math.round((verdict.confidence || 0) * 100)}%</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${verdictRecommendationClass(verdict.recommendation)}`}>
+                          {verdict.recommendation || '-'}
+                        </span>
+                        <span className="text-xs text-slate-400">{Math.round((verdict.confidence || 0) * 100)}%</span>
+                      </div>
+                      {verdict.analysisSourceLabel && (
+                        <span className={`self-start px-1.5 py-px rounded text-[9px] font-semibold ${
+                          verdict.analysisSource === 'rule-engine'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-purple-500/20 text-purple-400'
+                        }`}>
+                          {verdict.analysisSourceLabel}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">

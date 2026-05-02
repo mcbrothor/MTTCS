@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { validateCronRequest } from '@/lib/contest-cron';
 
 /**
  * GET /api/cron/purge-metrics
  * 데이터 보존 정책 수행 (3개월 경과 데이터 압축, 1년 경과 데이터 삭제)
  */
 export async function GET(req: NextRequest) {
-  // 인증 확인 (cron-job.org 등의 외부 호출 시 API 키 또는 헤더 검증 필요)
-  const authHeader = req.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!validateCronRequest(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -39,7 +39,11 @@ async function sign(value: string, secret: string) {
 }
 
 function getAuthSecret() {
-  return process.env.MTN_AUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const secret = process.env.MTN_AUTH_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    console.error('[auth] FATAL: MTN_AUTH_SECRET is not set. All session verification will fail.');
+  }
+  return secret || '';
 }
 
 export function getSessionMaxAgeSeconds() {
@@ -71,7 +75,15 @@ export async function verifySessionToken(token?: string | null) {
   if (!body || !signature) return null;
 
   const expected = await sign(body, secret);
-  if (expected !== signature) return null;
+  
+  if (expected.length !== signature.length) return null;
+  let isValid = true;
+  for (let i = 0; i < expected.length; i++) {
+    if (expected[i] !== signature[i]) {
+      isValid = false;
+    }
+  }
+  if (!isValid) return null;
 
   try {
     const payload = JSON.parse(base64UrlDecode(body)) as SessionPayload;
@@ -85,7 +97,7 @@ export async function verifySessionToken(token?: string | null) {
 /**
  * 시스템 관리자 고정 ID (Supabase Auth 사용 안 함에 따른 고정 식별자)
  */
-export const SYSTEM_ADMIN_ID = '00000000-0000-0000-0000-000000000000';
+export const SYSTEM_ADMIN_ID = process.env.MTN_ADMIN_ID || '00000000-0000-0000-0000-000000000000';
 
 /**
  * Next.js 서버 사이드(API, Server Action) 전용 세션 검증 헬퍼

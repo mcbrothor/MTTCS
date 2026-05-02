@@ -28,6 +28,12 @@ const CONFIG = {
     border: 'border-rose-500/40',
     ariaLabel: '위험',
   },
+  GREY: {
+    icon: AlertTriangle,
+    color: 'text-slate-400',
+    border: 'border-slate-500/40',
+    ariaLabel: '데이터 부족',
+  },
 } as const;
 
 export default function StatusBadge({ state, label, size = 'md' }: StatusBadgeProps) {

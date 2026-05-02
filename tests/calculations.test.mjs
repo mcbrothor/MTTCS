@@ -83,7 +83,7 @@ run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
   });
 
   assert.ok(evidence.summary.info >= 1);
-  assert.notEqual(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'info');
+  assert.equal(evidence.criteria.find((item) => item.id === 'rs_rating')?.status, 'info');
   assert.equal(evidence.criteria.find((item) => item.id === 'fundamentals')?.status, 'info');
 });
 

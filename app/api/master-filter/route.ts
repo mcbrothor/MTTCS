@@ -1,12 +1,27 @@
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
+import type { AiInsightProvider, AiFallbackAttempt, AiModelInsight } from '@/types';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
-import type { MasterFilterResponse, OHLCData } from '@/types';
+import type { MasterFilterResponse, OHLCData, MasterFilterMetricDetail } from '@/types';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 3600; // Cache for 1 hour
+
+interface CachedInsight {
+  text: string;
+  providerUsed: AiInsightProvider;
+  modelUsed: string;
+  isAiGenerated: boolean;
+  fallbackChain: AiFallbackAttempt[];
+  modelInsights: AiModelInsight[];
+  errorSummary?: string | null;
+  cachedAt: number;
+}
+const insightCache = new Map<string, CachedInsight>();
+const INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const US_MACRO_SYMBOLS = [
   '^VIX', 'UUP', 'DX-Y.NYB', 'KRW=X', '^TNX', '^IRX', 'SHY', 'TLT', 'HYG', 'IEF',
@@ -88,7 +103,65 @@ export async function GET(request: Request) {
     ]);
 
     if (mainData.length < 200) {
-      throw new Error(`${mainSymbol} 200일 가격 데이터를 충분히 확보하지 못했습니다.`);
+      console.warn(`${mainSymbol} 200일 가격 데이터를 충분히 확보하지 못했습니다. GREY 상태를 반환합니다.`);
+      const emptyMetric = (label: string): MasterFilterMetricDetail => ({
+        value: null,
+        threshold: '-',
+        status: 'WARNING',
+        label,
+        unit: '',
+        description: '데이터 부족으로 판정 불가',
+        source: '시스템',
+        score: 0,
+      });
+
+      const responseData: MasterFilterResponse = {
+        state: 'GREY',
+        market,
+        metrics: {
+          trend: emptyMetric('장기 추세'),
+          breadth: emptyMetric('시장 폭'),
+          volatility: emptyMetric('변동성'),
+          ftd: emptyMetric('팔로스루데이'),
+          distribution: emptyMetric('분배일'),
+          newHighLow: emptyMetric('신고가/신저가'),
+          sectorRotation: emptyMetric('섹터 로테이션'),
+          score: 0,
+          p3Score: 0, // 하위 호환
+          mainPrice: mainData.at(-1)?.close || 0,
+          ma50: 0,
+          ma150: 0,
+          ma200: 0,
+          mainHistory: [],
+          movingAverageHistory: [],
+          vixHistory: [],
+          sectorRows: [],
+          ftdReason: `${mainSymbol} 데이터 부족`,
+          distributionDetails: [],
+          macroData: {
+            leadingSectors: [],
+            sectorRows: [],
+            breadthRows: [],
+            ftdReason: `${mainSymbol} 데이터 부족`,
+          },
+          regimeHistory: [],
+          meta: {
+            asOf: new Date().toISOString(),
+            source: 'Market Analysis Engine',
+            provider: 'MTN Aggregator',
+            delay: 'EOD',
+            fallbackUsed: false,
+            warnings: ['Insufficient data for 200ma'],
+          },
+          updatedAt: new Date().toISOString(),
+        },
+        insightLog: '데이터 부족으로 인한 GREY 상태 반환',
+        isAiGenerated: false,
+
+        aiFallbackChain: [],
+        aiModelInsights: [],
+      };
+      return NextResponse.json(responseData);
     }
 
     // 외국인 순매수 5일 누적 (양수=순매수, 음수=순매도)
@@ -153,7 +226,17 @@ export async function GET(request: Request) {
       },
     };
 
-    const insight = await generateMarketInsight(insightInput);
+    const cacheKey = market;
+    const cached = insightCache.get(cacheKey);
+    const now = Date.now();
+    let insight: CachedInsight;
+    if (cached && now - cached.cachedAt < INSIGHT_CACHE_TTL_MS) {
+      insight = cached;
+    } else {
+      const fresh = await generateMarketInsight(insightInput);
+      insight = { ...fresh, cachedAt: now };
+      insightCache.set(cacheKey, insight);
+    }
 
     // 3. 최종 응답 구조 생성 (기존 호환성 유지)
     const responseData: MasterFilterResponse = {

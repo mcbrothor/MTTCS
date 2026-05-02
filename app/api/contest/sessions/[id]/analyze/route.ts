@@ -66,6 +66,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
       if (!candidateId) continue;
 
+      const originalCandidate = (session.candidates ?? []).find((c: any) => c.id === candidateId);
+      if (originalCandidate) {
+        originalCandidate.llm_rank = ranking.rank;
+        originalCandidate.llm_comment = ranking.comment || ranking.key_strength;
+        originalCandidate.llm_scores = ranking.scores || {};
+        originalCandidate.llm_analysis = ranking.analysis;
+      }
+
       await supabaseServer
         .from('contest_candidates')
         .update({
@@ -92,6 +100,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       .eq('id', sessionId);
 
     if (updateError) throw updateError;
+
+    // 5. 연결된 거래(trade)에 Snapshot 동기화 (BUG-003)
+    const { buildContestSnapshot, buildLlmVerdict } = await import('@/lib/finance/core/snapshot');
+    const linkedCandidates = (session.candidates || []).filter((c: any) => Boolean(c.linked_trade_id));
+    for (const candidate of linkedCandidates) {
+      await supabaseServer.from('trades').update({
+        contest_snapshot: buildContestSnapshot(session as any, candidate as any),
+        llm_verdict: buildLlmVerdict(session as any, candidate as any),
+        updated_at: new Date().toISOString(),
+      }).eq('id', candidate.linked_trade_id);
+    }
 
     return NextResponse.json({
       success: true,

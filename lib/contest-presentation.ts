@@ -15,6 +15,8 @@ export interface ContestStructuredVerdict {
   confidence: number | null;
   comment: string | null;
   hasStructuredData: boolean;
+  analysisSource: 'rule-engine' | 'llm' | null;
+  analysisSourceLabel: string | null;
 }
 
 function normalizeText(value: unknown, max = 1000) {
@@ -53,6 +55,14 @@ export function getContestStructuredVerdict(candidate: ContestCandidate): Contes
   const confidence = normalizeConfidence(analysis?.confidence);
   const comment = normalizeText(candidate.llm_comment) || normalizeText(analysis?.comment) || keyStrength;
 
+  const isRuleEngine = analysis?.mtn_role === 'PRELIMINARY_SCREEN';
+  const analysisSource: 'rule-engine' | 'llm' | null = analysis
+    ? (isRuleEngine ? 'rule-engine' : 'llm')
+    : null;
+  const analysisSourceLabel = analysis
+    ? (isRuleEngine ? 'Rule Engine' : 'LLM')
+    : null;
+
   return {
     overall,
     keyStrength,
@@ -61,5 +71,7 @@ export function getContestStructuredVerdict(candidate: ContestCandidate): Contes
     confidence,
     comment,
     hasStructuredData: Boolean(overall || keyStrength || keyRisk || recommendation || confidence !== null),
+    analysisSource,
+    analysisSourceLabel,
   };
 }

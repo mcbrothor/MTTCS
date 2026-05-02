@@ -177,6 +177,17 @@ export async function POST(request: Request) {
       return apiError('SEPA evidence and entry plan fields are required.', 'MISSING_STRATEGY_FIELDS');
     }
 
+    const entryPrice = Number(body.entry_price);
+    const stoplossPrice = Number(body.stoploss_price);
+    if (entryPrice && stoplossPrice) {
+      if (direction === 'LONG' && stoplossPrice >= entryPrice) {
+        return apiError('LONG 포지션에서 손절가는 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
+      }
+      if (direction === 'SHORT' && stoplossPrice <= entryPrice) {
+        return apiError('SHORT 포지션에서 손절가는 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
+      }
+    }
+
     const record: Record<string, unknown> & TradeRecordForSnapshot = {
       ticker,
       direction,
@@ -236,13 +247,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = searchParams.has('limit') ? Math.max(1, parseInt(searchParams.get('limit')!, 10)) : null;
     const offset = searchParams.has('offset') ? Math.max(0, parseInt(searchParams.get('offset')!, 10)) : 0;
+    const id = searchParams.get('id');
 
     let query = supabaseServer
       .from('trades')
       .select('*, trade_executions(*)')
       .order('created_at', { ascending: false });
 
-    if (limit !== null) query = query.range(offset, offset + limit - 1);
+    if (id) {
+      query = query.eq('id', id);
+    } else if (limit !== null) {
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data, error } = await query;
 
@@ -310,6 +326,19 @@ export async function PATCH(request: Request) {
         return apiError('Invalid trade status.', 'INVALID_STATUS', 400, { allowed: VALID_STATUSES });
       }
       update.status = body.status;
+    }
+
+    const patchDirection = body.direction !== undefined ? body.direction : existingTrade.direction;
+    const patchEntry = body.entry_price !== undefined ? Number(body.entry_price) : Number(existingTrade.entry_price);
+    const patchStoploss = body.stoploss_price !== undefined ? Number(body.stoploss_price) : Number(existingTrade.stoploss_price);
+    
+    if (patchEntry && patchStoploss) {
+      if (patchDirection === 'LONG' && patchStoploss >= patchEntry) {
+        return apiError('LONG 포지션에서 손절가는 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
+      }
+      if (patchDirection === 'SHORT' && patchStoploss <= patchEntry) {
+        return apiError('SHORT 포지션에서 손절가는 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
+      }
     }
 
     const numericFields = [

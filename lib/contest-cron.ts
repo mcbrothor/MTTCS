@@ -105,14 +105,8 @@ export async function runContestReviewBatch(market: ContestMarket) {
 
 export function validateCronRequest(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
-  }
+  if (!secret) return false;
 
-  // 헤더 검증 또는 쿼리 파라미터 검증 허용 (수동 테스트용)
   const authHeader = request.headers.get('authorization');
-  const { searchParams } = new URL(request.url);
-  const querySecret = searchParams.get('secret');
-
-  return authHeader === `Bearer ${secret}` || querySecret === secret;
+  return authHeader === `Bearer ${secret}`;
 }

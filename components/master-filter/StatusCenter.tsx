@@ -8,7 +8,7 @@ import { useMarket } from '@/contexts/MarketContext';
 interface HistoryPoint {
   date: string;
   p3Score: number;
-  state: 'GREEN' | 'YELLOW' | 'RED';
+  state: 'GREEN' | 'YELLOW' | 'RED' | 'GREY';
 }
 
 function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; currentScore: number }) {
@@ -119,6 +119,16 @@ export default function StatusCenter() {
       subtitle: '방어 우선 하락장',
       description: '시장 압력이 높습니다. 신규 매수보다 현금 비중 확대, 보유 종목 손절선 준수, 포트폴리오 리스크 축소를 우선하세요.',
       accent: 'bg-rose-500/30',
+    },
+    GREY: {
+      color: 'text-slate-400',
+      bg: 'bg-slate-500/10',
+      border: 'border-slate-500/20',
+      icon: <AlertTriangle className="h-10 w-10 text-slate-400" />,
+      title: '데이터 수집 대기',
+      subtitle: '판단 보류',
+      description: '필수 데이터가 부족하여 분석을 보류합니다. 데이터가 수집될 때까지 신규 매수 및 기존 포지션의 방향성 베팅을 자제하세요.',
+      accent: 'bg-slate-500/30',
     },
   } as const;
 

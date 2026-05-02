@@ -30,7 +30,10 @@ const REGIME_ORDER = { RISK_ON: 0, NEUTRAL: 1, RISK_OFF: 2 } as const;
  * 위계 원칙: 마스터필터 RED/YELLOW면 매크로 무관 NO-GO.
  * 진입 권유 어조는 사용하지 않는다.
  */
-function detectConflict(mfState: 'GREEN' | 'YELLOW' | 'RED', regime: MacroRegime): string | null {
+function detectConflict(mfState: 'GREEN' | 'YELLOW' | 'RED' | 'GREY', regime: MacroRegime): string | null {
+  if (mfState === 'GREY') {
+    return '마스터필터 데이터 부족 — 데이터 수집 지연으로 매크로 신호 적용을 보류합니다.';
+  }
   // GREEN + RISK_OFF: 게이트는 통과했으나 글로벌 자금흐름이 위험회피 — 비중 50%로 제한
   if (mfState === 'GREEN' && regime === 'RISK_OFF') {
     return '마스터필터 GREEN이지만 매크로 RISK-OFF — 신규 진입 시 비중 50%로 제한하고 손절선을 강화하세요.';

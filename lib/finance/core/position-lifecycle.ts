@@ -104,7 +104,7 @@ export function buildPositionLifecycle(executions: TradeExecution[] = []): Posit
           ? 'PARTIAL_EXIT'
           : sharesBefore > 0
             ? 'MANUAL_EXIT'
-            : 'UNWIND';
+            : 'UNWIND'; // BUG-015: 수수료 전용 청산 레코드 등 sharesBefore가 0인데 exit인 경우를 위한 안전망
     if (action === 'PARTIAL_EXIT') partialExitCount += 1;
 
     events.push({

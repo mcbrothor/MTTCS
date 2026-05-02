@@ -266,7 +266,9 @@ export function analyzeSepa(
       return criterion(
         'rs_rating',
         '상대강도 RS',
-        rsValue !== null ? passFail(rsValue >= 70) : 'info',
+        rsValue !== null
+          ? hasRealRs ? passFail(rsValue >= 70) : 'info'
+          : 'info',
         rsValue !== null
           ? hasRealRs
             ? `${rsValue}점 (유니버스 백분위 공식 RS)`
@@ -283,7 +285,7 @@ export function analyzeSepa(
       '20일 평균 거래대금',
       avgDollarVolume
         ? isKR
-          ? `₩${(avgDollarVolume / 1_000_000_000).toFixed(1)}B`
+          ? `₩${(avgDollarVolume / 100_000_000).toFixed(0)}억`
           : `$${avgDollarVolume.toLocaleString()}`
         : null,
       data.length >= 20,

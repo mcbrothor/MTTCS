@@ -20,10 +20,12 @@ export function calculateTradeMetrics(
     | 'stoploss_price'
     | 'total_shares'
     | 'position_size'
-  >,
+    | 'direction'
+  > & { direction?: 'LONG' | 'SHORT' },
   executions: TradeExecution[] = [],
   currentPrice: number | null = null
 ): TradeMetrics {
+  const direction = trade.direction || 'LONG';
   const normalized = executions
     .filter((execution) => Number.isFinite(Number(execution.price)) && Number.isFinite(Number(execution.shares)))
     .map((execution, orderIndex) => ({
@@ -72,7 +74,11 @@ export function calculateTradeMetrics(
     const closedShares = Math.min(execution.shares, runningShares);
     if (execution.shares > runningShares) invalidExitShares = true;
     if (closedShares > 0 && avgCost !== null) {
-      realizedGross += (execution.price - avgCost) * closedShares;
+      if (direction === 'SHORT') {
+        realizedGross += (avgCost - execution.price) * closedShares;
+      } else {
+        realizedGross += (execution.price - avgCost) * closedShares;
+      }
       runningCost = Math.max(0, runningCost - avgCost * closedShares);
       runningShares = Math.max(0, runningShares - closedShares);
     }
@@ -93,11 +99,17 @@ export function calculateTradeMetrics(
   const executionProgressPct =
     plannedShares && plannedShares > 0 ? Math.min((entryShares / plannedShares) * 100, 100) : hasExecutions ? 100 : 0;
   const openRisk =
-    netShares > 0 && avgEntryPrice !== null && stopLoss !== null ? Math.max(avgEntryPrice - stopLoss, 0) * netShares : 0;
+    netShares > 0 && avgEntryPrice !== null && stopLoss !== null
+      ? direction === 'SHORT'
+        ? Math.max(stopLoss - avgEntryPrice, 0) * netShares
+        : Math.max(avgEntryPrice - stopLoss, 0) * netShares
+      : 0;
 
   const unrealizedPnL =
     netShares > 0 && avgEntryPrice !== null && currentPrice !== null
-      ? (currentPrice - avgEntryPrice) * netShares
+      ? direction === 'SHORT'
+        ? (avgEntryPrice - currentPrice) * netShares
+        : (currentPrice - avgEntryPrice) * netShares
       : null;
   const unrealizedR =
     unrealizedPnL !== null && plannedRisk && plannedRisk > 0 ? unrealizedPnL / plannedRisk : null;

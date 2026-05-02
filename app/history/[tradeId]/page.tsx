@@ -150,7 +150,7 @@ export default function HistoryTradeDetailPage() {
       setError(null);
 
       try {
-        const response = await axios.get('/api/trades', { signal: controller.signal });
+        const response = await axios.get(`/api/trades?id=${tradeId}`, { signal: controller.signal });
         if (!mounted) return;
         setTrades(response.data.data || []);
       } catch (err: unknown) {

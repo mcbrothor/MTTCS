@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { validateCronRequest } from '@/lib/contest-cron';
 
 interface OHLCData {
   date: string;
@@ -45,12 +46,9 @@ async function fetchLatestPrice(ticker: string, market: string): Promise<number 
 }
 
 export async function GET(request: Request) {
-  // 보안 검증: cron 요청만 허용
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  
+  if (!validateCronRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {

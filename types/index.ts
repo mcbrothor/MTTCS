@@ -580,7 +580,7 @@ export interface WatchlistItem {
   priority: WatchlistPriority;
 }
 
-export type MarketState = 'GREEN' | 'YELLOW' | 'RED';
+export type MarketState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY';
 export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules';
 
 export interface AiFallbackAttempt {
