@@ -14,22 +14,22 @@ export default function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[rgba(4,8,16,0.94)] backdrop-blur">
-      <div className="mx-auto flex max-w-[1600px] flex-col gap-2 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-2 px-4 py-2.5 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="group flex shrink-0 items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 transition-colors hover:border-emerald-400/35">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md border border-emerald-400/25 bg-emerald-500/10">
-                <Activity className="h-5 w-5 text-emerald-300" />
+            <Link href="/" className="group flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 transition-colors hover:border-emerald-400/35">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-emerald-400/25 bg-emerald-500/10">
+                <Activity className="h-4 w-4 text-emerald-300" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-lg font-bold tracking-tight text-emerald-300">MTN</span>
+                  <span className="font-mono text-base font-bold text-emerald-300">MTN</span>
                   <span className="inline-flex items-center gap-1 rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
                     Live
                   </span>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)]">Mantori&apos;s Trading Navigator</p>
+                <p className="text-[11px] text-[var(--text-secondary)]">Mantori&apos;s Trading Navigator</p>
               </div>
             </Link>
           </div>

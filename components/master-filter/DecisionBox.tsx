@@ -65,15 +65,53 @@ function exposureLabel(multiplier: number, isUnscored: boolean) {
   return `${Math.round(multiplier * 100)}% 권장 상한`;
 }
 
+function userFacingIssue(message?: string) {
+  if (!message) return null;
+  const lower = message.toLowerCase();
+  if (lower.includes('authentication') || lower.includes('unauthorized')) {
+    return 'API 인증 필요 · 세션 또는 서버 인증 상태를 확인하세요.';
+  }
+  if (lower.includes('timeout') || lower.includes('aborted')) {
+    return '데이터 요청 시간 초과 · 최근 정상 값 또는 재시도가 필요합니다.';
+  }
+  return message;
+}
+
 export default function DecisionBox() {
   const { data, macroRegime, isLoading, isStale, error, conflictWarning } = useMarket();
 
   if (isLoading || !data) {
     return (
-      <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-5 md:grid-cols-[1.2fr_0.8fr]">
-        <div className="h-32 animate-pulse rounded-lg bg-slate-800/50" />
-        <div className="h-32 animate-pulse rounded-lg bg-slate-800/50" />
-      </div>
+      <section className="rounded-xl border border-sky-500/25 bg-slate-950/55 p-4 shadow-[var(--panel-shadow)] sm:p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-bold text-sky-200">
+            DECISION COCKPIT
+          </span>
+          <span className="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300">
+            동기화 중
+          </span>
+        </div>
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-2xl font-black leading-tight text-slate-200 sm:text-3xl">
+              시장 데이터 확인 중
+            </p>
+            <p className="mt-1.5 text-sm leading-6 text-slate-400">
+              마스터 필터와 매크로 레짐을 동시에 확인하고 있습니다. 응답이 지연되면 데이터 미채점 상태로 전환합니다.
+            </p>
+          </div>
+          <div className="grid min-w-[220px] grid-cols-2 gap-2">
+            <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase text-slate-500">P3 Score</p>
+              <p className="mt-1 font-mono text-lg font-black text-white">PENDING</p>
+            </div>
+            <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase text-slate-500">Exposure</p>
+              <p className="mt-1 text-sm font-black text-white">Hold</p>
+            </div>
+          </div>
+        </div>
+      </section>
     );
   }
 
@@ -101,13 +139,13 @@ export default function DecisionBox() {
 
   return (
     <section
-      className={`rounded-xl border p-5 shadow-[var(--panel-shadow)] ${cfg.shell}`}
+      className={`rounded-xl border p-4 shadow-[var(--panel-shadow)] sm:p-5 ${cfg.shell}`}
       role="status"
       aria-label={`오늘 진입 결정: ${result.headline}`}
     >
-      <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold ${cfg.badge}`}>
               <Icon className="h-3.5 w-3.5" />
               DECISION COCKPIT
@@ -120,12 +158,12 @@ export default function DecisionBox() {
             </span>
           </div>
 
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className={`text-3xl font-black leading-none ${cfg.text}`}>
+              <p className={`text-2xl font-black leading-tight sm:text-3xl ${cfg.text}`}>
                 {isUnscored ? 'NO-GO · 데이터 확인' : result.headline}
               </p>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
                 {isUnscored
                   ? '시장 약세 판정이 아니라 필수 데이터가 미수신된 상태입니다. 점수가 정상 수집될 때까지 신규 진입과 피라미딩을 보류합니다.'
                   : result.reason}
@@ -150,20 +188,20 @@ export default function DecisionBox() {
 
           {(conflictWarning || error || data.metrics.meta.warnings.length > 0) && (
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-200">
-              {conflictWarning ?? error?.message ?? data.metrics.meta.warnings[0]}
+              {conflictWarning ?? userFacingIssue(error?.message) ?? data.metrics.meta.warnings[0]}
             </div>
           )}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-3">
+        <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
+          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
             <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
               <Activity className="h-3.5 w-3.5 text-sky-300" />
               주요 근거
             </div>
             <div className="space-y-1.5">
               {(pass.length ? pass : metrics.slice(0, 2)).map((item) => (
-                <p key={item.label} className="flex items-center justify-between gap-2 text-xs">
+                <p key={item.label} className="flex items-center justify-between gap-2 text-[11px] xl:text-xs">
                   <span className="truncate text-slate-300">{item.label}</span>
                   <span className={item.status === 'PASS' ? 'text-emerald-300' : item.status === 'WARNING' ? 'text-amber-300' : 'text-rose-300'}>
                     {item.value ?? 'N/A'}
@@ -173,12 +211,12 @@ export default function DecisionBox() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-3">
+          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
             <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
               <Target className="h-3.5 w-3.5 text-amber-300" />
               판단 변경 트리거
             </div>
-            <div className="space-y-1.5 text-xs leading-5 text-slate-300">
+            <div className="space-y-1 text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
               {isUnscored ? (
                 <p>API 응답 정상화와 기준 시각 확인 후 재채점</p>
               ) : data.state === 'GREEN' ? (
@@ -194,12 +232,12 @@ export default function DecisionBox() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-3">
+          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
             <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
               <Database className="h-3.5 w-3.5 text-sky-300" />
               데이터 신뢰도
             </div>
-            <p className="text-xs leading-5 text-slate-300">
+            <p className="text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
               {data.metrics.meta.provider} · {data.metrics.meta.source}
             </p>
             <p className="mt-1 font-mono text-[10px] text-slate-500">

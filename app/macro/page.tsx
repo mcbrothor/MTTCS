@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import MarketBanner from '@/components/ui/MarketBanner';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import RegimeHeroCard from '@/components/macro/RegimeHeroCard';
 import DecisionBox from '@/components/master-filter/DecisionBox';
@@ -104,6 +103,18 @@ function getRegimeCommentary(score: number, regime: MacroRegime, spyAbove50ma: b
   return { headline, points: points.slice(0, 3) };
 }
 
+function userFacingMacroError(message: string | null) {
+  if (!message) return '매크로 데이터를 불러오지 못했습니다.';
+  const lower = message.toLowerCase();
+  if (lower.includes('authentication') || lower.includes('unauthorized')) {
+    return 'API 인증 필요 · 세션 또는 서버 인증 상태를 확인하세요.';
+  }
+  if (lower.includes('timeout') || lower.includes('aborted')) {
+    return '데이터 요청 시간 초과 · 잠시 후 재시도하세요.';
+  }
+  return message;
+}
+
 export default function MacroPage() {
   const [macroData, setMacroData] = useState<MacroApiResponse | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
@@ -154,15 +165,15 @@ export default function MacroPage() {
         : `레짐 ${score}점 — RISK-OFF 환경. 신규 진입을 중단하고 현금을 확보하세요.`;
 
   return (
-    <div className="space-y-6 pb-12">
-      <header className="mb-6 border-b border-[var(--border)] pb-6">
+    <div className="space-y-4 pb-12">
+      <header className="border-b border-[var(--border)] pb-4">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
           STEP 01 · 시장 분석 / 매크로
         </p>
-        <h1 className="text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em] text-[var(--text-primary)]">
+        <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
           매크로 분석
         </h1>
-        <p className="mt-2 max-w-[580px] text-xs leading-[1.6] text-[var(--text-secondary)]">
+        <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
           글로벌 자금 흐름과 리스크 선호도를 6개 컴포넌트로 점수화합니다. 마스터 필터와 함께 확인해 진입 공격성을 조절하세요.
         </p>
       </header>
@@ -184,8 +195,6 @@ export default function MacroPage() {
         </p>
       </div>
 
-      <MarketBanner compact />
-
       {isLoading && (
         <div className="flex h-40 items-center justify-center rounded-lg border border-slate-800/50 bg-slate-900/50 backdrop-blur-md">
           <div className="flex flex-col items-center gap-3">
@@ -202,7 +211,7 @@ export default function MacroPage() {
             <div>
               <p className="text-sm font-bold text-sky-200">매크로 데이터 미채점</p>
               <p className="mt-1 text-sm leading-6 text-sky-100/85">
-                {macroError ?? '매크로 데이터를 불러오지 못했습니다.'} 현재 0점/RISK-OFF로 해석하지 말고,
+                {userFacingMacroError(macroError)} 현재 0점/RISK-OFF로 해석하지 말고,
                 API 인증과 데이터 소스가 정상화된 뒤 다시 판단하세요.
               </p>
               <div className="mt-3 grid gap-2 text-xs text-slate-300 md:grid-cols-3">

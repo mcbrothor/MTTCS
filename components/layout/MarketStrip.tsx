@@ -119,12 +119,12 @@ export default function MarketStrip() {
         return (
           <div
             key={item.symbol}
-            className={`flex min-w-[108px] shrink-0 flex-col rounded-2xl border px-3 py-2 ${tone} relative`}
+            className={`relative flex min-w-[96px] shrink-0 flex-col rounded-xl border px-2.5 py-1.5 ${tone} sm:min-w-[108px]`}
           >
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
               {item.label}
             </span>
-            <span className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+            <span className="font-mono text-[13px] font-semibold text-[var(--text-primary)]">
               {formatPrice(quote?.regularMarketPrice, item.digits)}
             </span>
             <div className="flex justify-between items-center mt-0.5">

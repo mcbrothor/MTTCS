@@ -12,7 +12,7 @@ export default function AppStepper() {
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--surface-strong)]/85">
-      <div className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+      <div className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-1.5 sm:px-6 lg:px-8">
         {FLOW_STEPS.map((step, index) => {
           const isActive = step.key === activeStep.key;
           const isDone = index < activeIndex;
@@ -21,7 +21,7 @@ export default function AppStepper() {
             <Link
               key={step.key}
               href={step.href}
-              className={`flex min-w-[112px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${
+              className={`flex min-w-[96px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors sm:min-w-[112px] ${
                 isActive
                   ? 'border-emerald-400/40 bg-emerald-500/10 text-[var(--text-primary)]'
                   : isDone
@@ -41,8 +41,8 @@ export default function AppStepper() {
                 {isDone ? <Check className="h-3 w-3" /> : step.step}
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-xs font-semibold">{step.label}</span>
-                <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{step.sub}</span>
+                <span className="block truncate text-[11px] font-semibold sm:text-xs">{step.label}</span>
+                <span className="hidden truncate text-[10px] text-[var(--text-tertiary)] sm:block">{step.sub}</span>
               </span>
             </Link>
           );

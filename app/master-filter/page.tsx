@@ -2,10 +2,8 @@
 
 import InsightLog from '@/components/master-filter/InsightLog';
 import MetricsGrid from '@/components/master-filter/MetricsGrid';
-import StatusCenter from '@/components/master-filter/StatusCenter';
 import DecisionBox from '@/components/master-filter/DecisionBox';
 import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
-import MarketBanner from '@/components/ui/MarketBanner';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import { useMarket } from '@/contexts/MarketContext';
 
@@ -14,21 +12,21 @@ export default function MasterFilterPage() {
   const updatedAt = data?.metrics.updatedAt || data?.metrics.meta.asOf;
 
   return (
-    <div className="space-y-6 pb-12">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--border)] pb-6">
+    <div className="space-y-4 pb-12">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
             STEP 01 · 시장 분석 / 마스터 필터
           </p>
-          <h1 className="text-[22px] font-extrabold leading-[1.2] tracking-[-0.02em] text-[var(--text-primary)]">
+          <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
             마스터 필터
           </h1>
-          <p className="mt-2 max-w-[580px] text-xs leading-[1.6] text-[var(--text-secondary)]">
+          <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
             FTD, 분산일, 내부 강도, 200일선 참여율 등 여러 지표를 조합하여 시장 기류를 점수화합니다. GREEN 구간이 아니면 신규 진입을 자제하거나 비중을 줄이는 것이 원칙입니다.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 rounded-[7px] border border-[var(--border)] bg-[var(--surface-soft)] p-1">
             <button
               onClick={() => setMarket('US')}
@@ -61,36 +59,18 @@ export default function MasterFilterPage() {
 
       <LLMBriefing />
 
-      <MarketBanner compact />
+      <MetricsGrid />
 
-      <div className="flex flex-col gap-6 lg:flex-row">
-        {/* Left Sidebar: Status, Log, Macro Widget, Guidelines */}
-        <div className="flex flex-col gap-6 lg:w-[320px] xl:w-[360px] shrink-0">
-          <StatusCenter />
-          <MacroCompactWidget />
-          <InsightLog />
-          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
-            <h3 className="mb-4 text-lg font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
-            <ul className="space-y-3 text-sm text-[var(--text-secondary)]">
-              <li className="flex gap-2">
-                <span className="font-semibold text-emerald-300">GREEN:</span>
-                신규 진입 가능. 매크로 레짐에 따라 비중(50–100%)을 조절하세요.
-              </li>
-              <li className="flex gap-2">
-                <span className="font-semibold text-amber-300 whitespace-nowrap">신규 진입 보류:</span>
-                기존 포지션만 유지하고 손절선을 점검하세요. GREEN 회복 시 재진입을 준비합니다.
-              </li>
-              <li className="flex gap-2">
-                <span className="font-semibold text-rose-300">RED:</span>
-                신규 매수 금지. 현금 비중 확대와 보유 종목 손절선 준수가 최우선입니다.
-              </li>
-            </ul>
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr_1fr]">
+        <MacroCompactWidget />
+        <InsightLog />
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)]">
+          <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
+          <div className="space-y-2 text-xs leading-5 text-[var(--text-secondary)]">
+            <p><span className="font-semibold text-emerald-300">GREEN:</span> 신규 진입 가능. 매크로 레짐에 따라 50-100% 범위에서 비중을 조절합니다.</p>
+            <p><span className="font-semibold text-amber-300">YELLOW:</span> 신규 진입 보류. 기존 포지션 손절선과 시장폭 회복 여부를 확인합니다.</p>
+            <p><span className="font-semibold text-rose-300">RED:</span> 신규 매수 금지. 현금 비중 확대와 기존 포지션 방어가 우선입니다.</p>
           </div>
-        </div>
-
-        {/* Right Content: Metrics Grid */}
-        <div className="flex-1 min-w-0">
-          <MetricsGrid />
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { Info, ShieldAlert, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Info, ShieldAlert, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import Card from '@/components/ui/Card';
 import HelpButton from '@/components/ui/HelpButton';
@@ -271,6 +271,86 @@ function DistributionTable({ details }: { details: NonNullable<MasterFilterMetri
   );
 }
 
+function DataQualityPanel({
+  metrics,
+  market,
+}: {
+  metrics: MasterFilterMetrics;
+  market: string;
+}) {
+  const rows = [
+    metrics.trend,
+    metrics.breadth,
+    metrics.volatility,
+    metrics.ftd,
+    metrics.distribution,
+    metrics.newHighLow,
+    metrics.sectorRotation,
+  ];
+
+  return (
+    <section className="rounded-xl border border-sky-500/25 bg-slate-950/55 p-4 shadow-[var(--panel-shadow)]">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">
+            {market === 'KR' ? 'KOSPI 200' : 'SPY'} Market Filter
+          </p>
+          <h2 className="mt-1 text-lg font-black text-white">데이터 신뢰도 게이트</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
+            현재 지표는 투자 판단용으로 채점되지 않았습니다. 0점은 시장 약세가 아니라 API/인증/데이터 소스 미수신 상태를 의미합니다.
+          </p>
+        </div>
+        <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-left md:text-right">
+          <p className="text-[10px] font-semibold uppercase text-sky-300">P3 Score</p>
+          <p className="font-mono text-xl font-black text-white">UNSCORED</p>
+        </div>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-lg border border-slate-800">
+        <table className="w-full text-left text-xs text-slate-300">
+          <thead className="bg-slate-900/70 text-[10px] uppercase tracking-widest text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Indicator</th>
+              <th className="px-3 py-2">Status</th>
+              <th className="hidden px-3 py-2 md:table-cell">Required Before Use</th>
+              <th className="px-3 py-2 text-right">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className="border-t border-slate-800/80">
+                <td className="px-3 py-2 font-semibold text-slate-200">{row.label}</td>
+                <td className="px-3 py-2">
+                  <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-200">
+                    NOT SCORED
+                  </span>
+                </td>
+                <td className="hidden px-3 py-2 text-slate-400 md:table-cell">{row.description}</td>
+                <td className="px-3 py-2 text-right font-mono text-[10px] text-slate-500">{row.source}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 grid gap-2 text-xs text-slate-300 md:grid-cols-3">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="font-semibold text-sky-200">1. 인증/세션</p>
+          <p className="mt-1 text-slate-400">API 인증이 정상이어야 실시간 채점이 시작됩니다.</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="font-semibold text-sky-200">2. 기준 시각</p>
+          <p className="mt-1 text-slate-400">as-of와 지연 상태를 확인한 뒤 당일 판단에 사용합니다.</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="font-semibold text-sky-200">3. 재채점</p>
+          <p className="mt-1 text-slate-400">데이터 정상화 후 P3, FTD, 시장폭, 섹터 리더십을 재평가합니다.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function MetricsGrid() {
   const { data, isLoading } = useMarket();
 
@@ -287,15 +367,20 @@ export default function MetricsGrid() {
   }
 
   const { metrics } = data;
+  const isUnscored = data.state === 'GREY' || metrics.meta.fallbackUsed;
   const displayMetricsList = [
-    { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory },
-    { detail: metrics.breadth, chartData: metrics.mainHistory },
-    { detail: metrics.volatility, chartData: metrics.vixHistory },
+    { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory && metrics.movingAverageHistory.length > 1 ? metrics.movingAverageHistory : undefined },
+    { detail: metrics.breadth, chartData: metrics.mainHistory && metrics.mainHistory.length > 1 ? metrics.mainHistory : undefined },
+    { detail: metrics.volatility, chartData: metrics.vixHistory && metrics.vixHistory.length > 1 ? metrics.vixHistory : undefined },
     { detail: metrics.ftd },
     { detail: metrics.distribution },
     { detail: metrics.newHighLow },
     { detail: metrics.sectorRotation }
   ];
+
+  if (isUnscored) {
+    return <DataQualityPanel metrics={metrics} market={data.market} />;
+  }
 
   return (
     <div className="space-y-5">

@@ -151,7 +151,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    const timeout = window.setTimeout(() => controller.abort(), 7000);
     let mounted = true;
 
     async function fetchMarketData() {
@@ -159,7 +159,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
       try {
         const [mfResponse, macroResponse] = await Promise.allSettled([
           fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
-          fetch('/api/macro'),
+          fetch('/api/macro', { signal: controller.signal }),
         ]);
 
         if (mfResponse.status === 'rejected' || (mfResponse.status === 'fulfilled' && !mfResponse.value.ok)) {
