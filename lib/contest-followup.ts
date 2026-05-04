@@ -4,6 +4,34 @@ export function contestCandidatePlanHref(candidate: Pick<ContestCandidate, 'tick
   return `/plan?ticker=${encodeURIComponent(candidate.ticker)}&exchange=${encodeURIComponent(candidate.exchange)}`;
 }
 
+export interface ContestPlanQueueItem {
+  ticker: string;
+  exchange: string;
+  name: string | null;
+}
+
+export const CONTEST_PLAN_QUEUE_STORAGE_KEY = 'mtn:plan:contest-queue:v1';
+
+export function contestPlanQueue(candidates: Pick<ContestCandidate, 'ticker' | 'exchange' | 'name'>[]): ContestPlanQueueItem[] {
+  return candidates.map((candidate) => ({
+    ticker: candidate.ticker,
+    exchange: candidate.exchange,
+    name: candidate.name ?? null,
+  }));
+}
+
+export function contestPlanQueueHref(candidates: Pick<ContestCandidate, 'ticker' | 'exchange' | 'name'>[]) {
+  const first = candidates[0];
+  if (!first) return '/plan';
+  const params = new URLSearchParams({
+    ticker: first.ticker,
+    exchange: first.exchange,
+    source: 'contest',
+    autoAnalyze: '1',
+  });
+  return `/plan?${params.toString()}`;
+}
+
 export function contestWatchlistPriority(recommendation: ContestLlmRecommendation | null | undefined): WatchlistPriority {
   if (recommendation === 'PROCEED') return 2;
   if (recommendation === 'WATCH') return 1;

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
@@ -15,6 +15,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import { useMarketData } from '@/hooks/useMarketData';
+import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
 
 // useSearchParams는 Suspense 바운더리 내에서만 사용 가능 (Next.js 14+)
 export default function PlanPage() {
@@ -30,9 +31,12 @@ function PlanPageContent() {
   const searchParams = useSearchParams();
   const initialTicker = searchParams.get('ticker') || '';
   const initialExchange = searchParams.get('exchange') || 'NAS';
+  const shouldAutoAnalyze = searchParams.get('autoAnalyze') === '1';
   const [planMarket, setPlanMarket] = useState<'US' | 'KR'>(
     (initialExchange === 'KOSPI' || initialExchange === 'KOSDAQ') ? 'KR' : 'US'
   );
+  const autoAnalyzeStarted = useRef(false);
+  const [contestQueue, setContestQueue] = useState<ContestPlanQueueItem[]>([]);
 
   // 스캐너에서 전달받은 컨텍스트 데이터 — 계획서 수립 시 참고용
   const scannerContext = {
@@ -65,6 +69,25 @@ function PlanPageContent() {
     setSaveError(null);
     fetchMarketData(ticker, exchange, totalEquity, riskPercent);
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(CONTEST_PLAN_QUEUE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { candidates?: ContestPlanQueueItem[] };
+      if (Array.isArray(parsed.candidates)) setContestQueue(parsed.candidates);
+    } catch {
+      setContestQueue([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker) return;
+    autoAnalyzeStarted.current = true;
+    handleAnalyze(initialTicker, initialExchange, 0, 1);
+  }, [shouldAutoAnalyze, initialTicker, initialExchange]);
 
   const handleSavePlan = async () => {
     if (!analysis || !checklist) return;
@@ -142,6 +165,31 @@ function PlanPageContent() {
       <div className={`flex items-center gap-2 rounded-lg border px-4 py-2.5 text-xs font-semibold ${planMarket === 'US' ? 'border-blue-500/30 bg-blue-500/8 text-blue-300' : 'border-rose-500/30 bg-rose-500/8 text-rose-300'}`}>
         {planMarket === 'US' ? '🇺🇸 미국 계좌 — 통화: USD ($)' : '🇰🇷 한국 계좌 — 통화: KRW (₩)'}
       </div>
+
+      {contestQueue.length > 0 && (
+        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-indigo-300">Contest Plan Queue</p>
+              <p className="mt-1 text-sm text-slate-300">
+                선별된 {contestQueue.length}개 종목 중 첫 번째 종목의 매매 계획 분석을 자동으로 시작했습니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {contestQueue.map((item) => (
+                <Link
+                  key={`${item.exchange}:${item.ticker}`}
+                  href={`/plan?ticker=${encodeURIComponent(item.ticker)}&exchange=${encodeURIComponent(item.exchange)}&source=contest&autoAnalyze=1`}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${item.ticker === initialTicker ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-indigo-400/50'}`}
+                >
+                  <span className="font-mono">{item.ticker}</span>
+                  {item.name ? <span className="ml-1 text-slate-500">{item.name}</span> : null}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <TickerInput key={planMarket} onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange} />
 

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { getContestStructuredVerdict } from '../lib/contest-presentation.ts';
-import { contestCandidatePlanHref, contestFollowUpCopy, contestWatchlistPriority } from '../lib/contest-followup.ts';
+import {
+  contestCandidatePlanHref,
+  contestFollowUpCopy,
+  contestPlanQueue,
+  contestPlanQueueHref,
+  contestWatchlistPriority,
+} from '../lib/contest-followup.ts';
 
 {
   const verdict = getContestStructuredVerdict({
@@ -56,6 +62,13 @@ import { contestCandidatePlanHref, contestFollowUpCopy, contestWatchlistPriority
 
 {
   assert.equal(contestCandidatePlanHref({ ticker: 'GOOGL', exchange: 'NAS' }), '/plan?ticker=GOOGL&exchange=NAS');
+  assert.equal(
+    contestPlanQueueHref([{ ticker: '005930', exchange: 'KOSPI', name: '삼성전자' }]),
+    '/plan?ticker=005930&exchange=KOSPI&source=contest&autoAnalyze=1',
+  );
+  assert.deepEqual(contestPlanQueue([{ ticker: '005930', exchange: 'KOSPI', name: '삼성전자' }]), [
+    { ticker: '005930', exchange: 'KOSPI', name: '삼성전자' },
+  ]);
   assert.equal(contestWatchlistPriority('PROCEED'), 2);
   assert.equal(contestWatchlistPriority('WATCH'), 1);
   assert.equal(contestWatchlistPriority('SKIP'), 0);

@@ -28,7 +28,14 @@ import UniverseSelectionSection from './components/UniverseSelectionSection';
 
 // Utils & Types
 import { getContestStructuredVerdict } from '@/lib/contest-presentation';
-import { contestCandidatePlanHref, contestFollowUpCopy, contestWatchlistPriority } from '@/lib/contest-followup';
+import {
+  CONTEST_PLAN_QUEUE_STORAGE_KEY,
+  contestCandidatePlanHref,
+  contestFollowUpCopy,
+  contestPlanQueue,
+  contestPlanQueueHref,
+  contestWatchlistPriority,
+} from '@/lib/contest-followup';
 import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import { formatDate, verdictRecommendationClass } from '@/lib/contest-ui-utils';
 
@@ -356,6 +363,21 @@ export default function ContestPage() {
   const finalPicks = useMemo(() => activeCandidates.filter((c) => c.actual_invested).sort((a, b) => (a.final_pick_rank || 99) - (b.final_pick_rank || 99)), [activeCandidates]);
   const followUpCopy = useMemo(() => contestFollowUpCopy(finalPicks.length), [finalPicks.length]);
   const followUpCandidates = finalPicks.length > 0 ? finalPicks : activeCandidates.slice(0, 5);
+  const planQueueCandidates = finalPicks.length > 0 ? finalPicks : followUpCandidates;
+  const planQueueHref = useMemo(() => contestPlanQueueHref(planQueueCandidates), [planQueueCandidates]);
+
+  const persistPlanQueue = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      CONTEST_PLAN_QUEUE_STORAGE_KEY,
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        source: 'contest',
+        sessionId: activeSession?.id ?? null,
+        candidates: contestPlanQueue(planQueueCandidates),
+      }),
+    );
+  }, [activeSession?.id, planQueueCandidates]);
 
   const toggleCandidateSelection = (ticker: string) => {
     setSelected((prev) => prev.includes(ticker) ? prev.filter((t) => t !== ticker) : prev.length >= 10 ? prev : [...prev, ticker]);
@@ -622,7 +644,13 @@ export default function ContestPage() {
                 {renderFollowUpPanel()}
               </div>
               <div className="flex flex-col w-full max-w-xs gap-3">
-                <Link href="/plan" className="inline-flex h-14 items-center justify-center rounded-2xl bg-indigo-600 font-black text-white shadow-xl">매매 계획 수립</Link>
+                <Link
+                  href={planQueueHref}
+                  onClick={persistPlanQueue}
+                  className="inline-flex h-14 items-center justify-center rounded-2xl bg-indigo-600 font-black text-white shadow-xl"
+                >
+                  매매 계획 수립
+                </Link>
                 <Button variant="ghost" onClick={() => { setStep('selection'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-slate-500">다른 종목 분석</Button>
               </div>
             </div>
