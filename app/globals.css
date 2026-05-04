@@ -137,6 +137,15 @@
     letter-spacing: -0.05em;
   }
 
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   /* IB Investment Committee Report — markdown typography (dark) */
   .ib-report {
     font-size: 0.9375rem;

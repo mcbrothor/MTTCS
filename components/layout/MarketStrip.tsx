@@ -106,7 +106,7 @@ export default function MarketStrip() {
   }, [enabled]);
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+    <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1">
       {STRIP_ITEMS.map((item) => {
         const quote = quotes[item.symbol];
         const change = quote?.regularMarketChangePercent ?? null;

@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lu
 import MarketBanner from '@/components/ui/MarketBanner';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import RegimeHeroCard from '@/components/macro/RegimeHeroCard';
+import DecisionBox from '@/components/master-filter/DecisionBox';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 
 interface HistoryPoint {
@@ -108,18 +109,28 @@ export default function MacroPage() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [macroError, setMacroError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/macro').then((r) => r.json()),
-      fetch('/api/macro/history?days=7').then((r) => r.json()),
+      fetch('/api/macro').then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
+      fetch('/api/macro/history?days=7').then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
     ])
       .then(([macro, hist]) => {
-        if (macro.score !== undefined) setMacroData(macro);
-        else setHasError(true);
-        if (Array.isArray(hist.data)) setHistory(hist.data);
+        if (macro.ok && macro.body?.score !== undefined) {
+          setMacroData(macro.body);
+        } else {
+          setMacroData(null);
+          setHasError(true);
+          setMacroError(macro.body?.message || '매크로 데이터를 채점하지 못했습니다.');
+        }
+        if (hist.ok && Array.isArray(hist.body?.data)) setHistory(hist.body.data);
       })
-      .catch(() => setHasError(true))
+      .catch((err) => {
+        setMacroData(null);
+        setHasError(true);
+        setMacroError(err instanceof Error ? err.message : '매크로 데이터를 채점하지 못했습니다.');
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -132,8 +143,11 @@ export default function MacroPage() {
     ? getRegimeCommentary(score, regime, macroData.spyAbove50ma, macroData.hygIefDiff, macroData.vixLevel)
     : null;
 
+  const isMacroScored = Boolean(macroData && !hasError);
   const nextStepText =
-    score >= 70
+    !isMacroScored
+      ? '매크로 미채점 — 이 상태는 RISK-OFF가 아닙니다. 데이터/API 상태를 먼저 정상화한 뒤 포지션 사이즈를 판단하세요.'
+      : score >= 70
       ? `레짐 ${score}점 — RISK-ON 환경. 마스터 필터가 GREEN이면 공격적 후보를 탐색하세요.`
       : score >= 45
         ? `레짐 ${score}점 — 중립 국면. 신중하게 후보를 검토하고 비중을 줄이세요.`
@@ -153,7 +167,9 @@ export default function MacroPage() {
         </p>
       </header>
 
-      <LLMBriefing />
+      <DecisionBox />
+
+      <LLMBriefing regime={macroData?.regime ?? null} />
 
       {/* 위계 안내 배너 — 매크로는 사이즈 조절용, 진입 게이트는 마스터 필터 */}
       <div className="flex items-start gap-3 rounded-xl border border-sky-700/40 bg-sky-900/15 px-4 py-3">
@@ -168,7 +184,7 @@ export default function MacroPage() {
         </p>
       </div>
 
-      <MarketBanner />
+      <MarketBanner compact />
 
       {isLoading && (
         <div className="flex h-40 items-center justify-center rounded-lg border border-slate-800/50 bg-slate-900/50 backdrop-blur-md">
@@ -180,9 +196,31 @@ export default function MacroPage() {
       )}
 
       {!isLoading && hasError && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
-          <span>매크로 데이터를 불러오지 못했습니다. 잠시 후 새로고침하세요.</span>
+        <div role="alert" className="rounded-xl border border-sky-500/35 bg-sky-500/10 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
+            <div>
+              <p className="text-sm font-bold text-sky-200">매크로 데이터 미채점</p>
+              <p className="mt-1 text-sm leading-6 text-sky-100/85">
+                {macroError ?? '매크로 데이터를 불러오지 못했습니다.'} 현재 0점/RISK-OFF로 해석하지 말고,
+                API 인증과 데이터 소스가 정상화된 뒤 다시 판단하세요.
+              </p>
+              <div className="mt-3 grid gap-2 text-xs text-slate-300 md:grid-cols-3">
+                <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
+                  <p className="font-semibold text-sky-200">Credit</p>
+                  <p className="mt-1 text-slate-400">HY OAS 또는 HYG/IEF 정상 수집 필요</p>
+                </div>
+                <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
+                  <p className="font-semibold text-sky-200">Rates / FX</p>
+                  <p className="mt-1 text-slate-400">금리 커브, 달러, 원화 민감도 확인 필요</p>
+                </div>
+                <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
+                  <p className="font-semibold text-sky-200">Volatility</p>
+                  <p className="mt-1 text-slate-400">VIX 레벨과 term structure 확인 필요</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -226,6 +264,21 @@ export default function MacroPage() {
 
           {/* Right Content */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              {[
+                ['Credit', 'HY OAS · HYG/IEF', '크레딧 스프레드 축소 여부'],
+                ['Rates / FX', 'UUP · TLT · Curve', '달러와 금리 충격 방향'],
+                ['Volatility', 'VIX', '변동성 레벨과 급등 위험'],
+                ['Leadership', 'QQQ/SPY · IWM/SPY', '성장주·소형주 참여 폭'],
+              ].map(([title, metric, desc]) => (
+                <div key={title} className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
+                  <p className="text-[10px] font-bold uppercase text-slate-500">{title}</p>
+                  <p className="mt-1 text-sm font-bold text-[var(--text-primary)]">{metric}</p>
+                  <p className="mt-2 text-[11px] leading-5 text-[var(--text-secondary)]">{desc}</p>
+                </div>
+              ))}
+            </div>
+
             {/* Commentary Card */}
             {commentary && (
               <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-[var(--panel-shadow)]">

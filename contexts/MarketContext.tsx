@@ -21,9 +21,6 @@ interface MarketContextValue {
   conflictWarning: string | null;
 }
 
-const STATE_ORDER = { GREEN: 0, YELLOW: 1, RED: 2 } as const;
-const REGIME_ORDER = { RISK_ON: 0, NEUTRAL: 1, RISK_OFF: 2 } as const;
-
 /**
  * 마스터필터와 매크로 사이 신호 불일치 감지
  *
@@ -68,9 +65,9 @@ const createEmptyMetric = (label: string, threshold: string | number, unit: stri
   label,
   value: 'N/A',
   threshold,
-  status: 'FAIL',
+  status: 'WARNING',
   unit,
-  description: '데이터를 불러오지 못했습니다.',
+  description: '데이터 소스 장애로 해당 지표를 채점하지 않았습니다.',
   source: 'System Fallback',
   score: 0,
   weight: 20,
@@ -88,7 +85,7 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
   };
 
   return {
-    state: 'YELLOW',
+    state: 'GREY',
     market,
     metrics: {
       trend: createEmptyMetric('Trend Alignment', 'PASS', ''),
@@ -112,7 +109,7 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
       ftdReason: '마스터 필터 API 응답이 없어 Follow-Through Day를 확인하지 못했습니다.',
       updatedAt,
     },
-    insightLog: '마스터 필터 데이터를 불러오지 못했습니다. 안전을 위해 신규 진입은 보수적으로 판단하세요.',
+    insightLog: '마스터 필터 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 미채점 상태입니다.',
     isAiGenerated: false,
     aiProviderUsed: 'rules',
     aiModelUsed: 'system-fallback',
@@ -123,12 +120,12 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
       label: 'rules',
       model: 'system-fallback',
       status: 'success',
-      text: '마스터 필터 데이터를 불러오지 못했습니다. 안전을 위해 신규 진입은 보수적으로 판단하세요.',
+      text: '마스터 필터 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 미채점 상태입니다.',
       selected: true,
       priority: 99,
       generatedAt: updatedAt,
     }],
-    aiErrorSummary: '브라우저가 마스터 필터 API 응답을 받지 못해 로컬 fallback 데이터를 표시합니다.',
+    aiErrorSummary: '브라우저가 마스터 필터 API 응답을 받지 못해 로컬 fallback 데이터를 표시합니다. 점수와 상태는 투자 판단에 사용하지 마세요.',
   };
 }
 

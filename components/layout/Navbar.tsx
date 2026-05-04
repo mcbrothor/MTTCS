@@ -40,7 +40,7 @@ export default function Navbar() {
         </div>
 
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 gap-2 overflow-x-auto pb-1">
+          <div className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1">
             {FLOW_STEPS.map((step) => {
               const isActive = step.key === activeStep.key;
 

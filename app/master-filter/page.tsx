@@ -57,12 +57,11 @@ export default function MasterFilterPage() {
         </div>
       </header>
 
-      <LLMBriefing />
-
-      {/* Decision Box — 가장 먼저, 오늘의 진입 결정 */}
       <DecisionBox />
 
-      <MarketBanner />
+      <LLMBriefing />
+
+      <MarketBanner compact />
 
       <div className="flex flex-col gap-6 lg:flex-row">
         {/* Left Sidebar: Status, Log, Macro Widget, Guidelines */}

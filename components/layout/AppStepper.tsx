@@ -12,7 +12,7 @@ export default function AppStepper() {
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--surface-strong)]/85">
-      <div className="mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+      <div className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
         {FLOW_STEPS.map((step, index) => {
           const isActive = step.key === activeStep.key;
           const isDone = index < activeIndex;
