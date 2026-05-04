@@ -58,14 +58,17 @@ const prompt = buildIbValidationPrompt(session, [candidate], {
 assert.match(prompt, /SYSTEM-LIMITATION DISCLOSURE/);
 assert.match(prompt, /DECISION HIERARCHY/);
 assert.match(prompt, /MTN Rule Engine의 순위, 점수, 추천, confidence는 최종 투자 결정이 아닙니다/);
+assert.match(prompt, /실질적인 투자 판단은 IB Investment Committee의 독립적 최종 판단입니다/);
+assert.match(prompt, /committee_role": "FINAL_INVESTMENT_JUDGMENT"/);
 assert.match(prompt, /PRELIMINARY_SCREEN/);
-assert.match(prompt, /DECISION_INFLUENCING_REVIEW/);
 assert.match(prompt, /mtn_alignment/);
 assert.match(prompt, /final_decision_impact/);
 assert.match(prompt, /override_reason/);
 assert.match(prompt, /"name": "<company name or null>"/);
+assert.match(prompt, /Committee Ranking Rationale/);
 assert.match(prompt, /Top Pick 표기에는 ticker와 company name/);
 assert.match(prompt, /전체 markdown report는 1,200~1,800단어 안에서 끝내십시오/);
 assert.match(prompt, /MTN 정량 결과는 1차 후보 선별/);
+assert.doesNotMatch(prompt, /諛|李|꾩|쒖/);
 
 console.log('contest IB prompt SIR tests passed');

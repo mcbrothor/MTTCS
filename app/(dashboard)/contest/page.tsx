@@ -17,6 +17,7 @@ const { Zap } = require('lucide-react') as {
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Button from '@/components/ui/Button';
+import { copyTextToClipboard } from '@/lib/browser/clipboard';
 
 // Components
 import AnalyzingView from './components/AnalyzingView';
@@ -396,7 +397,7 @@ export default function ContestPage() {
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
       if (!silent) {
-        await navigator.clipboard.writeText(result.data.llm_prompt);
+        await copyTextToClipboard(result.data.llm_prompt);
         setNotice('세션 저장 및 프롬프트 복사 완료');
       }
       await loadSessions(result.data.id);
@@ -471,12 +472,20 @@ export default function ContestPage() {
 
   const copyIbPrompt = async () => {
     if (!activeSession) return;
+    setIbError(null);
     try {
       const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`);
       const result = await response.json();
-      if (result.success) { await navigator.clipboard.writeText(result.data.prompt); setIbPromptText(result.data.prompt); setNotice('IB 프롬프트 복사됨'); }
-      else throw new Error(result.error);
-    } catch (err: any) { setIbError(err.message); }
+      if (!result.success) throw new Error(result.error);
+
+      setIbPromptText(result.data.prompt);
+      const method = await copyTextToClipboard(result.data.prompt);
+      setNotice(method === 'exec-command' ? 'IB 프롬프트 복사 완료 (fallback)' : 'IB 프롬프트 복사 완료');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '프롬프트 복사 중 오류가 발생했습니다.';
+      setIbError(`프롬프트를 화면에 열어두었습니다. 브라우저 포커스를 앱으로 둔 뒤 다시 복사하세요. (${message})`);
+      setIbPromptOpen(true);
+    }
   };
 
   const runIbValidation = async () => {

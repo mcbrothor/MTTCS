@@ -1,7 +1,7 @@
 import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } from '@/types';
 
-export const IB_PROMPT_VERSION = 'mtn-ib-committee-v3-concise-memo';
-export const IB_RESPONSE_SCHEMA_VERSION = 'mtn-ib-committee-markdown-v2';
+export const IB_PROMPT_VERSION = 'mtn-ib-committee-v4-final-judgment';
+export const IB_RESPONSE_SCHEMA_VERSION = 'mtn-ib-committee-markdown-v3';
 
 export interface IbCandidateInput {
   ticker: string;
@@ -22,25 +22,27 @@ const SYSTEM_LIMITATION_DISCLOSURE = `
 [SYSTEM-LIMITATION DISCLOSURE - 반드시 평가에 반영]
 
 MTN 정량 점수(VCP, RS, SEPA, Momentum, Technical Quality)는 1차 후보 선별용입니다.
-아래 한계를 명시적으로 보완하십시오.
+실질적인 투자 판단은 IB Investment Committee의 독립적 최종 판단입니다.
 
-(L-1) SEPA 점수는 가격/패턴 기반이며 EPS 컨센서스, 가이던스, 백로그, 매출 mix를 자동 반영하지 않습니다.
+MTN의 한계:
+(L-1) SEPA/VCP는 가격과 패턴 중심이며 EPS 컨센서스, 가이던스, 백로그, 매출 mix를 자동 반영하지 않습니다.
 (L-2) RS는 universe-relative proxy이며 IBD Official RS Rating이 아닙니다.
 (L-3) Moat, 경쟁우위, 회계 품질, 이벤트 캘린더, 정책/규제 리스크는 별도 판단이 필요합니다.
-(L-4) 외부 LLM 판단은 최종 매매 계획을 보조하는 2차 검토입니다. MTN 점수와 충돌하면 채택 여부와 근거를 분명히 적으십시오.
+(L-4) MTN 점수와 충돌하더라도, 위원회가 더 강한 펀더멘털/리스크 근거를 발견하면 위원회 판단을 우선하십시오.
 `.trim();
 
 const DECISION_HIERARCHY = `
-[DECISION HIERARCHY - MTN은 1차 스크린, IB 위원회는 의사결정 보정 레이어]
+[DECISION HIERARCHY - MTN은 1차 분석, IB 위원회가 실질 투자 판단]
 
 MTN Rule Engine의 순위, 점수, 추천, confidence는 최종 투자 결정이 아닙니다.
-위원회는 MTN 결과를 존중하되 그대로 복제하지 말고, 펀더멘털, 촉매, 리스크, 유동성, 집행 가능성 관점에서 재평가하십시오.
+위원회는 MTN 결과를 참고 자료로만 사용하고, 펀더멘털, 촉매, 리스크, 밸류에이션, 유동성, 집행 가능성을 종합해 독립 판단을 내려야 합니다.
 
 반드시 수행할 것:
-1. MTN 순위와 위원회 최종 순위가 일치하는지 명시하십시오.
+1. MTN 순위와 IB 위원회 최종 순위가 일치하는지 명시하십시오.
 2. 다르면 upgrade/downgrade/rerank 이유를 구체적으로 설명하십시오.
 3. 각 후보의 final_decision_impact를 LOW / MEDIUM / HIGH로 분류하십시오.
-4. 보고서는 실제 포트폴리오 매니저가 바로 읽을 수 있는 투자위원회 메모 톤으로 작성하십시오.
+4. 최종 Top 3와 제외/보류 후보에 대해 위원회 판단이 MTN 결과를 어떻게 재해석했는지 설명하십시오.
+5. 보고서는 실제 포트폴리오 매니저가 바로 실행 여부를 판단할 수 있는 Investment Committee Memo 톤으로 작성하십시오.
 `.trim();
 
 function extractScores(candidate: ContestCandidate): IbCandidateInput['score_breakdown'] {
@@ -134,8 +136,8 @@ export function buildIbValidationPrompt(
   const dataPayload = JSON.stringify({
     decision_context: {
       mtn_role: 'PRELIMINARY_SCREEN',
-      committee_role: 'DECISION_INFLUENCING_REVIEW',
-      final_decision_note: 'MTN 정량 결과는 1차 후보 선별이며, IB 위원회 상세 평가는 최종 매매 계획 결정에 영향을 주는 보정 레이어입니다.',
+      committee_role: 'FINAL_INVESTMENT_JUDGMENT',
+      final_decision_note: 'MTN 정량 결과는 1차 후보 선별입니다. 실질적인 투자 판단과 최종 우선순위는 IB 투자위원회의 독립 판단을 우선합니다.',
     },
     universe: session.universe,
     market: session.market,
@@ -144,7 +146,9 @@ export function buildIbValidationPrompt(
     mtn_ranked_candidates: ranked,
   }, null, 2);
 
-  const tickerList = ranked.map((candidate) => `${candidate.ticker}${candidate.name ? ` (${candidate.name})` : ''}`).join(', ');
+  const tickerList = ranked
+    .map((candidate) => `${candidate.ticker}${candidate.name ? ` (${candidate.name})` : ''}`)
+    .join(', ');
 
   return [
     SYSTEM_LIMITATION_DISCLOSURE,
@@ -153,7 +157,8 @@ export function buildIbValidationPrompt(
     '',
     '# Role',
     '당신은 글로벌 투자은행의 Investment Committee 서기 겸 수석 애널리스트입니다.',
-    '한국어로 작성하되, ticker, rating, target, EPS 같은 금융 용어와 숫자는 원문 표기를 유지하십시오.',
+    'MTN은 1차 정량 스크리너일 뿐이며, 당신의 임무는 IB 위원회의 실질적인 투자 판단을 문서화하는 것입니다.',
+    '한국어로 작성하되 ticker, rating, target, EPS, moat 같은 금융 용어와 숫자는 원문 표기를 유지하십시오.',
     '',
     '# Input Data',
     'MTN Rule Engine scoring: VCP 25 + RS 25 + SEPA 20 + Momentum 15 + Technical Quality 15 = 100.',
@@ -174,7 +179,7 @@ export function buildIbValidationPrompt(
       `  "session_id": "${session.id}",`,
       `  "analysis_date": "<YYYY-MM-DD>",`,
       `  "mtn_role": "PRELIMINARY_SCREEN",`,
-      `  "committee_role": "DECISION_INFLUENCING_REVIEW",`,
+      `  "committee_role": "FINAL_INVESTMENT_JUDGMENT",`,
       `  "final_decision_impact": "LOW | MEDIUM | HIGH",`,
       `  "committee_consensus": {`,
       `    "top3_tickers": ["...", "...", "..."],`,
@@ -212,14 +217,17 @@ export function buildIbValidationPrompt(
     '## 2. Market Regime & Portfolio Implication',
     '2문단 이내. 현재 시장 상태, 리스크 온/오프, 섹터/스타일 로테이션, 포지션 사이징 관점을 연결하십시오.',
     '',
-    '## 3. Top Picks',
+    '## 3. Committee Ranking Rationale',
+    'MTN 1차 순위와 IB 위원회 최종 순위가 어떻게 달라졌는지 표 또는 짧은 문단으로 설명하십시오. 순위 변경은 펀더멘털, 촉매, 리스크, 실행 가능성 중 어느 요인이 결정적이었는지 명시하십시오.',
+    '',
+    '## 4. Top Picks',
     '각 Top Pick은 아래 형식으로 220~320단어 안에서 작성하십시오.',
     '### Pick #1 - <TICKER> (<Company Name>)',
     '> **IB Verdict**: <...> · **12M Target**: <...> · **EPS FY+1**: <...> · **Moat**: <...>',
     '**Thesis**: 왜 지금 이 종목인지, 시장이 아직 덜 반영한 요소가 무엇인지 설명하십시오.',
     '**Drivers & Catalysts**: 향후 3개월 촉매와 펀더멘털 동인을 bullets 2~3개로 정리하십시오.',
     '**Risk & Execution**: 핵심 리스크, 무효화 조건, 진입/분할 관점을 간결히 쓰십시오.',
-    '**MTN Cross-Check**: MTN 점수와 위원회 판단이 확인/상향/하향되는 이유를 명시하십시오.',
+    '**MTN Cross-Check**: MTN 결과를 위원회가 확인/상향/하향/재순위화한 이유를 명시하십시오.',
     '',
     '### Pick #2 - <TICKER> (<Company Name>)',
     '동일 형식.',
@@ -227,15 +235,15 @@ export function buildIbValidationPrompt(
     '### Pick #3 - <TICKER> (<Company Name>)',
     '동일 형식.',
     '',
-    '## 4. Remaining Candidates',
+    '## 5. Remaining Candidates',
     '| Ticker | Company | IB Rank | Verdict | MTN Alignment | Decision Impact | One-line Rationale |',
     '| --- | --- | --- | --- | --- | --- | --- |',
     '',
-    '## 5. Final Committee Decision',
-    '2문단 이내. 최종 포트폴리오 행동, 우선순위, 보류/제외 후보를 정리하십시오.',
+    '## 6. Final Committee Decision',
+    '2문단 이내. 최종 포트폴리오 행동, 우선순위, 보류/제외 후보를 정리하십시오. 이 섹션은 MTN이 아니라 IB 위원회의 최종 판단이어야 합니다.',
     '',
-    '## 6. Data Caveat',
-    '짧게. 이 리포트는 MTN Rule Engine과 외부 LLM 기반 2차 검토이며 투자 책임은 사용자에게 있음을 명시하십시오.',
+    '## 7. Data Caveat',
+    '짧게. MTN은 1차 정량 스크리너이고, 본 메모는 IB 위원회 판단을 구조화한 투자 검토 자료이며 투자 책임은 사용자에게 있음을 명시하십시오.',
     '',
     '# Writing Rules',
     '- 전체 markdown report는 1,200~1,800단어 안에서 끝내십시오. 절대 중간에 끊기지 않게 결론까지 작성하십시오.',

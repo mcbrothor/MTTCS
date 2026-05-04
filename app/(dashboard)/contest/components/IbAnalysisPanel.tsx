@@ -119,7 +119,7 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                 <div>
                   <h3 className="text-xl font-black text-white">IB 투자 위원회 분석 완료</h3>
                   <p className="mt-1 text-xs font-medium text-slate-400">
-                    {ibAnalysis.committee_consensus?.regime_label || '시장 국면 고려'} · {ibAnalysis.committee_consensus?.mtn_alignment || 'MTN 의견 보완'}
+                    {ibAnalysis.committee_consensus?.regime_label || '시장 국면 고려'} · {ibAnalysis.committee_consensus?.mtn_alignment || 'IB 최종 판단'}
                   </p>
                 </div>
               </div>
@@ -160,7 +160,7 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                     </div>
                   </div>
                   <span className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                    Decision Review
+                    IB Final Judgment
                   </span>
                 </div>
                 <div className="max-h-[72vh] overflow-y-auto px-5 py-5 sm:px-8 sm:py-7">
@@ -177,7 +177,7 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
           <div className="space-y-6 p-8">
             <div className="flex items-center justify-between gap-4">
               <h4 className="text-sm font-black uppercase tracking-widest text-slate-400">위원회 선별 Top Pick</h4>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Decision Influencing Review</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">IB Final Judgment</span>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               {topTickers.map((ticker, idx) => {
