@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/session';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { buildEntrySnapshot } from '@/lib/finance/core/snapshot';
@@ -63,6 +63,10 @@ type TradeRecordForSnapshot = Pick<
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected error';
+}
+
+function isKoreanTicker(ticker: string) {
+  return /^\d{6}$/.test(ticker);
 }
 
 function apiError(message: string, code: string, status = 400, details?: unknown) {
@@ -181,10 +185,10 @@ export async function POST(request: Request) {
     const stoplossPrice = Number(body.stoploss_price);
     if (entryPrice && stoplossPrice) {
       if (direction === 'LONG' && stoplossPrice >= entryPrice) {
-        return apiError('LONG 포지션에서 손절가는 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
+        return apiError('LONG 포지션에서는 손절가가 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
       }
       if (direction === 'SHORT' && stoplossPrice <= entryPrice) {
-        return apiError('SHORT 포지션에서 손절가는 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
+        return apiError('SHORT 포지션에서는 손절가가 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
       }
     }
 
@@ -248,6 +252,16 @@ export async function GET(request: Request) {
     const limit = searchParams.has('limit') ? Math.max(1, parseInt(searchParams.get('limit')!, 10)) : null;
     const offset = searchParams.has('offset') ? Math.max(0, parseInt(searchParams.get('offset')!, 10)) : 0;
     const id = searchParams.get('id');
+    const market = searchParams.get('market');
+    const status = searchParams.get('status') as TradeStatus | null;
+    const includeLivePrices = searchParams.get('includeLivePrices') !== 'false';
+
+    if (market && market !== 'US' && market !== 'KR') {
+      return apiError('market must be US or KR.', 'INVALID_MARKET', 400, { allowed: ['US', 'KR'] });
+    }
+    if (status && !VALID_STATUSES.includes(status)) {
+      return apiError('Invalid trade status.', 'INVALID_STATUS', 400, { allowed: VALID_STATUSES });
+    }
 
     let query = supabaseServer
       .from('trades')
@@ -256,23 +270,32 @@ export async function GET(request: Request) {
 
     if (id) {
       query = query.eq('id', id);
-    } else if (limit !== null) {
-      query = query.range(offset, offset + limit - 1);
+    } else {
+      if (status) query = query.eq('status', status);
+      if (limit !== null) query = query.range(offset, offset + limit - 1);
     }
 
     const { data, error } = await query;
 
     if (error) throw error;
 
-    const allRecords = (data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[];
-    const priceMap = await buildLivePriceMap(allRecords, {
-      getUsQuotes: getYahooQuotes,
-      getKrPrice: getKisDomesticPrice,
-    });
+    const allRecords = ((data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[])
+      .filter((trade) => {
+        if (market === 'KR') return isKoreanTicker(trade.ticker);
+        if (market === 'US') return !isKoreanTicker(trade.ticker);
+        return true;
+      });
+
+    const priceMap = includeLivePrices
+      ? await buildLivePriceMap(allRecords, {
+          getUsQuotes: getYahooQuotes,
+          getKrPrice: getKisDomesticPrice,
+        })
+      : new Map<string, number>();
 
     const trades = allRecords.map((trade) => {
       const { trade_executions: tradeExecutions, ...rest } = trade;
-      const currentPrice = trade.status === 'ACTIVE' ? (priceMap.get(trade.ticker) || null) : null;
+      const currentPrice = includeLivePrices && trade.status === 'ACTIVE' ? (priceMap.get(trade.ticker) || null) : null;
 
       return attachTradeMetrics({
         ...rest,
@@ -334,10 +357,10 @@ export async function PATCH(request: Request) {
     
     if (patchEntry && patchStoploss) {
       if (patchDirection === 'LONG' && patchStoploss >= patchEntry) {
-        return apiError('LONG 포지션에서 손절가는 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
+        return apiError('LONG 포지션에서는 손절가가 진입가보다 낮아야 합니다.', 'INVALID_STOPLOSS');
       }
       if (patchDirection === 'SHORT' && patchStoploss <= patchEntry) {
-        return apiError('SHORT 포지션에서 손절가는 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
+        return apiError('SHORT 포지션에서는 손절가가 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
       }
     }
 

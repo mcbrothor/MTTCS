@@ -120,7 +120,10 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
     async function fetchTrades() {
       setData((prev) => ({ ...prev, loading: true, error: null }));
       try {
-        const response = await axios.get('/api/trades', { signal: controller.signal });
+        const response = await axios.get('/api/trades', {
+          params: { market, includeLivePrices: false },
+          signal: controller.signal,
+        });
         const allTrades: Trade[] = response.data.data || [];
         const trades = allTrades.filter((trade) => market === 'KR' ? isKorean(trade.ticker) : !isKorean(trade.ticker));
         const lastSuccessfulAt = new Date().toISOString();

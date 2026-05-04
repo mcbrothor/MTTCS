@@ -56,14 +56,23 @@ export async function POST(request: Request) {
     const session = await getServerSession();
     const systemId = session?.systemId || null;
 
-    const { data, error } = await supabaseServer
+    const now = new Date().toISOString();
+    const payload = { ticker, exchange, memo, tags, priority, user_id: systemId, updated_at: now };
+
+    const { data: existingRows, error: lookupError } = await supabaseServer
       .from('watchlist')
-      .upsert(
-        [{ ticker, exchange, memo, tags, priority, user_id: systemId, updated_at: new Date().toISOString() }],
-        { onConflict: 'ticker' }
-      )
-      .select()
-      .single();
+      .select('id')
+      .eq('ticker', ticker)
+      .limit(1);
+
+    if (lookupError) throw lookupError;
+
+    const existingId = existingRows?.[0]?.id;
+    const query = existingId
+      ? supabaseServer.from('watchlist').update(payload).eq('id', existingId)
+      : supabaseServer.from('watchlist').insert([{ ...payload, created_at: now }]);
+
+    const { data, error } = await query.select().single();
 
     if (error) throw error;
 

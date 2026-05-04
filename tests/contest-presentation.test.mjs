@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { getContestStructuredVerdict } from '../lib/contest-presentation.ts';
+import { contestCandidatePlanHref, contestFollowUpCopy, contestWatchlistPriority } from '../lib/contest-followup.ts';
 
 {
   const verdict = getContestStructuredVerdict({
@@ -51,6 +52,15 @@ import { getContestStructuredVerdict } from '../lib/contest-presentation.ts';
   assert.equal(verdict.confidence, null);
   assert.equal(verdict.comment, 'Legacy only');
   assert.equal(verdict.hasStructuredData, false);
+}
+
+{
+  assert.equal(contestCandidatePlanHref({ ticker: 'GOOGL', exchange: 'NAS' }), '/plan?ticker=GOOGL&exchange=NAS');
+  assert.equal(contestWatchlistPriority('PROCEED'), 2);
+  assert.equal(contestWatchlistPriority('WATCH'), 1);
+  assert.equal(contestWatchlistPriority('SKIP'), 0);
+  assert.equal(contestFollowUpCopy(0).empty, true);
+  assert.equal(contestFollowUpCopy(2).empty, false);
 }
 
 console.log('contest presentation tests passed');

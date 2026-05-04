@@ -36,8 +36,16 @@ function formatChange(value?: number) {
 export default function MarketStrip() {
   const [quotes, setQuotes] = useState<Record<string, StripQuote>>({});
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
+    const idleId = window.setTimeout(() => setEnabled(true), 2500);
+    return () => window.clearTimeout(idleId);
+  }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+
     let mounted = true;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let currentController: AbortController | null = null;
@@ -95,7 +103,7 @@ export default function MarketStrip() {
       currentController?.abort();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [enabled]);
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1">

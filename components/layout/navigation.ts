@@ -1,5 +1,5 @@
 export type FlowStepKey =
-  | 'dashboard'
+  | 'home'
   | 'market'
   | 'scanner'
   | 'watchlist'
@@ -24,6 +24,15 @@ export interface FlowStep {
 }
 
 export const FLOW_STEPS: FlowStep[] = [
+  {
+    key: 'home',
+    step: '00',
+    label: '오늘',
+    sub: '의사결정',
+    href: '/',
+    matchers: ['/'],
+    tabs: [],
+  },
   {
     key: 'market',
     step: '01',
@@ -90,10 +99,10 @@ export const FLOW_STEPS: FlowStep[] = [
     label: '성과 복기',
     sub: '결과 축적',
     href: '/history',
-    matchers: ['/', '/history'],
+    matchers: ['/history'],
     tabs: [
-      { href: '/', label: '대시보드' },
       { href: '/history', label: '매매 복기' },
+      { href: '/history?view=stats', label: '성과 통계' },
     ],
   },
 ];
@@ -113,6 +122,10 @@ export function getActiveFlowStep(pathname: string) {
   return FLOW_STEPS.find((step) => step.matchers.some((matcher) => matchesPath(pathname, matcher))) ?? FLOW_STEPS[0];
 }
 
-export function isActiveTab(pathname: string, href: string) {
-  return matchesPath(pathname, href);
+export function isActiveTab(pathname: string, href: string, search = '') {
+  const [tabPath] = href.split('?');
+  if (!matchesPath(pathname, tabPath)) return false;
+  const [, tabSearch] = href.split('?');
+  if (!tabSearch) return !search.includes('view=');
+  return search === tabSearch;
 }

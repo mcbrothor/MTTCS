@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  ArrowUpRight,
   BarChart3,
+  Star,
 } from 'lucide-react';
 
 // lucide-react@1.8.0 bundler resolution 이슈 대응
@@ -26,6 +28,7 @@ import UniverseSelectionSection from './components/UniverseSelectionSection';
 
 // Utils & Types
 import { getContestStructuredVerdict } from '@/lib/contest-presentation';
+import { contestCandidatePlanHref, contestFollowUpCopy, contestWatchlistPriority } from '@/lib/contest-followup';
 import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import { formatDate, verdictRecommendationClass } from '@/lib/contest-ui-utils';
 
@@ -280,6 +283,8 @@ export default function ContestPage() {
   const [ibAnalysis, setIbAnalysis] = useState<IbCommitteeAnalysis | null>(null);
   const [ibPromptOpen, setIbPromptOpen] = useState(false);
   const [ibPromptText, setIbPromptText] = useState<string | null>(null);
+  const [watchlistBusyId, setWatchlistBusyId] = useState<string | null>(null);
+  const [savedWatchlistIds, setSavedWatchlistIds] = useState<Set<string>>(new Set());
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
@@ -349,6 +354,8 @@ export default function ContestPage() {
   const w1Summary = useMemo(() => performanceSummary(activeCandidates, 'W1'), [activeCandidates]);
   const m1Summary = useMemo(() => performanceSummary(activeCandidates, 'M1'), [activeCandidates]);
   const finalPicks = useMemo(() => activeCandidates.filter((c) => c.actual_invested).sort((a, b) => (a.final_pick_rank || 99) - (b.final_pick_rank || 99)), [activeCandidates]);
+  const followUpCopy = useMemo(() => contestFollowUpCopy(finalPicks.length), [finalPicks.length]);
+  const followUpCandidates = finalPicks.length > 0 ? finalPicks : activeCandidates.slice(0, 5);
 
   const toggleCandidateSelection = (ticker: string) => {
     setSelected((prev) => prev.includes(ticker) ? prev.filter((t) => t !== ticker) : prev.length >= 10 ? prev : [...prev, ticker]);
@@ -413,6 +420,33 @@ export default function ContestPage() {
     } catch (err: any) { setError(err.message); } finally { setBusyId(null); }
   }, [activeCandidates.length, activeSession?.id, loadSessions]);
 
+  const addCandidateToWatchlist = useCallback(async (candidate: ContestCandidate) => {
+    const verdict = getContestStructuredVerdict(candidate);
+    setWatchlistBusyId(candidate.id);
+    setError(null);
+    try {
+      const response = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ticker: candidate.ticker,
+          exchange: candidate.exchange,
+          priority: contestWatchlistPriority(verdict.recommendation),
+          tags: ['contest', verdict.recommendation || 'manual-follow-up'],
+          memo: `Contest follow-up: ${verdict.comment || verdict.recommendation || 'manual selection'}`,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || '관심종목 등록에 실패했습니다.');
+      setSavedWatchlistIds((prev) => new Set(prev).add(candidate.id));
+      setNotice(`${candidate.ticker} 관심종목 등록 완료. 매매 계획으로 이어갈 수 있습니다.`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '관심종목 등록 중 오류가 발생했습니다.');
+    } finally {
+      setWatchlistBusyId(null);
+    }
+  }, []);
+
   const copyIbPrompt = async () => {
     if (!activeSession) return;
     try {
@@ -444,6 +478,79 @@ export default function ContestPage() {
         <span>선정 {summary.selectedAvgReturn === null ? '-' : `${summary.selectedAvgReturn.toFixed(2)}%`}</span>
         <span>미선정 {summary.unselectedAvgReturn === null ? '-' : `${summary.unselectedAvgReturn.toFixed(2)}%`}</span>
         <span>상대 {summary.relativeReturn === null ? '-' : `${summary.relativeReturn > 0 ? '+' : ''}${summary.relativeReturn.toFixed(2)}%`}</span>
+      </div>
+    </div>
+  );
+
+  const renderFollowUpPanel = () => (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-5 text-left">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">Next Flow</p>
+          <h3 className="mt-2 text-lg font-bold text-white">{followUpCopy.title}</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-400">{followUpCopy.description}</p>
+        </div>
+        <Link
+          href="/watchlist"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-200 hover:border-emerald-500/60 hover:text-emerald-200"
+        >
+          관심종목 보기 <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {followUpCandidates.map((candidate) => {
+          const verdict = getContestStructuredVerdict(candidate);
+          const isSaved = savedWatchlistIds.has(candidate.id);
+          const isSelected = candidate.actual_invested;
+
+          return (
+            <div key={candidate.id} className={`rounded-lg border p-3 ${isSelected ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/50'}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-black text-white">{candidate.ticker}</span>
+                    <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${verdictRecommendationClass(verdict.recommendation)}`}>
+                      {verdict.recommendation || 'MANUAL'}
+                    </span>
+                    {isSelected && <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">후속 선택됨</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{candidate.name || candidate.exchange}</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isSelected && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => updateCandidate(candidate, true)}
+                      disabled={busyId === candidate.id}
+                      className="text-xs"
+                    >
+                      {busyId === candidate.id ? '선택 중...' : '이 종목으로 진행'}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={isSaved ? 'secondary' : 'primary'}
+                    onClick={() => addCandidateToWatchlist(candidate)}
+                    disabled={watchlistBusyId === candidate.id}
+                    icon={<Star className="h-3.5 w-3.5" />}
+                    className="text-xs"
+                  >
+                    {watchlistBusyId === candidate.id ? '등록 중...' : isSaved ? '등록 완료' : '관심종목 등록'}
+                  </Button>
+                  <Link
+                    href={contestCandidatePlanHref(candidate)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-500"
+                  >
+                    매매 계획 <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -511,6 +618,9 @@ export default function ContestPage() {
             <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-8 flex flex-col justify-center items-center text-center space-y-6">
               <div className="h-20 w-20 rounded-3xl bg-indigo-500 flex items-center justify-center"><BarChart3 className="h-10 w-10 text-white" /></div>
               <div className="space-y-2"><h3 className="text-2xl font-black text-white">분석 완료</h3><p className="text-sm text-slate-400">최종 선정된 {finalPicks.length}개 종목의 매매 계획을 수립하세요.</p></div>
+              <div className="w-full">
+                {renderFollowUpPanel()}
+              </div>
               <div className="flex flex-col w-full max-w-xs gap-3">
                 <Link href="/plan" className="inline-flex h-14 items-center justify-center rounded-2xl bg-indigo-600 font-black text-white shadow-xl">매매 계획 수립</Link>
                 <Button variant="ghost" onClick={() => { setStep('selection'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-slate-500">다른 종목 분석</Button>
