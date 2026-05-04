@@ -8,6 +8,7 @@ import { fetchAggregatedFundamentals } from '@/lib/finance/market/fundamental-fe
 import { analyzeVcp } from '@/lib/finance/engines/vcp';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
+import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
@@ -153,6 +154,15 @@ function mergeStandardMetrics(response: MarketAnalysisResponse, metric: StockMet
         macroActionLevel: macroTrend?.action_level ?? response.sepaEvidence.metrics.macroActionLevel ?? null,
       },
     },
+  };
+}
+
+function withPriceMetrics(response: MarketAnalysisResponse): MarketAnalysisResponse {
+  const metrics = calculatePriceMetrics(response.priceData);
+  return {
+    ...response,
+    changePercent: response.changePercent ?? metrics.changePercent,
+    adrPct: response.adrPct ?? metrics.adrPct,
   };
 }
 
@@ -302,7 +312,7 @@ export async function GET(request: Request) {
       const { metric, macroTrend } = skipStandardMetrics
         ? { metric: null as StockMetric | null, macroTrend: null as MacroTrend | null }
         : await loadStandardMetrics(ticker, exchange);
-      const mergedCached = mergeStandardMetrics(cached, metric, macroTrend);
+      const mergedCached = mergeStandardMetrics(withPriceMetrics(cached), metric, macroTrend);
       return NextResponse.json({
         ...mergedCached,
         data: mergedCached,
@@ -349,6 +359,8 @@ export async function GET(request: Request) {
       riskPlan: {} as never,
       vcpAnalysis: {} as never,
       fundamentals,
+      changePercent: null,
+      adrPct: null,
       dataQuality: { bars: data.length, hasEnoughForAtr: false, hasEnoughForLongMa: false, missingFundamentals: [] },
       warnings,
     }, metric, macroTrend).sepaEvidence;
@@ -381,6 +393,7 @@ export async function GET(request: Request) {
     }
 
     providerAttempts.push(attempt('MTN Engine', 'SEPA/VCP calculation', 'success', 'SEPA, VCP and risk plan were calculated.'));
+    const priceMetrics = calculatePriceMetrics(data);
 
     const response: MarketAnalysisResponse = {
       ticker,
@@ -392,6 +405,8 @@ export async function GET(request: Request) {
       riskPlan,
       vcpAnalysis,
       fundamentals,
+      changePercent: priceMetrics.changePercent,
+      adrPct: priceMetrics.adrPct,
       dataQuality: {
         bars: data.length,
         hasEnoughForAtr: data.length >= 21,

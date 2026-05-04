@@ -408,6 +408,8 @@ export interface MarketAnalysisResponse {
   riskPlan: RiskPlan;
   vcpAnalysis: VcpAnalysis;
   fundamentals: FundamentalSnapshot | null;
+  changePercent: number | null;
+  adrPct: number | null;
   dataQuality: {
     bars: number;
     hasEnoughForAtr: boolean;

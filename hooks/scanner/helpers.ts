@@ -130,19 +130,21 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
       ? round(((currentPrice - recommendedEntry) / recommendedEntry) * 100)
       : null;
 
-  const changePercent =
+  const fallbackChangePercent =
     latestClose !== null && prevBar?.close
       ? round(((latestClose - prevBar.close) / prevBar.close) * 100)
       : null;
+  const changePercent = typeof analysis.changePercent === 'number' ? analysis.changePercent : fallbackChangePercent;
 
   const adrBars = analysis.priceData.slice(-20);
-  const adrPct =
+  const fallbackAdrPct =
     adrBars.length >= 5
       ? round(
           (adrBars.reduce((s, b) => s + (b.high - b.low), 0) / adrBars.length) /
           (adrBars.reduce((s, b) => s + (b.high + b.low) / 2, 0) / adrBars.length) * 100
         )
       : null;
+  const adrPct = typeof analysis.adrPct === 'number' ? analysis.adrPct : fallbackAdrPct;
 
   return withRecommendation({
     ...item,
