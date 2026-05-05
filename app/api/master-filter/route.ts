@@ -22,6 +22,7 @@ interface CachedInsight {
 }
 const insightCache = new Map<string, CachedInsight>();
 const INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000;
+const INSIGHT_RESPONSE_TIMEOUT_MS = 3500;
 
 const US_MACRO_SYMBOLS = [
   '^VIX', 'UUP', 'DX-Y.NYB', 'KRW=X', '^TNX', '^IRX', 'SHY', 'TLT', 'HYG', 'IEF',
@@ -71,6 +72,49 @@ const KOSDAQ_RISK_ON_SECTORS = new Set(['244580.KS', '455850.KS', '305720.KS', '
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
   return getYahooDailyPrice(symbol).catch(() => []);
+}
+
+function fallbackInsight(message: string): CachedInsight {
+  const generatedAt = new Date().toISOString();
+  return {
+    text: message,
+    providerUsed: 'rules',
+    modelUsed: 'mtn-rule-timeout',
+    isAiGenerated: false,
+    fallbackChain: [
+      { provider: 'rules', model: 'mtn-rule-timeout', status: 'success', message: 'LLM insight timed out.' },
+    ],
+    modelInsights: [
+      {
+        id: '99-rules-mtn-rule-timeout',
+        provider: 'rules',
+        label: 'rules',
+        model: 'mtn-rule-timeout',
+        status: 'success',
+        text: message,
+        selected: true,
+        priority: 99,
+        generatedAt,
+      },
+    ],
+    errorSummary: 'LLM insight timed out; market data returned with rule-based commentary.',
+    cachedAt: Date.now(),
+  };
+}
+
+async function generateInsightWithTimeout(input: Parameters<typeof generateMarketInsight>[0]) {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<CachedInsight>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(fallbackInsight('시장 데이터 계산은 완료되었으나 LLM 인사이트 생성이 지연되어 규칙 기반 요약으로 대체했습니다. P3 점수, 추세, 시장폭, 분산일, 섹터 리더십 지표를 우선 확인하세요.'));
+    }, INSIGHT_RESPONSE_TIMEOUT_MS);
+  });
+
+  const generated = generateMarketInsight(input)
+    .then((fresh) => ({ ...fresh, cachedAt: Date.now() }))
+    .catch((error: unknown) => fallbackInsight(error instanceof Error ? error.message : 'LLM insight generation failed.'));
+
+  return Promise.race([generated, timeout]).finally(() => clearTimeout(timer));
 }
 
 export async function GET(request: Request) {
@@ -233,8 +277,7 @@ export async function GET(request: Request) {
     if (cached && now - cached.cachedAt < INSIGHT_CACHE_TTL_MS) {
       insight = cached;
     } else {
-      const fresh = await generateMarketInsight(insightInput);
-      insight = { ...fresh, cachedAt: now };
+      insight = await generateInsightWithTimeout(insightInput);
       insightCache.set(cacheKey, insight);
     }
 

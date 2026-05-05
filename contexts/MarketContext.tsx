@@ -151,7 +151,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 7000);
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     let mounted = true;
 
     async function fetchMarketData() {
