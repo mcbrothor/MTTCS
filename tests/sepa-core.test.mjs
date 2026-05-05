@@ -65,6 +65,9 @@ console.log('=== SEPA Core Tests ===\n');
     vcpGrade: 'forming',
     vcpScore: 68,
     volumeDryUpScore: 72,
+    pivotPrice: 120,
+    pivotKind: 'VCP_PIVOT',
+    entrySource: 'VCP_PIVOT',
     distanceToPivotPct: 2.1,
     rsRating: 86,
   });

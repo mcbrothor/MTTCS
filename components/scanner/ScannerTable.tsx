@@ -101,6 +101,26 @@ function volumeSignalDetail(result: ScannerResult) {
   return `DU ${dryUp} / PP ${pocket} / ${breakout}`;
 }
 
+function pivotDisplay(result: ScannerResult) {
+  if (result.distanceToPivotPct !== null && result.pivotPrice !== null) {
+    const age = typeof result.pivotAgeDays === 'number' ? ` · ${result.pivotAgeDays}일 전` : '';
+    return {
+      primary: `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%`,
+      secondary: `VCP ${formatPrice(result.pivotPrice, result.currency, result.ticker)}${age}`,
+      tone: 'text-emerald-300',
+    };
+  }
+  if (typeof result.referenceHighPrice === 'number') {
+    const date = result.referenceHighDate ? ` · ${result.referenceHighDate.slice(5)}` : '';
+    return {
+      primary: '참고',
+      secondary: `최근 고점 ${formatPrice(result.referenceHighPrice, result.currency, result.ticker)}${date}`,
+      tone: 'text-slate-400',
+    };
+  }
+  return { primary: '-', secondary: '피벗 미확정', tone: 'text-slate-600' };
+}
+
 interface ScannerTableProps {
   results: ScannerResult[];
   selectedTickers: Set<string>;
@@ -178,6 +198,7 @@ export default function ScannerTable({
         <tbody className="divide-y divide-slate-800 bg-slate-950/40">
           {results.map((result) => {
             const volumeTier = getVolumeSignalTier(result);
+            const pivot = pivotDisplay(result);
             return (
               <tr
                 key={result.ticker}
@@ -236,7 +257,8 @@ export default function ScannerTable({
                   <p className="mt-1 truncate text-[10px] text-slate-500">{volumeSignalDetail(result)}</p>
                 </td>
                 <td className="px-2 py-3 text-right font-mono text-slate-300">
-                  {result.distanceToPivotPct !== null ? `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%` : '-'}
+                  <span className={pivot.tone}>{pivot.primary}</span>
+                  <p className="mt-1 truncate text-[10px] text-slate-500">{pivot.secondary}</p>
                 </td>
                 <td className="px-2 py-3">{tierBadge(result)}</td>
                 <td className="px-2 py-3 text-[11px] text-slate-300">
@@ -249,7 +271,7 @@ export default function ScannerTable({
                       ticker={result.ticker}
                       exchange={result.exchange ?? 'NAS'}
                       pivotPrice={result.pivotPrice}
-                      stopLossPrice={(result as any).canslimResult?.stopLossPrice}
+                      stopLossPrice={(result as ScannerResult & { canslimResult?: { stopLossPrice?: number | null } }).canslimResult?.stopLossPrice}
                       variant="icon"
                     />
                     {selectionColumn(result)}

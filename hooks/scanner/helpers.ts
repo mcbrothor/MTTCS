@@ -84,7 +84,13 @@ export function initialResult(item: ScannerConstituent): ScannerResult {
     vcpDetails: null,
     fundamentals: null,
     pivotPrice: null,
+    pivotDate: null,
+    pivotAgeDays: null,
+    pivotKind: null,
+    referenceHighPrice: null,
+    referenceHighDate: null,
     recommendedEntry: null,
+    entrySource: null,
     distanceToPivotPct: null,
     breakoutVolumeStatus: null,
     baseType: null,
@@ -123,8 +129,9 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
   const latestClose = latestBar?.close ?? null;
   const currentPrice = item.currentPrice ?? latestClose;
   const priceAsOf = item.currentPrice !== null ? item.priceAsOf : latestBar?.date ?? item.priceAsOf;
-  const recommendedEntry = analysis.vcpAnalysis.recommendedEntry || null;
-  const pivotPrice = analysis.vcpAnalysis.pivotPrice ?? recommendedEntry;
+  const hasActionablePivot = analysis.vcpAnalysis.entrySource !== 'RECENT_HIGH_FALLBACK';
+  const recommendedEntry = hasActionablePivot ? analysis.vcpAnalysis.recommendedEntry || null : null;
+  const pivotPrice = hasActionablePivot ? analysis.vcpAnalysis.pivotPrice : null;
   const distanceToPivotPct =
     currentPrice && recommendedEntry
       ? round(((currentPrice - recommendedEntry) / recommendedEntry) * 100)
@@ -172,8 +179,14 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
     vcpDetails: analysis.vcpAnalysis.details,
     fundamentals: analysis.fundamentals,
     pivotPrice,
+    pivotDate: analysis.vcpAnalysis.pivotDate,
+    pivotAgeDays: analysis.vcpAnalysis.pivotAgeDays,
+    pivotKind: analysis.vcpAnalysis.pivotKind,
+    referenceHighPrice: analysis.vcpAnalysis.referenceHighPrice,
+    referenceHighDate: analysis.vcpAnalysis.referenceHighDate,
     distanceToPivotPct,
     recommendedEntry,
+    entrySource: analysis.vcpAnalysis.entrySource,
     baseType: analysis.vcpAnalysis.baseType,
     momentumBranch: analysis.vcpAnalysis.momentumBranch,
     eightWeekReturnPct: analysis.vcpAnalysis.eightWeekReturnPct,

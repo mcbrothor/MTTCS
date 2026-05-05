@@ -13,6 +13,10 @@ function nearPivot(distanceToPivotPct: number | null | undefined, maxAbs = 5) {
   return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && Math.abs(distanceToPivotPct) <= maxAbs;
 }
 
+function actionablePivot(distanceToPivotPct: number | null | undefined) {
+  return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -2 && distanceToPivotPct <= 3;
+}
+
 function scoreAtLeast(value: number | null | undefined, threshold: number) {
   return typeof value === 'number' && Number.isFinite(value) && value >= threshold;
 }
@@ -71,7 +75,7 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
     const rsSource = externalRsRating !== null ? (item.rsSource ?? 'DB_BATCH') : 'UNIVERSE';
 
     // sepaEvidence 내부의 RS 기준 동기화
-    let sepaEvidence = item.sepaEvidence;
+    const sepaEvidence = item.sepaEvidence;
     if (sepaEvidence) {
       const rsCriterion = sepaEvidence.criteria.find(c => c.id === 'rs_rating');
       if (rsCriterion) {
@@ -188,8 +192,9 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const nearSepaPass = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
   const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
   const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 60);
-  const tightPivot = nearPivot(result.distanceToPivotPct, 3);
-  const nearActionablePivot = nearPivot(result.distanceToPivotPct, 5);
+  const validPivot = result.entrySource === 'VCP_PIVOT' || result.entrySource === 'HIGH_TIGHT_FLAG' || result.pivotKind === 'VCP_PIVOT' || result.pivotKind === 'HIGH_TIGHT_FLAG';
+  const tightPivot = validPivot && actionablePivot(result.distanceToPivotPct);
+  const nearActionablePivot = validPivot && nearPivot(result.distanceToPivotPct, 5);
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
   const volumeDryUp = scoreAtLeast(result.volumeDryUpScore, 65);
   const breakoutVolume = result.breakoutVolumeStatus === 'confirmed' || result.breakoutVolumeStatus === 'pending';
@@ -205,7 +210,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
-    result.baseType ? `Base ${result.baseType}` : null,
+    validPivot && result.baseType ? `Base ${result.baseType}` : null,
     tightPivot ? 'Pivot within 3%' : nearActionablePivot ? 'Pivot within 5%' : null,
     pocketPivot ? 'Pocket pivot' : null,
     volumeDryUp ? 'Volume dry-up' : null,
@@ -215,30 +220,30 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  // --- Tier 1: Recommended (엄격한 SEPA + 기술적 증거 1개 이상 OR 압도적 기술적 리더) ---
+  // --- Tier 1: Recommended (유효 피벗 + SEPA + RS 85+ + 거래량 확인) ---
   
-  // 1-1. SEPA 통과 + 유효한 베이스 + 거래량/RS 뒷받침
-  if (sepaPass && constructiveVcp && (volumeWatch || rs85)) {
+  // 1-1. SEPA 통과 + 유효 VCP/HTF 피벗 + RS 85+ + 거래량 뒷받침
+  if (sepaPass && validPivot && strongVcp && tightPivot && rs85 && (volumeStrong || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA 통과 및 건설적인 차트 패턴(VCP/HTF)과 거래량/RS 리더십이 결합되었습니다.',
+      recommendationReason: 'SEPA 통과, RS 85+ 리더십, 유효 VCP/HTF 피벗, 거래량 확인이 결합된 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
   // 1-2. RS 95+ 슈퍼 리더 (SEPA가 완벽하다면 우선 추천)
-  if (sepaPass && rs95 && (constructiveVcp || tennisBall)) {
+  if (sepaPass && validPivot && rs95 && tightPivot && (constructiveVcp || tennisBall)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'RS 95+의 시장 주도주 및 기술적 증거(VCP/Tennis Ball)가 확인되어 최우선 순위로 추천합니다.',
+      recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗 근처에서 기술적 근거를 유지하고 있어 우선 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
   // 1-3. High Tight Flag (압도적 모멘텀)
-  if (htfPassed && rs90 && (volumeStrong || rsLineHigh)) {
+  if (htfPassed && validPivot && rs85 && tightPivot && (volumeStrong || rsLineHigh)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 주도주 후보입니다.',
@@ -248,7 +253,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   // 1-4. VCP 돌파 확인 (거래량 실린 돌파)
-  if (sepaPass && strongVcp && breakoutVolume && volumeStrong) {
+  if (sepaPass && validPivot && strongVcp && breakoutVolume && volumeStrong) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: '강력한 VCP 베이스 상단에서의 거래량을 동반한 돌파 신호가 감지되었습니다.',
@@ -260,7 +265,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   // --- Tier 2: Partial (기술적으론 좋으나 SEPA가 부족하거나, SEPA는 좋으나 기술적 증거가 약함) ---
 
   // 2-1. SEPA가 1~2개 부족하지만 기술적으로 매우 훌륭한 경우 (사용자 요청: Partial 유지)
-  if (nearSepaPass && !sepaPass && constructiveVcp && volumeWatch) {
+  if (nearSepaPass && !sepaPass && validPivot && constructiveVcp && volumeWatch && rs85) {
     return {
       recommendationTier: 'Partial',
       recommendationReason: '핵심 SEPA 기준이 1개 부족해 경고 구간이지만, 기술적 패턴과 거래량 신호가 살아 있어 관찰 후보로 유지합니다.',
@@ -270,7 +275,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   // 2-2. RS 85+ 리더십 + VCP 형성 중
-  if (rs85 && constructiveVcp) {
+  if (rs85 && validPivot && constructiveVcp) {
     return {
       recommendationTier: 'Partial',
       recommendationReason: 'RS 85+ 주도주 영역에서 베이스를 형성 중인 후보로, 콘테스트 검토 가치가 충분합니다.',
@@ -290,7 +295,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   // 2-4. 포켓 피벗 / 거래량 마름 (VCP 내부 신호)
-  if ((pocketPivot || volumeDryUp) && rs85) {
+  if ((pocketPivot || volumeDryUp) && rs85 && validPivot) {
     return {
       recommendationTier: 'Partial',
       recommendationReason: '베이스 내부의 매집 신호(Pocket Pivot) 또는 매물 소화(Dry-up)가 RS 리더십과 함께 관찰됩니다.',
@@ -309,7 +314,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
 
 export function isContestPoolTier(tier: RecommendationTier | null | undefined) {
-  return tier === 'Recommended' || tier === 'Partial';
+  return tier === 'Recommended';
 }
 
 export function isAutoSelectedTier(tier: RecommendationTier | null | undefined) {

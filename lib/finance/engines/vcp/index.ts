@@ -36,13 +36,32 @@ function recentLow(data: OHLCData[], lookback = 20): number | null {
   return round(Math.min(...slice.map((d) => d.low)));
 }
 
+function referenceHigh(data: OHLCData[], price: number, lookback = 50) {
+  const slice = data.slice(-lookback);
+  if (slice.length === 0) return { price, date: null };
+  const roundedPrice = round(price);
+  const exact = [...slice].reverse().find((bar) => round(bar.high) === roundedPrice);
+  if (exact) return { price: round(exact.high), date: exact.date };
+  const high = slice.reduce((best, bar) => (bar.high > best.high ? bar : best), slice[0]);
+  return { price: round(high.high), date: high.date };
+}
+
+function barsAgo(data: OHLCData[], date: string | null) {
+  if (!date) return null;
+  const index = data.findIndex((bar) => bar.date >= date);
+  return index >= 0 ? data.length - 1 - index : null;
+}
+
 /** 최종 수축 고점을 VCP 피벗으로, 최종 수축 저점을 무효화 기준으로 사용합니다. */
 function determinePivot(
   data: OHLCData[],
   contractions: VcpContraction[],
-  breakoutReference: number
+  breakoutReference: number,
+  breakoutReferenceDate: string | null
 ): {
   pivotPrice: number | null;
+  pivotDate: string | null;
+  pivotKind: VcpAnalysis['pivotKind'];
   invalidationPrice: number | null;
   recommendedEntry: number;
   entrySource: VcpAnalysis['entrySource'];
@@ -58,6 +77,8 @@ function determinePivot(
     }
     return {
       pivotPrice: null,
+      pivotDate: null,
+      pivotKind: 'RECENT_HIGH_REFERENCE',
       invalidationPrice: fallbackInvalidation,
       recommendedEntry: breakoutReference,
       entrySource: 'RECENT_HIGH_FALLBACK',
@@ -67,18 +88,19 @@ function determinePivot(
 
   const lastContraction = contractions.at(-1)!;
   const pivotPrice = lastContraction.peakPrice;
+  const pivotDate = lastContraction.peakDate;
   const invalidationPrice = lastContraction.troughPrice;
   const recommendedEntry = pivotPrice;
 
-  details.push(`VCP 피벗 진입가: $${pivotPrice.toFixed(2)} (최종 수축 고점 돌파)`);
+  details.push(`VCP 피벗 진입가: $${pivotPrice.toFixed(2)} (${pivotDate}, 최종 수축 고점 돌파)`);
   details.push(`패턴 무효화 기준: $${invalidationPrice.toFixed(2)} (최종 수축 저점 이탈)`);
-  details.push(`최근 고점 참고가: $${breakoutReference.toFixed(2)} (피벗 판단 보조용)`);
+  details.push(`최근 고점 참고가: $${breakoutReference.toFixed(2)}${breakoutReferenceDate ? ` (${breakoutReferenceDate})` : ''} (피벗 판단 보조용)`);
 
   if (breakoutReference > pivotPrice * 1.05) {
     details.push('최근 고점 참고가가 VCP 피벗보다 5% 이상 높습니다. 피벗 돌파 후 과도하게 추격하지 않도록 주의합니다.');
   }
 
-  return { pivotPrice, invalidationPrice, recommendedEntry, entrySource: 'VCP_PIVOT', details };
+  return { pivotPrice, pivotDate, pivotKind: 'VCP_PIVOT', invalidationPrice, recommendedEntry, entrySource: 'VCP_PIVOT', details };
 }
 
 function assessBreakoutVolume(data: OHLCData[], entryPrice: number): {
@@ -158,6 +180,11 @@ export function analyzeVcp(
       bbSqueezeScore: 0,
       pocketPivotScore: 0,
       pivotPrice: null,
+      pivotDate: null,
+      pivotAgeDays: null,
+      pivotKind: 'RECENT_HIGH_REFERENCE',
+      referenceHighPrice: breakoutPrice,
+      referenceHighDate: null,
       invalidationPrice: null,
       breakoutPrice,
       recommendedEntry: breakoutPrice,
@@ -179,6 +206,7 @@ export function analyzeVcp(
   }
 
   const momentum = momentumProfile(data);
+  const highReference = referenceHigh(data, breakoutPrice);
   const baseLength = detectBaseLength(data);
   const analysisWindow = Math.max(MIN_BASE_DAYS, Math.min(baseLength + 20, data.length));
   const analysisData = data.slice(-analysisWindow);
@@ -205,11 +233,13 @@ export function analyzeVcp(
 
   const {
     pivotPrice,
+    pivotDate,
+    pivotKind,
     invalidationPrice,
     recommendedEntry,
     entrySource,
     details: pivotDetails,
-  } = determinePivot(weeklyData, contractions, breakoutPrice);
+  } = determinePivot(weeklyData, contractions, breakoutPrice, highReference.date);
   allDetails.push(...pivotDetails);
 
   const {
@@ -241,6 +271,8 @@ export function analyzeVcp(
   let finalGrade = grade;
   let finalBaseType: VcpAnalysis['baseType'] = standardBaseType;
   let finalPivotPrice = pivotPrice;
+  let finalPivotDate = pivotDate;
+  let finalPivotKind = pivotKind;
   let finalInvalidationPrice = invalidationPrice;
   let finalRecommendedEntry = recommendedEntry;
   let finalEntrySource = entrySource;
@@ -278,6 +310,8 @@ export function analyzeVcp(
     finalGrade = finalScore >= 70 ? 'strong' : 'forming';
     finalBaseType = 'High_Tight_Flag';
     finalPivotPrice = highTightFlag.baseHigh;
+    finalPivotDate = referenceHigh(data, highTightFlag.baseHigh, Math.max(20, highTightFlag.baseDays + 10)).date;
+    finalPivotKind = 'HIGH_TIGHT_FLAG';
     finalInvalidationPrice = highTightFlag.baseLow;
     finalRecommendedEntry = highTightFlag.baseHigh;
     finalEntrySource = 'HIGH_TIGHT_FLAG';
@@ -297,6 +331,11 @@ export function analyzeVcp(
     bbSqueezeScore,
     pocketPivotScore,
     pivotPrice: finalPivotPrice,
+    pivotDate: finalPivotDate,
+    pivotAgeDays: barsAgo(data, finalPivotDate),
+    pivotKind: finalPivotKind,
+    referenceHighPrice: highReference.price,
+    referenceHighDate: highReference.date,
     invalidationPrice: finalInvalidationPrice,
     breakoutPrice,
     recommendedEntry: finalRecommendedEntry,

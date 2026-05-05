@@ -85,6 +85,8 @@ run('simulates a professional leadership workflow from scanner to history review
     vcpGrade: 'strong',
     vcpScore: 88,
     distanceToPivotPct: 1.2,
+    pivotKind: 'VCP_PIVOT',
+    entrySource: 'VCP_PIVOT',
     pocketPivotScore: 66,
     volumeDryUpScore: 74,
     breakoutVolumeStatus: 'confirmed',

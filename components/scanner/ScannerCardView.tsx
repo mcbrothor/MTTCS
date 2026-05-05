@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, type ComponentType, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { Activity, Check, Plus, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import GlossaryTooltip from '@/components/ui/GlossaryTooltip';
@@ -54,6 +54,25 @@ function MetricStat({ label, value, accent, termKey }: { label: string; value: s
     return <GlossaryTooltip termKey={termKey}>{content}</GlossaryTooltip>;
   }
   return content;
+}
+
+function pivotLabel(result: ScannerResult) {
+  if (result.distanceToPivotPct !== null && result.pivotPrice !== null) {
+    const age = typeof result.pivotAgeDays === 'number' ? ` · ${result.pivotAgeDays}일 전` : '';
+    return {
+      value: `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct.toFixed(1)}%`,
+      detail: `VCP 피벗 ${result.pivotDate?.slice(5) ?? '-'}${age}`,
+      actionable: Math.abs(result.distanceToPivotPct) <= 5,
+    };
+  }
+  if (typeof result.referenceHighPrice === 'number') {
+    return {
+      value: '참고 고점',
+      detail: result.referenceHighDate ? result.referenceHighDate.slice(5) : 'VCP 피벗 미확정',
+      actionable: false,
+    };
+  }
+  return { value: '-', detail: 'VCP 피벗 미확정', actionable: false };
 }
 
 function TrendDots({ result }: { result: ScannerResult }) {
@@ -223,7 +242,16 @@ export default function ScannerCardView({
     </button>
   );
 
-  const MotionDiv = motion.div as any;
+  const MotionDiv = motion.div as ComponentType<{
+    children?: ReactNode;
+    variants?: unknown;
+    initial?: unknown;
+    animate?: unknown;
+    className?: string;
+    layout?: boolean;
+    whileHover?: unknown;
+    onClick?: () => void;
+  }>;
 
   return (
     <MotionDiv
@@ -237,9 +265,7 @@ export default function ScannerCardView({
         const rsBand = getScannerRsBand(result);
         const sepa = getScannerSepaSummary(result);
         const isExpanded = expandedTickers.has(result.ticker);
-        const pivotText = result.distanceToPivotPct === null
-          ? '-'
-          : `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct.toFixed(1)}%`;
+        const pivot = pivotLabel(result);
 
         return (
           <MotionDiv
@@ -334,8 +360,8 @@ export default function ScannerCardView({
                           />
                           <MetricStat 
                             label="타점 이격" 
-                            value={pivotText} 
-                            accent={Math.abs(result.distanceToPivotPct || 99) <= 5 ? 'text-emerald-100' : 'text-slate-100'} 
+                            value={`${pivot.value} · ${pivot.detail}`}
+                            accent={pivot.actionable ? 'text-emerald-100' : 'text-slate-100'}
                             termKey="PIVOT"
                           />
                         </div>

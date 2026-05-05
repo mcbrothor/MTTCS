@@ -72,6 +72,7 @@ const INDICATOR_CRITERIA = {
 
 export default function VcpAnalysisPanel({ analysis }: VcpAnalysisPanelProps) {
   const colors = GRADE_COLORS[analysis.grade];
+  const hasActionablePivot = analysis.entrySource !== 'RECENT_HIGH_FALLBACK' && analysis.pivotPrice !== null;
 
   return (
     <Card className="space-y-6">
@@ -143,22 +144,28 @@ export default function VcpAnalysisPanel({ analysis }: VcpAnalysisPanelProps) {
             <p className="mt-1 font-mono text-lg font-bold text-white">
               {analysis.pivotPrice !== null ? `$${analysis.pivotPrice.toFixed(2)}` : '—'}
             </p>
-            <p className="mt-0.5 text-[10px] text-slate-500">최종 수축 고점</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              {analysis.pivotDate
+                ? `${analysis.pivotDate}${typeof analysis.pivotAgeDays === 'number' ? ` · ${analysis.pivotAgeDays}거래일 전` : ''}`
+                : 'VCP 피벗 미확정'}
+            </p>
           </div>
           <div>
             <p className="text-xs text-slate-400">최근 고점 참고가</p>
             <p className="mt-1 font-mono text-lg font-bold text-white">
-              ${analysis.breakoutPrice.toFixed(2)}
+              ${(analysis.referenceHighPrice ?? analysis.breakoutPrice).toFixed(2)}
             </p>
-            <p className="mt-0.5 text-[10px] text-slate-500">피벗 보조 확인용</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">
+              {analysis.referenceHighDate ? `${analysis.referenceHighDate} · 피벗 보조` : '피벗 보조 확인용'}
+            </p>
           </div>
           <div>
-            <p className="text-xs text-slate-400">권장 진입가</p>
+            <p className="text-xs text-slate-400">{hasActionablePivot ? '권장 진입가' : '참고 타점'}</p>
             <p className={`mt-1 font-mono text-lg font-bold ${colors.text}`}>
               ${analysis.recommendedEntry.toFixed(2)}
             </p>
             <p className="mt-0.5 text-[10px] text-slate-500">
-              {analysis.entrySource === 'VCP_PIVOT' ? 'VCP 피벗 우선' : '최근 고점 참고'}
+              {hasActionablePivot ? 'VCP/HTF 피벗 우선' : '최근 고점 참고 · 매수 신호 아님'}
             </p>
           </div>
           <div>

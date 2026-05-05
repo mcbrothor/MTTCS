@@ -32,6 +32,21 @@ function valueOrDash(value: number | null | undefined) {
   return typeof value === 'number' ? value.toLocaleString() : '-';
 }
 
+function pivotDistance(result: ScannerResult) {
+  if (result.distanceToPivotPct !== null && result.pivotPrice !== null) return pct(result.distanceToPivotPct);
+  return result.referenceHighPrice !== null && result.referenceHighPrice !== undefined ? '참고 고점' : '-';
+}
+
+function pivotTiming(result: ScannerResult) {
+  if (result.pivotDate) {
+    return typeof result.pivotAgeDays === 'number'
+      ? `${result.pivotDate} · ${result.pivotAgeDays}거래일 전`
+      : result.pivotDate;
+  }
+  if (result.referenceHighDate) return `${result.referenceHighDate} · 최근 고점 참고`;
+  return 'VCP 피벗 미확정';
+}
+
 function mddColor(value: number | null | undefined) {
   if (typeof value !== 'number') return 'text-slate-400';
   if (value < 20) return 'text-emerald-400';
@@ -168,7 +183,7 @@ export default function VcpDrilldownModal({
             {/* Quick Stats */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <StatItem label="VCP 점수" value={`${result.vcpScore ?? 0}`} highlight />
-              <StatItem label="피벗 이격" value={pct(result.distanceToPivotPct)} />
+              <StatItem label="피벗 이격" value={pivotDistance(result)} />
               <StatItem label="패턴 유형" value={translateBaseType(result)} />
               <StatItem label="거래량 신호" value={translateVolumeTier(volumeTier)} />
             </div>
@@ -270,6 +285,7 @@ export default function VcpDrilldownModal({
               <InfoTile label="50일선 이격" value={pct(result.distanceFromMa50Pct)} />
               <InfoTile label="52주 저점 대비" value={pct(result.low52WeekAdvancePct)} />
               <InfoTile label="모멘텀 분기" value={translateMomentumBranch(result.momentumBranch)} />
+              <InfoTile label="피벗 발생" value={pivotTiming(result)} />
               <InfoTile
                 label="MDD 52주"
                 value={typeof result.mdd52wPct === 'number' ? `${result.mdd52wPct}%` : '—'}
@@ -379,7 +395,9 @@ export default function VcpDrilldownModal({
                   <span>진입 참고값</span>
                 </div>
                 <p className="text-sm leading-6 text-slate-300">
-                  권장 진입 {valueOrDash(result.recommendedEntry)} · 피벗 {valueOrDash(result.pivotPrice)} · 현재가 {valueOrDash(result.currentPrice)}
+                  {result.pivotPrice !== null
+                    ? `권장 진입 ${valueOrDash(result.recommendedEntry)} · 피벗 ${valueOrDash(result.pivotPrice)} · 현재가 ${valueOrDash(result.currentPrice)}`
+                    : `VCP 피벗 미확정 · 최근 고점 참고 ${valueOrDash(result.referenceHighPrice)} · 현재가 ${valueOrDash(result.currentPrice)}`}
                 </p>
               </div>
               <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">

@@ -8,14 +8,7 @@ import {
   Star,
 } from 'lucide-react';
 
-// lucide-react@1.8.0 bundler resolution 이슈 대응
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { Zap } = require('lucide-react') as {
-  Zap: React.FC<React.SVGProps<SVGSVGElement>>;
-};
-
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import Button from '@/components/ui/Button';
 import { copyTextToClipboard } from '@/lib/browser/clipboard';
 
@@ -50,12 +43,10 @@ import type {
   MasterFilterResponse,
   ScannerResult,
   ScannerUniverse,
-  ScannerUniverseResponse,
   StoredScannerSnapshot,
 } from '@/types';
 import { readScannerSnapshot } from '@/hooks/scanner/storage';
 
-const SNAPSHOT_PREFIX = 'mtn:scanner-snapshot:v3:';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
@@ -65,6 +56,17 @@ interface TransferSelection {
   universe: ScannerUniverse;
   tickers: string[];
   savedAt: string;
+}
+
+function isTransferSelection(value: unknown): value is TransferSelection {
+  if (!value || typeof value !== 'object') return false;
+  const selection = value as Partial<TransferSelection>;
+  return Boolean(
+    parseUniverse(selection.universe ?? null)
+    && Array.isArray(selection.tickers)
+    && selection.tickers.length > 0
+    && typeof selection.savedAt === 'string',
+  );
 }
 
 interface IbCandidateMeta {
@@ -118,8 +120,8 @@ function getInitialUniverse(): ScannerUniverse {
       
       // 2. Otherwise find any universe with selections (most recently saved first)
       const selections = Object.values(map)
-        .filter((s: any) => s && Array.isArray(s.tickers) && s.tickers.length > 0)
-        .sort((a: any, b: any) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()) as any[];
+        .filter(isTransferSelection)
+        .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
 
         
       if (selections.length > 0) {
@@ -208,6 +210,11 @@ function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCa
     bb_squeeze_score: item.bbSqueezeScore ?? null,
     pocket_pivot_score: item.pocketPivotScore ?? null,
     pivot_price: item.pivotPrice,
+    pivot_date: item.pivotDate ?? null,
+    pivot_age_days: item.pivotAgeDays ?? null,
+    pivot_kind: item.pivotKind ?? null,
+    reference_high_price: item.referenceHighPrice ?? null,
+    reference_high_date: item.referenceHighDate ?? null,
     distance_to_pivot_pct: item.distanceToPivotPct,
     avg_dollar_volume: item.sepaEvidence?.metrics.avgDollarVolume20 || null,
     price: item.currentPrice,
@@ -221,6 +228,10 @@ async function parseResponse<T>(response: Response) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
   return body as ApiSuccess<T>;
+}
+
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message : fallback;
 }
 
 async function fetchMarketContext(market: ContestMarket): Promise<MasterFilterResponse | null> {
@@ -402,7 +413,7 @@ export default function ContestPage() {
       }
       await loadSessions(result.data.id);
       return result.data;
-    } catch (err: any) { setError(err.message); throw err; } finally { if (!silent) setBusy(false); }
+    } catch (err: unknown) { setError(errorMessage(err, 'Failed to create contest session')); throw err; } finally { if (!silent) setBusy(false); }
   };
 
   const runAiAnalysis = async (sessionToAnalyze?: BeautyContestSession) => {
@@ -419,7 +430,7 @@ export default function ContestPage() {
         return true;
       }
       throw new Error(result.error);
-    } catch (err: any) { setError(err.message); return false; } finally { setBusy(false); }
+    } catch (err: unknown) { setError(errorMessage(err, 'Failed to run AI analysis')); return false; } finally { setBusy(false); }
   };
 
   const handleStartAnalysis = async () => {
@@ -440,7 +451,7 @@ export default function ContestPage() {
         body: JSON.stringify({ actual_invested: actualInvested, final_pick_rank: actualInvested ? (activeCandidates.filter(c => c.actual_invested).length + 1) : null }),
       });
       await loadSessions(activeSession?.id);
-    } catch (err: any) { setError(err.message); } finally { setBusyId(null); }
+    } catch (err: unknown) { setError(errorMessage(err, 'Failed to update candidate')); } finally { setBusyId(null); }
   }, [activeCandidates.length, activeSession?.id, loadSessions]);
 
   const addCandidateToWatchlist = useCallback(async (candidate: ContestCandidate) => {
@@ -496,7 +507,7 @@ export default function ContestPage() {
       const result = await response.json();
       if (result.success) { setIbAnalysis(result.data.ib_analysis); setNotice('IB 검증 완료'); await loadSessions(activeSession.id); }
       else throw new Error(result.error);
-    } catch (err: any) { setIbError(err.message); } finally { setIbBusy(false); }
+    } catch (err: unknown) { setIbError(errorMessage(err, 'Failed to run IB validation')); } finally { setIbBusy(false); }
   };
 
   const summaryCard = (horizon: Horizon, summary: ReturnType<typeof performanceSummary>) => (
