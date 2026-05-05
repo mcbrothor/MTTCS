@@ -317,7 +317,7 @@ export default function ContestPage() {
     }
     const transfer = readTransferSelection(nextUniverse);
     const validTickers = new Set(next.results.map((item) => item.ticker));
-    const transferred = (transfer?.tickers || []).filter((ticker) => validTickers.has(ticker)).slice(0, 10);
+    const transferred = (transfer?.tickers || []).filter((ticker) => validTickers.has(ticker)).slice(0, 15);
     if (transferred.length > 0) {
       setSelected(transferred);
       setTransferInfo({ universe: nextUniverse, tickers: transferred, savedAt: transfer?.savedAt || new Date().toISOString() });
@@ -392,7 +392,7 @@ export default function ContestPage() {
   }, [activeSession?.id, planQueueCandidates]);
 
   const toggleCandidateSelection = (ticker: string) => {
-    setSelected((prev) => prev.includes(ticker) ? prev.filter((t) => t !== ticker) : prev.length >= 10 ? prev : [...prev, ticker]);
+    setSelected((prev) => prev.includes(ticker) ? prev.filter((t) => t !== ticker) : prev.length >= 15 ? prev : [...prev, ticker]);
   };
 
   const createSession = async (silent = false) => {

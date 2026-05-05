@@ -1,5 +1,6 @@
 import { get, set } from 'idb-keyval';
 import type { MacroTrend, ScannerResult, ScannerUniverse, ScannerUniverseResponse, StockMetric } from '@/types';
+import { applyScannerReviewPoolRankings } from '@/lib/scanner-recommendation';
 import {
   LAST_UNIVERSE_STORAGE_KEY,
   LATEST_SCAN_UNIVERSE_STORAGE_KEY,
@@ -24,7 +25,7 @@ export async function readScannerSnapshot(universe: ScannerUniverse): Promise<St
     if (!snapshot.universeMeta || snapshot.universeMeta.universe !== universe || !Array.isArray(snapshot.results)) return null;
     return {
       ...snapshot,
-      results: snapshot.results.map((item: ScannerResult) => withRecommendation(item)),
+      results: applyScannerReviewPoolRankings(snapshot.results.map((item: ScannerResult) => withRecommendation(item))),
     };
   } catch {
     return null;
@@ -35,7 +36,7 @@ export async function writeScannerSnapshot(universeMeta: ScannerUniverseResponse
   const snapshot: StoredScannerSnapshot = {
     savedAt,
     universeMeta,
-    results: results.map((item) => withRecommendation(item)),
+    results: applyScannerReviewPoolRankings(results.map((item) => withRecommendation(item))),
   };
   await set(scannerStorageKey(universeMeta.universe, SCANNER_STORAGE_PREFIX), snapshot);
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
@@ -114,7 +115,7 @@ export async function loadScannerMetrics(universe: ScannerUniverse, rows: Scanne
     return { results: mergeStandardMetrics(rows, payload.metrics, payload.macroTrend), macroTrend: payload.macroTrend };
   } catch {
     return {
-      results: rows.map((item) => withRecommendation({
+      results: applyScannerReviewPoolRankings(rows.map((item) => withRecommendation({
         ...item,
         rsRating: null,
         internalRsRating: null,
@@ -127,7 +128,7 @@ export async function loadScannerMetrics(universe: ScannerUniverse, rows: Scanne
         mansfieldRsScore: null,
         rsDataQuality: 'NA',
         macroActionLevel: null,
-      })),
+      }))),
       macroTrend: null as MacroTrend | null,
     };
   }

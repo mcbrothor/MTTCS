@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
-const MAX_SELECTION = 10;
+const MAX_SELECTION = 15;
 
 /**
  * 전역 콘테스트 후보 선택 상태를 관리하는 훅입니다.

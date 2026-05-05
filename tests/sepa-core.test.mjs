@@ -72,7 +72,7 @@ console.log('=== SEPA Core Tests ===\n');
     rsRating: 86,
   });
 
-  assert.equal(recommendation.recommendationTier, 'Partial');
+  assert.equal(recommendation.recommendationTier, 'IB Review');
   assert.equal(recommendation.sepaMissingCount, 1);
   console.log('✅ Test 2: core 6/7은 warning + Partial로 분류');
 }

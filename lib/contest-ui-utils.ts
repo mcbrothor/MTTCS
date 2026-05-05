@@ -19,7 +19,8 @@ export function formatPrice(value: number | null | undefined, exchange?: string)
 
 export function tierClass(tier?: RecommendationTier | null) {
   if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
-  if (tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'IB Review' || tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Watch') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
   if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
   return 'border-slate-700 text-slate-300';
 }

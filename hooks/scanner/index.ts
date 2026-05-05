@@ -7,6 +7,7 @@ import {
   getVolumeSignalTier,
   isContestPoolTier,
   recommendationSortValue,
+  applyScannerReviewPoolRankings,
 } from '@/lib/scanner-recommendation';
 import type {
   MacroTrend,
@@ -88,8 +89,7 @@ export function useScanner() {
   const [showAllMacroResults, setShowAllMacroResults] = useState(false);
 
   const macroScopedResults = useMemo(() => {
-    return results
-      .map((item) => withRecommendation(item))
+    return applyScannerReviewPoolRankings(results)
       .filter((item) => passesScannerMacroPolicy(item, macroTrend?.action_level, showAllMacroResults));
   }, [results, macroTrend, showAllMacroResults]);
 
@@ -247,7 +247,7 @@ export function useScanner() {
         const withRealtimeRs = applyUniverseRsRankings(merged.results);
 
         // 2. 추천 등급 최종 평가
-        const normalized = withRealtimeRs.map((item) => withRecommendation(item));
+        const normalized = applyScannerReviewPoolRankings(withRealtimeRs);
 
         setMacroTrend(merged.macroTrend);
         const now = new Date().toISOString();
@@ -310,7 +310,7 @@ export function useScanner() {
 
     if (filterKey === 'sepaPass') list = list.filter((row) => row.sepaStatus === 'pass');
     else if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
-    else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'Partial');
+    else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'IB Review');
     else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
     else if (filterKey === 'nearPivot') list = list.filter((row) => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= 5);
     else if (filterKey === 'volume') {
@@ -355,7 +355,7 @@ export function useScanner() {
 
   const stats = useMemo(() => ({
     recommended: macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length,
-    partial: macroScopedResults.filter((item) => item.recommendationTier === 'Partial').length,
+    partial: macroScopedResults.filter((item) => item.recommendationTier === 'IB Review').length,
     errors: macroScopedResults.filter((item) => item.status === 'error').length,
   }), [macroScopedResults]);
 

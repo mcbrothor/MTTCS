@@ -17,8 +17,30 @@ function actionablePivot(distanceToPivotPct: number | null | undefined) {
   return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -2 && distanceToPivotPct <= 3;
 }
 
+function reviewPivot(distanceToPivotPct: number | null | undefined) {
+  return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -8 && distanceToPivotPct <= 5;
+}
+
 function scoreAtLeast(value: number | null | undefined, threshold: number) {
   return typeof value === 'number' && Number.isFinite(value) && value >= threshold;
+}
+
+function coreSummary(result: Partial<ScannerResult>) {
+  const summary = result.sepaEvidence?.summary;
+  const coreTotal = summary?.coreTotal ?? 7;
+  const fallbackCorePassed = result.sepaStatus === 'pass'
+    ? coreTotal
+    : (typeof result.sepaFailed === 'number' && result.sepaFailed <= 2 ? coreTotal - 1 : null);
+  const corePassed = summary?.corePassed ?? fallbackCorePassed;
+  const coreFailed = summary?.coreFailed ?? (typeof corePassed === 'number' ? Math.max(0, coreTotal - corePassed) : null);
+  return { coreTotal, corePassed, coreFailed };
+}
+
+function hasValidPivot(result: Partial<ScannerResult>) {
+  return result.entrySource === 'VCP_PIVOT'
+    || result.entrySource === 'HIGH_TIGHT_FLAG'
+    || result.pivotKind === 'VCP_PIVOT'
+    || result.pivotKind === 'HIGH_TIGHT_FLAG';
 }
 
 export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSignalTier {
@@ -73,9 +95,8 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
     const internalRsRating = ranked.rating;
     const rsRating = externalRsRating ?? internalRsRating ?? item.benchmarkRelativeScore ?? null;
     const rsSource = externalRsRating !== null ? (item.rsSource ?? 'DB_BATCH') : 'UNIVERSE';
-
-    // sepaEvidence 내부의 RS 기준 동기화
     const sepaEvidence = item.sepaEvidence;
+
     if (sepaEvidence) {
       const rsCriterion = sepaEvidence.criteria.find(c => c.id === 'rs_rating');
       if (rsCriterion) {
@@ -83,27 +104,24 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
         rsCriterion.actual = rsRating !== null
           ? rsSource === 'DB_BATCH'
             ? `${rsRating}점 (공식 RS)`
-            : `${ranked.rank}위 / ${rsRating}점 (실시간 유니버스 RS)` // 랭킹(위)과 점수를 함께 표시
+            : `${ranked.rank}위 / ${rsRating}점 (실시간 유니버스 RS)`
           : '데이터 없음';
         rsCriterion.description = rsSource === 'DB_BATCH'
-          ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
-          : '현재 스캔된 유니버스 내 실시간 랭킹 기준 RS입니다.';
+          ? '데이터베이스에서 조회한 공식 RS Rating입니다.'
+          : '현재 스캔 유니버스 내 실시간 랭크 기준 RS입니다.';
       }
-      
-      // summary 업데이트 (info -> pass/fail 이동)
+
       const passed = sepaEvidence.criteria.filter(c => c.status === 'pass').length;
       const failed = sepaEvidence.criteria.filter(c => c.status === 'fail').length;
       const info = sepaEvidence.criteria.filter(c => c.status === 'info').length;
       sepaEvidence.summary = { ...sepaEvidence.summary, passed, failed, info };
-      
-      // metrics 업데이트
       sepaEvidence.metrics = {
         ...sepaEvidence.metrics,
         rsRating,
         rsSource,
         rsRank: ranked.rank,
         rsUniverseSize: universeSize,
-        rsPercentile: ranked.percentile
+        rsPercentile: ranked.percentile,
       };
     }
 
@@ -116,16 +134,11 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
       rsRank: ranked.rank,
       rsUniverseSize: universeSize,
       rsPercentile: ranked.percentile,
-      sepaEvidence
+      sepaEvidence,
     };
   });
 }
 
-/**
- * 오닐(CANSLIM) 스캐너 전용 RS 유니버스 랭킹 부여
- * weightedMomentumScore가 없는 CanslimScannerResult에 대해
- * benchmarkRelativeScore를 기준으로 RS 백분위를 계산합니다.
- */
 export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]): CanslimScannerResult[] {
   const analyzable = results
     .filter((item) => item.status === 'done' && typeof (item.benchmarkRelativeScore ?? item.rsRating) === 'number')
@@ -152,7 +165,6 @@ export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]):
   return results.map((item) => {
     const ranked = rankByTicker.get(item.ticker);
     if (!ranked) return item;
-    // DB에서 가져온 공식 RS가 있으면 우선 사용, 없으면 유니버스 내 랭킹 적용
     const externalRsRating = item.rsSource === 'DB_BATCH' ? (item.rsRating ?? null) : null;
     const internalRsRating = ranked.rating;
     const rsRating = externalRsRating ?? internalRsRating;
@@ -164,19 +176,13 @@ export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]):
       rsSource,
       rsRank: ranked.rank,
       rsUniverseSize: universeSize,
-      rsPercentile: ranked.percentile
+      rsPercentile: ranked.percentile,
     };
   });
 }
 
 export function evaluateScannerRecommendation(result: Partial<ScannerResult>): ScannerRecommendation {
-  const summary = result.sepaEvidence?.summary;
-  const coreTotal = summary?.coreTotal ?? 7;
-  const fallbackCorePassed = result.sepaStatus === 'pass'
-    ? coreTotal
-    : (typeof result.sepaFailed === 'number' && result.sepaFailed <= 2 ? coreTotal - 1 : null);
-  const corePassed = summary?.corePassed ?? fallbackCorePassed;
-  const coreFailed = summary?.coreFailed ?? (typeof corePassed === 'number' ? Math.max(0, coreTotal - corePassed) : null);
+  const { coreTotal, corePassed, coreFailed } = coreSummary(result);
 
   if (result.status === 'error') {
     return {
@@ -189,18 +195,21 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
   const sepaMissingCount = coreFailed ?? result.sepaFailed ?? null;
   const sepaPass = result.sepaStatus === 'pass' && corePassed === coreTotal;
-  const nearSepaPass = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
+  const reviewSepa = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
+  const watchSepa = typeof corePassed === 'number' && corePassed >= Math.max(0, coreTotal - 2);
   const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
   const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 60);
-  const validPivot = result.entrySource === 'VCP_PIVOT' || result.entrySource === 'HIGH_TIGHT_FLAG' || result.pivotKind === 'VCP_PIVOT' || result.pivotKind === 'HIGH_TIGHT_FLAG';
+  const validPivot = hasValidPivot(result);
   const tightPivot = validPivot && actionablePivot(result.distanceToPivotPct);
   const nearActionablePivot = validPivot && nearPivot(result.distanceToPivotPct, 5);
+  const reviewReadyPivot = validPivot && reviewPivot(result.distanceToPivotPct);
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
   const volumeDryUp = scoreAtLeast(result.volumeDryUpScore, 65);
   const breakoutVolume = result.breakoutVolumeStatus === 'confirmed' || result.breakoutVolumeStatus === 'pending';
   const volumeTier = getVolumeSignalTier(result);
   const volumeWatch = volumeTier === 'Strong' || volumeTier === 'Watch';
   const volumeStrong = volumeTier === 'Strong';
+  const rs80 = scoreAtLeast(result.rsRating, 80);
   const rs85 = scoreAtLeast(result.rsRating, 85);
   const rs90 = scoreAtLeast(result.rsRating, 90);
   const rs95 = scoreAtLeast(result.rsRating, 95);
@@ -220,85 +229,48 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  // --- Tier 1: Recommended (유효 피벗 + SEPA + RS 85+ + 거래량 확인) ---
-  
-  // 1-1. SEPA 통과 + 유효 VCP/HTF 피벗 + RS 85+ + 거래량 뒷받침
-  if (sepaPass && validPivot && strongVcp && tightPivot && rs85 && (volumeStrong || breakoutVolume)) {
+  if (sepaPass && validPivot && strongVcp && tightPivot && rs90 && (volumeStrong || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA 통과, RS 85+ 리더십, 유효 VCP/HTF 피벗, 거래량 확인이 결합된 실행 후보입니다.',
+      recommendationReason: 'SEPA 7/7, RS 90+ 리더십, 유효 VCP/HTF 피벗 근접, 거래량 확인이 결합된 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  // 1-2. RS 95+ 슈퍼 리더 (SEPA가 완벽하다면 우선 추천)
   if (sepaPass && validPivot && rs95 && tightPivot && (constructiveVcp || tennisBall)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗 근처에서 기술적 근거를 유지하고 있어 우선 후보입니다.',
+      recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗 근처에서 기술적 근거를 유지하고 있어 우선 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  // 1-3. High Tight Flag (압도적 모멘텀)
-  if (htfPassed && validPivot && rs85 && tightPivot && (volumeStrong || rsLineHigh)) {
+  if (htfPassed && validPivot && rs90 && tightPivot && (volumeStrong || rsLineHigh)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 주도주 후보입니다.',
+      recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  // 1-4. VCP 돌파 확인 (거래량 실린 돌파)
-  if (sepaPass && validPivot && strongVcp && breakoutVolume && volumeStrong) {
+  if (rs85 && reviewSepa && validPivot && reviewReadyPivot && constructiveVcp && volumeWatch) {
     return {
-      recommendationTier: 'Recommended',
-      recommendationReason: '강력한 VCP 베이스 상단에서의 거래량을 동반한 돌파 신호가 감지되었습니다.',
+      recommendationTier: 'IB Review',
+      recommendationReason: 'RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  // --- Tier 2: Partial (기술적으론 좋으나 SEPA가 부족하거나, SEPA는 좋으나 기술적 증거가 약함) ---
-
-  // 2-1. SEPA가 1~2개 부족하지만 기술적으로 매우 훌륭한 경우 (사용자 요청: Partial 유지)
-  if (nearSepaPass && !sepaPass && validPivot && constructiveVcp && volumeWatch && rs85) {
+  if (rs80 && watchSepa && (constructiveVcp || tennisBall || rsLineHigh || pocketPivot || volumeDryUp)) {
     return {
-      recommendationTier: 'Partial',
-      recommendationReason: '핵심 SEPA 기준이 1개 부족해 경고 구간이지만, 기술적 패턴과 거래량 신호가 살아 있어 관찰 후보로 유지합니다.',
-      sepaMissingCount,
-      exceptionSignals,
-    };
-  }
-
-  // 2-2. RS 85+ 리더십 + VCP 형성 중
-  if (rs85 && validPivot && constructiveVcp) {
-    return {
-      recommendationTier: 'Partial',
-      recommendationReason: 'RS 85+ 주도주 영역에서 베이스를 형성 중인 후보로, 콘테스트 검토 가치가 충분합니다.',
-      sepaMissingCount,
-      exceptionSignals,
-    };
-  }
-
-  // 2-3. 테니스공 액션 (변동성 수축 증거)
-  if (tennisBall && volumeWatch) {
-    return {
-      recommendationTier: 'Partial',
-      recommendationReason: '반복적인 테니스공 액션(회복력)이 확인되어 건설적인 하락/반등 과정을 거치고 있습니다.',
-      sepaMissingCount,
-      exceptionSignals,
-    };
-  }
-
-  // 2-4. 포켓 피벗 / 거래량 마름 (VCP 내부 신호)
-  if ((pocketPivot || volumeDryUp) && rs85 && validPivot) {
-    return {
-      recommendationTier: 'Partial',
-      recommendationReason: '베이스 내부의 매집 신호(Pocket Pivot) 또는 매물 소화(Dry-up)가 RS 리더십과 함께 관찰됩니다.',
+      recommendationTier: 'Watch',
+      recommendationReason: validPivot
+        ? 'RS 80+와 일부 기술적 단서가 있으나, IB Review 조건에는 아직 피벗 위치·거래량·SEPA 조합이 부족합니다.'
+        : 'RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보로만 분류합니다.',
       sepaMissingCount,
       exceptionSignals,
     };
@@ -306,24 +278,70 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
 
   return {
     recommendationTier: 'Low Priority',
-    recommendationReason: '현재 SEPA/VCP/RS/거래량 증거가 콘테스트 우선순위에 들기에는 부족합니다. 수동 검토는 가능합니다.',
+    recommendationReason: '현재 SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기에는 부족합니다. 수동 검토는 가능합니다.',
     sepaMissingCount,
     exceptionSignals,
   };
 }
 
+export function scannerReviewScore(result: Partial<ScannerResult>) {
+  const { coreTotal, corePassed } = coreSummary(result);
+  const rs = Math.max(0, Math.min(99, result.rsRating ?? 0));
+  const vcp = Math.max(0, Math.min(100, result.vcpScore ?? 0));
+  const sepa = typeof corePassed === 'number' && coreTotal > 0 ? Math.max(0, Math.min(1, corePassed / coreTotal)) * 100 : 0;
+  const distance = typeof result.distanceToPivotPct === 'number' ? result.distanceToPivotPct : null;
+  const pivotScore = distance === null
+    ? 0
+    : distance >= -2 && distance <= 3
+      ? 100
+      : distance >= -8 && distance <= 5
+        ? Math.max(30, 100 - Math.abs(distance) * 8)
+        : 0;
+  const volumeTier = getVolumeSignalTier(result);
+  const volumeScore = volumeTier === 'Strong' ? 100 : volumeTier === 'Watch' ? 65 : 0;
+  const bonus =
+    (result.rsLineNewHigh || result.rsLineNearHigh ? 5 : 0) +
+    (scoreAtLeast(result.pocketPivotScore, 60) ? 4 : 0) +
+    (scoreAtLeast(result.volumeDryUpScore, 65) ? 4 : 0);
+
+  return Math.round((rs * 0.30) + (vcp * 0.25) + (sepa * 0.20) + (pivotScore * 0.15) + (volumeScore * 0.10) + bonus);
+}
+
+export function applyScannerReviewPoolRankings(results: ScannerResult[], maxReviewPool = 15): ScannerResult[] {
+  const reviewed = results.map((item) => ({
+    ...item,
+    ...evaluateScannerRecommendation(item),
+  }));
+  const keep = new Set(
+    reviewed
+      .filter((item) => item.recommendationTier === 'IB Review')
+      .sort((a, b) => scannerReviewScore(b) - scannerReviewScore(a) || (b.rsRating || 0) - (a.rsRating || 0))
+      .slice(0, maxReviewPool)
+      .map((item) => item.ticker)
+  );
+
+  return reviewed.map((item) => {
+    if (item.recommendationTier !== 'IB Review' || keep.has(item.ticker)) return item;
+    return {
+      ...item,
+      recommendationTier: 'Watch',
+      recommendationReason: 'IB Review 최소 조건은 충족했지만, 동일 로직 composite score 상위 15개 밖이라 Watch로 유지합니다.',
+    };
+  });
+}
 
 export function isContestPoolTier(tier: RecommendationTier | null | undefined) {
-  return tier === 'Recommended';
+  return tier === 'Recommended' || tier === 'IB Review';
 }
 
 export function isAutoSelectedTier(tier: RecommendationTier | null | undefined) {
-  return tier === 'Recommended';
+  return tier === 'Recommended' || tier === 'IB Review';
 }
 
 export function recommendationSortValue(tier: RecommendationTier | null | undefined) {
   if (tier === 'Recommended') return 0;
-  if (tier === 'Partial') return 1;
-  if (tier === 'Low Priority') return 2;
-  return 3;
+  if (tier === 'IB Review') return 1;
+  if (tier === 'Watch' || tier === 'Partial') return 2;
+  if (tier === 'Low Priority') return 3;
+  return 4;
 }
