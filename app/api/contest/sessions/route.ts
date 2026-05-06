@@ -1,5 +1,6 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { buildContestPrompt, CONTEST_PROMPT_VERSION, CONTEST_RESPONSE_SCHEMA_VERSION, reviewDueDate, validateContestCandidates } from '@/lib/contest';
+import { parseContestSource } from '@/lib/contest-sources';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { ContestMarket, ContestPromptCandidate, ScannerUniverse } from '@/types';
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const market = parseMarket(body.market);
+    const source = parseContestSource(body.source) || parseContestSource((body.candidates || [])[0]?.screener_source) || 'minervini';
     const universe = String(body.universe || (market === 'KR' ? 'KOSPI200' : 'NASDAQ100')) as ScannerUniverse;
     const selectedAt = body.selected_at ? new Date(body.selected_at).toISOString() : new Date().toISOString();
     const payload = validateContestCandidates(body.candidates as ContestPromptCandidate[]);
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
       candidates: promptCandidates,
       marketContext,
       llmProvider: body.llm_provider || null,
+      source,
     });
 
     const { error: promptError } = await supabaseServer

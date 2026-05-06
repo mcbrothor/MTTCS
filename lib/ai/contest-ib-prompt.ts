@@ -1,4 +1,5 @@
 import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } from '@/types';
+import { MAX_CONTEST_CANDIDATES } from '../contest-sources.ts';
 
 export const IB_PROMPT_VERSION = 'mtn-ib-committee-v4-final-judgment';
 export const IB_RESPONSE_SCHEMA_VERSION = 'mtn-ib-committee-markdown-v3';
@@ -66,6 +67,7 @@ function extractAnalysis(candidate: ContestCandidate): Record<string, unknown> {
 function compactSnapshot(snap: Record<string, unknown> | null): Record<string, unknown> {
   if (!snap) return {};
   return {
+    screener_source: snap.screener_source,
     rs_rating: snap.rs_rating,
     rs_source: snap.rs_source,
     rs_percentile: snap.rs_percentile,
@@ -91,12 +93,41 @@ function compactSnapshot(snap: Record<string, unknown> | null): Record<string, u
     recommendation_tier: snap.recommendation_tier,
     recommendation_reason: snap.recommendation_reason,
     exception_signals: snap.exception_signals,
+    canslim: snap.canslim,
   };
+}
+
+function sessionScreenerSource(session: BeautyContestSession, candidates: ContestCandidate[]) {
+  const fromPayload = (session.prompt_payload || []).find((candidate) => candidate?.screener_source)?.screener_source;
+  if (fromPayload === 'canslim' || fromPayload === 'minervini') return fromPayload;
+  const fromSnapshot = candidates
+    .map((candidate) => (candidate.snapshot || {}) as Record<string, unknown>)
+    .find((snap) => snap.screener_source === 'canslim' || snap.screener_source === 'minervini')?.screener_source;
+  return fromSnapshot === 'canslim' ? 'canslim' : 'minervini';
+}
+
+function screenerCommitteeMandate(source: 'minervini' | 'canslim') {
+  if (source === 'canslim') {
+    return [
+      "[O'NEIL CANSLIM COMMITTEE MANDATE]",
+      "The O'Neil scanner is a first-pass CANSLIM filter. The IB committee must make the final investment judgment.",
+      'Primary diligence lens: C/A/N/S/L/I/M evidence quality, earnings and sales acceleration, new-high or new-catalyst validity, supply-demand sponsorship, market direction, and whether the base/pivot creates executable risk/reward.',
+      'Do not over-weight VCP score when CANSLIM pillar evidence is incomplete. VCP/base quality is execution confirmation, not the thesis itself.',
+      'Explicitly call out which CANSLIM pillar changes the committee view versus the first-pass screen.',
+    ].join('\n');
+  }
+  return [
+    '[MINERVINI SEPA/VCP COMMITTEE MANDATE]',
+    'The Minervini scanner is a first-pass SEPA/VCP filter. The IB committee must make the final investment judgment.',
+    'Primary diligence lens: trend template, VCP contraction quality, valid pivot, RS leadership, volume dry-up, liquidity, high-tight-flag exceptions, and whether fundamentals support institutional sponsorship.',
+    'Do not accept a recent-high fallback as a buy point. If the pivot is not valid, classify the idea as watch/research unless fundamentals and leadership justify an explicit committee override.',
+    'Explicitly call out whether the committee confirms, upgrades, downgrades, or reranks the first-pass Minervini result.',
+  ].join('\n');
 }
 
 function candidatePayload(candidates: ContestCandidate[], includeJsonMetadata: boolean) {
   const allRanked = [...candidates].sort((a, b) => (a.llm_rank ?? 99) - (b.llm_rank ?? 99));
-  const ranked = includeJsonMetadata ? allRanked.slice(0, 10) : allRanked;
+  const ranked = includeJsonMetadata ? allRanked.slice(0, MAX_CONTEST_CANDIDATES) : allRanked;
 
   return ranked.map((candidate) => {
     const snapshot = compactSnapshot((candidate.snapshot ?? {}) as Record<string, unknown>);
@@ -108,6 +139,7 @@ function candidatePayload(candidates: ContestCandidate[], includeJsonMetadata: b
       ticker: candidate.ticker,
       name: candidate.name,
       exchange: candidate.exchange,
+      screener_source: snapshot.screener_source ?? null,
       mtn_rank: candidate.llm_rank,
       score_total: Math.round(scoreTotal * 10) / 10,
       score_breakdown: scores,
@@ -116,6 +148,7 @@ function candidatePayload(candidates: ContestCandidate[], includeJsonMetadata: b
       mtn_recommendation: analysis.recommendation ?? null,
       mtn_confidence: analysis.confidence ?? null,
       technical_data: snapshot,
+      canslim_data: snapshot.canslim ?? null,
     };
   });
 }
@@ -126,6 +159,7 @@ export function buildIbValidationPrompt(
   marketContext?: MasterFilterResponse | null,
   includeJsonMetadata: boolean = true
 ): string {
+  const screenerSource = sessionScreenerSource(session, candidates);
   const ranked = candidatePayload(candidates, includeJsonMetadata);
   const marketBlock = marketContext ? {
     state: marketContext.state,
@@ -135,6 +169,7 @@ export function buildIbValidationPrompt(
 
   const dataPayload = JSON.stringify({
     decision_context: {
+      screener_source: screenerSource,
       mtn_role: 'PRELIMINARY_SCREEN',
       committee_role: 'FINAL_INVESTMENT_JUDGMENT',
       final_decision_note: 'MTN 정량 결과는 1차 후보 선별입니다. 실질적인 투자 판단과 최종 우선순위는 IB 투자위원회의 독립 판단을 우선합니다.',
@@ -154,6 +189,8 @@ export function buildIbValidationPrompt(
     SYSTEM_LIMITATION_DISCLOSURE,
     '',
     DECISION_HIERARCHY,
+    '',
+    screenerCommitteeMandate(screenerSource),
     '',
     '# Role',
     '당신은 글로벌 투자은행의 Investment Committee 서기 겸 수석 애널리스트입니다.',

@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { ScannerUniverse, StoredScannerSnapshot, MasterFilterResponse, ScannerResult } from '@/types';
 import { tierClass } from '@/lib/contest-ui-utils';
+import { MAX_CONTEST_CANDIDATES } from '@/lib/contest-sources';
 
 // lucide-react@1.8.0 bundler resolution 이슈 대응
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -24,6 +25,7 @@ interface UniverseSelectionSectionProps {
   handleStartAnalysis: () => void;
   busy: boolean;
   UNIVERSES: ScannerUniverse[];
+  sourceLabel?: string;
 }
 
 const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
@@ -38,6 +40,7 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
   handleStartAnalysis,
   busy,
   UNIVERSES,
+  sourceLabel = 'MTN Scanner',
 }) => {
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 shadow-2xl backdrop-blur-xl">
@@ -47,7 +50,7 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/30">1</div>
             분석 후보 선택
           </h2>
-          <p className="text-sm text-slate-400">최대 10개까지 선택 가능합니다. 선택된 순서대로 AI에게 전달됩니다.</p>
+          <p className="text-sm text-slate-400">{sourceLabel} ???? ?? {MAX_CONTEST_CANDIDATES}??? ?? ?????. ?? ???? AI? ?????.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <select
@@ -70,14 +73,14 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
       {!snapshot ? (
         <div className="mt-6 rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
           <p>저장된 스캔 결과가 없습니다.</p>
-          <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">스캐너로 이동하기 &rarr;</Link>
+          <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">???? ???? &rarr;</Link>
         </div>
       ) : (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500">
             <span className="flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5">
               <div className={`h-2 w-2 rounded-full ${selected.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
-              {selected.length} / 10 선택됨
+              {selected.length} / {MAX_CONTEST_CANDIDATES} selected
             </span>
             {marketContext && (
               <span className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-indigo-300">

@@ -43,6 +43,7 @@ declare module 'lucide-react' {
   export const Save: LucideIcon;
   export const ScanSearch: LucideIcon;
   export const Search: LucideIcon;
+  export const Send: LucideIcon;
   export const Shield: LucideIcon;
   export const ShieldAlert: LucideIcon;
   export const ShieldCheck: LucideIcon;

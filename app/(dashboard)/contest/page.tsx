@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   ArrowUpRight,
   BarChart3,
@@ -32,6 +33,22 @@ import {
 } from '@/lib/contest-followup';
 import { isContestPoolTier, recommendationSortValue } from '@/lib/scanner-recommendation';
 import { formatDate, verdictRecommendationClass } from '@/lib/contest-ui-utils';
+import { canslimCandidateFromResult, minerviniCandidateFromResult } from '@/lib/contest-candidates';
+import {
+  CANSLIM_LATEST_UNIVERSE_STORAGE_KEY,
+  CANSLIM_SNAPSHOT_PREFIX,
+  CONTEST_SELECTIONS_MAP_KEY,
+  CONTEST_SELECTIONS_SOURCE_MAP_KEY,
+  CONTEST_SELECTION_STORAGE_KEY,
+  CONTEST_SOURCE_STORAGE_KEY,
+  DEFAULT_CONTEST_SOURCE,
+  MAX_CONTEST_CANDIDATES,
+  contestSourceLabel,
+  parseContestSource,
+  sourceUniverseKey,
+  type ContestScreenerSource,
+  type ContestTransferSelection,
+} from '@/lib/contest-sources';
 
 import type {
   ApiSuccess,
@@ -41,6 +58,7 @@ import type {
   ContestPromptCandidate,
   DataSourceMeta,
   MasterFilterResponse,
+  CanslimScannerResult,
   ScannerResult,
   ScannerUniverse,
   StoredScannerSnapshot,
@@ -49,20 +67,16 @@ import { readScannerSnapshot } from '@/hooks/scanner/storage';
 
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
-const CONTEST_SELECTION_STORAGE_KEY = 'mtn:contest:selected:v1';
 const UNIVERSES: ScannerUniverse[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
 
-interface TransferSelection {
-  universe: ScannerUniverse;
-  tickers: string[];
-  savedAt: string;
-}
+type TransferSelection = ContestTransferSelection;
 
 function isTransferSelection(value: unknown): value is TransferSelection {
   if (!value || typeof value !== 'object') return false;
   const selection = value as Partial<TransferSelection>;
   return Boolean(
-    parseUniverse(selection.universe ?? null)
+    parseContestSource(selection.source)
+    && parseUniverse(selection.universe ?? null)
     && Array.isArray(selection.tickers)
     && selection.tickers.length > 0
     && typeof selection.savedAt === 'string',
@@ -101,16 +115,37 @@ function parseUniverse(value: string | null): ScannerUniverse | null {
   return null;
 }
 
-function getInitialUniverse(): ScannerUniverse {
+function getInitialSource(): ContestScreenerSource {
+  if (typeof window === 'undefined') return DEFAULT_CONTEST_SOURCE;
+  const urlSource = parseContestSource(new URLSearchParams(window.location.search).get('source'));
+  return urlSource || parseContestSource(window.localStorage.getItem(CONTEST_SOURCE_STORAGE_KEY)) || DEFAULT_CONTEST_SOURCE;
+}
+
+function getInitialUniverse(source: ContestScreenerSource = getInitialSource()): ScannerUniverse {
   if (typeof window === 'undefined') return 'NASDAQ100';
   
   const lastSelected = window.localStorage.getItem(LAST_UNIVERSE_STORAGE_KEY);
-  const storedLatest = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
+  const storedLatest = window.localStorage.getItem(
+    source === 'canslim' ? CANSLIM_LATEST_UNIVERSE_STORAGE_KEY : LATEST_SCAN_UNIVERSE_STORAGE_KEY,
+  );
   const preferred = parseUniverse(lastSelected) || parseUniverse(storedLatest);
 
   try {
-    const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
-    const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
+    const sourceMapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_SOURCE_MAP_KEY);
+    if (sourceMapRaw) {
+      const sourceMap = JSON.parse(sourceMapRaw);
+      const selections = Object.values(sourceMap)
+        .filter(isTransferSelection)
+        .filter((selection) => selection.source === source)
+        .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime());
+      if (preferred && sourceMap[sourceUniverseKey(source, preferred)]?.tickers?.length > 0) return preferred;
+      if (selections.length > 0) {
+        const u = parseUniverse(selections[0].universe);
+        if (u) return u;
+      }
+    }
+
+    const mapRaw = source === DEFAULT_CONTEST_SOURCE ? window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY) : null;
     if (mapRaw) {
       const map = JSON.parse(mapRaw);
       // 1. Prefer the most recently used universe if it has selections
@@ -138,14 +173,20 @@ function getInitialUniverse(): ScannerUniverse {
 
 // Removed readSnapshot as we use readScannerSnapshot from storage
 
-function readTransferSelection(targetUniverse: ScannerUniverse): TransferSelection | null {
+function readTransferSelection(source: ContestScreenerSource, targetUniverse: ScannerUniverse): TransferSelection | null {
   try {
-    const CONTEST_SELECTIONS_MAP_KEY = 'mtn:contest:selections:v2';
+    const sourceMapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_SOURCE_MAP_KEY);
+    if (sourceMapRaw) {
+      const sourceMap = JSON.parse(sourceMapRaw);
+      const selection = sourceMap[sourceUniverseKey(source, targetUniverse)];
+      if (selection && Array.isArray(selection.tickers)) return selection as TransferSelection;
+    }
+
     const mapRaw = window.localStorage.getItem(CONTEST_SELECTIONS_MAP_KEY);
-    if (mapRaw) {
+    if (source === DEFAULT_CONTEST_SOURCE && mapRaw) {
       const map = JSON.parse(mapRaw);
       const selection = map[targetUniverse];
-      if (selection && Array.isArray(selection.tickers)) return selection as TransferSelection;
+      if (selection && Array.isArray(selection.tickers)) return { source, ...selection } as TransferSelection;
     }
     const raw = window.localStorage.getItem(CONTEST_SELECTION_STORAGE_KEY);
     if (!raw) return null;
@@ -153,9 +194,10 @@ function readTransferSelection(targetUniverse: ScannerUniverse): TransferSelecti
     if (Array.isArray(parsed)) {
       const storedUniverse = window.localStorage.getItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY);
       const universe = parseUniverse(storedUniverse) || 'NASDAQ100';
-      if (universe === targetUniverse) return { universe, tickers: parsed, savedAt: new Date().toISOString() };
+      if (source === DEFAULT_CONTEST_SOURCE && universe === targetUniverse) return { source, universe, tickers: parsed, savedAt: new Date().toISOString() };
       return null;
     }
+    if ((parsed.source || DEFAULT_CONTEST_SOURCE) !== source) return null;
     if (!parseUniverse(parsed.universe) || !Array.isArray(parsed.tickers)) return null;
     if (parsed.universe !== targetUniverse) return null;
     return parsed as TransferSelection;
@@ -165,63 +207,7 @@ function readTransferSelection(targetUniverse: ScannerUniverse): TransferSelecti
 }
 
 function candidateFromResult(item: ScannerResult, rank: number): ContestPromptCandidate {
-  return {
-    ticker: item.ticker,
-    exchange: item.exchange,
-    name: item.name || item.ticker,
-    user_rank: rank,
-    recommendation_tier: item.recommendationTier,
-    recommendation_reason: item.recommendationReason,
-    exception_signals: item.exceptionSignals || [],
-    rs_rating: item.rsRating ?? null,
-    internal_rs_rating: item.internalRsRating ?? null,
-    external_rs_rating: item.externalRsRating ?? null,
-    rs_rank: item.rsRank ?? null,
-    rs_universe_size: item.rsUniverseSize ?? null,
-    rs_percentile: item.rsPercentile ?? null,
-    weighted_momentum_score: item.weightedMomentumScore ?? null,
-    ibd_proxy_score: item.ibdProxyScore ?? null,
-    mansfield_rs_flag: item.mansfieldRsFlag ?? null,
-    mansfield_rs_score: item.mansfieldRsScore ?? null,
-    rs_data_quality: item.rsDataQuality ?? 'NA',
-    macro_action_level: item.macroActionLevel ?? null,
-    benchmark_relative_score: item.benchmarkRelativeScore ?? null,
-    rs_line_new_high: item.rsLineNewHigh ?? null,
-    rs_line_near_high: item.rsLineNearHigh ?? null,
-    tennis_ball_count: item.tennisBallCount ?? null,
-    tennis_ball_score: item.tennisBallScore ?? null,
-    return_3m: item.return3m ?? null,
-    return_6m: item.return6m ?? null,
-    return_9m: item.return9m ?? null,
-    return_12m: item.return12m ?? null,
-    base_type: item.baseType ?? null,
-    momentum_branch: item.momentumBranch ?? null,
-    eight_week_return_pct: item.eightWeekReturnPct ?? null,
-    distance_from_ma50_pct: item.distanceFromMa50Pct ?? null,
-    low_52_week_advance_pct: item.low52WeekAdvancePct ?? null,
-    high_tight_flag: item.highTightFlag ?? null,
-    sepa_status: item.sepaStatus,
-    sepa_passed: item.sepaPassed,
-    sepa_failed: item.sepaFailed,
-    vcp_status: item.vcpGrade,
-    vcp_score: item.vcpScore,
-    contraction_score: item.contractionScore ?? null,
-    volume_dry_up_score: item.volumeDryUpScore ?? null,
-    bb_squeeze_score: item.bbSqueezeScore ?? null,
-    pocket_pivot_score: item.pocketPivotScore ?? null,
-    pivot_price: item.pivotPrice,
-    pivot_date: item.pivotDate ?? null,
-    pivot_age_days: item.pivotAgeDays ?? null,
-    pivot_kind: item.pivotKind ?? null,
-    reference_high_price: item.referenceHighPrice ?? null,
-    reference_high_date: item.referenceHighDate ?? null,
-    distance_to_pivot_pct: item.distanceToPivotPct,
-    avg_dollar_volume: item.sepaEvidence?.metrics.avgDollarVolume20 || null,
-    price: item.currentPrice,
-    price_as_of: item.priceAsOf,
-    source: item.priceSource || 'MTN scanner',
-    provider_attempts: item.providerAttempts || [],
-  };
+  return minerviniCandidateFromResult(item, rank);
 }
 
 async function parseResponse<T>(response: Response) {
@@ -260,6 +246,98 @@ function sortScannerPool(rows: ScannerResult[]) {
     );
 }
 
+interface StoredCanslimSnapshot {
+  savedAt: string;
+  universe: ScannerUniverse;
+  results: CanslimScannerResult[];
+  macro: unknown | null;
+}
+
+function readCanslimSnapshot(universe: ScannerUniverse): StoredCanslimSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(`${CANSLIM_SNAPSHOT_PREFIX}${universe}`);
+    if (!raw) return null;
+    const snapshot = JSON.parse(raw) as StoredCanslimSnapshot;
+    if (snapshot.universe !== universe || !Array.isArray(snapshot.results)) return null;
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+function scannerLikeFromCanslimResult(item: CanslimScannerResult): ScannerResult {
+  const candidate = canslimCandidateFromResult(item, 1);
+  return {
+    rank: 0,
+    ticker: item.ticker,
+    exchange: item.exchange,
+    name: item.name,
+    marketCap: item.marketCap,
+    currency: item.currency,
+    currentPrice: item.currentPrice,
+    priceAsOf: item.analyzedAt,
+    priceSource: "MTN O'Neil CANSLIM scanner",
+    status: item.status,
+    recommendationTier: candidate.recommendation_tier || 'Low Priority',
+    recommendationReason: candidate.recommendation_reason || null,
+    sepaMissingCount: candidate.sepa_failed,
+    exceptionSignals: item.dataWarnings || [],
+    providerAttempts: [],
+    sepaStatus: candidate.sepa_status,
+    sepaPassed: candidate.sepa_passed,
+    sepaFailed: candidate.sepa_failed,
+    sepaCriteria: null,
+    sepaEvidence: null,
+    vcpScore: item.vcpScore,
+    vcpGrade: item.vcpGrade,
+    contractionScore: null,
+    volumeDryUpScore: null,
+    bbSqueezeScore: null,
+    pocketPivotScore: null,
+    vcpDetails: null,
+    fundamentals: item.sector ? { sector: item.sector, source: "MTN O'Neil CANSLIM scanner", epsGrowthPct: null, revenueGrowthPct: null, roePct: null, debtToEquityPct: null } : null,
+    pivotPrice: candidate.pivot_price,
+    pivotDate: null,
+    pivotAgeDays: null,
+    pivotKind: candidate.pivot_kind,
+    referenceHighPrice: null,
+    referenceHighDate: null,
+    recommendedEntry: candidate.pivot_price,
+    entrySource: candidate.pivot_price ? 'VCP_PIVOT' : null,
+    distanceToPivotPct: candidate.distance_to_pivot_pct,
+    breakoutVolumeStatus: null,
+    baseType: candidate.base_type ?? null,
+    momentumBranch: null,
+    eightWeekReturnPct: null,
+    distanceFromMa50Pct: null,
+    low52WeekAdvancePct: null,
+    highTightFlag: null,
+    rsRating: item.rsRating,
+    rsSource: item.rsSource ?? null,
+    internalRsRating: null,
+    externalRsRating: item.rsSource === 'DB_BATCH' ? item.rsRating : null,
+    rsRank: null,
+    rsUniverseSize: null,
+    rsPercentile: null,
+    weightedMomentumScore: null,
+    benchmarkRelativeScore: item.benchmarkRelativeScore ?? null,
+    rsLineNewHigh: null,
+    rsLineNearHigh: null,
+    tennisBallCount: null,
+    tennisBallScore: null,
+    return3m: null,
+    return6m: null,
+    return9m: null,
+    return12m: null,
+    changePercent: null,
+    adrPct: null,
+    analyzedAt: item.analyzedAt,
+    errorMessage: item.errorMessage,
+    dataWarnings: item.dataWarnings,
+  } as ScannerResult;
+}
+
 function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 }
@@ -282,9 +360,14 @@ function performanceSummary(candidates: ContestCandidate[], horizon: Horizon) {
 
 // --- Main Page Component ---
 
-export default function ContestPage() {
-  const [universe, setUniverse] = useState<ScannerUniverse>(() => getInitialUniverse());
+function ContestPageContent() {
+  const searchParams = useSearchParams();
+  const searchSource = parseContestSource(searchParams.get('source'));
+  const initialSource = searchSource || getInitialSource();
+  const [contestSource, setContestSource] = useState<ContestScreenerSource>(() => initialSource);
+  const [universe, setUniverse] = useState<ScannerUniverse>(() => getInitialUniverse(initialSource));
   const [snapshot, setSnapshot] = useState<StoredScannerSnapshot | null>(null);
+  const [canslimSnapshot, setCanslimSnapshot] = useState<StoredCanslimSnapshot | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [transferInfo, setTransferInfo] = useState<TransferSelection | null>(null);
   const [sessions, setSessions] = useState<BeautyContestSession[]>([]);
@@ -307,25 +390,31 @@ export default function ContestPage() {
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
-  const loadSnapshot = useCallback(async (nextUniverse: ScannerUniverse) => {
-    const next = await readScannerSnapshot(nextUniverse);
+  const loadSnapshot = useCallback(async (nextUniverse: ScannerUniverse, sourceOverride?: ContestScreenerSource) => {
+    const source = sourceOverride || contestSource;
+    window.localStorage.setItem(CONTEST_SOURCE_STORAGE_KEY, source);
+
+    const nextCanslim = source === 'canslim' ? readCanslimSnapshot(nextUniverse) : null;
+    const next = source === 'minervini' ? await readScannerSnapshot(nextUniverse) : null;
+    setCanslimSnapshot(nextCanslim);
     setSnapshot(next);
-    if (!next) {
+    const rows = source === 'canslim' ? (nextCanslim?.results || []).map(scannerLikeFromCanslimResult) : (next?.results || []);
+    if (rows.length === 0) {
       setSelected([]);
       setTransferInfo(null);
       return;
     }
-    const transfer = readTransferSelection(nextUniverse);
-    const validTickers = new Set(next.results.map((item) => item.ticker));
-    const transferred = (transfer?.tickers || []).filter((ticker) => validTickers.has(ticker)).slice(0, 15);
+    const transfer = readTransferSelection(source, nextUniverse);
+    const validTickers = new Set(rows.map((item) => item.ticker));
+    const transferred = (transfer?.tickers || []).filter((ticker) => validTickers.has(ticker)).slice(0, MAX_CONTEST_CANDIDATES);
     if (transferred.length > 0) {
       setSelected(transferred);
-      setTransferInfo({ universe: nextUniverse, tickers: transferred, savedAt: transfer?.savedAt || new Date().toISOString() });
+      setTransferInfo({ source, universe: nextUniverse, tickers: transferred, savedAt: transfer?.savedAt || new Date().toISOString() });
     } else {
       setTransferInfo(null);
       setSelected([]);
     }
-  }, []);
+  }, [contestSource]);
 
   const loadSessions = useCallback(async (preferredSessionId?: string | null) => {
     setError(null);
@@ -340,11 +429,13 @@ export default function ContestPage() {
   }, []);
 
   useEffect(() => {
-    const initial = getInitialUniverse();
+    const source = searchSource || getInitialSource();
+    setContestSource(source);
+    const initial = getInitialUniverse(source);
     setUniverse(initial);
-    loadSnapshot(initial);
+    loadSnapshot(initial, source);
     loadSessions().catch((err: unknown) => setError(err instanceof Error ? err.message : '불러오기 실패'));
-  }, [loadSessions, loadSnapshot]);
+  }, [loadSessions, loadSnapshot, searchSource]);
 
   useEffect(() => { fetchMarketContext(market).then(setMarketContext); }, [market]);
 
@@ -353,21 +444,51 @@ export default function ContestPage() {
     else setIbAnalysis(null);
   }, [activeSession?.id]);
 
-  const rankedResults = useMemo(() => sortScannerPool(snapshot?.results || []), [snapshot]);
-  const candidatePool = useMemo(() => rankedResults.filter((item) => isContestPoolTier(item.recommendationTier)), [rankedResults]);
+  const rankedResults = useMemo(() => (
+    contestSource === 'canslim'
+      ? (canslimSnapshot?.results || []).map(scannerLikeFromCanslimResult)
+      : sortScannerPool(snapshot?.results || [])
+  ), [canslimSnapshot, contestSource, snapshot]);
+  const candidatePool = useMemo(() => rankedResults.filter((item) => (
+    contestSource === 'canslim' ? item.recommendationTier !== 'Low Priority' : isContestPoolTier(item.recommendationTier)
+  )), [contestSource, rankedResults]);
   const visibleSelectionRows = useMemo(() => {
     if (!transferInfo || transferInfo.tickers.length === 0) return [];
     const transferred = new Set(transferInfo.tickers);
     return rankedResults.filter((item) => transferred.has(item.ticker));
   }, [rankedResults, transferInfo]);
+  const selectionSnapshot = useMemo(() => {
+    if (snapshot) return snapshot;
+    if (!canslimSnapshot) return null;
+    return {
+      savedAt: canslimSnapshot.savedAt,
+      universeMeta: {
+        universe: canslimSnapshot.universe,
+        label: universe,
+        asOf: canslimSnapshot.savedAt,
+        source: "MTN O'Neil CANSLIM scanner",
+        delayNote: null,
+        items: rankedResults,
+        warnings: [],
+      },
+      results: rankedResults,
+    } as StoredScannerSnapshot;
+  }, [canslimSnapshot, rankedResults, snapshot, universe]);
 
   const selectedCandidates = useMemo(() => {
+    if (contestSource === 'canslim') {
+      const byTicker = new Map((canslimSnapshot?.results || []).map((item) => [item.ticker, item]));
+      return selected.map((ticker, index) => {
+        const item = byTicker.get(ticker);
+        return item ? canslimCandidateFromResult(item, index + 1) : null;
+      }).filter((v): v is ContestPromptCandidate => !!v);
+    }
     const byTicker = new Map(rankedResults.map((item) => [item.ticker, item]));
     return selected.map((t, i) => {
       const item = byTicker.get(t);
       return item ? candidateFromResult(item, i + 1) : null;
     }).filter((v): v is ContestPromptCandidate => !!v);
-  }, [rankedResults, selected]);
+  }, [canslimSnapshot, contestSource, rankedResults, selected]);
 
   const activeCandidates = useMemo(() => orderedCandidates(activeSession), [activeSession]);
   const w1Summary = useMemo(() => performanceSummary(activeCandidates, 'W1'), [activeCandidates]);
@@ -403,7 +524,16 @@ export default function ContestPage() {
       const response = await fetch('/api/contest/sessions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ market, universe, candidates: selectedCandidates, market_context: context, candidate_pool_snapshot: candidatePool.map((it, i) => candidateFromResult(it, i + 1)) }),
+        body: JSON.stringify({
+          source: contestSource,
+          market,
+          universe,
+          candidates: selectedCandidates,
+          market_context: context,
+          candidate_pool_snapshot: contestSource === 'canslim'
+            ? (canslimSnapshot?.results || []).map((it, i) => canslimCandidateFromResult(it, i + 1))
+            : candidatePool.map((it, i) => candidateFromResult(it, i + 1)),
+        }),
       });
       const result = await parseResponse<BeautyContestSession>(response);
       setActiveSession(result.data);
@@ -628,10 +758,10 @@ export default function ContestPage() {
       {step === 'selection' && (
         <div className="space-y-6">
           <UniverseSelectionSection
-            universe={universe} setUniverse={setUniverse} snapshot={snapshot} loadSnapshot={loadSnapshot}
+            universe={universe} setUniverse={setUniverse} snapshot={selectionSnapshot} loadSnapshot={loadSnapshot}
             selected={selected} marketContext={marketContext} visibleSelectionRows={visibleSelectionRows}
             toggleCandidateSelection={toggleCandidateSelection} handleStartAnalysis={handleStartAnalysis}
-            busy={busy} UNIVERSES={UNIVERSES}
+            busy={busy} UNIVERSES={UNIVERSES} sourceLabel={contestSourceLabel(contestSource)}
           />
           <SessionHistory 
             sessions={sessions} 
@@ -678,5 +808,13 @@ export default function ContestPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ContestPage() {
+  return (
+    <Suspense fallback={<div className="mx-auto max-w-7xl px-4 py-10 text-sm text-slate-400">Loading contest...</div>}>
+      <ContestPageContent />
+    </Suspense>
   );
 }

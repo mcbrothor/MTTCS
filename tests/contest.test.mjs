@@ -10,6 +10,7 @@ import {
   validateContestCandidates,
   CONTEST_RESPONSE_SCHEMA_VERSION,
 } from '../lib/contest.ts';
+import { MAX_CONTEST_CANDIDATES } from '../lib/contest-sources.ts';
 
 const candidates = Array.from({ length: 3 }, (_, index) => ({
   candidate_id: ['cand-nvda', 'cand-meta', 'cand-tsla'][index],
@@ -48,6 +49,44 @@ const candidates = Array.from({ length: 3 }, (_, index) => ({
   assert.match(llmPrompt, /PROCEED/);
   assert.match(llmPrompt, /key_strength/);
   assert.match(llmPrompt, /NVDA/);
+}
+
+{
+  const canslimCandidates = candidates.map((candidate) => ({
+    ...candidate,
+    screener_source: 'canslim',
+    source: "MTN O'Neil CANSLIM scanner",
+    canslim: {
+      pass: true,
+      confidence: 'HIGH',
+      n_status: 'VALID',
+      dual_tier: 'TIER_1',
+      pillars: [],
+    },
+  }));
+  const { llmPrompt } = buildContestPrompt({
+    market: 'US',
+    universe: 'NASDAQ100',
+    sessionId: 'session-canslim',
+    source: 'canslim',
+    candidates: canslimCandidates,
+  });
+  assert.match(llmPrompt, /O'Neil CANSLIM first-pass candidates/);
+  assert.match(llmPrompt, /CANSLIM pillar evidence as the primary screen/);
+}
+
+{
+  const manyCandidates = Array.from({ length: MAX_CONTEST_CANDIDATES }, (_, index) => ({
+    ...candidates[0],
+    candidate_id: `candidate-${index}`,
+    ticker: `T${index}`,
+    user_rank: index + 1,
+  }));
+  assert.equal(validateContestCandidates(manyCandidates).length, MAX_CONTEST_CANDIDATES);
+  assert.throws(
+    () => validateContestCandidates([...manyCandidates, { ...candidates[0], ticker: 'TOO_MANY' }]),
+    new RegExp(`at most ${MAX_CONTEST_CANDIDATES}`)
+  );
 }
 
 {

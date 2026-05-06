@@ -85,6 +85,8 @@ export function useScanner() {
     baseClearSelection(universe);
   }, [baseClearSelection, universe]);
   const [isSavingWatchlist, setIsSavingWatchlist] = useState(false);
+  const [telegramBusy, setTelegramBusy] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
   const [macroTrend, setMacroTrend] = useState<MacroTrend | null>(null);
   const [showAllMacroResults, setShowAllMacroResults] = useState(false);
 
@@ -353,6 +355,59 @@ export function useScanner() {
     return list;
   }, [macroScopedResults, filterKey, sortKey, showCustomFilter, customFilters]);
 
+  const telegramCandidates = useMemo(() => {
+    return applyScannerReviewPoolRankings(results)
+      .filter((row) => row.status === 'done')
+      .filter((row) =>
+        row.recommendationTier === 'Recommended'
+        || row.recommendationTier === 'IB Review'
+        || row.sepaStatus === 'pass'
+      )
+      .sort((a, b) =>
+        recommendationSortValue(a.recommendationTier) - recommendationSortValue(b.recommendationTier)
+        || (b.rsRating ?? 0) - (a.rsRating ?? 0)
+        || (b.vcpScore ?? 0) - (a.vcpScore ?? 0)
+      )
+      .slice(0, 30);
+  }, [results]);
+
+  const sendTelegramSummary = useCallback(async () => {
+    if (telegramBusy) return;
+    setTelegramBusy(true);
+    setTelegramMessage(null);
+    try {
+      const response = await fetch('/api/scanner/telegram', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          source: 'minervini',
+          universe,
+          candidates: telegramCandidates.map((item) => ({
+            ticker: item.ticker,
+            name: item.name,
+            exchange: item.exchange,
+            recommendationTier: item.recommendationTier,
+            recommendationReason: item.recommendationReason,
+            rsRating: item.rsRating,
+            vcpScore: item.vcpScore,
+            vcpGrade: item.vcpGrade,
+            sepaStatus: item.sepaStatus,
+            pivotPrice: item.pivotPrice,
+            distanceToPivotPct: item.distanceToPivotPct,
+            currentPrice: item.currentPrice,
+          })),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'Telegram send failed.');
+      setTelegramMessage(`${telegramCandidates.length}개 후보를 텔레그램으로 전송했습니다.`);
+    } catch (error) {
+      setTelegramMessage(getErrorMessage(error));
+    } finally {
+      setTelegramBusy(false);
+    }
+  }, [telegramBusy, telegramCandidates, universe]);
+
   const stats = useMemo(() => ({
     recommended: macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length,
     partial: macroScopedResults.filter((item) => item.recommendationTier === 'IB Review').length,
@@ -383,6 +438,6 @@ export function useScanner() {
     startScan, stopScan, addToWatchlist, toggleSelected, filteredResults,
     stats, dataSourceSummary, isSavingWatchlist,
     customFilters, setCustomFilters, showCustomFilter, setShowCustomFilter,
-    limitMessage
+    limitMessage, telegramBusy, telegramMessage, telegramCandidates, sendTelegramSummary,
   };
 }

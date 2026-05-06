@@ -17,11 +17,13 @@ import {
   Plus,
   Check,
   Activity,
+  Send,
 } from 'lucide-react';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 
 import { useContestSelection } from '@/hooks/useContestSelection';
+import { CANSLIM_LATEST_UNIVERSE_STORAGE_KEY } from '@/lib/contest-sources';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import dynamic from 'next/dynamic';
@@ -114,7 +116,7 @@ function dualTierToRecommendationTier(tier: DualScreenerTier): 'Recommended' | '
 
 function writeSnapshot(snapshot: StoredSnapshot) {
   window.localStorage.setItem(storageKey(snapshot.universe), JSON.stringify(snapshot));
-  window.localStorage.setItem('mtn:scanner:latest-scan-universe:v1', snapshot.universe);
+  window.localStorage.setItem(CANSLIM_LATEST_UNIVERSE_STORAGE_KEY, snapshot.universe);
 
   // 콘테스트 페이지가 읽는 mtn:scanner-snapshot:v3: 형식으로도 저장
   try {
@@ -260,12 +262,14 @@ export default function CanslimScannerPage() {
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
   const [selectedResult, setSelectedResult] = useState<CanslimScannerResult | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('web');
+  const [telegramBusy, setTelegramBusy] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
   const {
     selectedTickers,
     toggleSelection: baseToggleSelection,
     clearSelection: baseClearSelection,
     limitMessage,
-  } = useContestSelection(universe);
+  } = useContestSelection(universe, { source: 'canslim' });
 
   const [quota, setQuota] = useState(0);
 
@@ -505,7 +509,58 @@ export default function CanslimScannerPage() {
     return list;
   }, [results, filterKey, sortKey]);
 
-  // === 통계 ===
+  const telegramCandidates = useMemo(() => {
+    return [...results]
+      .filter((r) => r.status === 'done')
+      .filter((r) => r.canslimResult.pass || r.dualTier === 'TIER_1' || r.dualTier === 'WATCHLIST' || r.dualTier === 'SHORT_TERM')
+      .sort((a, b) =>
+        tierSortValue(a.dualTier) - tierSortValue(b.dualTier)
+        || confidenceSortValue(a.canslimResult.confidence) - confidenceSortValue(b.canslimResult.confidence)
+        || (b.rsRating ?? 0) - (a.rsRating ?? 0)
+      )
+      .slice(0, 30);
+  }, [results]);
+
+  const sendTelegramSummary = async () => {
+    if (telegramBusy) return;
+    setTelegramBusy(true);
+    setTelegramMessage(null);
+    try {
+      const response = await fetch('/api/scanner/telegram', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          source: 'canslim',
+          universe,
+          candidates: telegramCandidates.map((item) => ({
+            ticker: item.ticker,
+            name: item.name,
+            exchange: item.exchange,
+            dualTier: item.dualTier,
+            pass: item.canslimResult.pass,
+            confidence: item.canslimResult.confidence,
+            rsRating: item.rsRating,
+            vcpScore: item.vcpScore,
+            vcpGrade: item.vcpGrade,
+            pivotPrice: item.basePattern?.pivotPoint ?? null,
+            distanceToPivotPct: item.currentPrice && item.basePattern?.pivotPoint
+              ? Number((((item.currentPrice - item.basePattern.pivotPoint) / item.basePattern.pivotPoint) * 100).toFixed(2))
+              : null,
+            currentPrice: item.currentPrice,
+          })),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || 'Telegram send failed.');
+      setTelegramMessage(telegramCandidates.length + '? ??? ?????? ??????.');
+    } catch (error) {
+      setTelegramMessage(getErrorMessage(error));
+    } finally {
+      setTelegramBusy(false);
+    }
+  };
+
+  // === ?? ===
   const stats = useMemo(() => ({
     total: results.filter((r) => r.status === 'done').length,
     pass: results.filter((r) => r.canslimResult.pass).length,
@@ -820,6 +875,11 @@ export default function CanslimScannerPage() {
           {limitMessage}
         </div>
       )}
+      {telegramMessage && (
+        <div className="fixed bottom-20 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-rose-500/40 bg-rose-950/90 px-5 py-3 text-sm font-semibold text-rose-100 shadow-2xl backdrop-blur-md">
+          {telegramMessage}
+        </div>
+      )}
       
       {/* API 쿼터 경고 배너 */}
       {quota > QUOTA_LIMIT * 0.8 && (
@@ -893,7 +953,7 @@ export default function CanslimScannerPage() {
                           {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
                         </p>
                         {universe === u && (
-                          /* @ts-ignore - framer-motion layoutId type issue */
+                          /* @ts-expect-error - framer-motion layoutId type issue */
                           <motion.div layoutId="activeUniverse" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500 blur-[2px]" />
                         )}
                       </button>
@@ -933,6 +993,16 @@ export default function CanslimScannerPage() {
                     )}
                   </div>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={sendTelegramSummary}
+                  disabled={telegramBusy || telegramCandidates.length === 0}
+                  className="h-10 w-full justify-center gap-2 rounded-xl border-rose-500/30 text-rose-100"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}
+                </Button>
               </div>
             </div>
 
@@ -1166,7 +1236,7 @@ export default function CanslimScannerPage() {
             >
               전체 해제
             </button>
-            <Link href="/contest">
+            <Link href="/contest?source=canslim">
               <button className="group relative flex items-center gap-2 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 px-6 py-2.5 font-black text-white shadow-lg transition-all hover:from-rose-500 hover:to-rose-600 active:scale-95">
                 <CheckCircle2 className="h-4 w-4" />
                 선정 완료 (콘테스트 이동)
@@ -1182,7 +1252,7 @@ export default function CanslimScannerPage() {
       )}
 
       <FlowCtaButton 
-        nextPath="/contest" 
+        nextPath="/contest?source=canslim" 
         label="최고의 차트 선정하기" 
         subLabel="Step 3: Beauty Contest"
         variant="emerald"

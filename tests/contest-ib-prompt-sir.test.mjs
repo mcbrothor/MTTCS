@@ -71,4 +71,21 @@ assert.match(prompt, /전체 markdown report는 1,200~1,800단어 안에서 끝�
 assert.match(prompt, /MTN 정량 결과는 1차 후보 선별/);
 assert.doesNotMatch(prompt, /諛|李|꾩|쒖/);
 
+const canslimPrompt = buildIbValidationPrompt({
+  ...session,
+  id: 'sir-canslim-1',
+  prompt_payload: [{ ticker: 'TOP', exchange: 'NAS', name: 'Top Corp', user_rank: 1, screener_source: 'canslim' }],
+}, [{
+  ...candidate,
+  snapshot: {
+    ...candidate.snapshot,
+    screener_source: 'canslim',
+    canslim: { pass: true, confidence: 'HIGH', n_status: 'VALID', dual_tier: 'TIER_1', pillars: [] },
+  },
+}], null, false);
+
+assert.match(canslimPrompt, /O'NEIL CANSLIM COMMITTEE MANDATE/);
+assert.match(canslimPrompt, /CANSLIM pillar changes the committee view/);
+assert.match(canslimPrompt, /canslim_data/);
+
 console.log('contest IB prompt SIR tests passed');

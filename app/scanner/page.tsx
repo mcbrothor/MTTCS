@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, ScanSearch, Square } from 'lucide-react';
+import { Play, ScanSearch, Send, Square } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Button from '@/components/ui/Button';
 const VcpDrilldownModal = dynamic(() => import('@/components/scanner/VcpDrilldownModal'), { ssr: false });
@@ -61,6 +61,10 @@ export default function ScannerPage() {
     showCustomFilter,
     setShowCustomFilter,
     limitMessage,
+    telegramBusy,
+    telegramMessage,
+    telegramCandidates,
+    sendTelegramSummary,
   } = useScanner();
 
   const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
@@ -70,6 +74,11 @@ export default function ScannerPage() {
       {limitMessage && (
         <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
           {limitMessage}
+        </div>
+      )}
+      {telegramMessage && (
+        <div className="fixed bottom-20 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-emerald-500/40 bg-emerald-950/90 px-5 py-3 text-sm font-semibold text-emerald-100 shadow-2xl backdrop-blur-md">
+          {telegramMessage}
         </div>
       )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
@@ -175,6 +184,16 @@ export default function ScannerPage() {
                     )}
                   </div>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={sendTelegramSummary}
+                  disabled={telegramBusy || telegramCandidates.length === 0}
+                  className="h-10 w-full justify-center gap-2 rounded-xl border-emerald-500/30 text-emerald-100"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}
+                </Button>
               </div>
             </div>
 

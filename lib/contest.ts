@@ -13,8 +13,9 @@ import type {
   ScannerUniverse,
 } from '../types/index.ts';
 import { extractStructuredJson } from './ai/gemini.ts';
+import { MAX_CONTEST_CANDIDATES } from './contest-sources.ts';
 
-const MAX_CANDIDATES = 10;
+const MAX_CANDIDATES = MAX_CONTEST_CANDIDATES;
 const VALID_LLM_OVERALL: ContestLlmOverall[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
 const VALID_LLM_RECOMMENDATIONS: ContestLlmRecommendation[] = ['PROCEED', 'WATCH', 'SKIP'];
 
@@ -28,6 +29,7 @@ export interface ContestSessionInput {
   sessionId?: string | null;
   marketContext?: Partial<MasterFilterResponse> | Record<string, unknown> | null;
   llmProvider?: string | null;
+  source?: 'minervini' | 'canslim' | null;
 }
 
 export type ParsedLlmRanking = ContestLlmRanking;
@@ -39,7 +41,7 @@ export function validateContestCandidates(candidates: ContestPromptCandidate[]) 
     throw new Error('At least one contest candidate is required.');
   }
   if (candidates.length > MAX_CANDIDATES) {
-    throw new Error('A beauty contest session can include at most 10 candidates.');
+    throw new Error(`A beauty contest session can include at most ${MAX_CANDIDATES} candidates.`);
   }
 
   const seen = new Set<string>();
@@ -143,6 +145,7 @@ export function buildContestResponseSchema(sessionId?: string | null) {
 
 export function buildContestPrompt(input: ContestSessionInput) {
   const candidates = validateContestCandidates(input.candidates);
+  const screenerSource = input.source || candidates.find((candidate) => candidate.screener_source)?.screener_source || 'minervini';
   const marketContext = compactMarketContext(input.marketContext);
   const sessionId = input.sessionId || 'session-id';
   const responseSchema = buildContestResponseSchema(input.sessionId || null);
@@ -173,12 +176,15 @@ export function buildContestPrompt(input: ContestSessionInput) {
   };
 
   const payload = {
-    task: 'MTN scanner candidates hedge-fund style comparison',
+    task: screenerSource === 'canslim'
+      ? "MTN O'Neil CANSLIM candidates hedge-fund style comparison"
+      : 'MTN Minervini SEPA/VCP candidates hedge-fund style comparison',
     prompt_version: CONTEST_PROMPT_VERSION,
     response_schema_version: CONTEST_RESPONSE_SCHEMA_VERSION,
     session_id: input.sessionId || null,
     market: input.market,
     universe: input.universe,
+    screener_source: screenerSource,
     selected_at: new Date().toISOString(),
     market_context: marketContext,
     market_context_guide: {
@@ -192,16 +198,27 @@ export function buildContestPrompt(input: ContestSessionInput) {
     },
     scoring_context: {
       rank_1_meaning: 'Best relative candidate among the submitted names.',
-      compare_axes: [
-        'Technical structure and VCP quality',
-        'Base type and High Tight Flag edge cases',
-        'RS Rating and universe-relative leadership',
-        'IBD proxy and Mansfield RS strength',
-        'Macro action level and market regime fit',
-        'SEPA pass/fail details and exception signals',
-        'Recent sales and earnings growth',
-        'Moat, industry leadership, and risk/reward',
-      ],
+      compare_axes: screenerSource === 'canslim'
+        ? [
+          'CANSLIM C/A/N/S/L/I/M pillar quality and evidence gaps',
+          'Quarterly and annual earnings or sales acceleration',
+          'New high, new product, new management, or base-pattern catalyst',
+          'Supply and demand, float/volume confirmation, and institutional sponsorship',
+          'Leader status via RS Rating, Mansfield RS, and universe-relative strength',
+          'Market direction and distribution-day regime fit',
+          'Base/pivot validity, stop-loss feasibility, and risk/reward',
+          'Moat, industry leadership, and execution risk',
+        ]
+        : [
+          'Technical structure and VCP quality',
+          'Base type and High Tight Flag edge cases',
+          'RS Rating and universe-relative leadership',
+          'IBD proxy and Mansfield RS strength',
+          'Macro action level and market regime fit',
+          'SEPA pass/fail details and exception signals',
+          'Recent sales and earnings growth',
+          'Moat, industry leadership, and risk/reward',
+        ],
       output_contract: responseExample,
       output_schema: responseSchema,
     },
@@ -209,7 +226,12 @@ export function buildContestPrompt(input: ContestSessionInput) {
   };
 
   const llmPrompt = [
-    'You are MTN beauty contest analyst.',
+    screenerSource === 'canslim'
+      ? "You are MTN beauty contest analyst reviewing O'Neil CANSLIM first-pass candidates."
+      : 'You are MTN beauty contest analyst reviewing Minervini SEPA/VCP first-pass candidates.',
+    screenerSource === 'canslim'
+      ? 'Treat CANSLIM pillar evidence as the primary screen; use VCP/base data only as execution confirmation.'
+      : 'Treat SEPA, VCP, RS leadership, and valid pivot/base quality as the primary screen.',
     'Write the reasoning in Korean, but return only valid JSON.',
     `response_schema_version must be "${CONTEST_RESPONSE_SCHEMA_VERSION}".`,
     'Do not return markdown, prose, or code fences.',
@@ -323,7 +345,10 @@ function coerceRankingItem(item: unknown, fallbackSessionId: string | null): Par
   const rank = Number(row.rank ?? row.llm_rank);
   const compositeScore = Number(row.composite_score || row.score_composite || 0);
   const overall = normalizeOverall(row.overall) || (compositeScore >= 70 ? 'POSITIVE' : compositeScore >= 40 ? 'NEUTRAL' : 'NEGATIVE');
-  const recommendation = normalizeRecommendation(row.recommendation) || ((row.recommendation as any)?.action ? normalizeRecommendation((row.recommendation as any).action) : null) || inferRecommendation(overall);
+  const recommendationObject = objectOrNull(row.recommendation);
+  const recommendation = normalizeRecommendation(row.recommendation)
+    || (recommendationObject?.action ? normalizeRecommendation(recommendationObject.action) : null)
+    || inferRecommendation(overall);
   
   const keyStrength = stringOrNull(row.key_strength, 1000)
     || stringOrNull(row.investment_thesis, 1000)
