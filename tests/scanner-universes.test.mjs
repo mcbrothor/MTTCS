@@ -98,6 +98,28 @@ console.log('=== Scanner Universe Tests ===\n');
 }
 
 {
+  const leadershipSetup = evaluateScannerRecommendation({
+    status: 'done',
+    sepaStatus: 'warning',
+    sepaFailed: 1,
+    sepaEvidence: { summary: { corePassed: 6, coreFailed: 1, coreTotal: 7 } },
+    vcpGrade: 'forming',
+    vcpScore: 64,
+    pivotKind: 'RECENT_HIGH_REFERENCE',
+    entrySource: 'RECENT_HIGH_FALLBACK',
+    referenceHighPrice: 120,
+    distanceFromMa50Pct: 8,
+    volumeDryUpScore: 58,
+    rsRating: 92,
+    rsLineNearHigh: true,
+  });
+
+  assert.equal(leadershipSetup.recommendationTier, 'IB Review');
+  assert.match(leadershipSetup.recommendationReason, /not|미확정|매수 타점/);
+  console.log('OK leadership setups without a valid pivot can enter IB Review without becoming buy points');
+}
+
+{
   const rows = Array.from({ length: 18 }, (_, index) => ({
     status: 'done',
     ticker: `T${String(index).padStart(2, '0')}`,

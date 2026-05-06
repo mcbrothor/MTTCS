@@ -18,7 +18,7 @@ function actionablePivot(distanceToPivotPct: number | null | undefined) {
 }
 
 function reviewPivot(distanceToPivotPct: number | null | undefined) {
-  return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -8 && distanceToPivotPct <= 5;
+  return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -12 && distanceToPivotPct <= 8;
 }
 
 function scoreAtLeast(value: number | null | undefined, threshold: number) {
@@ -209,6 +209,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const volumeTier = getVolumeSignalTier(result);
   const volumeWatch = volumeTier === 'Strong' || volumeTier === 'Watch';
   const volumeStrong = volumeTier === 'Strong';
+  const accumulationSignal = volumeWatch || pocketPivot || volumeDryUp || breakoutVolume;
   const rs80 = scoreAtLeast(result.rsRating, 80);
   const rs85 = scoreAtLeast(result.rsRating, 85);
   const rs90 = scoreAtLeast(result.rsRating, 90);
@@ -216,6 +217,8 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
   const tennisBall = (result.tennisBallCount || 0) >= 2;
+  const ma50Controlled = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 15;
+  const leadershipSetupWithoutPivot = !validPivot && rs90 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
 
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
@@ -256,10 +259,12 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
-  if (rs85 && reviewSepa && validPivot && reviewReadyPivot && constructiveVcp && volumeWatch) {
+  if (rs85 && reviewSepa && constructiveVcp && accumulationSignal && (reviewReadyPivot || leadershipSetupWithoutPivot)) {
     return {
       recommendationTier: 'IB Review',
-      recommendationReason: 'RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.',
+      recommendationReason: reviewReadyPivot
+        ? 'RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.'
+        : 'RS 90+ 주도주가 SEPA core 6/7 이상과 건설적 VCP/매집 단서를 보입니다. 유효 피벗은 아직 미확정이므로 매수 타점이 아닌 IB 검토 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
     };
@@ -291,10 +296,12 @@ export function scannerReviewScore(result: Partial<ScannerResult>) {
   const sepa = typeof corePassed === 'number' && coreTotal > 0 ? Math.max(0, Math.min(1, corePassed / coreTotal)) * 100 : 0;
   const distance = typeof result.distanceToPivotPct === 'number' ? result.distanceToPivotPct : null;
   const pivotScore = distance === null
-    ? 0
+    ? hasValidPivot(result)
+      ? 0
+      : 45
     : distance >= -2 && distance <= 3
       ? 100
-      : distance >= -8 && distance <= 5
+      : distance >= -12 && distance <= 8
         ? Math.max(30, 100 - Math.abs(distance) * 8)
         : 0;
   const volumeTier = getVolumeSignalTier(result);

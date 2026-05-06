@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -162,7 +162,7 @@ export default function ScannerPage() {
                   <div className="flex items-end">
                     {isScanning ? (
                       <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
-                        <Square className="h-3.5 w-3.5" /> 以묐떒
+                        <Square className="h-3.5 w-3.5" /> 중단
                       </Button>
                     ) : (
                       <Button
@@ -170,7 +170,7 @@ export default function ScannerPage() {
                         disabled={busy || scanBlocked}
                         className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border-none bg-gradient-to-br from-emerald-600 to-emerald-700 font-black text-white shadow-xl shadow-emerald-500/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 transition-all"
                       >
-                        <Play className="h-3.5 w-3.5 fill-white" /> {scanBlocked ? 'HALT 李⑤떒' : '?ㅼ틪 ?쒖옉'}
+                        <Play className="h-3.5 w-3.5 fill-white" /> {scanBlocked ? 'HALT 차단' : '스캔 시작'}
                       </Button>
                     )}
                   </div>
@@ -185,17 +185,17 @@ export default function ScannerPage() {
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Recommended</p>
             <p className="mt-2 font-mono text-2xl font-semibold text-emerald-300">{stats.recommended}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">利됱떆 寃???곗꽑?쒖쐞</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">즉시 검토 우선순위</p>
           </div>
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">IB Review</p>
             <p className="mt-2 font-mono text-2xl font-semibold text-amber-300">{stats.partial}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">?꾩썝??寃???꾨낫</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">위원회 검토 후보</p>
           </div>
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Errors</p>
             <p className="mt-2 font-mono text-2xl font-semibold text-rose-300">{stats.errors}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">?ъ“???먮뒗 ?덉쇅 ?뺤씤</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">구조적 또는 예외 확인</p>
           </div>
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Data Source</p>
@@ -233,7 +233,7 @@ export default function ScannerPage() {
                 Macro Action
               </p>
               <p className="mt-1 text-sm text-[var(--text-primary)]">
-                <span className="font-semibold">{macroTrend.action_level}</span> 쨌 {macroTrend.index_code} 湲곗? 50?쇱꽑 {macroTrend.is_uptrend_50 ? '?곹쉶' : '?섑쉶'} / 200?쇱꽑 {macroTrend.is_uptrend_200 ? '?곹쉶' : '?섑쉶'}
+                <span className="font-semibold">{macroTrend.action_level}</span> 쨌 {macroTrend.index_code} 기준 50일선 {macroTrend.is_uptrend_50 ? '상회' : '하회'} / 200일선 {macroTrend.is_uptrend_200 ? '상회' : '하회'}
               </p>
             </div>
             {(macroTrend.action_level === 'REDUCED' || macroTrend.action_level === 'HALT') && (
@@ -243,14 +243,14 @@ export default function ScannerPage() {
                 className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
               >
                 {showAllMacroResults
-                  ? macroTrend.action_level === 'HALT' ? 'HALT ?쒗븳 蹂닿린' : 'RS 80+ ?곗꽑 蹂닿린'
-                  : macroTrend.action_level === 'HALT' ? '?쒗븳 ?댁젣?섍퀬 ?꾩껜 蹂닿린' : '?꾩껜 蹂닿린'}
+                  ? macroTrend.action_level === 'HALT' ? 'HALT 제한 보기' : 'RS 80+ 우선 보기'
+                  : macroTrend.action_level === 'HALT' ? '제한 해제하고 전체 보기' : '전체 보기'}
               </button>
             )}
           </div>
           {macroTrend.action_level === 'HALT' && !showAllMacroResults && (
             <div className="rounded-2xl border border-rose-400/20 bg-black/10 px-3 py-3 text-sm text-rose-100">
-              ?쒖옣 ?곹깭媛 <strong>HALT</strong> ?대?濡?VCP ?좉퇋 ?꾨낫 ?몄텧怨??ъ뒪罹붿쓣 ?쒗븳?⑸땲?? 湲곗〈 寃곌낵瑜?寃?좏븯?ㅻ㈃ ?곗륫 踰꾪듉?쇰줈 ?꾩껜 蹂닿린瑜??????덉뒿?덈떎.
+              시장 상태가 <strong>HALT</strong> 이므로 VCP 신규 후보 노출과 재스캔을 제한합니다. 기존 결과를 검토하시려면 오른쪽 버튼으로 전체 보기를 할 수 있습니다.
             </div>
           )}
         </div>
@@ -282,7 +282,7 @@ export default function ScannerPage() {
                   : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              ?곸꽭 ?꾪꽣
+              상세 필터
             </button>
           </div>
 
@@ -309,7 +309,7 @@ export default function ScannerPage() {
         {showCustomFilter && (
           <div className="mt-4 grid grid-cols-1 gap-4 rounded-[20px] border border-emerald-400/20 bg-emerald-500/6 p-4 sm:grid-cols-3">
             <div>
-              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">理쒖냼 RS Rating ({customFilters.rsMin}+)</label>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">최소 RS Rating ({customFilters.rsMin}+)</label>
               <input
                 type="range"
                 min="0"
@@ -320,7 +320,7 @@ export default function ScannerPage() {
               />
             </div>
             <div>
-              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">理쒖냼 VCP ?먯닔 ({customFilters.vcpMin}+)</label>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">최소 VCP 점수 ({customFilters.vcpMin}+)</label>
               <input
                 type="range"
                 min="0"
@@ -331,7 +331,7 @@ export default function ScannerPage() {
               />
             </div>
             <div>
-              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">?쇰쿁 理쒕? 嫄곕━ ({customFilters.distMax}%)</label>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">피벗 최대 거리 ({customFilters.distMax}%)</label>
               <input
                 type="range"
                 min="1"
@@ -419,7 +419,7 @@ export default function ScannerPage() {
         <div className="fixed bottom-8 left-1/2 z-50 flex w-[min(92vw,640px)] -translate-x-1/2 items-center justify-between gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Contest Pool</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{selectedTickers.size} / 15 醫낅ぉ ?좏깮</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{selectedTickers.size} / 15 종목 선택</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -428,11 +428,11 @@ export default function ScannerPage() {
               onClick={() => clearSelection()}
               className="text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
             >
-              ?꾩껜 ?댁젣
+              전체 해제
             </button>
             <Link href="/contest">
               <Button icon={<ScanSearch className="h-4 w-4" />} className="rounded-2xl bg-emerald-600 hover:bg-emerald-500">
-                肄섑뀒?ㅽ듃濡??대룞
+                콘테스트로 이동
               </Button>
             </Link>
           </div>
@@ -441,7 +441,7 @@ export default function ScannerPage() {
 
       <FlowCtaButton
         nextPath="/contest"
-        label="理쒓퀬??李⑦듃 ?좎젙?섍린"
+        label="최고의 차트 선정하기"
         subLabel="Step 3: Beauty Contest"
         variant="emerald"
       />
