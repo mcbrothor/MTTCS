@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios from 'axios';
@@ -64,11 +64,11 @@ function PlanPageContent() {
   // C-6: alert() 대신 인라인 에러 상태
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleAnalyze = (ticker: string, exchange: string, totalEquity: number, riskPercent: number) => {
+  const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number) => {
     setChecklist(null);
     setSaveError(null);
     fetchMarketData(ticker, exchange, totalEquity, riskPercent);
-  };
+  }, [fetchMarketData]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -87,7 +87,7 @@ function PlanPageContent() {
     if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker) return;
     autoAnalyzeStarted.current = true;
     handleAnalyze(initialTicker, initialExchange, 0, 1);
-  }, [shouldAutoAnalyze, initialTicker, initialExchange]);
+  }, [handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange]);
 
   const handleSavePlan = async () => {
     if (!analysis || !checklist) return;

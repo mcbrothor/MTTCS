@@ -294,7 +294,107 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* ── 모바일 카드 리스트 ── */}
+      <div className="block md:hidden">
+        {visibleRows.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-500">첫 진입 체결을 기록하면 자동 계산됩니다.</p>
+        ) : (
+          <div className="space-y-2">
+            {visibleRows.map((trade) => {
+              const metrics = trade.metrics;
+              const isExpanded = expandedId === trade.id;
+              const isEditing = editingId === trade.id;
+              const activeTab = activeTabs[trade.id] || 'plan';
+              const realizedPnL = metrics?.realizedPnL ?? trade.result_amount;
+              const pnlPositive = (realizedPnL ?? 0) >= 0;
+
+              return (
+                <div key={trade.id} className="rounded-xl border border-slate-800 bg-slate-900/60">
+                  {/* 카드 헤더 */}
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-4 py-3 text-left"
+                    onClick={() => setExpandedId(isExpanded ? null : trade.id)}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-semibold text-white">{trade.ticker}</span>
+                          <StatusBadge status={trade.status} />
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                          {new Date(trade.created_at).toLocaleDateString('ko-KR')}
+                          {securityNames[trade.ticker] ? ` · ${securityNames[trade.ticker]}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="ml-3 shrink-0 text-right">
+                      <p className={`font-mono text-sm font-semibold ${pnlPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {signedCurrency(realizedPnL, trade.ticker)}
+                      </p>
+                      <p className="mt-0.5 font-mono text-xs text-slate-400">
+                        {typeof metrics?.rMultiple === 'number' ? `${metrics.rMultiple.toFixed(2)}R` : '-'}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* 확장 패널 */}
+                  {isExpanded && (
+                    <div className="border-t border-slate-800 px-4 py-3">
+                      {/* 빠른 액션 */}
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        <TradingViewWidget ticker={trade.ticker} exchange={isKorean(trade.ticker) ? 'KOSPI' : 'NAS'} variant="icon" />
+                        <button
+                          type="button"
+                          onClick={() => handleAddToWatchlist(trade.ticker)}
+                          title="관심 종목 추가"
+                          className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 text-yellow-500"
+                        >
+                          <Star className="h-4 w-4" />
+                        </button>
+                        <ActionLink href={`/history/${trade.id}?market=${isKorean(trade.ticker) ? 'KR' : 'US'}`}>3-Layer</ActionLink>
+                        <ActionButton danger onClick={() => deleteTrade(trade)} disabled={busyId === trade.id}>삭제</ActionButton>
+                      </div>
+
+                      {/* 탭 */}
+                      <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto">
+                        {(['plan', 'executions', 'review', 'rtarget', 'stops'] as DetailTab[]).map((tab) => (
+                          <TabButton key={tab} active={activeTab === tab} onClick={() => setTab(trade.id, tab)}>
+                            {tab === 'plan' ? '계획' : tab === 'executions' ? '체결' : tab === 'review' ? '복기' : tab === 'rtarget' ? 'R-Target' : 'Stop 이력'}
+                          </TabButton>
+                        ))}
+                      </div>
+
+                      {activeTab === 'plan' && (isEditing && draft ? (
+                        <EditPanel draft={draft} busy={busyId === trade.id} onChange={updateDraft}
+                          onCancel={() => { setEditingId(null); setDraft(null); }} onSave={() => saveEdit(trade)} />
+                      ) : (
+                        <StrategyDetail trade={trade} />
+                      ))}
+                      {activeTab === 'executions' && (
+                        <ExecutionsPanel trade={trade} busy={busyId === trade.id}
+                          onSave={(ed) => saveExecution(trade, ed)} onDelete={(ex) => deleteExecution(trade, ex)} />
+                      )}
+                      {activeTab === 'review' && (
+                        <div className="space-y-4">
+                          <ExitReasonDropdown tradeId={trade.id} currentReason={trade.exit_reason}
+                            onUpdated={(reason) => replaceRow({ ...trade, exit_reason: reason })} />
+                          <ReviewPanel trade={trade} busy={busyId === trade.id} onSave={(rd) => saveReview(trade, rd)} />
+                        </div>
+                      )}
+                      {activeTab === 'rtarget' && <ExitRulesPanel tradeId={trade.id} />}
+                      {activeTab === 'stops' && <StopEventsTimeline tradeId={trade.id} initialStopPrice={trade.stoploss_price} />}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── 데스크톱 테이블 ── */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full min-w-[1080px] text-left text-sm text-slate-300">
           <thead className="border-b border-slate-700 bg-slate-800 text-xs uppercase text-slate-400">
             <tr>

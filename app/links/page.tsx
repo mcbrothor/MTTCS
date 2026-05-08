@@ -46,9 +46,19 @@ export default function LinkHubPage() {
   }, []);
 
   useEffect(() => {
-    fetchLinks();
     checkAuth();
-  }, [fetchLinks, checkAuth]);
+  }, [checkAuth]);
+
+  useEffect(() => {
+    if (isAuthenticated === null) return;
+    if (!isAuthenticated) {
+      setLinks([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    fetchLinks();
+  }, [fetchLinks, isAuthenticated]);
 
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`'${title}' 링크를 삭제할까요?`)) return;

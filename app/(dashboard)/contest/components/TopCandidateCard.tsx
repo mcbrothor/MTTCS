@@ -1,7 +1,8 @@
 import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { ContestCandidate } from '@/types';
+import type { ContestCandidate, ContestPromptCandidate } from '@/types';
+import type { ContestStructuredVerdict } from '@/lib/contest-presentation';
 import { verdictRecommendationClass } from '@/lib/contest-ui-utils';
 
 // lucide-react@1.8.0 bundler resolution 이슈 대응
@@ -15,7 +16,7 @@ const { Crown, Medal, Zap } = require('lucide-react') as {
 interface TopCandidateCardProps {
   candidate: ContestCandidate;
   idx: number;
-  verdict: any;
+  verdict: ContestStructuredVerdict;
   busyId: string | null;
   updateCandidate: (candidate: ContestCandidate, invested: boolean) => void;
 }
@@ -28,6 +29,10 @@ const TopCandidateCard: React.FC<TopCandidateCardProps> = ({
   updateCandidate,
 }) => {
   const isSelected = candidate.actual_invested;
+  const snapshot = candidate.snapshot && typeof candidate.snapshot === 'object'
+    ? candidate.snapshot as Partial<ContestPromptCandidate>
+    : null;
+  const verdictTitle = verdict.recommendation || verdict.overall || 'MANUAL';
 
   return (
     <div className={`group relative overflow-hidden rounded-3xl border transition-all duration-500 hover:scale-[1.02] ${
@@ -39,14 +44,14 @@ const TopCandidateCard: React.FC<TopCandidateCardProps> = ({
         <div className="absolute -right-6 -top-6 h-20 w-20 rotate-12 bg-amber-500/10 blur-2xl" />
       )}
       
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className={`flex h-6 w-6 items-center justify-center rounded-lg bg-slate-800 text-[10px] font-black text-slate-400 ${idx === 0 ? 'bg-amber-500/20 text-amber-500' : ''}`}>
                 {idx + 1}
               </span>
-              <p className="font-mono text-2xl font-black tracking-tighter text-white group-hover:text-emerald-400 transition-colors">
+              <p className="font-mono text-xl font-black tracking-tighter text-white transition-colors group-hover:text-emerald-400 sm:text-2xl">
                 {candidate.ticker}
               </p>
             </div>
@@ -55,32 +60,32 @@ const TopCandidateCard: React.FC<TopCandidateCardProps> = ({
           {idx === 0 ? <Crown className="h-6 w-6 text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]" /> : <Medal className="h-6 w-6 text-slate-600" />}
         </div>
 
-        <div className="mt-8 space-y-4">
+        <div className="mt-4 space-y-4 sm:mt-8">
           <div className={`rounded-2xl border p-4 transition-all ${verdictRecommendationClass(verdict.recommendation)}`}>
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black uppercase tracking-widest opacity-70">MTN Verdict</span>
               <Zap className="h-3 w-3" />
             </div>
-            <p className="mt-1 text-lg font-black tracking-tight">{verdict.title}</p>
+            <p className="mt-1 text-lg font-black tracking-tight">{verdictTitle}</p>
           </div>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl bg-slate-900/50 p-3 border border-slate-800/50">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">VCP Grade</p>
-              <p className="mt-1 text-sm font-black text-white">{(candidate.snapshot as any)?.vcp_status || 'N/A'}</p>
+              <p className="mt-1 text-sm font-black text-white">{snapshot?.vcp_status || 'N/A'}</p>
             </div>
             <div className="rounded-xl bg-slate-900/50 p-3 border border-slate-800/50">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">RS Rating</p>
-              <p className="mt-1 text-sm font-black text-white">{(candidate.snapshot as any)?.rs_rating || 'N/A'}</p>
+              <p className="mt-1 text-sm font-black text-white">{snapshot?.rs_rating || 'N/A'}</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-4 sm:mt-8">
           <button
             onClick={() => updateCandidate(candidate, !isSelected)}
             disabled={busyId === candidate.id}
-            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-xs font-black transition-all active:scale-95 ${
+            className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black transition-all active:scale-95 sm:py-4 ${
               isSelected
                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                 : 'bg-slate-800 text-slate-300 hover:bg-slate-700'

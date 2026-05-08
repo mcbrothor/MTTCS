@@ -11,13 +11,19 @@ interface FlowBannerProps {
   className?: string;
 }
 
+type MotionDivProps = React.HTMLAttributes<HTMLDivElement> & {
+  layoutId?: string;
+  transition?: unknown;
+};
+
+const MotionDiv = motion.div as React.ComponentType<MotionDivProps>;
+
 export default function FlowBanner({ currentKey, className = '' }: FlowBannerProps) {
   const pathname = usePathname();
   const activeStep = currentKey
     ? FLOW_STEPS.find((step) => step.key === currentKey) ?? FLOW_STEPS[0]
     : getActiveFlowStep(pathname);
   const activeIndex = FLOW_STEPS.findIndex((step) => step.key === activeStep.key);
-  const MotionDiv = motion.div as any;
 
   return (
     <div className={`overflow-x-auto rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)]/40 px-3 py-3 shadow-[var(--panel-shadow)] backdrop-blur-xl ${className}`}>
@@ -74,4 +80,3 @@ export default function FlowBanner({ currentKey, className = '' }: FlowBannerPro
     </div>
   );
 }
-

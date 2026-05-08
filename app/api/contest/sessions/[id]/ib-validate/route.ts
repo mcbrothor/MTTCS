@@ -7,6 +7,10 @@ import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } fro
 // IB 프롬프트는 대형 컨텍스트 + 긴 마크다운 리포트 생성 필요 → 충분한 실행 시간 확보
 export const maxDuration = 120;
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 /**
  * 응답에서 첫 ```json ... ``` 펜스 블록을 메타데이터로 추출하고,
  * 그 이후의 모든 텍스트(마크다운 본문)를 report_markdown으로 반환.
@@ -114,8 +118,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         candidate_count: candidates.length,
       },
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }
 
@@ -190,8 +194,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         ib_analysis: ibAnalysis,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('IB Validation Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

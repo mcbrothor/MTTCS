@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { formatScannerTelegramMessage } from '../lib/scanner-telegram.ts';
+import { chunkTelegramMessage } from '../lib/telegram.ts';
 
 {
   const message = formatScannerTelegramMessage({
@@ -33,6 +34,14 @@ import { formatScannerTelegramMessage } from '../lib/scanner-telegram.ts';
   assert.match(message, /O'Neil CANSLIM/);
   assert.match(message, /TIER\\_1|TIER_1/);
   assert.match(message, /MSFT/);
+}
+
+{
+  const longMessage = Array.from({ length: 80 }, (_, index) => `${index + 1}. ${'A'.repeat(90)}`).join('\n');
+  const chunks = chunkTelegramMessage(longMessage, 1000);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 1000));
+  assert.equal(chunks.join('\n'), longMessage);
 }
 
 console.log('scanner telegram tests passed');

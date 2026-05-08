@@ -31,11 +31,12 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
       message: 'Retention policy applied.' 
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[Cron] Error in purge-metrics:', err);
     return NextResponse.json({ 
       success: false, 
-      error: err.message 
+      error: message 
     }, { status: 500 });
   }
 }

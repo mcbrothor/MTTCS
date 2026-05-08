@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { HelpCircle } from 'lucide-react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronUp } from 'lucide-react';
 
 interface HelpButtonProps {
   label: string;

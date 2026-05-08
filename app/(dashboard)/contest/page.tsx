@@ -442,7 +442,7 @@ function ContestPageContent() {
   useEffect(() => {
     if (activeSession?.ib_analysis && typeof activeSession.ib_analysis === 'object') setIbAnalysis(activeSession.ib_analysis as IbCommitteeAnalysis);
     else setIbAnalysis(null);
-  }, [activeSession?.id]);
+  }, [activeSession?.id, activeSession?.ib_analysis]);
 
   const rankedResults = useMemo(() => (
     contestSource === 'canslim'
@@ -582,7 +582,7 @@ function ContestPageContent() {
       });
       await loadSessions(activeSession?.id);
     } catch (err: unknown) { setError(errorMessage(err, 'Failed to update candidate')); } finally { setBusyId(null); }
-  }, [activeCandidates.length, activeSession?.id, loadSessions]);
+  }, [activeCandidates, activeSession?.id, loadSessions]);
 
   const addCandidateToWatchlist = useCallback(async (candidate: ContestCandidate) => {
     const verdict = getContestStructuredVerdict(candidate);
@@ -775,7 +775,7 @@ function ContestPageContent() {
       {step === 'analyzing' && <AnalyzingView llmSaveMessage={llmSaveMessage} />}
       {step === 'result' && (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeCandidates.slice(0, 3).map((c, i) => (
               <TopCandidateCard key={c.id} candidate={c} idx={i} verdict={getContestStructuredVerdict(c)} busyId={busyId} updateCandidate={updateCandidate} />
             ))}

@@ -1,12 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, BarChart3, Globe, RefreshCw, AlertCircle } from 'lucide-react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { TrendingUp, Globe, RefreshCw, AlertCircle } from 'lucide-react';
 import TradingViewAdvancedChart from '../ui/TradingViewAdvancedChart';
 import LightweightChart from './LightweightChart';
 import { toTradingViewSymbol } from '../ui/TradingViewWidget';
+import { useIsMobile } from '@/lib/hooks/useViewport';
 
 type ChartSource = 'tradingview' | 'naver' | 'mtn';
+
+interface PriceHistoryPoint {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+interface ChartPoint {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
 
 interface AnalysisChartContainerProps {
   ticker: string;
@@ -23,20 +40,18 @@ export default function AnalysisChartContainer({
   stopLossPrice,
   initialSource = 'tradingview'
 }: AnalysisChartContainerProps) {
+  const isMobile = useIsMobile();
   const symbol = toTradingViewSymbol(ticker, exchange);
   const isKrx = symbol.startsWith('KRX:');
-  const [source, setSource] = useState<ChartSource>(isKrx && initialSource === 'tradingview' ? 'naver' : initialSource);
-  const [priceData, setPriceData] = useState<any[]>([]);
+  const resolvedInitial: ChartSource = (isMobile && initialSource === 'tradingview')
+    ? (pivotPrice ? 'mtn' : 'naver')
+    : (isKrx && initialSource === 'tradingview' ? 'naver' : initialSource);
+  const [source, setSource] = useState<ChartSource>(resolvedInitial);
+  const [priceData, setPriceData] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (source === 'mtn' && priceData.length === 0) {
-      fetchPriceData();
-    }
-  }, [source, ticker]);
-
-  const fetchPriceData = async () => {
+  const fetchPriceData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -45,12 +60,13 @@ export default function AnalysisChartContainer({
       const yahooTicker = isKR ? `${ticker}.${exchange === 'KOSPI' ? 'KS' : 'KQ'}` : ticker;
 
       const res = await fetch(`/api/price-history/${yahooTicker}`);
-      const payload = await res.json();
+      const payload = await res.json() as { data?: PriceHistoryPoint[]; error?: string };
       
       if (payload.error) throw new Error(payload.error);
+      if (!Array.isArray(payload.data)) throw new Error('Invalid price history response');
       
       // LightweightChart format: { time: 'YYYY-MM-DD', open, high, low, close }
-      const formatted = payload.data.map((d: any) => ({
+      const formatted = payload.data.map((d) => ({
         time: d.date,
         open: d.open,
         high: d.high,
@@ -65,7 +81,13 @@ export default function AnalysisChartContainer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [exchange, ticker]);
+
+  useEffect(() => {
+    if (source === 'mtn' && priceData.length === 0) {
+      fetchPriceData();
+    }
+  }, [fetchPriceData, priceData.length, source]);
 
   const naverUrl = isKrx
     ? `https://finance.naver.com/item/fchart.naver?code=${ticker}`
@@ -82,10 +104,10 @@ export default function AnalysisChartContainer({
             icon={<TrendingUp className="h-3.5 w-3.5" />}
             label="MTN Pro"
           />
-          {!isKrx && (
-            <SourceButton 
-              active={source === 'tradingview'} 
-              onClick={() => setSource('tradingview')} 
+          {!isKrx && !isMobile && (
+            <SourceButton
+              active={source === 'tradingview'}
+              onClick={() => setSource('tradingview')}
               icon={<TrendingUp className="h-3.5 w-3.5" />}
               label="TradingView"
             />

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { X, ExternalLink, TrendingUp } from 'lucide-react';
-import TradingViewAdvancedChart from './TradingViewAdvancedChart';
+import { TrendingUp } from 'lucide-react';
 import AnalysisChartContainer from '../analysis/AnalysisChartContainer';
+import { useIsMobile } from '@/lib/hooks/useViewport';
 
 // TradingView 심볼 변환
 export function toTradingViewSymbol(ticker: string, exchange: string): string {
@@ -18,6 +18,7 @@ export function toTradingViewSymbol(ticker: string, exchange: string): string {
 }
 
 // 네이버 금융 URL 변환
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function toNaverUrl(ticker: string, exchange: string): string {
   // 한국 종목: 6자리 코드
   if (/^\d{6}$/.test(ticker)) {
@@ -34,6 +35,7 @@ function toNaverUrl(ticker: string, exchange: string): string {
   return `https://finance.naver.com/world/sise.naver?symbol=${ticker}.${suffix}`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type ChartSource = 'tradingview' | 'naver';
 
 interface TradingViewModalProps {
@@ -51,9 +53,6 @@ function TradingViewModal({
   stopLossPrice, 
   onClose 
 }: TradingViewModalProps) {
-  const symbol = toTradingViewSymbol(ticker, exchange);
-  const tvExternalUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol)}`;
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
@@ -78,6 +77,7 @@ function TradingViewModal({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function NaverChartView({
   ticker,
   naverUrl,
@@ -133,15 +133,38 @@ interface TradingViewWidgetProps {
   className?: string;
 }
 
-export default function TradingViewWidget({ 
-  ticker, 
-  exchange, 
+export default function TradingViewWidget({
+  ticker,
+  exchange,
   pivotPrice,
   stopLossPrice,
-  variant = 'icon', 
-  className = '' 
+  variant = 'icon',
+  className = ''
 }: TradingViewWidgetProps) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const tvSymbol = toTradingViewSymbol(ticker, exchange);
+  const tvExternalUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`;
+
+  const btnClass = `inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition-all hover:border-emerald-500/50 hover:bg-slate-700 hover:text-emerald-300 ${className}`;
+  const label = variant === 'text' ? (pivotPrice ? 'Pro 차트' : '차트') : null;
+  const icon = pivotPrice ? <TrendingUp className="h-3 w-3 text-amber-400" /> : <TrendingUp className="h-3 w-3" />;
+
+  if (isMobile) {
+    return (
+      <a
+        href={tvExternalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={`${ticker} TradingView`}
+        onClick={(e) => e.stopPropagation()}
+        className={btnClass}
+      >
+        {icon}
+        {label}
+      </a>
+    );
+  }
 
   return (
     <>
@@ -152,19 +175,19 @@ export default function TradingViewWidget({
           setOpen(true);
         }}
         title={`${ticker} 차트 보기`}
-        className={`inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300 transition-all hover:border-emerald-500/50 hover:bg-slate-700 hover:text-emerald-300 ${className}`}
+        className={btnClass}
       >
-        {pivotPrice ? <TrendingUp className="h-3 w-3 text-amber-400" /> : <TrendingUp className="h-3 w-3" />}
-        {variant === 'text' && (pivotPrice ? 'Pro 차트' : '차트')}
+        {icon}
+        {label}
       </button>
 
       {open && (
-        <TradingViewModal 
-          ticker={ticker} 
-          exchange={exchange} 
+        <TradingViewModal
+          ticker={ticker}
+          exchange={exchange}
           pivotPrice={pivotPrice}
           stopLossPrice={stopLossPrice}
-          onClose={() => setOpen(false)} 
+          onClose={() => setOpen(false)}
         />
       )}
     </>

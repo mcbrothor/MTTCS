@@ -13,6 +13,15 @@ interface FlowCtaButtonProps {
   variant?: 'rose' | 'emerald' | 'indigo';
 }
 
+type MotionDivProps = React.HTMLAttributes<HTMLDivElement> & {
+  initial?: unknown;
+  animate?: unknown;
+  whileHover?: unknown;
+  whileTap?: unknown;
+};
+
+const MotionDiv = motion.div as React.ComponentType<MotionDivProps>;
+
 export default function FlowCtaButton({ 
   nextPath, 
   label, 
@@ -24,8 +33,6 @@ export default function FlowCtaButton({
     emerald: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20',
     indigo: 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20',
   };
-
-  const MotionDiv = motion.div as any;
 
   return (
     <div className="fixed bottom-8 right-8 z-[50]">

@@ -2,13 +2,14 @@ import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { ContestCandidate } from '@/types';
+import type { ContestStructuredVerdict } from '@/lib/contest-presentation';
 import { verdictRecommendationClass } from '@/lib/contest-ui-utils';
 
 interface CandidateResultTableProps {
   candidates: ContestCandidate[];
   busyId: string | null;
   updateCandidate: (candidate: ContestCandidate, invested: boolean) => void;
-  getContestStructuredVerdict: (candidate: ContestCandidate) => any;
+  getContestStructuredVerdict: (candidate: ContestCandidate) => ContestStructuredVerdict;
 }
 
 const CandidateResultTable: React.FC<CandidateResultTableProps> = ({
@@ -27,11 +28,11 @@ const CandidateResultTable: React.FC<CandidateResultTableProps> = ({
         <table className="w-full text-left text-sm text-slate-300">
           <thead className="bg-slate-900/50 text-[10px] uppercase font-black tracking-widest text-slate-500">
             <tr>
-              <th className="px-6 py-4">순위</th>
-              <th className="px-6 py-4">종목</th>
-              <th className="px-6 py-4">MTN 1차 신호</th>
-              <th className="px-6 py-4">핵심 리스크</th>
-              <th className="px-6 py-4 text-right">계획 후보</th>
+              <th className="px-4 py-3 sm:px-6 sm:py-4">순위</th>
+              <th className="px-4 py-3 sm:px-6 sm:py-4">종목</th>
+              <th className="px-4 py-3 sm:px-6 sm:py-4">MTN 신호</th>
+              <th className="hidden px-6 py-4 md:table-cell">핵심 리스크</th>
+              <th className="px-4 py-3 text-right sm:px-6 sm:py-4">계획</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
@@ -39,18 +40,18 @@ const CandidateResultTable: React.FC<CandidateResultTableProps> = ({
               const verdict = getContestStructuredVerdict(candidate);
               return (
                 <tr key={candidate.id} className={`group transition-colors hover:bg-slate-900/40 ${candidate.actual_invested ? 'bg-emerald-500/[0.02]' : ''}`}>
-                  <td className="px-6 py-4">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-lg font-mono font-bold ${(candidate.llm_rank ?? 99) <= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+                  <td className="px-4 py-3 sm:px-6 sm:py-4">
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg font-mono text-xs font-bold sm:h-8 sm:w-8 ${(candidate.llm_rank ?? 99) <= 3 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
                       {candidate.llm_rank || '-'}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 sm:px-6 sm:py-4">
                     <p className="font-bold text-white">{candidate.ticker}</p>
                     <p className="text-[10px] text-slate-500 uppercase">{candidate.name || candidate.exchange}</p>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3 sm:px-6 sm:py-4">
                     <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${verdictRecommendationClass(verdict.recommendation)}`}>
                           {verdict.recommendation || '-'}
                         </span>
@@ -67,10 +68,10 @@ const CandidateResultTable: React.FC<CandidateResultTableProps> = ({
                       )}
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="hidden px-6 py-4 md:table-cell">
                     <p className="max-w-xs truncate text-xs text-slate-400">{verdict.keyRisk || '-'}</p>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-3 text-right sm:px-6 sm:py-4">
                     <button
                       onClick={() => updateCandidate(candidate, !candidate.actual_invested)}
                       disabled={busyId === candidate.id}

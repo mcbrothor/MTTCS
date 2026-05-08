@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronUp, Globe, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { ChevronDown, ChevronUp, Globe, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 

@@ -174,7 +174,7 @@ export default function HistoryTradeDetailPage() {
       mounted = false;
       controller.abort();
     };
-  }, []);
+  }, [tradeId]);
 
   const trade = useMemo(() => trades.find((item) => item.id === tradeId) ?? null, [tradeId, trades]);
   const fallbackMarket = trade && isKorean(trade.ticker) ? 'KR' : 'US';

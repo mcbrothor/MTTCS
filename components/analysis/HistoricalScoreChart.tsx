@@ -2,8 +2,6 @@
 
 import React, { useEffect, useState, useMemo, memo } from 'react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -51,9 +49,10 @@ function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
 
         if (supabaseError) throw supabaseError;
         setData(metrics || []);
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to fetch historical metrics';
         console.error('Failed to fetch historical metrics:', err);
-        setError(err.message);
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -95,6 +94,7 @@ function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5 shadow-xl">
+      {error && <p className="mb-3 text-xs text-rose-300">{error}</p>}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex flex-col">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">RS Strength History</h3>

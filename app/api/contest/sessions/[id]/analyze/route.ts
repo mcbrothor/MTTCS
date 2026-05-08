@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { runRuleEngine, RULE_ENGINE_PROVIDER, RULE_ENGINE_VERSION } from '@/lib/ai/contest-rule-engine';
 import { supabaseServer } from '@/lib/supabase/server';
 import { fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
+import type { BeautyContestSession, ContestCandidate, ContestMarket } from '@/types';
+
+type ContestCandidateRow = Pick<ContestCandidate, 'id' | 'ticker' | 'snapshot' | 'user_rank' | 'linked_trade_id'> & Partial<ContestCandidate>;
+type ContestSessionRow = BeautyContestSession & { candidates?: ContestCandidateRow[] };
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
+}
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: sessionId } = await params;
@@ -18,8 +26,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: '세션을 찾을 수 없습니다.' }, { status: 404 });
     }
 
+    const sessionRow = session as ContestSessionRow;
     const candidates: Array<{ id: string; ticker: string; snapshot: Record<string, unknown> | null; user_rank: number }> =
-      (session.candidates ?? []).map((c: any) => ({
+      (sessionRow.candidates ?? []).map((c) => ({
         id: c.id,
         ticker: c.ticker,
         snapshot: (c.snapshot ?? null) as Record<string, unknown> | null,
@@ -28,7 +37,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     // 2a. stock_metrics에서 최신 RS 데이터를 가져와 스냅샷 보강
     //     (snapshot 저장 당시 RS가 null이었던 경우를 복구)
-    const market = ((session as any).market ?? 'US') as 'US' | 'KR';
+    const market = (sessionRow.market === 'KR' || sessionRow.market === 'KR_KOSPI' || sessionRow.market === 'KR_KOSDAQ' ? 'KR' : 'US') as Extract<ContestMarket, 'US' | 'KR'>;
     const rsMap = await fetchLatestStockMetrics(candidates.map(c => c.ticker), market);
     const hasPositiveNum = (v: unknown) => typeof v === 'number' && isFinite(v) && v > 0;
     const enriched = candidates.map(c => {
@@ -66,7 +75,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
       if (!candidateId) continue;
 
-      const originalCandidate = (session.candidates ?? []).find((c: any) => c.id === candidateId);
+      const originalCandidate = (sessionRow.candidates ?? []).find((c) => c.id === candidateId);
       if (originalCandidate) {
         originalCandidate.llm_rank = ranking.rank;
         originalCandidate.llm_comment = ranking.comment || ranking.key_strength;
@@ -103,11 +112,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     // 5. 연결된 거래(trade)에 Snapshot 동기화 (BUG-003)
     const { buildContestSnapshot, buildLlmVerdict } = await import('@/lib/finance/core/snapshot');
-    const linkedCandidates = (session.candidates || []).filter((c: any) => Boolean(c.linked_trade_id));
+    const linkedCandidates = (sessionRow.candidates || []).filter((c) => Boolean(c.linked_trade_id));
     for (const candidate of linkedCandidates) {
       await supabaseServer.from('trades').update({
-        contest_snapshot: buildContestSnapshot(session as any, candidate as any),
-        llm_verdict: buildLlmVerdict(session as any, candidate as any),
+        contest_snapshot: buildContestSnapshot(sessionRow, candidate as ContestCandidate),
+        llm_verdict: buildLlmVerdict(sessionRow, candidate as ContestCandidate),
         updated_at: new Date().toISOString(),
       }).eq('id', candidate.linked_trade_id);
     }
@@ -122,8 +131,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         fallback_chain: [],
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Rule Engine Analysis Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

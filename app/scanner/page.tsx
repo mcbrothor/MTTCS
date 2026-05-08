@@ -13,6 +13,7 @@ import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';
 import MarketBanner from '@/components/ui/MarketBanner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import { useIsMobile } from '@/lib/hooks/useViewport';
 
 const MACRO_TONE = {
   HALT: 'border-rose-400/24 bg-rose-500/10 text-rose-50',
@@ -67,6 +68,7 @@ export default function ScannerPage() {
     sendTelegramSummary,
   } = useScanner();
 
+  const isMobile = useIsMobile();
   const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
   const scanBlocked = macroTrend?.action_level === 'HALT';
   return (
@@ -152,22 +154,24 @@ export default function ScannerPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                    View Mode
-                    <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
-                      {(['web', 'app'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setViewMode(mode)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
-                            viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          {mode === 'web' ? 'TABLE' : 'CARDS'}
-                        </button>
-                      ))}
+                  {!isMobile && (
+                    <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
+                      View Mode
+                      <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
+                        {(['web', 'app'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setViewMode(mode)}
+                            className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
+                              viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {mode === 'web' ? 'TABLE' : 'CARDS'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="flex items-end">
                     {isScanning ? (
                       <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
@@ -373,7 +377,7 @@ export default function ScannerPage() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {viewMode === 'web' ? (
+            {!isMobile && viewMode === 'web' ? (
               <ScannerTable
                 results={filteredResults}
                 selectedTickers={selectedTickers}

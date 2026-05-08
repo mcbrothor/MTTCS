@@ -29,8 +29,18 @@ interface IbCandidateMeta {
   price_target_12m?: string | null;
 }
 
+interface IbCommitteeAnalysis {
+  committee_consensus?: {
+    top3_tickers?: string[];
+    mtn_alignment?: string;
+    regime_label?: string;
+  };
+  candidates?: IbCandidateMeta[];
+  report_markdown?: string;
+}
+
 interface IbAnalysisPanelProps {
-  ibAnalysis: any;
+  ibAnalysis: IbCommitteeAnalysis | null;
   ibBusy: boolean;
   ibError: string | null;
   ibPromptOpen: boolean;
@@ -60,7 +70,7 @@ function candidateName(activeSession: BeautyContestSession | null, ticker: strin
   return sessionCandidates.find((candidate) => candidate.ticker === ticker)?.name || null;
 }
 
-function reportText(ibAnalysis: any) {
+function reportText(ibAnalysis: IbCommitteeAnalysis | null) {
   return typeof ibAnalysis?.report_markdown === 'string' && ibAnalysis.report_markdown.trim()
     ? ibAnalysis.report_markdown.trim()
     : '리포트 내용이 없습니다.';

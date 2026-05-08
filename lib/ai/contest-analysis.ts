@@ -20,10 +20,14 @@ const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 
 export interface ContestAnalysisResult {
   rawResponse: string;
-  analysis: any;
+  analysis: unknown;
   providerUsed: string;
   modelUsed: string;
   fallbackChain: AiFallbackAttempt[];
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function runContestAnalysis(prompt: string): Promise<ContestAnalysisResult> {
@@ -42,14 +46,15 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
         modelUsed: GEMINI_PRIMARY_MODEL,
         fallbackChain
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = errorMessage(error);
       fallbackChain.push({ 
         provider: 'gemini', 
         model: GEMINI_PRIMARY_MODEL, 
         status: 'failed', 
-        message: error.message 
+        message 
       });
-      console.warn('Gemini analysis failed, falling back to Groq:', error.message);
+      console.warn('Gemini analysis failed, falling back to Groq:', message);
     }
   } else {
     fallbackChain.push({ provider: 'gemini', model: GEMINI_PRIMARY_MODEL, status: 'skipped', message: 'API Key missing' });
@@ -73,14 +78,15 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
         modelUsed: GROQ_MODEL,
         fallbackChain
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = errorMessage(error);
       fallbackChain.push({ 
         provider: 'groq', 
         model: GROQ_MODEL, 
         status: 'failed', 
-        message: error.message 
+        message 
       });
-      console.warn('Groq analysis failed, falling back to Cerebras:', error.message);
+      console.warn('Groq analysis failed, falling back to Cerebras:', message);
     }
   } else {
     fallbackChain.push({ provider: 'groq', model: GROQ_MODEL, status: 'skipped', message: 'API Key missing' });
@@ -104,12 +110,12 @@ export async function runContestAnalysis(prompt: string): Promise<ContestAnalysi
         modelUsed: CEREBRAS_MODEL,
         fallbackChain
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       fallbackChain.push({ 
         provider: 'cerebras', 
         model: CEREBRAS_MODEL, 
         status: 'failed', 
-        message: error.message 
+        message: errorMessage(error) 
       });
     }
   } else {

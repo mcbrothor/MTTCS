@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, IPriceLine, CandlestickSeries, ISeriesApi } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, IPriceLine, CandlestickSeries } from 'lightweight-charts';
+import type { CandlestickData } from 'lightweight-charts';
 
 interface LightweightChartProps {
   data: { time: string; open: number; high: number; low: number; close: number }[];
@@ -48,7 +49,7 @@ export default function LightweightChart({
       wickDownColor: '#f43f5e',
     });
 
-    candlestickSeries.setData(data as any);
+    candlestickSeries.setData(data as CandlestickData[]);
 
     // Pivot Line
     if (pivotPrice) {
