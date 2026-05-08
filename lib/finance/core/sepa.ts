@@ -49,6 +49,34 @@ function evaluableCriterion(
   );
 }
 
+// 21~25일 구간의 MA200 시계열에 대한 단순 선형회귀 기울기 (>0이면 우상향).
+// 단일 두 점 비교는 노이즈 한 점에 fail이 결정되는 문제가 있어 회귀 기반으로 변경.
+function ma200SlopeUptrend(data: OHLCData[]): { canEvaluate: boolean; uptrend: boolean; slopePerDay: number | null } {
+  const window = 25;
+  const required = 200 + window;
+  if (data.length < required) return { canEvaluate: false, uptrend: false, slopePerDay: null };
+
+  const series: number[] = [];
+  for (let offset = window - 1; offset >= 0; offset -= 1) {
+    const slice = data.slice(0, data.length - offset);
+    const ma = calculateMovingAverage(slice, 200);
+    if (ma === null) return { canEvaluate: false, uptrend: false, slopePerDay: null };
+    series.push(ma);
+  }
+
+  const n = series.length;
+  const xMean = (n - 1) / 2;
+  const yMean = series.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    num += (i - xMean) * (series[i] - yMean);
+    den += (i - xMean) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  return { canEvaluate: true, uptrend: slope > 0, slopePerDay: round(slope) };
+}
+
 function calculateRsProxy(data: OHLCData[], benchmarkData?: OHLCData[]) {
   const rs = calculateRsMetrics(data, benchmarkData);
   return {
@@ -94,8 +122,9 @@ function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
   }
 
   const items: string[] = [];
+  // CAN SLIM 임계와 정렬: EPS 25%+, 매출 15%+, ROE 17%+, 부채 40%-
   if (fundamentals.epsGrowthPct !== null) {
-    const ok = fundamentals.epsGrowthPct >= 20;
+    const ok = fundamentals.epsGrowthPct >= 25;
     items.push(`EPS ${fundamentals.epsGrowthPct}% ${ok ? '✅' : '⚠️'}`);
   } else {
     items.push('EPS —');
@@ -130,7 +159,7 @@ function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
     'EPS/매출/ROE/부채 기본 필터',
     'info',
     actual,
-    'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
+    'EPS 25%+, 매출 15%+, ROE 17%+, 부채 40%-',
     sourceNote
   );
 }
@@ -153,6 +182,7 @@ export function analyzeSepa(
   const ma150 = calculateMovingAverage(data, 150);
   const ma200 = calculateMovingAverage(data, 200);
   const ma200PrevMonth = data.length >= 221 ? calculateMovingAverage(data.slice(0, -21), 200) : null;
+  const ma200Slope = ma200SlopeUptrend(data);
   const high52Week = data.length >= 252 ? round(Math.max(...data.slice(-252).map((d) => d.high))) : null;
   const distanceFromHigh52WeekPct =
     lastClose && high52Week ? round(((high52Week - lastClose) / high52Week) * 100) : null;
@@ -209,25 +239,35 @@ export function analyzeSepa(
       undefined,
       true
     ),
-    evaluableCriterion(
-      'ma_alignment',
-      '50일선 > 150일선 > 200일선',
-      ma50 && ma150 && ma200 ? `${ma50} / ${ma150} / ${ma200}` : null,
-      ma50 !== null && ma150 !== null && ma200 !== null,
-      Boolean(ma50 !== null && ma150 !== null && ma200 !== null && ma50 > ma150 && ma150 > ma200),
-      'MA50 > MA150 > MA200 정배열',
-      '상승 추세의 정렬 상태를 확인합니다.',
-      undefined,
-      true
-    ),
+    (() => {
+      // 부동소수점 라운딩으로 인한 동률 fail 방지: 0.05% (5bp) epsilon
+      const eps = ma200 !== null ? Math.max(ma200 * 0.0005, 0.0001) : 0;
+      const aligned = ma50 !== null && ma150 !== null && ma200 !== null
+        && ma50 > ma150 - eps && ma150 > ma200 - eps;
+      return evaluableCriterion(
+        'ma_alignment',
+        '50일선 > 150일선 > 200일선',
+        ma50 && ma150 && ma200 ? `${ma50} / ${ma150} / ${ma200}` : null,
+        ma50 !== null && ma150 !== null && ma200 !== null,
+        aligned,
+        'MA50 > MA150 > MA200 정배열',
+        '상승 추세의 정렬 상태를 확인합니다.',
+        undefined,
+        true
+      );
+    })(),
     evaluableCriterion(
       'ma200_uptrend',
       '200일선 상승',
-      ma200 && ma200PrevMonth ? `${ma200} / 1개월 전 ${ma200PrevMonth}` : null,
-      ma200 !== null && ma200PrevMonth !== null,
-      Boolean(ma200 !== null && ma200PrevMonth !== null && ma200 > ma200PrevMonth),
-      '200일선이 최소 1개월 전보다 높음',
-      '장기 추세가 우상향인지 확인합니다.',
+      ma200Slope.canEvaluate
+        ? `25일 회귀 기울기 ${ma200Slope.slopePerDay}/일${ma200PrevMonth ? `, MA200 ${ma200} / 1M전 ${ma200PrevMonth}` : ''}`
+        : ma200 && ma200PrevMonth ? `${ma200} / 1개월 전 ${ma200PrevMonth}` : null,
+      ma200Slope.canEvaluate || (ma200 !== null && ma200PrevMonth !== null),
+      ma200Slope.canEvaluate
+        ? ma200Slope.uptrend
+        : Boolean(ma200 !== null && ma200PrevMonth !== null && ma200 > ma200PrevMonth),
+      '200일선 25일 회귀 기울기 > 0',
+      '단일 시점 비교의 노이즈 민감성을 줄이기 위해 25일 선형회귀 기울기로 우상향 여부를 판정합니다.',
       undefined,
       true
     ),
@@ -254,31 +294,35 @@ export function analyzeSepa(
       true
     ),
     (() => {
-      // RS pass/fail 판정은 유니버스 전체 백분위 기반 DB 배치값일 때만 수행.
-      // benchmarkRelativeScore(proxy)는 전체 랭킹 없이 단일 벤치마크 대비 수익률이라
-      // pass/fail 기준으로 쓰면 상승장 전종목 통과 / 하락장 전종목 탈락 오류 발생.
-      const hasRealRs = options.preCalculatedRs !== undefined &&
+      // RS pass/fail 판정은 유니버스 백분위 기반 점수일 때만 수행 (DB_BATCH 또는 UNIVERSE).
+      // benchmarkRelativeScore(BENCHMARK_PROXY)는 단일 벤치마크 대비 수익률이라
+      // pass/fail 기준으로 쓰면 상승장 전종목 통과/하락장 전종목 탈락 오류 발생 → 'info'.
+      // RS는 미너비니 8개 trend template의 #8 항목이므로 DB/UNIVERSE 평가가 가능하면 isCore 처리.
+      const hasRealRs = options.preCalculatedRs !== undefined && options.preCalculatedRs !== null &&
         (options.rsSourceHint === 'DB_BATCH' || options.rsSourceHint === 'UNIVERSE');
-      const rsValue = hasRealRs
-        ? options.preCalculatedRs!
-        : rs.rsScore;
-
-      return criterion(
-        'rs_rating',
-        '상대강도 RS',
-        rsValue !== null
-          ? hasRealRs ? passFail(rsValue >= 70) : 'info'
-          : 'info',
-        rsValue !== null
-          ? hasRealRs
-            ? `${rsValue}점 (유니버스 백분위 공식 RS)`
-            : `${rsValue}점 (참고 — ${benchmarkLabel} 대비 상대수익률 추정)`
-          : '데이터 없음',
-        '70점 이상 (유니버스 백분위 또는 벤치마크 상대수익률)',
-        hasRealRs
-          ? '데이터베이스에서 조회한 유니버스 전체 백분위 기준 공식 RS Rating입니다.'
-          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률 추정치를 기준으로 판정합니다. (공식 RS 조회 시 갱신됨)`
-      );
+      const rsValue = hasRealRs ? options.preCalculatedRs! : rs.rsScore;
+      const status: AssessmentStatus = rsValue === null
+        ? 'info'
+        : hasRealRs
+          ? passFail(rsValue >= 70)
+          : 'info';
+      const labelSuffix = hasRealRs
+        ? options.rsSourceHint === 'DB_BATCH'
+          ? '유니버스 백분위 공식 RS'
+          : '실시간 스캔 유니버스 백분위 RS'
+        : `참고 — ${benchmarkLabel} 대비 상대수익률 추정`;
+      return {
+        id: 'rs_rating',
+        label: '상대강도 RS',
+        status,
+        actual: rsValue !== null ? `${rsValue}점 (${labelSuffix})` : '데이터 없음',
+        threshold: hasRealRs ? '70점 이상 (유니버스 백분위)' : '70점 이상 (DB/UNIVERSE 점수 도착 시 평가)',
+        description: hasRealRs
+          ? '유니버스 백분위 기반 RS Rating. Minervini Trend Template #8 항목.'
+          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률은 참고용으로만 표시하며 코어 판정에서 제외됩니다.`,
+        // 평가 가능한 경우(real RS 도착)에만 코어로 카운트. proxy일 때는 info로만 표시되어 자연스럽게 코어에서 빠짐.
+        isCore: hasRealRs,
+      } satisfies SepaCriterion;
     })(),
     evaluableCriterion(
       'avg_dollar_volume',
@@ -352,6 +396,8 @@ export function analyzeSepa(
       ma50,
       ma150,
       ma200,
+      ma200SlopePerDay: ma200Slope.slopePerDay,
+      ma200SlopeUptrend: ma200Slope.canEvaluate ? ma200Slope.uptrend : null,
       high52Week,
       distanceFromHigh52WeekPct,
       low52Week,

@@ -99,22 +99,37 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
 
     if (sepaEvidence) {
       const rsCriterion = sepaEvidence.criteria.find(c => c.id === 'rs_rating');
+      // benchmarkRelativeScore(BENCHMARK_PROXY)는 단일 벤치마크 비교라 pass/fail 기준에 부적절.
+      // DB_BATCH 또는 UNIVERSE 소스일 때만 코어 항목으로 카운트한다.
+      const isRsEvaluable = (rsSource === 'DB_BATCH' || rsSource === 'UNIVERSE') && rsRating !== null;
       if (rsCriterion) {
-        rsCriterion.status = rsRating !== null && rsRating >= 70 ? 'pass' : (rsRating !== null ? 'fail' : 'info');
+        rsCriterion.status = isRsEvaluable
+          ? rsRating! >= 70 ? 'pass' : 'fail'
+          : 'info';
         rsCriterion.actual = rsRating !== null
           ? rsSource === 'DB_BATCH'
             ? `${rsRating}점 (공식 RS)`
-            : `${ranked.rank}위 / ${rsRating}점 (실시간 유니버스 RS)`
+            : rsSource === 'UNIVERSE'
+              ? `${ranked.rank}위 / ${rsRating}점 (실시간 유니버스 RS)`
+              : `${rsRating}점 (참고 — 벤치마크 상대수익률)`
           : '데이터 없음';
+        rsCriterion.threshold = '70점 이상 (유니버스 백분위)';
         rsCriterion.description = rsSource === 'DB_BATCH'
-          ? '데이터베이스에서 조회한 공식 RS Rating입니다.'
-          : '현재 스캔 유니버스 내 실시간 랭크 기준 RS입니다.';
+          ? '데이터베이스에서 조회한 공식 RS Rating입니다. Minervini Trend Template #8.'
+          : rsSource === 'UNIVERSE'
+            ? '현재 스캔 유니버스 내 실시간 랭크 기준 RS입니다. Minervini Trend Template #8.'
+            : '벤치마크 대비 상대수익률 추정치 — 코어 판정에서 제외됩니다.';
+        rsCriterion.isCore = isRsEvaluable;
       }
 
       const passed = sepaEvidence.criteria.filter(c => c.status === 'pass').length;
       const failed = sepaEvidence.criteria.filter(c => c.status === 'fail').length;
       const info = sepaEvidence.criteria.filter(c => c.status === 'info').length;
-      sepaEvidence.summary = { ...sepaEvidence.summary, passed, failed, info };
+      const corePassed = sepaEvidence.criteria.filter(c => c.isCore && c.status === 'pass').length;
+      const coreFailed = sepaEvidence.criteria.filter(c => c.isCore && c.status === 'fail').length;
+      const coreTotal = sepaEvidence.criteria.filter(c => c.isCore).length;
+      sepaEvidence.summary = { ...sepaEvidence.summary, passed, failed, info, corePassed, coreFailed, coreTotal };
+      sepaEvidence.status = corePassed >= coreTotal ? 'pass' : (corePassed >= coreTotal - 1 ? 'warning' : 'fail');
       sepaEvidence.metrics = {
         ...sepaEvidence.metrics,
         rsRating,

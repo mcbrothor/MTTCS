@@ -93,17 +93,30 @@ export function evaluateCanslim(
   );
 
   if (effectiveAction === 'HALT') {
-    // HALT에서도 스캔 허용 — 차세대 리더 발굴 기회 유지. 강한 경고만 추가.
-    warnings.push('⚠️ 시장 HALT 구간: 신규 진입은 자제하되 워치리스트 등록 후 FTD 확인 시 점진적 진입을 고려합니다.');
-    confidence = minConfidence(confidence, 'LOW');
-    addDetail(
-      'M',
-      '시장 방향성',
-      'WARNING',
-      `HALT (200MA 하회)`,
-      'FULL / REDUCED 권장',
-      'HALT 구간에서 선택한 종목은 포지션 축소 및 엄격한 손절 원칙 유지.'
-    );
+    // O'Neil 원전: 시장이 HALT(200MA 하회) 구간에선 신규 매수 신호 자체가 무효.
+    // 단, FTD 발생 후 24~72시간 내 재시도는 차세대 리더 발굴 기회로 인정.
+    if (macro.followThroughDay) {
+      warnings.push('⚠️ HALT이지만 FTD 직후 재시도 구간 — 포지션 축소(보통 사이즈의 25~50%) 및 엄격한 손절 권장.');
+      confidence = minConfidence(confidence, 'LOW');
+      addDetail(
+        'M',
+        '시장 방향성',
+        'WARNING',
+        `HALT + 최근 FTD`,
+        'FTD 직후 재시도 허용',
+        'FTD가 확인된 직후 차세대 리더 발굴 시도. 포지션 축소·엄격 손절 필수.'
+      );
+    } else {
+      addDetail(
+        'M',
+        '시장 방향성',
+        'FAIL',
+        `HALT (200MA 하회, FTD 미확인)`,
+        'FULL / REDUCED 또는 FTD 동반',
+        'O\'Neil 원전 기준 시장 약세장 신규 매수 차단.'
+      );
+      return fail('M_HALT', '시장 약세장 차단', 'M(시장)이 HALT이며 FTD가 확인되지 않아 신규 매수 신호를 차단합니다.');
+    }
   }
 
   if (effectiveAction === 'REDUCED') {
@@ -151,8 +164,9 @@ export function evaluateCanslim(
       );
     }
   } else {
+    confidence = minConfidence(confidence, 'LOW');
     addDetail('C', '분기 EPS 성장률', 'INFO', null, `>= ${CANSLIM_CRITERIA.MIN_CURRENT_EPS_GROWTH}%`, '데이터가 없어 판정을 보류했습니다.');
-    warnings.push('분기 EPS 데이터가 부족합니다.');
+    warnings.push('분기 EPS 데이터가 부족합니다 — 신뢰도가 LOW로 강등됩니다.');
   }
 
   if (stock.currentQtrSalesGrowth !== null) {
@@ -190,8 +204,9 @@ export function evaluateCanslim(
       );
     }
   } else {
+    confidence = minConfidence(confidence, 'LOW');
     addDetail('C', '분기 매출 성장률', 'INFO', null, `>= ${CANSLIM_CRITERIA.MIN_CURRENT_SALES_GROWTH}%`, '데이터가 없어 판정을 보류했습니다.');
-    warnings.push('분기 매출 성장률 데이터가 부족합니다.');
+    warnings.push('분기 매출 성장률 데이터가 부족합니다 — 신뢰도가 LOW로 강등됩니다.');
   }
 
   const validQtrs = stock.epsGrowthLast3Qtrs.filter((value): value is number => value !== null);
@@ -268,8 +283,9 @@ export function evaluateCanslim(
     }
     addDetail('A', 'ROE', 'PASS', `${stock.roe}%`, `>= ${CANSLIM_CRITERIA.MIN_ROE}%`, 'ROE가 기준을 충족합니다.');
   } else {
+    confidence = minConfidence(confidence, 'LOW');
     addDetail('A', 'ROE', 'INFO', null, `>= ${CANSLIM_CRITERIA.MIN_ROE}%`, 'ROE 데이터가 없습니다.');
-    warnings.push('ROE 데이터가 부족합니다.');
+    warnings.push('ROE 데이터가 부족합니다 — 신뢰도가 LOW로 강등됩니다.');
   }
 
   const validYears = stock.annualEpsGrowthEachYear.filter((value): value is number => value !== null);
@@ -334,8 +350,9 @@ export function evaluateCanslim(
       return fail('A_ANNUAL', '연간 EPS 부족', `연평균 EPS 성장률 ${round(annualAverageGrowth)}%`);
     }
   } else {
+    confidence = minConfidence(confidence, 'LOW');
     addDetail('A', '연평균 EPS 성장', 'INFO', `${validYears.length}개 연도`, '최소 2개 연도', '연간 EPS 검증 데이터가 부족합니다.');
-    warnings.push('연간 EPS 성장 데이터가 부족합니다.');
+    warnings.push('연간 EPS 성장 데이터가 부족합니다 — 신뢰도가 LOW로 강등됩니다.');
   }
 
   const nStatus = evaluateN(stock);
@@ -513,8 +530,9 @@ export function evaluateCanslim(
       '충분한 기관이 보유하고 있습니다.'
     );
   } else {
+    confidence = minConfidence(confidence, 'MEDIUM');
     addDetail('I', '보유 기관 수', 'INFO', null, `>= ${CANSLIM_CRITERIA.MIN_INSTITUTIONAL_HOLDERS}`, '기관 보유 데이터가 없습니다.');
-    warnings.push('기관 보유 수 데이터가 부족합니다.');
+    warnings.push('기관 보유 수 데이터가 부족합니다 — 신뢰도가 MEDIUM 이하로 유지됩니다.');
   }
 
   if (stock.institutionalOwnershipPct !== null) {
@@ -547,6 +565,15 @@ export function evaluateCanslim(
         '기관 보유 비중이 적정 구간입니다.'
       );
     }
+  } else {
+    addDetail(
+      'I',
+      '기관 보유 비중',
+      'INFO',
+      null,
+      `${CANSLIM_CRITERIA.MIN_INSTITUTIONAL_OWNERSHIP_PCT}~${CANSLIM_CRITERIA.MAX_INSTITUTIONAL_OWNERSHIP_PCT}%`,
+      '기관 보유 비중 데이터가 없어 판정을 보류했습니다.'
+    );
   }
 
   const effectiveEntryPrice = entryPrice ?? stock.currentPrice;

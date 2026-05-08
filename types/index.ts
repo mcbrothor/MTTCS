@@ -245,6 +245,8 @@ export interface SepaEvidence {
     ma50: number | null;
     ma150: number | null;
     ma200: number | null;
+    ma200SlopePerDay?: number | null;
+    ma200SlopeUptrend?: boolean | null;
     high52Week: number | null;
     distanceFromHigh52WeekPct: number | null;
     low52Week: number | null;

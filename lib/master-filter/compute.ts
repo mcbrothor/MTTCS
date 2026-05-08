@@ -1,5 +1,6 @@
 import type { MarketState, MasterFilterMetricDetail } from '@/types';
 import type { OHLCData } from '@/types';
+import { MACRO_CRITERIA } from '@/lib/finance/engines/canslim-criteria';
 
 export function average(values: number[]) {
   return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
@@ -100,14 +101,17 @@ export function detectFollowThroughDay(data: Pick<OHLCData, 'close' | 'high' | '
     return { found: false, daysAgo: null, reason: '조정 저점 이후 FTD 확인 기준인 4거래일차가 아직 지나지 않았습니다.' };
   }
 
+  // FTD 임계는 canslim-criteria의 MACRO_CRITERIA.FTD_MIN_GAIN_PCT(=1.5%)로 단일화.
+  // 이전엔 1.25%로 더 느슨해 두 곳에서 시장 상태 판정이 갈리는 버그 발생.
+  const ftdGain = MACRO_CRITERIA.FTD_MIN_GAIN_PCT;
   let hadPriceGain = false;
   for (let i = startIndex; i < lookback.length; i++) {
     const prev = lookback[i - 1];
     const curr = lookback[i];
     const gainPct = ((curr.close - prev.close) / prev.close) * 100;
-    if (gainPct >= 1.25) hadPriceGain = true;
-    if (gainPct >= 1.25 && curr.volume > prev.volume) {
-      return { found: true, daysAgo: lookback.length - 1 - i, reason: `${lookback.length - 1 - i}거래일 전 1.25% 이상 상승과 거래량 증가가 확인되었습니다.` };
+    if (gainPct >= ftdGain) hadPriceGain = true;
+    if (gainPct >= ftdGain && curr.volume > prev.volume) {
+      return { found: true, daysAgo: lookback.length - 1 - i, reason: `${lookback.length - 1 - i}거래일 전 ${ftdGain}% 이상 상승과 거래량 증가가 확인되었습니다.` };
     }
   }
 
@@ -115,8 +119,8 @@ export function detectFollowThroughDay(data: Pick<OHLCData, 'close' | 'high' | '
     found: false,
     daysAgo: null,
     reason: hadPriceGain
-      ? '1.25% 이상 상승일은 있었지만 전일 대비 거래량 증가가 동반되지 않았습니다.'
-      : '조정 저점 이후 4거래일차부터 1.25% 이상 상승일을 찾지 못했습니다.',
+      ? `${ftdGain}% 이상 상승일은 있었지만 전일 대비 거래량 증가가 동반되지 않았습니다.`
+      : `조정 저점 이후 4거래일차부터 ${ftdGain}% 이상 상승일을 찾지 못했습니다.`,
   };
 }
 

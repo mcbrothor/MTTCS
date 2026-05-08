@@ -93,6 +93,21 @@ function emptyMetric(item: ScannerConstituent, market: MarketCode, calcDate: str
   };
 }
 
+// IBD 정통 RS는 가격 모멘텀 + 신고가 거리 + 거래량 가중을 함께 본다.
+// 무료 인프라에서 진정한 IBD RS를 복제하기는 어렵지만,
+// 모멘텀 점수에 신고가 거리 보정을 더해 박스권 종목과 신고가 갱신 종목을 분리한다.
+function applyNewHighBonus(momentumScore: number | null, data: OHLCData[]): number | null {
+  if (momentumScore === null) return null;
+  if (data.length < 252) return momentumScore;
+  const lastClose = data.at(-1)?.close ?? null;
+  const high52w = Math.max(...data.slice(-252).map((d) => d.high));
+  if (lastClose === null || high52w <= 0) return momentumScore;
+  const distancePct = ((high52w - lastClose) / high52w) * 100; // 0=신고가, 25=25% 아래
+  // 신고가 0% 거리 → +5점, 25% 거리 → -2점, 50%+ → -8점 (선형)
+  const bonus = distancePct <= 0 ? 5 : distancePct >= 50 ? -8 : 5 - (distancePct / 50) * 13;
+  return Math.round((momentumScore + bonus) * 100) / 100;
+}
+
 export async function computeStockMetric(item: ScannerConstituent, market: MarketCode, calcDate = todayIso(), benchmarkCache = new Map<string, OHLCData[]>()) {
   try {
     const { data, source } = await fetchDailyBars(item.ticker, item.exchange);
@@ -101,11 +116,12 @@ export async function computeStockMetric(item: ScannerConstituent, market: Marke
     const mansfield = calculateMansfieldFromData(data, benchmark);
     const mdd52wPct = computeMdd52w(data.map((d) => d.close));
     const dataQuality = (momentum.rsDataQuality || 'NA') as DataQuality;
+    const adjustedMomentum = applyNewHighBonus(momentum.ibdProxyScore, data);
     return {
       ticker: item.ticker,
       market,
       calc_date: calcDate,
-      ibd_proxy_score: momentum.ibdProxyScore,
+      ibd_proxy_score: adjustedMomentum,
       rs_rating: null,
       rs_rank: null,
       rs_universe_size: null,
@@ -130,23 +146,42 @@ export async function upsertStockMetrics(rows: MetricRow[]) {
   return { count: rows.length };
 }
 
+// stock_metrics 신선도 가드: 7일을 초과한 row는 stale로 분류해 RS 평가에서 배제한다.
+// (Supabase free tier는 7일 미사용 시 일시정지되므로 현실적 윈도)
+const STOCK_METRICS_FRESHNESS_DAYS = 7;
+
+function isFreshCalcDate(calcDate: string | null | undefined): boolean {
+  if (!calcDate) return false;
+  const calc = new Date(`${calcDate}T00:00:00Z`).getTime();
+  if (!Number.isFinite(calc)) return false;
+  const ageMs = Date.now() - calc;
+  return ageMs <= STOCK_METRICS_FRESHNESS_DAYS * 24 * 60 * 60 * 1000;
+}
+
 export async function fetchLatestStockMetrics(tickers: string[], market: MarketCode) {
   const unique = Array.from(new Set(tickers.map((ticker) => ticker.toUpperCase()).filter(Boolean)));
   if (unique.length === 0) return new Map<string, StockMetric>();
+  // freshness 가드: 7일을 초과한 row는 RS 평가에 사용하지 않는다.
+  // 단, UI 표시는 가능하도록 stale 플래그만 붙여서 반환.
+  const cutoffIso = new Date(Date.now() - STOCK_METRICS_FRESHNESS_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString().slice(0, 10);
   const { data, error } = await supabaseServer
     .from('stock_metrics')
     .select('*')
     .eq('market', market)
     .in('ticker', unique)
+    .gte('calc_date', cutoffIso)
     .order('calc_date', { ascending: false });
   if (error) throw error;
 
   const byTicker = new Map<string, StockMetric>();
   for (const row of (data || []) as StockMetric[]) {
-    if (!byTicker.has(row.ticker)) byTicker.set(row.ticker, row);
+    if (!byTicker.has(row.ticker) && isFreshCalcDate(row.calc_date)) byTicker.set(row.ticker, row);
   }
   return byTicker;
 }
+
+export const STOCK_METRICS_FRESHNESS = STOCK_METRICS_FRESHNESS_DAYS;
 
 export async function fetchLatestMacroTrend(market: MarketCode, indexCode?: string | null) {
   let query = supabaseServer

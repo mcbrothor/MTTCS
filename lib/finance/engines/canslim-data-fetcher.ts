@@ -15,6 +15,7 @@ import type { CanslimAnalysisCoverage, CanslimPillarKey, CanslimStockData, Marke
 import { DATA_QUALITY } from './canslim-criteria';
 import { fetchAggregatedFundamentals } from '../market/fundamental-fetcher';
 import { getSecFundamentals } from '../providers/sec-edgar-api';
+import { readCanslimFundamentalsFromCache } from '../market/fundamentals-cache';
 
 
 /** Yahoo quoteSummary에서 추출 가능한 원시 응답 구조 */
@@ -195,10 +196,62 @@ export async function fetchCanslimFundamentals(
     console.warn(`[CAN SLIM Fetcher] Yahoo quoteSummary 실패 (${ticker}): ${msg} — DART/EDGAR로 대체 시도`);
   }
 
-  // ── Phase 2: DART / EDGAR 공식 데이터 보강 (Yahoo 성공 여부와 무관하게 실행) ──
-  // 왜 항상 실행하는가? 공식 공시 데이터가 Yahoo보다 정확하므로,
-  // Yahoo가 성공해도 공식 데이터로 덮어쓰는 것이 올바름
+  // ── Phase 2a: Supabase fundamental_cache read-through (EDGAR 백필 cron 결과) ──
+  // 7일 freshness window. 캐시에 fresh row가 있으면 EDGAR 라이브 호출(1~3MB JSON)을 회피해
+  // egress와 latency를 절감한다. cache miss / stale일 때만 Phase 2b로 fallthrough.
+  let cacheServedFromBackfill = false;
   try {
+    const cached = await readCanslimFundamentalsFromCache(baseTicker, market);
+    if (cached?.isFresh && cached.edgarStatus === 'OK') {
+      const officialSource = `${cached.source} (cached ${Math.round(cached.ageHours)}h)`;
+      const c = cached.data;
+      if (c.currentQtrEpsGrowth !== null && c.currentQtrEpsGrowth !== undefined) {
+        fundamentalData.currentQtrEpsGrowth = c.currentQtrEpsGrowth;
+        sourceMap.currentQtrEpsGrowth = officialSource;
+      }
+      if (c.priorQtrEpsGrowth !== null && c.priorQtrEpsGrowth !== undefined) {
+        fundamentalData.priorQtrEpsGrowth = c.priorQtrEpsGrowth;
+        sourceMap.priorQtrEpsGrowth = officialSource;
+      }
+      if (c.epsGrowthLast3Qtrs?.some((v) => v !== null)) {
+        fundamentalData.epsGrowthLast3Qtrs = c.epsGrowthLast3Qtrs;
+        sourceMap.epsGrowthLast3Qtrs = officialSource;
+      }
+      if (c.currentQtrSalesGrowth !== null && c.currentQtrSalesGrowth !== undefined) {
+        fundamentalData.currentQtrSalesGrowth = c.currentQtrSalesGrowth;
+        sourceMap.currentQtrSalesGrowth = officialSource;
+      }
+      if (c.annualEpsGrowthEachYear?.some((v) => v !== null)) {
+        fundamentalData.annualEpsGrowthEachYear = c.annualEpsGrowthEachYear;
+        sourceMap.annualEpsGrowthEachYear = officialSource;
+      }
+      if (c.hadNegativeEpsInLast3Yr !== null && c.hadNegativeEpsInLast3Yr !== undefined) {
+        fundamentalData.hadNegativeEpsInLast3Yr = c.hadNegativeEpsInLast3Yr;
+        sourceMap.hadNegativeEpsInLast3Yr = officialSource;
+      }
+      if (c.roe !== null && c.roe !== undefined) {
+        fundamentalData.roe = c.roe;
+        sourceMap.roe = officialSource;
+      }
+      if (c.floatShares !== null && c.floatShares !== undefined) {
+        fundamentalData.floatShares = c.floatShares;
+        sourceMap.floatShares = officialSource;
+      }
+      if (c.sharesBuyback !== null && c.sharesBuyback !== undefined) {
+        fundamentalData.sharesBuyback = c.sharesBuyback;
+        sourceMap.sharesBuyback = officialSource;
+      }
+      cacheServedFromBackfill = true;
+    }
+  } catch (cacheError) {
+    const msg = cacheError instanceof Error ? cacheError.message : 'Unknown';
+    warnings.push(`CANSLIM_CACHE_READ_FAILED:${msg}`);
+  }
+
+  // ── Phase 2b: DART / EDGAR 공식 데이터 보강 (캐시 hit이면 skip) ──
+  // 왜 cache hit 시 skip인가? 백필 cron이 이미 EDGAR에서 같은 데이터를 받아 캐시했으므로
+  // 라이브 호출은 중복 비용. cache miss/stale일 때만 라이브 호출로 폴백한다.
+  if (!cacheServedFromBackfill) try {
     const fundamentalSnapshot = await fetchAggregatedFundamentals(
       baseTicker,
       exchange,

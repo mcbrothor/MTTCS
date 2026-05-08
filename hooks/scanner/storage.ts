@@ -72,6 +72,51 @@ export async function getInitialRestoredUniverse(): Promise<ScannerUniverse> {
   return lastSelectedUniverse ?? latestScannedUniverse ?? 'NASDAQ100';
 }
 
+// DB rs_rating이 도착하면 SEPA criteria의 rs_rating 항목을 pass/fail로 재평가한다.
+// 이 단계가 빠지면 sepaEvidence.criteria는 'info'로 고정되어 corePassed 집계에서 누락된다.
+function rebuildSepaRsCriterion(item: ScannerResult, rsRating: number | null, dbAvailable: boolean): ScannerResult {
+  const evidence = item.sepaEvidence;
+  if (!evidence) return item;
+  const criteria = evidence.criteria.map((c) => {
+    if (c.id !== 'rs_rating') return c;
+    if (rsRating === null) {
+      return { ...c, status: 'info' as const, actual: '데이터 없음', threshold: '70점 이상 (DB/UNIVERSE 도착 시 평가)', isCore: false };
+    }
+    return {
+      ...c,
+      status: rsRating >= 70 ? ('pass' as const) : ('fail' as const),
+      actual: `${rsRating}점 (${dbAvailable ? '유니버스 백분위 공식 RS' : '실시간 스캔 유니버스 백분위 RS'})`,
+      threshold: '70점 이상 (유니버스 백분위)',
+      description: 'Minervini Trend Template #8 — 유니버스 백분위 기반 RS Rating으로 평가됨.',
+      isCore: true,
+    };
+  });
+  const passed = criteria.filter((c) => c.status === 'pass').length;
+  const failed = criteria.filter((c) => c.status === 'fail').length;
+  const info = criteria.filter((c) => c.status === 'info').length;
+  const corePassed = criteria.filter((c) => c.isCore && c.status === 'pass').length;
+  const coreFailed = criteria.filter((c) => c.isCore && c.status === 'fail').length;
+  const coreTotal = criteria.filter((c) => c.isCore).length;
+  let status: 'pass' | 'fail' | 'warning' = 'pass';
+  if (corePassed >= coreTotal) status = 'pass';
+  else if (corePassed >= coreTotal - 1) status = 'warning';
+  else status = 'fail';
+
+  return {
+    ...item,
+    sepaEvidence: {
+      ...evidence,
+      criteria,
+      status,
+      summary: { passed, failed, info, total: criteria.length, corePassed, coreFailed, coreTotal },
+      metrics: { ...evidence.metrics, rsRating, rsSource: dbAvailable ? 'DB_BATCH' : evidence.metrics.rsSource },
+    },
+    sepaStatus: status,
+    sepaPassed: passed,
+    sepaFailed: failed,
+  };
+}
+
 function mergeStandardMetrics(
   results: ScannerResult[],
   rows: { ticker: string; metric: StockMetric | null; sector?: string | null }[],
@@ -85,12 +130,13 @@ function mergeStandardMetrics(
     const mergedFundamentals = sector
       ? { ...(item.fundamentals ?? { source: 'Scanner metrics', epsGrowthPct: null, revenueGrowthPct: null, roePct: null, debtToEquityPct: null }), sector }
       : item.fundamentals;
-    return withRecommendation({
+    const dbRsAvailable = metric?.rs_rating !== null && metric?.rs_rating !== undefined;
+    const merged: ScannerResult = {
       ...item,
       fundamentals: mergedFundamentals,
       rsRating: metric?.rs_rating ?? item.rsRating,
       externalRsRating: metric?.rs_rating ?? item.externalRsRating,
-      rsSource: metric?.rs_rating !== null && metric?.rs_rating !== undefined ? 'DB_BATCH' : item.rsSource,
+      rsSource: dbRsAvailable ? 'DB_BATCH' : item.rsSource,
       rsRank: metric?.rs_rank ?? item.rsRank,
       rsUniverseSize: metric?.rs_universe_size ?? item.rsUniverseSize,
       rsPercentile: rsPercentile(metric?.rs_rank, metric?.rs_universe_size) ?? item.rsPercentile,
@@ -100,7 +146,11 @@ function mergeStandardMetrics(
       mansfieldRsScore: metric?.mansfield_rs_score ?? item.mansfieldRsScore,
       rsDataQuality: metric?.data_quality ?? item.rsDataQuality,
       macroActionLevel: macroTrend?.action_level ?? item.macroActionLevel,
-    });
+    };
+    const rebuilt = dbRsAvailable
+      ? rebuildSepaRsCriterion(merged, metric?.rs_rating ?? null, true)
+      : merged;
+    return withRecommendation(rebuilt);
   });
 }
 

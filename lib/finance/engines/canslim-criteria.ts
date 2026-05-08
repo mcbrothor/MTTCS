@@ -18,8 +18,9 @@ export const CANSLIM_CRITERIA = {
   MIN_ROE: 17,
 
   // N: New high / base pattern (Minervini Trend Template 원전: 25% 이내)
+  // 베이스 패턴(컵-위드-핸들 등)이 감지되면 베이스 깊이를 인정해 33%까지 허용 (O'Neil 본가 레인지)
   MAX_DIST_FROM_52W_HIGH: 0.25,
-  LOOSE_DIST_FROM_52W_HIGH: 0.25,
+  LOOSE_DIST_FROM_52W_HIGH: 0.33,
   PIVOT_BUY_ZONE_MAX: 0.06,
   PIVOT_EXTENDED_MAX: 0.10,
 

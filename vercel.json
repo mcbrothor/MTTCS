@@ -27,6 +27,14 @@
     {
       "path": "/api/cron/rs-metrics?market=KR",
       "schedule": "15 07 * * 1-5"
+    },
+    {
+      "path": "/api/cron/edgar-backfill?wave=A&size=80",
+      "schedule": "30 02 * * *"
+    },
+    {
+      "path": "/api/cron/edgar-backfill?wave=B&size=80",
+      "schedule": "0 03 * * *"
     }
   ]
 }

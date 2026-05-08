@@ -147,6 +147,70 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
   };
 }
 
+// Russell 1000 — RS Rating 모집단 확장용 (~1,000 종목).
+// IBD 정통 RS는 미국 전체 상장 ~7,000을 보지만, 무료 인프라 부담을 줄이기 위해
+// S&P500 + NASDAQ100 + Russell 1000 합집합(~1,000~1,200)을 RS 모집단으로 사용한다.
+// fetch 실패 시 호출부에서 fallthrough하여 S&P500 + NASDAQ100만 사용한다.
+async function fetchStockAnalysisRussell1000(): Promise<ScannerUniverseResponse> {
+  const response = await fetch('https://stockanalysis.com/list/russell-1000-stocks/', {
+    headers: {
+      accept: 'text/html',
+      'user-agent': 'Mozilla/5.0',
+    },
+    next: { revalidate: 60 * 60 * 12 }, // 12시간 캐시 (Russell 1000은 분기 1회 갱신)
+  });
+
+  if (!response.ok) {
+    throw new Error(`StockAnalysis Russell 1000 response error (${response.status})`);
+  }
+
+  const html = await response.text();
+  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+  const items = rows
+    .map((match) => {
+      const row = match[1] || '';
+      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!symbolMatch) return null;
+
+      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
+      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase();
+      const ticker = rawTicker.replace('.', '-');
+      const name = cells[2] || ticker;
+      const marketCap = parseAbbreviatedUsd(cells[3] || '');
+      const currentPrice = parseNumberText(cells[4] || '');
+
+      return {
+        rank: 0,
+        ticker,
+        exchange: 'NAS',
+        name,
+        marketCap,
+        currency: 'USD' as const,
+        currentPrice,
+        priceAsOf: new Date().toISOString(),
+        priceSource: 'StockAnalysis Russell 1000 table',
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, 1000)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+
+  if (items.length === 0) {
+    throw new Error('Russell 1000 constituents could not be parsed.');
+  }
+
+  return {
+    universe: 'SP500', // 표시는 SP500 universe로 통합 (실제 모집단은 합집합)
+    label: 'Russell 1000',
+    asOf: new Date().toISOString(),
+    source: 'StockAnalysis Russell 1000 table',
+    delayNote: 'Russell 1000 market-cap and price data can be delayed.',
+    items,
+    warnings: items.length < 800 ? [`Only ${items.length} Russell 1000 rows were parsed.`] : [],
+  };
+}
+
 async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
   const response = await fetch('https://api.nasdaq.com/api/quote/list-type/nasdaq100?assetclass=stocks&limit=100', {
     headers: {
@@ -288,10 +352,13 @@ export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<S
     return Array.from(byTicker.values());
   }
 
-  // S&P 500 + NASDAQ 100 합산 (중복 ticker는 S&P 500 우선)
-  const [sp500Result, nasdaq100Result] = await Promise.allSettled([
+  // RS 모집단 확장: S&P 500 + NASDAQ 100 + Russell 1000 합집합 (~1,000~1,200 종목).
+  // Russell 1000 fetch가 실패하면 자동으로 S&P 500 + NASDAQ 100(~530)으로 폴백.
+  // 우선순위: S&P 500 → NASDAQ 100 → Russell 1000 (S&P 500 메타데이터 우선)
+  const [sp500Result, nasdaq100Result, russell1000Result] = await Promise.allSettled([
     fetchStockAnalysisSp500(),
     fetchNasdaq100(),
+    fetchStockAnalysisRussell1000(),
   ]);
 
   const byTicker = new Map<string, ScannerConstituent>();
@@ -304,6 +371,14 @@ export async function getStandardScannerUniverse(market: 'KR' | 'US'): Promise<S
 
   if (nasdaq100Result.status === 'fulfilled') {
     for (const item of nasdaq100Result.value.items) {
+      if (!byTicker.has(item.ticker)) {
+        byTicker.set(item.ticker, item);
+      }
+    }
+  }
+
+  if (russell1000Result.status === 'fulfilled') {
+    for (const item of russell1000Result.value.items) {
       if (!byTicker.has(item.ticker)) {
         byTicker.set(item.ticker, item);
       }

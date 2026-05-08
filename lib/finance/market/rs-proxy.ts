@@ -158,13 +158,15 @@ export function calculateBenchmarkRelativeScore(data: OHLCData[], benchmarkData?
 
   // 1순위: Mansfield RS (52주 상대수익률) — 가장 정확한 상대강도 측정
   // mansfieldRsScore = (종목 52주 성과 / 벤치마크 52주 성과 - 1) * 100 (단위: %)
-  // 예) 종목 +120%, 벤치마크 +80% → mansfieldRsScore ≈ +22% → RS ≈ 83
+  // tanh 압축으로 ±50% 차이를 양 끝(~±40점)에 평탄화 → outlier에 robust.
+  //   +25%≈80점, +50%≈90점, ±0%=50점, -25%≈20점, -50%≈10점
+  const compress = (rel: number) => 50 + 50 * Math.tanh(0.04 * rel);
   const mansfield = calculateMansfieldFromData(data, benchmarkData);
   if (mansfield.mansfieldRsScore !== null) {
     return {
       stockReturn26Week,
       benchmarkReturn26Week,
-      benchmarkRelativeScore: round(clamp(50 + mansfield.mansfieldRsScore * 1.5, 1, 99), 0),
+      benchmarkRelativeScore: round(clamp(compress(mansfield.mansfieldRsScore), 1, 99), 0),
     };
   }
 
@@ -176,7 +178,7 @@ export function calculateBenchmarkRelativeScore(data: OHLCData[], benchmarkData?
     return {
       stockReturn26Week,
       benchmarkReturn26Week,
-      benchmarkRelativeScore: round(clamp(50 + relScore * 1.5, 1, 99), 0),
+      benchmarkRelativeScore: round(clamp(compress(relScore), 1, 99), 0),
     };
   }
 

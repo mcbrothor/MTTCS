@@ -341,12 +341,18 @@ export async function GET(request: Request) {
 
     const atr = calculateATR(data);
     const entryPrice = calculateEntryPrice(data, 50);
+    // skipStandardMetrics(=배치 스캔 모드)일 때는 RS가 별도 metrics 엔드포인트에서 도착하므로
+    // 여기선 BENCHMARK_PROXY로 두고, 클라이언트의 applyUniverseRsRankings/mergeStandardMetrics에서
+    // 실제 RS 도착 시 SEPA criterion을 다시 평가한다.
+    const dbRsRating = metric?.rs_rating ?? null;
     let sepaEvidence = analyzeSepa(data, {
       benchmarkData: benchmark.data,
       benchmarkTicker: benchmark.ticker,
       fundamentals,
       market: marketForExchange(exchange),
       exchange,
+      preCalculatedRs: dbRsRating ?? undefined,
+      rsSourceHint: dbRsRating !== null ? 'DB_BATCH' : undefined,
     });
     const standardRsRating = metric?.rs_rating ?? null;
     sepaEvidence = mergeStandardMetrics({
