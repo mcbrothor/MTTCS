@@ -126,7 +126,7 @@ export default function DecisionBox() {
   });
   const cfg = DECISION_CONFIG[result.decision];
   const Icon = cfg.icon;
-  const isUnscored = data.state === 'GREY' || data.metrics.meta.fallbackUsed || isStale;
+  const isUnscored = data.state === 'GREY' || isStale;
   const { pass, weak } = strongestDrivers(metrics);
   const updatedAt = data.metrics.updatedAt || data.metrics.meta.asOf;
   const dataLabel = isUnscored

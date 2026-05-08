@@ -367,7 +367,7 @@ export default function MetricsGrid() {
   }
 
   const { metrics } = data;
-  const isUnscored = data.state === 'GREY' || metrics.meta.fallbackUsed;
+  const isUnscored = data.state === 'GREY';
   const displayMetricsList = [
     { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory && metrics.movingAverageHistory.length > 1 ? metrics.movingAverageHistory : undefined },
     { detail: metrics.breadth, chartData: metrics.mainHistory && metrics.mainHistory.length > 1 ? metrics.mainHistory : undefined },
