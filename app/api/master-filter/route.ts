@@ -71,7 +71,10 @@ const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '123310.KS', '1392
 const KOSDAQ_RISK_ON_SECTORS = new Set(['244580.KS', '455850.KS', '305720.KS', '139260.KS']);
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
-  return getYahooDailyPrice(symbol).catch(() => []);
+  return getYahooDailyPrice(symbol).catch((err: unknown) => {
+    console.error(`[master-filter] safeDaily(${symbol}) failed:`, err instanceof Error ? err.message : err);
+    return [];
+  });
 }
 
 function fallbackInsight(message: string): CachedInsight {

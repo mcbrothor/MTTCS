@@ -1,6 +1,44 @@
 import axios from 'axios';
 import type { FundamentalSnapshot, OHLCData } from '@/types';
 
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+let _crumbCache: { crumb: string; cookie: string; fetchedAt: number } | null = null;
+const CRUMB_TTL_MS = 25 * 60 * 1000;
+
+async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
+  if (_crumbCache && Date.now() - _crumbCache.fetchedAt < CRUMB_TTL_MS) {
+    return _crumbCache;
+  }
+
+  const cookieRes = await fetch('https://finance.yahoo.com/', {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    },
+    redirect: 'follow',
+  });
+
+  const rawCookies: string[] = typeof cookieRes.headers.getSetCookie === 'function'
+    ? cookieRes.headers.getSetCookie()
+    : [(cookieRes.headers.get('set-cookie') || '')];
+  const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+
+  const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Cookie': cookieString,
+      'Accept': '*/*',
+      'Referer': 'https://finance.yahoo.com/',
+    },
+  });
+
+  const crumb = (await crumbRes.text()).trim();
+  _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
+  return _crumbCache;
+}
+
 function rawNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'object' && value && 'raw' in value) {
@@ -16,15 +54,20 @@ function toPct(value: number | null) {
 }
 
 export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
+  const { crumb, cookie } = await getYahooCrumb();
   const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
     params: {
       range: '2y',
       interval: '1d',
       includePrePost: false,
       events: 'history',
+      crumb,
     },
     headers: {
-      'user-agent': 'MTN/4.0',
+      'User-Agent': BROWSER_UA,
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'Referer': 'https://finance.yahoo.com/',
     },
   });
 
@@ -232,15 +275,21 @@ export async function getYahooSecurityProfile(ticker: string): Promise<YahooSecu
 export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
   if (!symbols || symbols.length === 0) return [];
 
+  const { crumb, cookie } = await getYahooCrumb().catch(() => ({ crumb: '', cookie: '' }));
+
   const promises = symbols.map(async (symbol) => {
     try {
       const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`, {
         params: {
           range: '50d',
           interval: '1d',
+          ...(crumb ? { crumb } : {}),
         },
         headers: {
-          'user-agent': 'Mozilla/5.0',
+          'User-Agent': BROWSER_UA,
+          ...(cookie ? { 'Cookie': cookie } : {}),
+          'Accept': 'application/json',
+          'Referer': 'https://finance.yahoo.com/',
         },
       });
 
