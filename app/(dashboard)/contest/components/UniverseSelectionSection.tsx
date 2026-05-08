@@ -50,7 +50,7 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-xs font-black text-white shadow-lg shadow-emerald-500/30">1</div>
             분석 후보 선택
           </h2>
-          <p className="text-sm text-slate-400">{sourceLabel} ???? ?? {MAX_CONTEST_CANDIDATES}??? ?? ?????. ?? ???? AI? ?????.</p>
+          <p className="text-sm text-slate-400">{sourceLabel} 스캔 결과에서 {MAX_CONTEST_CANDIDATES}개를 선택합니다. 선택 후 AI가 분석합니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <select
@@ -73,7 +73,7 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
       {!snapshot ? (
         <div className="mt-6 rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
           <p>저장된 스캔 결과가 없습니다.</p>
-          <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">???? ???? &rarr;</Link>
+          <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">스캐너로 이동 &rarr;</Link>
         </div>
       ) : (
         <>

@@ -63,12 +63,14 @@ export async function POST(request: Request) {
 
     if (sessionError) throw sessionError;
 
+    // DB constraint: user_rank BETWEEN 1 AND 10 (migration 022 raises this to 15)
+    const DB_RANK_MAX = 10;
     const candidateRows = payload.map((candidate) => ({
       session_id: session.id,
       ticker: candidate.ticker,
       exchange: candidate.exchange,
       name: candidate.name,
-      user_rank: candidate.user_rank,
+      user_rank: Math.min(candidate.user_rank, DB_RANK_MAX),
       recommendation_tier: candidate.recommendation_tier || null,
       recommendation_reason: candidate.recommendation_reason || null,
       entry_reference_price: candidate.price,
