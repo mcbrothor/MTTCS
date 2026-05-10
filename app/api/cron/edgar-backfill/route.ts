@@ -220,4 +220,7 @@ export async function GET(request: Request) {
   }
 }
 
-export const FRESHNESS_DAYS = CANSLIM_FUNDAMENTAL_FRESHNESS_DAYS;
+// FRESHNESS_DAYS는 Next.js Route export로 노출하지 않음 (빌드 오류 방지).
+// 외부에서 참조 필요 시 lib/finance/engines/canslim-data-fetcher.ts에서 직접 import.
+const FRESHNESS_DAYS = CANSLIM_FUNDAMENTAL_FRESHNESS_DAYS;
+void FRESHNESS_DAYS; // unused variable 경고 억제
