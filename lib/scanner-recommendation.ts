@@ -150,6 +150,12 @@ export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult
       rsUniverseSize: universeSize,
       rsPercentile: ranked.percentile,
       sepaEvidence,
+      // sepaEvidence가 갱신될 때 top-level 상태도 함께 동기화한다.
+      // 동기화 누락 시 evaluateScannerRecommendation이 stale top-level sepaStatus와
+      // fresh evidence summary를 동시에 검사해 Recommended/IB Review 후보가 모두 탈락함.
+      sepaStatus: sepaEvidence?.status ?? item.sepaStatus,
+      sepaPassed: sepaEvidence?.summary.passed ?? item.sepaPassed,
+      sepaFailed: sepaEvidence?.summary.failed ?? item.sepaFailed,
     };
   });
 }
@@ -209,7 +215,10 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   const sepaMissingCount = coreFailed ?? result.sepaFailed ?? null;
-  const sepaPass = result.sepaStatus === 'pass' && corePassed === coreTotal;
+  // SEPA 판정은 sepaEvidence.summary 기반(corePassed/coreTotal)을 단일 source of truth로 사용.
+  // top-level sepaStatus와 이중 검사하던 방식은 RS 소스 변경(BENCHMARK_PROXY → UNIVERSE/DB_BATCH)
+  // 시점에 두 값이 어긋나 후보가 0건이 되는 문제를 일으켰음.
+  const sepaPass = typeof corePassed === 'number' && coreTotal > 0 && corePassed === coreTotal;
   const reviewSepa = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
   const watchSepa = typeof corePassed === 'number' && corePassed >= Math.max(0, coreTotal - 2);
   const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
