@@ -71,9 +71,14 @@ export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSigna
 }
 
 export function applyUniverseRsRankings(results: ScannerResult[]): ScannerResult[] {
+  // weightedMomentumScore(DB ibd_proxy_score)가 없을 때 benchmarkRelativeScore로 폴백.
+  // scoreAtLeast(null, -9999)가 false를 반환해 DB 크론 미실행 시 모든 종목이 제외되는 버그 수정.
+  const sortScore = (item: ScannerResult) =>
+    item.weightedMomentumScore ?? item.benchmarkRelativeScore ?? -9999;
   const analyzable = results
-    .filter((item) => item.status === 'done' && scoreAtLeast(item.weightedMomentumScore, -9999))
-    .sort((a, b) => (b.weightedMomentumScore ?? -9999) - (a.weightedMomentumScore ?? -9999));
+    .filter((item) => item.status === 'done' &&
+      typeof (item.weightedMomentumScore ?? item.benchmarkRelativeScore) === 'number')
+    .sort((a, b) => sortScore(b) - sortScore(a));
   const universeSize = analyzable.length;
   const rankByTicker = new Map<string, { rank: number; rating: number; percentile: number }>();
 
