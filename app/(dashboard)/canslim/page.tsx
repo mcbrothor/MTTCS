@@ -22,6 +22,7 @@ import {
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 
+import { get, set } from 'idb-keyval';
 import { useContestSelection } from '@/hooks/useContestSelection';
 import { CANSLIM_LATEST_UNIVERSE_STORAGE_KEY } from '@/lib/contest-sources';
 import Button from '@/components/ui/Button';
@@ -98,11 +99,11 @@ interface StoredSnapshot {
   macro: CanslimMacroMarketData | null;
 }
 
-function readSnapshot(universe: ScannerUniverse): StoredSnapshot | null {
+async function readSnapshot(universe: ScannerUniverse): Promise<StoredSnapshot | null> {
   try {
-    const raw = window.localStorage.getItem(storageKey(universe));
+    const raw = await get(storageKey(universe));
     if (!raw) return null;
-    return JSON.parse(raw) as StoredSnapshot;
+    return (typeof raw === 'string' ? JSON.parse(raw) : raw) as StoredSnapshot;
   } catch {
     return null;
   }
@@ -114,8 +115,8 @@ function dualTierToRecommendationTier(tier: DualScreenerTier): 'Recommended' | '
   return 'Low Priority';
 }
 
-function writeSnapshot(snapshot: StoredSnapshot) {
-  window.localStorage.setItem(storageKey(snapshot.universe), JSON.stringify(snapshot));
+async function writeSnapshot(snapshot: StoredSnapshot) {
+  await set(storageKey(snapshot.universe), snapshot);
   window.localStorage.setItem(CANSLIM_LATEST_UNIVERSE_STORAGE_KEY, snapshot.universe);
 
   // 콘테스트 페이지가 읽는 mtn:scanner-snapshot:v3: 형식으로도 저장
@@ -306,12 +307,14 @@ export default function CanslimScannerPage() {
 
   // 초기 복원
   useEffect(() => {
-    const snapshot = readSnapshot(universe);
-    if (snapshot) {
-      setResults(snapshot.results);
-      setMacro(snapshot.macro);
-      setLastScannedAt(snapshot.savedAt);
-    }
+    (async () => {
+      const snapshot = await readSnapshot(universe);
+      if (snapshot) {
+        setResults(snapshot.results);
+        setMacro(snapshot.macro);
+        setLastScannedAt(snapshot.savedAt);
+      }
+    })();
   }, [universe]);
 
 
@@ -321,10 +324,10 @@ export default function CanslimScannerPage() {
     toggleSelection(ticker);
   };
 
-  const handleUniverseChange = (u: ScannerUniverse) => {
+  const handleUniverseChange = async (u: ScannerUniverse) => {
     if (isScanning) return;
     setUniverse(u);
-    const snapshot = readSnapshot(u);
+    const snapshot = await readSnapshot(u);
     if (snapshot) {
       setResults(snapshot.results);
       setMacro(snapshot.macro);
@@ -467,7 +470,7 @@ export default function CanslimScannerPage() {
         const now = new Date().toISOString();
         setLastScannedAt(now);
         setScanStage('스캔 완료');
-        writeSnapshot({ savedAt: now, universe, results: current, macro });
+        await writeSnapshot({ savedAt: now, universe, results: current, macro });
       }
     } catch (err) {
       if (!abort.signal.aborted) {
