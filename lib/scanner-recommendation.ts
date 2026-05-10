@@ -242,7 +242,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
   const tennisBall = (result.tennisBallCount || 0) >= 2;
   const ma50Controlled = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 15;
-  const leadershipSetupWithoutPivot = !validPivot && rs90 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
+  const leadershipSetupWithoutPivot = !validPivot && rs85 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
 
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
@@ -295,19 +295,30 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   }
 
   if (rs80 && watchSepa && (constructiveVcp || tennisBall || rsLineHigh || pocketPivot || volumeDryUp)) {
+    const watchGaps: string[] = [];
+    if (!rs85) watchGaps.push('RS 85 미달');
+    if (!reviewSepa) watchGaps.push(`SEPA core ${corePassed ?? '?'}/${coreTotal} (IB Review: ${coreTotal - 1} 이상 필요)`);
+    if (!constructiveVcp) watchGaps.push('VCP forming 미달');
+    if (!accumulationSignal) watchGaps.push('매집 시그널 없음');
+    if (!reviewReadyPivot && !leadershipSetupWithoutPivot) watchGaps.push('피벗 미확정 또는 원거리');
+    const gapNote = watchGaps.length > 0 ? ` IB Review까지 부족한 항목: [${watchGaps.join(' / ')}].` : '';
     return {
       recommendationTier: 'Watch',
       recommendationReason: validPivot
-        ? 'RS 80+와 일부 기술적 단서가 있으나, IB Review 조건에는 아직 피벗 위치·거래량·SEPA 조합이 부족합니다.'
-        : 'RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보로만 분류합니다.',
+        ? `RS 80+와 일부 기술적 단서가 있으나 IB Review 조건에 아직 미달합니다.${gapNote}`
+        : `RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보입니다.${gapNote}`,
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
+  const lpGaps: string[] = [];
+  if (!rs80) lpGaps.push(`RS ${result.rsRating ?? '없음'} (Watch: 80 이상 필요)`);
+  if (!watchSepa) lpGaps.push(`SEPA core ${corePassed ?? '?'}/${coreTotal} (Watch: ${Math.max(0, coreTotal - 2)} 이상 필요)`);
+  if (!constructiveVcp && !tennisBall && !rsLineHigh && !pocketPivot && !volumeDryUp) lpGaps.push('기술적 단서 없음 (VCP/테니스볼/RS라인/PP/볼륨)');
   return {
     recommendationTier: 'Low Priority',
-    recommendationReason: '현재 SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기에는 부족합니다. 수동 검토는 가능합니다.',
+    recommendationReason: `SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기 부족합니다. [${lpGaps.join(' / ')}]`,
     sepaMissingCount,
     exceptionSignals,
   };

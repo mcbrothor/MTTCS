@@ -69,9 +69,9 @@ function determinePivot(
 } {
   const details: string[] = [];
 
-  if (contractions.length < 2) {
+  if (contractions.length === 0) {
     const fallbackInvalidation = recentLow(data);
-    details.push('수축이 2개 미만이라 VCP 피벗을 확정하지 못했습니다. 최근 고점 참고가를 보조 진입가로 사용합니다.');
+    details.push('수축이 감지되지 않아 VCP 피벗을 확정하지 못했습니다. 최근 고점 참고가를 보조 진입가로 사용합니다.');
     if (fallbackInvalidation !== null) {
       details.push(`최근 저점 기반 무효화 참고선: $${fallbackInvalidation.toFixed(2)}`);
     }
@@ -84,6 +84,10 @@ function determinePivot(
       entrySource: 'RECENT_HIGH_FALLBACK',
       details,
     };
+  }
+
+  if (contractions.length === 1) {
+    details.push('수축이 1개 감지되어 단일 수축 VCP 피벗으로 처리합니다 (2개 이상 대비 낮은 신뢰도).');
   }
 
   const lastContraction = contractions.at(-1)!;
@@ -277,12 +281,12 @@ export function analyzeVcp(
   let finalRecommendedEntry = recommendedEntry;
   let finalEntrySource = entrySource;
 
-  if (contractions.length < 2) {
+  if (contractions.length === 1) {
     finalScore = Math.min(finalScore, 40);
     if (finalScore >= 25) {
       finalGrade = 'forming';
     }
-    allDetails.push('수축이 2개 미만이라 점수를 40점 이하로 제한합니다.');
+    allDetails.push('수축이 1개라 점수를 40점 이하로 제한합니다 (VCP 피벗은 인정하되 신뢰도 제한).');
   }
 
   allDetails.push(
