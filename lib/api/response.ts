@@ -35,7 +35,20 @@ export function apiError(
 }
 
 export function getErrorMessage(error: unknown, fallback = 'Unknown error') {
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof Error) return error.message;
+  // Supabase PostgrestError, fetch errors 등 plain object 형태의 에러도 메시지를 추출한다.
+  // instanceof Error만 체크하면 message가 무시되고 fallback이 노출되어 디버깅이 막힌다.
+  if (error && typeof error === 'object') {
+    const obj = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const message = typeof obj.message === 'string' ? obj.message : '';
+    const details = typeof obj.details === 'string' ? obj.details : '';
+    const hint = typeof obj.hint === 'string' ? obj.hint : '';
+    const code = typeof obj.code === 'string' ? obj.code : '';
+    const composed = [message, details, hint].filter(Boolean).join(' — ');
+    if (composed) return code ? `${composed} (${code})` : composed;
+  }
+  if (typeof error === 'string' && error) return error;
+  return fallback;
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs = 10_000, message = 'Request timed out') {

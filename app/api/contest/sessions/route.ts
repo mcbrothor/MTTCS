@@ -32,8 +32,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  let stage = 'parse_body';
   try {
     const body = await request.json();
+    stage = 'validate_input';
     const market = parseMarket(body.market);
     const source = parseContestSource(body.source) || parseContestSource((body.candidates || [])[0]?.screener_source) || 'minervini';
     const universe = String(body.universe || (market === 'KR' ? 'KOSPI200' : 'NASDAQ100')) as ScannerUniverse;
@@ -42,6 +44,7 @@ export async function POST(request: Request) {
     const marketContext = body.market_context && typeof body.market_context === 'object' ? body.market_context : null;
     const candidatePoolSnapshot = arrayOrEmpty(body.candidate_pool_snapshot);
 
+    stage = 'insert_session';
     const { data: session, error: sessionError } = await supabaseServer
       .from('beauty_contest_sessions')
       .insert([{
@@ -76,12 +79,14 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }));
 
+    stage = 'insert_candidates';
     const { data: candidates, error: candidateError } = await supabaseServer
       .from('contest_candidates')
       .insert(candidateRows)
       .select();
 
     if (candidateError) throw candidateError;
+    stage = 'build_prompt';
 
     const byTicker = new Map((candidates || []).map((candidate) => [String(candidate.ticker).toUpperCase(), candidate]));
     const promptCandidates = payload.map((candidate) => ({
@@ -98,6 +103,7 @@ export async function POST(request: Request) {
       source,
     });
 
+    stage = 'update_prompt';
     const { error: promptError } = await supabaseServer
       .from('beauty_contest_sessions')
       .update({
@@ -127,9 +133,11 @@ export async function POST(request: Request) {
       },
     ]));
 
+    stage = 'insert_reviews';
     const { error: reviewError } = await supabaseServer.from('contest_reviews').insert(reviewRows);
     if (reviewError) throw reviewError;
 
+    stage = 'select_final';
     const { data, error } = await supabaseServer
       .from('beauty_contest_sessions')
       .select('*, candidates:contest_candidates(*, reviews:contest_reviews(*))')
@@ -143,6 +151,13 @@ export async function POST(request: Request) {
       delay: 'REALTIME',
     }, 201);
   } catch (error) {
-    return apiError(getErrorMessage(error, 'Failed to create contest session.'), 'INVALID_INPUT', 400);
+    // 단계별 컨텍스트와 원본 에러를 모두 로그에 남겨 Vercel에서 진짜 원인을 추적 가능하게 한다.
+    console.error('[contest/sessions POST] failed at stage:', stage, error);
+    const baseMessage = getErrorMessage(error, 'Failed to create contest session.');
+    const isDbError = error && typeof error === 'object' && !(error instanceof Error)
+      && ('code' in (error as Record<string, unknown>) || 'details' in (error as Record<string, unknown>));
+    const status = isDbError ? 500 : 400;
+    const errorCode = isDbError ? 'DB_ERROR' : 'INVALID_INPUT';
+    return apiError(`[${stage}] ${baseMessage}`, errorCode, status, { stage });
   }
 }
