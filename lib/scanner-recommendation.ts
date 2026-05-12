@@ -261,7 +261,7 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  if (sepaPass && validPivot && strongVcp && tightPivot && rs90 && (volumeStrong || breakoutVolume)) {
+  if (sepaPass && validPivot && strongVcp && tightPivot && rs90 && (volumeWatch || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'SEPA 7/7, RS 90+ 리더십, 유효 VCP/HTF 피벗 근접, 거래량 확인이 결합된 실행 후보입니다.',
@@ -294,6 +294,24 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
       recommendationReason: reviewReadyPivot
         ? 'RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.'
         : 'RS 90+ 주도주가 SEPA core 6/7 이상과 건설적 VCP/매집 단서를 보입니다. 유효 피벗은 아직 미확정이므로 매수 타점이 아닌 IB 검토 후보입니다.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  // Path B: 완화된 IB Review - 시장이 좁아 strict 게이트 통과자가 거의 없을 때 모멘텀 리더를 포착.
+  // RS 82+ 리더가 SEPA core 5/7+, MA50 통제하, 건설적 단서를 보이면 검토 후보로 노출한다.
+  // 엄격 Path A(6/7 + accumulation)는 이상적 상태, Path B는 정상 모멘텀 사이클 상태를 포착.
+  const rs82 = scoreAtLeast(result.rsRating, 82);
+  const pathBPivotOk = (validPivot && reviewPivot(result.distanceToPivotPct))
+    || (!validPivot && rs82 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall || strongVcp));
+  const pathBSignals = constructiveVcp || rsLineHigh || tennisBall || pocketPivot || volumeDryUp || breakoutVolume;
+  if (rs82 && watchSepa && pathBSignals && ma50Controlled && pathBPivotOk) {
+    return {
+      recommendationTier: 'IB Review',
+      recommendationReason: validPivot && reviewPivot(result.distanceToPivotPct)
+        ? `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 유효 피벗, MA50 통제 상태에서 기술적 단서를 보유합니다. 엄격 6/7 기준은 미달이나 검토 가치 있는 후보입니다.`
+        : `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, MA50 통제하 리더십 셋업을 보유합니다. 유효 피벗 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.`,
       sepaMissingCount,
       exceptionSignals,
     };
@@ -354,26 +372,83 @@ export function scannerReviewScore(result: Partial<ScannerResult>) {
   return Math.round((rs * 0.30) + (vcp * 0.25) + (sepa * 0.20) + (pivotScore * 0.15) + (volumeScore * 0.10) + bonus);
 }
 
-export function applyScannerReviewPoolRankings(results: ScannerResult[], maxReviewPool = 15): ScannerResult[] {
+export function applyScannerReviewPoolRankings(
+  results: ScannerResult[],
+  maxReviewPool = 15,
+  minReviewPool = 10,
+): ScannerResult[] {
   const reviewed = results.map((item) => ({
     ...item,
     ...evaluateScannerRecommendation(item),
   }));
-  const keep = new Set(
+
+  // 1. Strict IB Review/Recommended 통과자를 composite score로 정렬해 maxReviewPool로 cap.
+  const strictKeep = new Set(
     reviewed
       .filter((item) => item.recommendationTier === 'IB Review')
       .sort((a, b) => scannerReviewScore(b) - scannerReviewScore(a) || (b.rsRating || 0) - (a.rsRating || 0))
       .slice(0, maxReviewPool)
-      .map((item) => item.ticker)
+      .map((item) => item.ticker),
   );
 
+  // 2. Strict 통과자가 minReviewPool 미만이면, composite score 상위 종목을 자동 승급해
+  //    최소 검토 풀(기본 10개)을 보장. 모멘텀 시장 사이클상 strict 7/7 게이트가 닫히는
+  //    구간에서도 발굴이 멈추지 않도록 한다. 단 추세가 살아있는 종목으로 한정:
+  //      - status === 'done' (분석 완료)
+  //      - RS rating >= 60 (벤치마크 대비 약하지 않음)
+  //      - SEPA core >= max(0, coreTotal - 3) (최소 4/7, 우상향 단서 일부 존재)
+  //      - VCP pivot 또는 RS 라인 신고가 또는 매집 단서 중 하나 이상
+  const promoted = new Set<string>();
+  if (strictKeep.size < minReviewPool) {
+    const needed = minReviewPool - strictKeep.size;
+    const promotionCandidates = reviewed
+      .filter((item) => item.status === 'done' && !strictKeep.has(item.ticker))
+      .filter((item) => {
+        const summary = item.sepaEvidence?.summary;
+        const corePassed = summary?.corePassed ?? null;
+        const coreTotal = summary?.coreTotal ?? 7;
+        const rs = item.rsRating ?? 0;
+        const minSepa = Math.max(0, coreTotal - 3);
+        const sepaOk = corePassed === null || corePassed >= minSepa;
+        const technicalAnchor =
+          hasValidPivot(item)
+          || item.rsLineNewHigh === true
+          || item.rsLineNearHigh === true
+          || (item.tennisBallCount ?? 0) >= 2
+          || scoreAtLeast(item.pocketPivotScore, 40)
+          || scoreAtLeast(item.volumeDryUpScore, 40)
+          || scoreAtLeast(item.vcpScore, 50)
+          || item.vcpGrade === 'forming'
+          || item.vcpGrade === 'strong';
+        return rs >= 60 && sepaOk && technicalAnchor;
+      })
+      .sort((a, b) => scannerReviewScore(b) - scannerReviewScore(a) || (b.rsRating || 0) - (a.rsRating || 0));
+
+    for (const item of promotionCandidates.slice(0, needed)) {
+      promoted.add(item.ticker);
+    }
+  }
+
   return reviewed.map((item) => {
-    if (item.recommendationTier !== 'IB Review' || keep.has(item.ticker)) return item;
-    return {
-      ...item,
-      recommendationTier: 'Watch',
-      recommendationReason: 'IB Review 최소 조건은 충족했지만, 동일 로직 composite score 상위 15개 밖이라 Watch로 유지합니다.',
-    };
+    if (item.recommendationTier === 'IB Review' && !strictKeep.has(item.ticker)) {
+      return {
+        ...item,
+        recommendationTier: 'Watch',
+        recommendationReason: `IB Review 최소 조건은 충족했지만, 동일 로직 composite score 상위 ${maxReviewPool}개 밖이라 Watch로 유지합니다.`,
+      };
+    }
+    if (promoted.has(item.ticker)) {
+      const summary = item.sepaEvidence?.summary;
+      const corePassed = summary?.corePassed ?? '?';
+      const coreTotal = summary?.coreTotal ?? 7;
+      const baseReason = item.recommendationReason ? ` 원래 등급 사유: ${item.recommendationReason}` : '';
+      return {
+        ...item,
+        recommendationTier: 'IB Review',
+        recommendationReason: `엄격 IB Review 기준은 미충족이나, 동일 로직 composite score 상위에 들어 최소 ${minReviewPool}개 검토 풀 보장 차원에서 자동 승급된 보충 후보입니다. (RS ${item.rsRating ?? '?'} · SEPA core ${corePassed}/${coreTotal}) 즉시 실행보다 추가 검증을 권장합니다.${baseReason}`,
+      };
+    }
+    return item;
   });
 }
 
