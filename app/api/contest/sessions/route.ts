@@ -12,18 +12,6 @@ function arrayOrEmpty(value: unknown) {
   return Array.isArray(value) ? value : [];
 }
 
-// DB CHECK 제약(migration 008)은 'Recommended', 'Partial', 'Low Priority', 'Error'만 허용.
-// 코드는 그 후 'IB Review', 'Watch'를 추가했고, migration 024가 production에 적용된 환경에서는
-// 원본 그대로 저장된다. 그러나 마이그레이션이 아직 미적용된 환경에서는 CHECK violation으로
-// 전체 contest 세션 생성이 실패하므로, 안전 매핑(legacy 등급)을 적용한다.
-// 원본 tier는 candidate.snapshot에 보존되므로 화면 표시·세션 히스토리에 영향 없음.
-function normalizeRecommendationTierForDb(tier: string | null | undefined): string | null {
-  if (!tier) return null;
-  if (tier === 'Recommended' || tier === 'Partial' || tier === 'Low Priority' || tier === 'Error') return tier;
-  if (tier === 'IB Review' || tier === 'Watch') return 'Partial';
-  return 'Partial';
-}
-
 export async function GET() {
   try {
     const { data, error } = await supabaseServer
@@ -84,7 +72,7 @@ export async function POST(request: Request) {
       exchange: candidate.exchange,
       name: candidate.name,
       user_rank: candidate.user_rank,
-      recommendation_tier: normalizeRecommendationTierForDb(candidate.recommendation_tier),
+      recommendation_tier: candidate.recommendation_tier || null,
       recommendation_reason: candidate.recommendation_reason || null,
       entry_reference_price: candidate.price,
       snapshot: candidate,
