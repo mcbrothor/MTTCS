@@ -5,7 +5,7 @@ import { verifySessionToken, isAuthEnabled } from '@/lib/auth/session';
 // In-memory rate limiter (per Edge isolate)
 const loginAttempts = new Map<string, { count: number; expiresAt: number }>();
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // If auth is disabled, allow all
   if (!isAuthEnabled()) {
     return NextResponse.next();
