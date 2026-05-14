@@ -39,6 +39,10 @@ yarn-error.log*
 /.gemini/
 /brain/
 
+# claude code worktrees and session artifacts (never commit)
+/.claude/worktrees/
+/.claude/qa/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
