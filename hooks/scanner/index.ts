@@ -312,6 +312,7 @@ export function useScanner() {
 
     if (filterKey === 'sepaPass') list = list.filter((row) => row.sepaStatus === 'pass');
     else if (filterKey === 'recommended') list = list.filter((row) => row.recommendationTier === 'Recommended');
+    else if (filterKey === 'action') list = list.filter((row) => row.recommendationTier === 'Action');
     else if (filterKey === 'partial') list = list.filter((row) => row.recommendationTier === 'IB Review');
     else if (filterKey === 'contestPool') list = list.filter((row) => isContestPoolTier(row.recommendationTier));
     else if (filterKey === 'nearPivot') list = list.filter((row) => row.distanceToPivotPct !== null && Math.abs(row.distanceToPivotPct) <= 5);
@@ -360,6 +361,7 @@ export function useScanner() {
       .filter((row) => row.status === 'done')
       .filter((row) =>
         row.recommendationTier === 'Recommended'
+        || row.recommendationTier === 'Action'
         || row.recommendationTier === 'IB Review'
         || row.sepaStatus === 'pass'
       )
@@ -410,6 +412,7 @@ export function useScanner() {
 
   const stats = useMemo(() => ({
     recommended: macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length,
+    action: macroScopedResults.filter((item) => item.recommendationTier === 'Action').length,
     partial: macroScopedResults.filter((item) => item.recommendationTier === 'IB Review').length,
     errors: macroScopedResults.filter((item) => item.status === 'error').length,
   }), [macroScopedResults]);

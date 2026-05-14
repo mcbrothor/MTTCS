@@ -73,9 +73,11 @@ console.log('=== Scanner Universe Tests ===\n');
     tennisBallCount: 2,
   });
 
-  assert.equal(recommendation.recommendationTier, 'IB Review');
+  // Regime-adaptive 4-tier 시스템: corePassed 6/7 + RS 95 + 유효 피벗 + 매집 단서 →
+  // Tier S(SEPA 7/7 필요) 대신 Tier A(Action) 진입. 사용자는 피벗 재확인 후 진입.
+  assert.equal(recommendation.recommendationTier, 'Action');
   assert.ok(recommendation.exceptionSignals.length > 0);
-  console.log('OK near-SEPA leaders with valid pivot and volume become IB Review');
+  console.log('OK near-SEPA leaders with valid pivot and volume become Action');
 }
 
 {
@@ -120,6 +122,8 @@ console.log('=== Scanner Universe Tests ===\n');
 }
 
 {
+  // Tier A(Action) 진입 임계(rs85+) 미달이지만 IB Review Path B(rs82+) 통과하는 후보군.
+  // applyScannerReviewPoolRankings는 IB Review 풀만 maxReviewPool(15)로 cap한다는 동작을 검증.
   const rows = Array.from({ length: 18 }, (_, index) => ({
     status: 'done',
     ticker: `T${String(index).padStart(2, '0')}`,
@@ -132,7 +136,7 @@ console.log('=== Scanner Universe Tests ===\n');
     entrySource: 'VCP_PIVOT',
     distanceToPivotPct: index % 2 === 0 ? 1.8 : -4,
     volumeDryUpScore: 52,
-    rsRating: 96 - (index * 0.4),
+    rsRating: 84 - (index * 0.05),
   }));
 
   const ranked = applyScannerReviewPoolRankings(rows, 15);

@@ -481,7 +481,7 @@ export interface MacroTrend {
   updated_at?: string;
 }
 export type ScannerStatus = 'queued' | 'running' | 'done' | 'error';
-export type RecommendationTier = 'Recommended' | 'IB Review' | 'Watch' | 'Partial' | 'Low Priority' | 'Error';
+export type RecommendationTier = 'Recommended' | 'Action' | 'IB Review' | 'Watch' | 'Partial' | 'Low Priority' | 'Error';
 
 export interface ScannerConstituent {
   rank: number;

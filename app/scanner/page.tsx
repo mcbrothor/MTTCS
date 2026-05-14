@@ -204,11 +204,16 @@ export default function ScannerPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Recommended</p>
             <p className="mt-2 font-mono text-2xl font-semibold text-emerald-300">{stats.recommended}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">즉시 검토 우선순위</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">즉시 진입 우선순위</p>
+          </div>
+          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Action</p>
+            <p className="mt-2 font-mono text-2xl font-semibold text-lime-300">{stats.action}</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">관찰 진입 후보 (피벗 확인)</p>
           </div>
           <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">IB Review</p>

@@ -1,4 +1,4 @@
-import type { CanslimScannerResult, RecommendationTier, ScannerResult } from '../types/index.ts';
+import type { CanslimScannerResult, MacroActionLevel, MacroRegime, RecommendationTier, ScannerResult } from '../types/index.ts';
 
 export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
 
@@ -9,12 +9,45 @@ export interface ScannerRecommendation {
   exceptionSignals: string[];
 }
 
+// Regime-adaptive threshold modifiers — relax gates in Risk-On windows so that
+// strong setups are surfaced when the broader market backdrop supports entry,
+// and tighten them when macro deteriorates so we don't surface marginal trades.
+interface RegimeModifier {
+  rsBonus: number;       // added to RS thresholds (negative = easier)
+  sepaSlack: number;     // additional SEPA core misses tolerated (positive = easier)
+  pivotBonus: number;    // additional % allowed above the actionable pivot ceiling
+}
+
+function regimeModifier(regime: MacroRegime): RegimeModifier {
+  if (regime === 'RISK_ON') return { rsBonus: -5, sepaSlack: 1, pivotBonus: 2 };
+  if (regime === 'RISK_OFF') return { rsBonus: 3, sepaSlack: -1, pivotBonus: -1 };
+  return { rsBonus: 0, sepaSlack: 0, pivotBonus: 0 };
+}
+
+// Map persisted MacroActionLevel to regime so call sites that already store the
+// action level on each ScannerResult don't need a separate plumbing path.
+function regimeFromActionLevel(level: MacroActionLevel | null | undefined): MacroRegime {
+  if (level === 'FULL') return 'RISK_ON';
+  if (level === 'HALT') return 'RISK_OFF';
+  return 'NEUTRAL';
+}
+
 function nearPivot(distanceToPivotPct: number | null | undefined, maxAbs = 5) {
   return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && Math.abs(distanceToPivotPct) <= maxAbs;
 }
 
-function actionablePivot(distanceToPivotPct: number | null | undefined) {
-  return typeof distanceToPivotPct === 'number' && Number.isFinite(distanceToPivotPct) && distanceToPivotPct >= -2 && distanceToPivotPct <= 3;
+function actionablePivot(distanceToPivotPct: number | null | undefined, pivotBonus = 0) {
+  return typeof distanceToPivotPct === 'number'
+    && Number.isFinite(distanceToPivotPct)
+    && distanceToPivotPct >= -2
+    && distanceToPivotPct <= (3 + pivotBonus);
+}
+
+function actionTierPivot(distanceToPivotPct: number | null | undefined, pivotBonus = 0) {
+  return typeof distanceToPivotPct === 'number'
+    && Number.isFinite(distanceToPivotPct)
+    && distanceToPivotPct >= -8
+    && distanceToPivotPct <= (5 + pivotBonus);
 }
 
 function reviewPivot(distanceToPivotPct: number | null | undefined) {
@@ -207,7 +240,10 @@ export function applyCanslimUniverseRsRankings(results: CanslimScannerResult[]):
   });
 }
 
-export function evaluateScannerRecommendation(result: Partial<ScannerResult>): ScannerRecommendation {
+export function evaluateScannerRecommendation(
+  result: Partial<ScannerResult>,
+  regime?: MacroRegime,
+): ScannerRecommendation {
   const { coreTotal, corePassed, coreFailed } = coreSummary(result);
 
   if (result.status === 'error') {
@@ -219,17 +255,29 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
+  const effectiveRegime = regime ?? regimeFromActionLevel(result.macroActionLevel);
+  const { rsBonus, sepaSlack, pivotBonus } = regimeModifier(effectiveRegime);
+  const tierSSepaTarget = Math.max(1, coreTotal - Math.max(0, sepaSlack));
+  const tierASepaTarget = Math.max(1, coreTotal - 1 - Math.max(0, sepaSlack));
+
   const sepaMissingCount = coreFailed ?? result.sepaFailed ?? null;
   // SEPA 판정은 sepaEvidence.summary 기반(corePassed/coreTotal)을 단일 source of truth로 사용.
   // top-level sepaStatus와 이중 검사하던 방식은 RS 소스 변경(BENCHMARK_PROXY → UNIVERSE/DB_BATCH)
   // 시점에 두 값이 어긋나 후보가 0건이 되는 문제를 일으켰음.
-  const sepaPass = typeof corePassed === 'number' && coreTotal > 0 && corePassed === coreTotal;
+  const sepaPassStrict = typeof corePassed === 'number' && coreTotal > 0 && corePassed === coreTotal;
+  const sepaPassRegime = typeof corePassed === 'number' && coreTotal > 0 && corePassed >= tierSSepaTarget;
+  const tierASepa = typeof corePassed === 'number' && coreTotal > 0 && corePassed >= tierASepaTarget;
   const reviewSepa = typeof corePassed === 'number' && corePassed >= coreTotal - 1;
   const watchSepa = typeof corePassed === 'number' && corePassed >= Math.max(0, coreTotal - 2);
   const strongVcp = result.vcpGrade === 'strong' || scoreAtLeast(result.vcpScore, 80);
   const constructiveVcp = strongVcp || result.vcpGrade === 'forming' || scoreAtLeast(result.vcpScore, 60);
+  // Tier A에서는 Forming + 보조 신호 또는 vcpScore≥40도 건설적으로 인정 — Strong에 도달하지 않은
+  // 베이스도 Pocket Pivot/매집 신호와 결합되면 신뢰할 만한 셋업이라는 차트 관찰을 반영.
+  const tierAVcp = constructiveVcp || scoreAtLeast(result.vcpScore, 40);
   const validPivot = hasValidPivot(result);
-  const tightPivot = validPivot && actionablePivot(result.distanceToPivotPct);
+  const tightPivot = validPivot && actionablePivot(result.distanceToPivotPct, pivotBonus);
+  const tightPivotStrict = validPivot && actionablePivot(result.distanceToPivotPct, 0);
+  const tierAPivot = validPivot && actionTierPivot(result.distanceToPivotPct, pivotBonus);
   const nearActionablePivot = validPivot && nearPivot(result.distanceToPivotPct, 5);
   const reviewReadyPivot = validPivot && reviewPivot(result.distanceToPivotPct);
   const pocketPivot = scoreAtLeast(result.pocketPivotScore, 60);
@@ -243,10 +291,15 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
   const rs85 = scoreAtLeast(result.rsRating, 85);
   const rs90 = scoreAtLeast(result.rsRating, 90);
   const rs95 = scoreAtLeast(result.rsRating, 95);
+  // Regime-adjusted RS gates — Tier S 90→85(Risk-On)/93(Risk-Off), Tier A 85→80/88
+  const rsTierS = scoreAtLeast(result.rsRating, 90 + rsBonus);
+  const rsTierA = scoreAtLeast(result.rsRating, 85 + rsBonus);
   const rsLineHigh = result.rsLineNewHigh === true || result.rsLineNearHigh === true;
   const htfPassed = result.baseType === 'High_Tight_Flag' && result.highTightFlag?.passed === true;
   const tennisBall = (result.tennisBallCount || 0) >= 2;
   const ma50Controlled = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 15;
+  // Tier S에서는 과열 차단을 위해 MA50 거리 12% 이내로 더 엄격하게 본다.
+  const ma50Tight = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 12;
   const leadershipSetupWithoutPivot = !validPivot && rs85 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
 
   const exceptionSignals = [
@@ -261,16 +314,20 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  if (sepaPass && validPivot && strongVcp && tightPivot && rs90 && (volumeWatch || breakoutVolume)) {
+  // Tier S — 즉시 진입(Recommended). Risk-On 환경에서는 RS≥85, SEPA 6/7, 피벗 +5%까지도
+  // 통과시켜 GREEN 윈도에서 0종목이 발생하는 문제를 해소. VCP는 Strong 또는
+  // (Forming + Pocket Pivot 50점 이상)으로 OR 분기를 추가해 단일 패턴 의존을 줄였음.
+  const tierSVcpFlex = strongVcp || (result.vcpGrade === 'forming' && (pocketPivot || scoreAtLeast(result.vcpScore, 50)));
+  if (sepaPassRegime && validPivot && tierSVcpFlex && tightPivot && rsTierS && ma50Tight && (volumeWatch || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'SEPA 7/7, RS 90+ 리더십, 유효 VCP/HTF 피벗 근접, 거래량 확인이 결합된 실행 후보입니다.',
+      recommendationReason: `SEPA core ${corePassed}/${coreTotal}, RS ${result.rsRating} 리더십, 유효 피벗 근접, 거래량 확인이 결합된 즉시 실행 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
       sepaMissingCount,
       exceptionSignals,
     };
   }
 
-  if (sepaPass && validPivot && rs95 && tightPivot && (constructiveVcp || tennisBall)) {
+  if (sepaPassStrict && validPivot && rs95 && tightPivotStrict && (constructiveVcp || tennisBall)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗 근처에서 기술적 근거를 유지하고 있어 우선 실행 후보입니다.',
@@ -279,10 +336,22 @@ export function evaluateScannerRecommendation(result: Partial<ScannerResult>): S
     };
   }
 
-  if (htfPassed && validPivot && rs90 && tightPivot && (volumeStrong || rsLineHigh)) {
+  if (htfPassed && validPivot && rs90 && tightPivotStrict && (volumeStrong || rsLineHigh)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 실행 후보입니다.',
+      sepaMissingCount,
+      exceptionSignals,
+    };
+  }
+
+  // Tier A — 관찰 진입(Action). 핵심 게이트는 충족하지만 Tier S만큼 정렬되지 않은 셋업.
+  // 피벗이 Tier A 윈도(-8% ~ +5+α%)에 있고, RS와 SEPA가 한 단계 완화된 임계를 통과하며,
+  // 매집 신호가 1개 이상 확인되면 노출 → 사용자는 피벗 재확인 후 진입 결정.
+  if (rsTierA && tierASepa && tierAVcp && accumulationSignal && tierAPivot && ma50Controlled) {
+    return {
+      recommendationTier: 'Action',
+      recommendationReason: `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 건설적 베이스, 매집 신호와 함께 Tier A 피벗 윈도에 있어 관찰 진입 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
       sepaMissingCount,
       exceptionSignals,
     };
@@ -382,7 +451,8 @@ export function applyScannerReviewPoolRankings(
     ...evaluateScannerRecommendation(item),
   }));
 
-  // 1. Strict IB Review/Recommended 통과자를 composite score로 정렬해 maxReviewPool로 cap.
+  // 1. IB Review 통과자를 composite score로 정렬해 maxReviewPool로 cap.
+  //    Recommended/Action 등급은 별도 분류이므로 IB Review 풀 cap에 영향을 주지 않는다.
   const strictKeep = new Set(
     reviewed
       .filter((item) => item.recommendationTier === 'IB Review')
@@ -453,17 +523,18 @@ export function applyScannerReviewPoolRankings(
 }
 
 export function isContestPoolTier(tier: RecommendationTier | null | undefined) {
-  return tier === 'Recommended' || tier === 'IB Review';
+  return tier === 'Recommended' || tier === 'Action' || tier === 'IB Review';
 }
 
 export function isAutoSelectedTier(tier: RecommendationTier | null | undefined) {
-  return tier === 'Recommended' || tier === 'IB Review';
+  return tier === 'Recommended' || tier === 'Action' || tier === 'IB Review';
 }
 
 export function recommendationSortValue(tier: RecommendationTier | null | undefined) {
   if (tier === 'Recommended') return 0;
-  if (tier === 'IB Review') return 1;
-  if (tier === 'Watch' || tier === 'Partial') return 2;
-  if (tier === 'Low Priority') return 3;
-  return 4;
+  if (tier === 'Action') return 1;
+  if (tier === 'IB Review') return 2;
+  if (tier === 'Watch' || tier === 'Partial') return 3;
+  if (tier === 'Low Priority') return 4;
+  return 5;
 }

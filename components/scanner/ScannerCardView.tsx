@@ -17,6 +17,7 @@ import type { RecommendationTier, ScannerResult } from '@/types';
 
 function tierClass(tier: RecommendationTier) {
   if (tier === 'Recommended') return 'border-emerald-400/40 bg-emerald-500/12 text-emerald-100';
+  if (tier === 'Action') return 'border-lime-400/40 bg-lime-500/12 text-lime-100';
   if (tier === 'IB Review' || tier === 'Partial') return 'border-amber-400/40 bg-amber-500/12 text-amber-100';
   if (tier === 'Watch') return 'border-sky-400/35 bg-sky-500/10 text-sky-100';
   if (tier === 'Error') return 'border-rose-400/40 bg-rose-500/12 text-rose-100';

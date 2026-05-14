@@ -11,6 +11,7 @@ export type FilterKey =
   | 'all'
   | 'sepaPass'
   | 'recommended'
+  | 'action'
   | 'partial'
   | 'contestPool'
   | 'nearPivot'
@@ -54,6 +55,7 @@ export const SCANNER_FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'sepaPass', label: 'SEPA 통과' },
   { key: 'recommended', label: 'Recommended' },
+  { key: 'action', label: 'Action' },
   { key: 'partial', label: 'IB Review' },
   { key: 'contestPool', label: 'IB 검토 풀' },
   { key: 'nearPivot', label: '피벗 5% 이내' },
