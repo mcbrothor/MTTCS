@@ -522,6 +522,7 @@ export interface ScannerResult extends ScannerConstituent {
   recommendationReason: string;
   sepaMissingCount: number | null;
   exceptionSignals: string[];
+  tierSBlockers?: import('@/lib/scanner-recommendation').TierSBlocker[];
   providerAttempts?: ProviderAttempt[];
   sepaStatus: AssessmentStatus | null;
   sepaPassed: number | null;

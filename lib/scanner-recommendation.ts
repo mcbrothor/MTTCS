@@ -2,11 +2,21 @@ import type { CanslimScannerResult, MacroActionLevel, MacroRegime, Recommendatio
 
 export type VolumeSignalTier = 'Strong' | 'Watch' | 'Weak' | 'Unknown';
 
+export type TierSBlocker =
+  | 'sepa_core'
+  | 'rs_rating'
+  | 'valid_pivot'
+  | 'pivot_distance'
+  | 'vcp_strength'
+  | 'ma50_extension'
+  | 'volume_confirmation';
+
 export interface ScannerRecommendation {
   recommendationTier: RecommendationTier;
   recommendationReason: string;
   sepaMissingCount: number | null;
   exceptionSignals: string[];
+  tierSBlockers: TierSBlocker[];
 }
 
 // Regime-adaptive threshold modifiers — relax gates in Risk-On windows so that
@@ -252,6 +262,7 @@ export function evaluateScannerRecommendation(
       recommendationReason: result.errorMessage || 'Data fetch or analysis did not complete.',
       sepaMissingCount: coreFailed ?? result.sepaFailed ?? null,
       exceptionSignals: [],
+      tierSBlockers: [],
     };
   }
 
@@ -302,6 +313,18 @@ export function evaluateScannerRecommendation(
   const ma50Tight = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 12;
   const leadershipSetupWithoutPivot = !validPivot && rs85 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
 
+  // Tier S 게이트별 통과 여부를 계산해 차단 사유를 누적한다.
+  // Tier S 도달자는 빈 배열, near-miss(1개 차단)와 다단계 미달자를 구분 가능.
+  const tierSVcpFlex = strongVcp || (result.vcpGrade === 'forming' && (pocketPivot || scoreAtLeast(result.vcpScore, 50)));
+  const tierSBlockers: TierSBlocker[] = [];
+  if (!sepaPassRegime) tierSBlockers.push('sepa_core');
+  if (!rsTierS) tierSBlockers.push('rs_rating');
+  if (!validPivot) tierSBlockers.push('valid_pivot');
+  else if (!tightPivot) tierSBlockers.push('pivot_distance');
+  if (!tierSVcpFlex) tierSBlockers.push('vcp_strength');
+  if (!ma50Tight) tierSBlockers.push('ma50_extension');
+  if (!(volumeWatch || breakoutVolume)) tierSBlockers.push('volume_confirmation');
+
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
     validPivot && result.baseType ? `Base ${result.baseType}` : null,
@@ -317,13 +340,13 @@ export function evaluateScannerRecommendation(
   // Tier S — 즉시 진입(Recommended). Risk-On 환경에서는 RS≥85, SEPA 6/7, 피벗 +5%까지도
   // 통과시켜 GREEN 윈도에서 0종목이 발생하는 문제를 해소. VCP는 Strong 또는
   // (Forming + Pocket Pivot 50점 이상)으로 OR 분기를 추가해 단일 패턴 의존을 줄였음.
-  const tierSVcpFlex = strongVcp || (result.vcpGrade === 'forming' && (pocketPivot || scoreAtLeast(result.vcpScore, 50)));
   if (sepaPassRegime && validPivot && tierSVcpFlex && tightPivot && rsTierS && ma50Tight && (volumeWatch || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
       recommendationReason: `SEPA core ${corePassed}/${coreTotal}, RS ${result.rsRating} 리더십, 유효 피벗 근접, 거래량 확인이 결합된 즉시 실행 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers: [],
     };
   }
 
@@ -333,6 +356,7 @@ export function evaluateScannerRecommendation(
       recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗 근처에서 기술적 근거를 유지하고 있어 우선 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers: [],
     };
   }
 
@@ -342,6 +366,7 @@ export function evaluateScannerRecommendation(
       recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 실행 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers: [],
     };
   }
 
@@ -354,6 +379,7 @@ export function evaluateScannerRecommendation(
       recommendationReason: `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 건설적 베이스, 매집 신호와 함께 Tier A 피벗 윈도에 있어 관찰 진입 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers,
     };
   }
 
@@ -365,6 +391,7 @@ export function evaluateScannerRecommendation(
         : 'RS 90+ 주도주가 SEPA core 6/7 이상과 건설적 VCP/매집 단서를 보입니다. 유효 피벗은 아직 미확정이므로 매수 타점이 아닌 IB 검토 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers,
     };
   }
 
@@ -383,6 +410,7 @@ export function evaluateScannerRecommendation(
         : `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, MA50 통제하 리더십 셋업을 보유합니다. 유효 피벗 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.`,
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers,
     };
   }
 
@@ -401,6 +429,7 @@ export function evaluateScannerRecommendation(
         : `RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보입니다.${gapNote}`,
       sepaMissingCount,
       exceptionSignals,
+      tierSBlockers,
     };
   }
 
@@ -413,6 +442,7 @@ export function evaluateScannerRecommendation(
     recommendationReason: `SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기 부족합니다. [${lpGaps.join(' / ')}]`,
     sepaMissingCount,
     exceptionSignals,
+    tierSBlockers,
   };
 }
 

@@ -410,12 +410,28 @@ export function useScanner() {
     }
   }, [telegramBusy, telegramCandidates, universe]);
 
-  const stats = useMemo(() => ({
-    recommended: macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length,
-    action: macroScopedResults.filter((item) => item.recommendationTier === 'Action').length,
-    partial: macroScopedResults.filter((item) => item.recommendationTier === 'IB Review').length,
-    errors: macroScopedResults.filter((item) => item.status === 'error').length,
-  }), [macroScopedResults]);
+  const stats = useMemo(() => {
+    const recommended = macroScopedResults.filter((item) => item.recommendationTier === 'Recommended').length;
+    const action = macroScopedResults.filter((item) => item.recommendationTier === 'Action').length;
+    const partial = macroScopedResults.filter((item) => item.recommendationTier === 'IB Review').length;
+    const errors = macroScopedResults.filter((item) => item.status === 'error').length;
+
+    // Tier S 진단: 차단 사유 1개로 막힌 near-miss 후보 수와 사유별 히스토그램.
+    // Recommended=0 일 때 어떤 게이트가 진입을 막았는지 가시화한다.
+    const blockerHistogram: Record<string, number> = {};
+    let nearMissRecommended = 0;
+    for (const item of macroScopedResults) {
+      if (item.status !== 'done' || item.recommendationTier === 'Recommended') continue;
+      const blockers = item.tierSBlockers || [];
+      if (blockers.length === 0) continue;
+      if (blockers.length === 1) nearMissRecommended += 1;
+      for (const reason of blockers) {
+        blockerHistogram[reason] = (blockerHistogram[reason] || 0) + 1;
+      }
+    }
+
+    return { recommended, action, partial, errors, nearMissRecommended, blockerHistogram };
+  }, [macroScopedResults]);
 
   const dataSourceSummary = useMemo(() => {
     const sources = Array.from(new Set(

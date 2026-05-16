@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, ScanSearch, Send, Square } from 'lucide-react';
+import { Play, ScanSearch, Send, Square, Info } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import * as Tooltip from '@radix-ui/react-tooltip';
 import Button from '@/components/ui/Button';
 const VcpDrilldownModal = dynamic(() => import('@/components/scanner/VcpDrilldownModal'), { ssr: false });
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
@@ -24,6 +25,141 @@ const MACRO_TONE = {
 function formatDateTime(value: string | null) {
   if (!value) return 'No snapshot';
   return new Date(value).toLocaleString('ko-KR');
+}
+
+const TIER_CRITERIA: Record<string, { title: string; lines: string[] }> = {
+  Recommended: {
+    title: 'Recommended — 즉시 진입 (Tier S)',
+    lines: [
+      '· SEPA core 충족 (NEUTRAL 7/7, RISK_ON 6/7, RISK_OFF 7/7+)',
+      '· RS Rating ≥ 90 (RISK_ON ≥ 85, RISK_OFF ≥ 93)',
+      '· 유효 VCP/HTF 피벗 보유 + 거리 -2% ~ +3% (RISK_ON +5%)',
+      '· Strong VCP 또는 Forming + Pocket Pivot/score ≥ 50',
+      '· MA50 이격도 ≤ 12% (과열 차단)',
+      '· 거래량 확인 (Watch 이상 또는 Breakout pending/confirmed)',
+      '예외 경로: RS 95+ & SEPA 7/7 & tightPivot, 또는 HTF + RS90 + 거래량 strong.',
+    ],
+  },
+  Action: {
+    title: 'Action — 관찰 진입 후보 (Tier A)',
+    lines: [
+      '· RS Rating ≥ 85 (RISK_ON ≥ 80)',
+      '· SEPA core ≥ coreTotal − 1 (보통 6/7)',
+      '· 건설적 VCP (Strong/Forming) 또는 vcpScore ≥ 40',
+      '· 유효 피벗 거리 -8% ~ +5%',
+      '· MA50 이격도 ≤ 15%',
+      '· 매집 신호 1개 이상 (Pocket Pivot / Volume Dry-up / Breakout)',
+      'Tier S만큼 정렬되지 않았으나 진입 윈도에 있음 → 피벗 재확인 후 결정.',
+    ],
+  },
+  'IB Review': {
+    title: 'IB Review — 투자위원회 검토 (composite 상위 cap)',
+    lines: [
+      'Path A (엄격): RS ≥ 85 · SEPA core ≥ 6/7 · 건설적 VCP · 매집 신호 · 유효 피벗 -12% ~ +8%',
+      'Path B (완화): RS ≥ 82 · SEPA core ≥ coreTotal − 2 · MA50 통제 · 기술적 단서 1개+',
+      '· composite score 상위 15개로 cap, 부족하면 RS ≥ 60 모멘텀 리더로 최소 10개 자동 승급',
+      '· 유효 피벗 미확정이면 매수 타점이 아닌 검토 대상.',
+    ],
+  },
+  Errors: {
+    title: 'Errors — 데이터/분석 예외',
+    lines: [
+      '· 가격/지표 수집 실패 (네트워크, 휴장, 신규 상장 등)',
+      '· VCP/SEPA 엔진이 충분한 캔들을 확보하지 못함',
+      '· 구조적 결격 (거래정지, 상폐 임박 등)',
+      '재시도하거나 데이터 소스를 점검하세요.',
+    ],
+  },
+  'Data Source': {
+    title: 'Data Source',
+    lines: [
+      '· 현재 유니버스와 사용된 일봉 데이터 출처/길이를 표시.',
+      '· KIS = 국내 정식 데이터, Yahoo Finance = 해외 백업 소스.',
+      '· 캔들 수가 적으면 (130일 미만) 일부 SEPA 항목이 info로 처리됩니다.',
+    ],
+  },
+};
+
+const BLOCKER_LABEL: Record<string, string> = {
+  sepa_core: 'SEPA core 미달',
+  rs_rating: 'RS 임계 미달',
+  valid_pivot: '유효 피벗 없음',
+  pivot_distance: '피벗 거리 윈도 밖',
+  vcp_strength: 'VCP 강도 부족',
+  ma50_extension: 'MA50 이격 과대 (>12%)',
+  volume_confirmation: '거래량 확인 부족',
+};
+
+function StatCard({
+  label,
+  value,
+  valueClass,
+  subtitle,
+  diagnostics,
+}: {
+  label: keyof typeof TIER_CRITERIA;
+  value: React.ReactNode;
+  valueClass: string;
+  subtitle: string;
+  diagnostics?: { nearMiss: number; histogram: Record<string, number> };
+}) {
+  const criteria = TIER_CRITERIA[label];
+  const sortedBlockers = diagnostics
+    ? Object.entries(diagnostics.histogram).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    : [];
+  return (
+    <Tooltip.Provider delayDuration={150}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <div className="group relative cursor-help rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4 transition-colors hover:border-emerald-400/40">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{label}</p>
+              <Info className="h-3 w-3 text-[var(--text-tertiary)] opacity-60 transition-opacity group-hover:opacity-100" />
+            </div>
+            <p className={`mt-2 font-mono text-2xl font-semibold ${valueClass}`}>{value}</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>
+            {diagnostics && diagnostics.nearMiss > 0 && (
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/80">
+                near-miss {diagnostics.nearMiss}
+              </p>
+            )}
+          </div>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            sideOffset={6}
+            className="z-[100] max-w-[380px] rounded-xl border border-slate-700 bg-slate-900/95 p-4 text-left shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95"
+          >
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">{criteria.title}</p>
+            <ul className="mt-2 space-y-1">
+              {criteria.lines.map((line, idx) => (
+                <li key={idx} className="text-[11px] leading-relaxed text-slate-300">{line}</li>
+              ))}
+            </ul>
+            {diagnostics && sortedBlockers.length > 0 && (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200">
+                  진단 — 차단 사유 분포
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Tier S 도달 직전(1게이트 미달) <span className="font-semibold text-emerald-200">{diagnostics.nearMiss}</span>건
+                </p>
+                <ul className="mt-2 space-y-0.5">
+                  {sortedBlockers.map(([key, count]) => (
+                    <li key={key} className="flex items-center justify-between text-[10px] text-slate-300">
+                      <span>· {BLOCKER_LABEL[key] || key}</span>
+                      <span className="font-mono text-emerald-200">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <Tooltip.Arrow className="fill-slate-700" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  );
 }
 
 export default function ScannerPage() {
@@ -205,31 +341,22 @@ export default function ScannerPage() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Recommended</p>
-            <p className="mt-2 font-mono text-2xl font-semibold text-emerald-300">{stats.recommended}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">즉시 진입 우선순위</p>
-          </div>
-          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Action</p>
-            <p className="mt-2 font-mono text-2xl font-semibold text-lime-300">{stats.action}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">관찰 진입 후보 (피벗 확인)</p>
-          </div>
-          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">IB Review</p>
-            <p className="mt-2 font-mono text-2xl font-semibold text-amber-300">{stats.partial}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">위원회 검토 후보</p>
-          </div>
-          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Errors</p>
-            <p className="mt-2 font-mono text-2xl font-semibold text-rose-300">{stats.errors}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">구조적 또는 예외 확인</p>
-          </div>
-          <div className="rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Data Source</p>
-            <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">{UNIVERSES[universe].label}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">{dataSourceSummary}</p>
-          </div>
+          <StatCard
+            label="Recommended"
+            value={stats.recommended}
+            valueClass="text-emerald-300"
+            subtitle="즉시 진입 우선순위"
+            diagnostics={{ nearMiss: stats.nearMissRecommended, histogram: stats.blockerHistogram }}
+          />
+          <StatCard label="Action" value={stats.action} valueClass="text-lime-300" subtitle="관찰 진입 후보 (피벗 확인)" />
+          <StatCard label="IB Review" value={stats.partial} valueClass="text-amber-300" subtitle="위원회 검토 후보" />
+          <StatCard label="Errors" value={stats.errors} valueClass="text-rose-300" subtitle="구조적 또는 예외 확인" />
+          <StatCard
+            label="Data Source"
+            value={<span className="text-sm font-semibold text-[var(--text-primary)]">{UNIVERSES[universe].label}</span>}
+            valueClass=""
+            subtitle={dataSourceSummary}
+          />
         </div>
 
         {isScanning && (
