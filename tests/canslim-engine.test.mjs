@@ -110,7 +110,9 @@ const macro = {
     pivotPoint: null,
     detectedBasePattern: 'VCP',
   }));
-  assert.equal(nStatus, 'INVALID');
+  // base pattern 보유 시 LOOSE_DIST_FROM_52W_HIGH(33%)까지 INVALID이 아닌 EXTENDED로 분류된다.
+  // 거리 26.9% < 33% 이므로 EXTENDED. 종합 점수는 여전히 WARNING 처리되어 pass=true.
+  assert.equal(nStatus, 'EXTENDED');
 
   const result = evaluateCanslim(makeStock({
     currentPrice: 95,
@@ -120,11 +122,12 @@ const macro = {
   }), macro, false);
   assert.equal(result.pass, true);
   assert.equal(result.failedPillar, null);
+  // EXTENDED 분기에서 N 항목 라벨이 '피벗 대비 위치'로 추가되며 WARNING 처리된다.
   assert.equal(
-    result.pillarDetails.find((detail) => detail.label === '52주 신고가 근접')?.status,
+    result.pillarDetails.find((detail) => detail.label === '피벗 대비 위치')?.status,
     'WARNING'
   );
-  console.log('OK valid base patterns survive N-too-far as a warning');
+  console.log('OK valid base patterns survive N-extended as a warning');
 }
 
 {

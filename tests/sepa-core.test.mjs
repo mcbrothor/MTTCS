@@ -52,7 +52,10 @@ console.log('=== SEPA Core Tests ===\n');
     rsSourceHint: 'DB_BATCH',
   });
 
-  assert.equal(evidence.summary.corePassed, 6);
+  // rsSourceHint='DB_BATCH'면 RS가 core 항목으로 승격되어 coreTotal=8.
+  // 마지막 봉 -8% 드롭으로 price_vs_ma50만 실패 → corePassed=7, coreFailed=1.
+  assert.equal(evidence.summary.coreTotal, 8);
+  assert.equal(evidence.summary.corePassed, 7);
   assert.equal(evidence.summary.coreFailed, 1);
   assert.equal(evidence.status, 'warning');
   assert.equal(evidence.metrics.rsSource, 'DB_BATCH');
@@ -72,9 +75,11 @@ console.log('=== SEPA Core Tests ===\n');
     rsRating: 86,
   });
 
-  assert.equal(recommendation.recommendationTier, 'IB Review');
+  // core 1 미달 + 유효 피벗 근접(+2.1%) + Volume Dry-up + VCP forming →
+  // Recommended(엄격)는 아니지만 Action 등급 게이트는 통과한다.
+  assert.equal(recommendation.recommendationTier, 'Action');
   assert.equal(recommendation.sepaMissingCount, 1);
-  console.log('✅ Test 2: core 6/7은 warning + Partial로 분류');
+  console.log('✅ Test 2: core 1 미달 + 매집 신호는 warning + Action으로 분류');
 }
 
 {
