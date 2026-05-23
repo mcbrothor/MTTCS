@@ -80,7 +80,7 @@ function userFacingIssue(message?: string) {
 export default function DecisionBox() {
   const { data, macroRegime, isLoading, isStale, error, conflictWarning } = useMarket();
 
-  if (isLoading || !data) {
+  if (isLoading || !data || !data.metrics) {
     return (
       <section className="rounded-xl border border-sky-500/25 bg-slate-950/55 p-4 shadow-[var(--panel-shadow)] sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
