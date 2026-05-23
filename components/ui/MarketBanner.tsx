@@ -36,7 +36,7 @@ const STATE_STYLE = {
 export default function MarketBanner({ compact = false }: { compact?: boolean }) {
   const { data, isLoading } = useMarket();
 
-  if (isLoading || !data) return null;
+  if (isLoading || !data || !data.metrics) return null;
 
   const style = STATE_STYLE[data.state];
   const updatedAt = data.metrics.updatedAt || data.metrics.meta.asOf;

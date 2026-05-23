@@ -1,0 +1,216 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: master-filter.spec.ts >> TC-MF: 마스터 필터 >> 정상 (GREEN) 상태 >> MF-01: GREEN 판정 시 녹색 UI 표시
+- Location: tests/e2e/master-filter.spec.ts:12:9
+
+# Error details
+
+```
+Error: expect(locator).toBeVisible() failed
+
+Locator: locator('text=마스터 필터')
+Expected: visible
+Error: strict mode violation: locator('text=마스터 필터') resolved to 3 elements:
+    1) <a href="/master-filter" class="rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByRole('link', { name: '마스터 필터' })
+    2) <a href="/master-filter" class="shrink-0 rounded-md border px-3 py-1 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByText('마스터 필터').nth(1)
+    3) <a href="/master-filter" class="shrink-0 rounded-md border px-3 py-1 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByText('마스터 필터').nth(2)
+
+Call log:
+  - Expect "toBeVisible" with timeout 10000ms
+  - waiting for locator('text=마스터 필터')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - navigation [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]:
+            - link "MTN Live Mantori's Trading Navigator" [ref=e8] [cursor=pointer]:
+              - /url: /
+              - img [ref=e10]
+              - generic [ref=e12]:
+                - generic [ref=e13]:
+                  - generic [ref=e14]: MTN
+                  - generic [ref=e15]: Live
+                - paragraph [ref=e17]: Mantori's Trading Navigator
+            - generic [ref=e19]:
+              - generic [ref=e20]:
+                - generic [ref=e21]: S&P500
+                - generic [ref=e22]: "--"
+                - generic [ref=e23]:
+                  - generic [ref=e24]: "--"
+                  - generic [ref=e25]: KIS
+              - generic [ref=e26]:
+                - generic [ref=e27]: NASDAQ
+                - generic [ref=e28]: "--"
+                - generic [ref=e29]:
+                  - generic [ref=e30]: "--"
+                  - generic [ref=e31]: KIS
+              - generic [ref=e32]:
+                - generic [ref=e33]: KOSPI
+                - generic [ref=e34]: "--"
+                - generic [ref=e35]:
+                  - generic [ref=e36]: "--"
+                  - generic [ref=e37]: KIS
+              - generic [ref=e38]:
+                - generic [ref=e39]: KOSDAQ
+                - generic [ref=e40]: "--"
+                - generic [ref=e41]:
+                  - generic [ref=e42]: "--"
+                  - generic [ref=e43]: KIS
+              - generic [ref=e44]:
+                - generic [ref=e45]: USD/KRW
+                - generic [ref=e46]: "--"
+                - generic [ref=e47]:
+                  - generic [ref=e48]: "--"
+                  - generic [ref=e49]: Yahoo
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - link "오늘" [ref=e52] [cursor=pointer]:
+                - /url: /
+              - link "시장 분석" [ref=e53] [cursor=pointer]:
+                - /url: /master-filter
+              - link "종목 발굴" [ref=e54] [cursor=pointer]:
+                - /url: /scanner
+              - link "콘테스트" [ref=e55] [cursor=pointer]:
+                - /url: /contest
+              - link "관심종목" [ref=e56] [cursor=pointer]:
+                - /url: /watchlist
+              - link "매매 계획" [ref=e57] [cursor=pointer]:
+                - /url: /plan
+              - link "포트폴리오" [ref=e58] [cursor=pointer]:
+                - /url: /portfolio
+              - link "성과 복기" [ref=e59] [cursor=pointer]:
+                - /url: /history
+            - generic [ref=e60]:
+              - link "마스터 필터" [ref=e61] [cursor=pointer]:
+                - /url: /master-filter
+              - link "매크로" [ref=e62] [cursor=pointer]:
+                - /url: /macro
+              - link "가이드" [ref=e63] [cursor=pointer]:
+                - /url: /guide
+              - link "링크 허브" [ref=e64] [cursor=pointer]:
+                - /url: /links
+              - link "관리" [ref=e65] [cursor=pointer]:
+                - /url: /admin
+              - button "로그아웃" [ref=e67]
+      - generic [ref=e69]:
+        - link "오늘 의사결정" [ref=e70] [cursor=pointer]:
+          - /url: /
+          - img [ref=e72]
+          - generic [ref=e74]:
+            - generic [ref=e75]: 오늘
+            - generic [ref=e76]: 의사결정
+        - link "01 시장 분석 진입 조건 확인" [ref=e77] [cursor=pointer]:
+          - /url: /master-filter
+          - generic [ref=e78]: "01"
+          - generic [ref=e79]:
+            - generic [ref=e80]: 시장 분석
+            - generic [ref=e81]: 진입 조건 확인
+        - link "02 종목 발굴 SEPA/VCP · CAN SLIM" [ref=e82] [cursor=pointer]:
+          - /url: /scanner
+          - generic [ref=e83]: "02"
+          - generic [ref=e84]:
+            - generic [ref=e85]: 종목 발굴
+            - generic [ref=e86]: SEPA/VCP · CAN SLIM
+        - link "03 콘테스트 LLM 비교 분석" [ref=e87] [cursor=pointer]:
+          - /url: /contest
+          - generic [ref=e88]: "03"
+          - generic [ref=e89]:
+            - generic [ref=e90]: 콘테스트
+            - generic [ref=e91]: LLM 비교 분석
+        - link "04 관심종목 후보 추적" [ref=e92] [cursor=pointer]:
+          - /url: /watchlist
+          - generic [ref=e93]: "04"
+          - generic [ref=e94]:
+            - generic [ref=e95]: 관심종목
+            - generic [ref=e96]: 후보 추적
+        - link "05 매매 계획 리스크 계산" [ref=e97] [cursor=pointer]:
+          - /url: /plan
+          - generic [ref=e98]: "05"
+          - generic [ref=e99]:
+            - generic [ref=e100]: 매매 계획
+            - generic [ref=e101]: 리스크 계산
+        - link "06 포트폴리오 노출도 점검" [ref=e102] [cursor=pointer]:
+          - /url: /portfolio
+          - generic [ref=e103]: "06"
+          - generic [ref=e104]:
+            - generic [ref=e105]: 포트폴리오
+            - generic [ref=e106]: 노출도 점검
+        - link "07 성과 복기 결과 축적" [ref=e107] [cursor=pointer]:
+          - /url: /history
+          - generic [ref=e108]: "07"
+          - generic [ref=e109]:
+            - generic [ref=e110]: 성과 복기
+            - generic [ref=e111]: 결과 축적
+    - main [ref=e112]:
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - paragraph [ref=e115]: 오류가 발생했습니다
+          - paragraph [ref=e116]: Cannot read properties of undefined (reading 'trend')
+        - button "다시 시도" [ref=e117]
+  - alert [ref=e118]
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect } from '@playwright/test';
+  2  | import { login } from './helpers/auth';
+  3  | import { setupAllMocks, setupHaltMocks } from './mocks/handlers';
+  4  | 
+  5  | test.describe('TC-MF: 마스터 필터', () => {
+  6  |   test.describe('정상 (GREEN) 상태', () => {
+  7  |     test.beforeEach(async ({ page }) => {
+  8  |       await setupAllMocks(page); // GREEN by default
+  9  |       await login(page);
+  10 |     });
+  11 | 
+  12 |     test('MF-01: GREEN 판정 시 녹색 UI 표시', async ({ page }) => {
+  13 |       await page.goto('/master-filter');
+  14 | 
+> 15 |       await expect(page.locator('text=마스터 필터')).toBeVisible();
+     |                                                 ^ Error: expect(locator).toBeVisible() failed
+  16 |       await expect(page.locator('text=GREEN')).toBeVisible();
+  17 |       
+  18 |       // Should indicate full action level
+  19 |       await expect(page.locator('text=진입 가능').or(page.locator('text=FULL'))).toBeVisible();
+  20 |     });
+  21 |   });
+  22 | 
+  23 |   test.describe('방어 (RED) 상태', () => {
+  24 |     test.beforeEach(async ({ page }) => {
+  25 |       await setupHaltMocks(page); // Sets to RED / HALT
+  26 |       await login(page);
+  27 |     });
+  28 | 
+  29 |     test('MF-03: RED 판정 시 레드 표시 및 차단 메시지', async ({ page }) => {
+  30 |       await page.goto('/master-filter');
+  31 | 
+  32 |       await expect(page.locator('text=RED')).toBeVisible();
+  33 |       
+  34 |       // Should indicate halt action level
+  35 |       await expect(page.locator('text=진입 금지').or(page.locator('text=HALT'))).toBeVisible();
+  36 |     });
+  37 | 
+  38 |     test('MF-04: DecisionBox 가이드라인 표시', async ({ page }) => {
+  39 |       await page.goto('/master-filter');
+  40 |       
+  41 |       const decisionBox = page.locator('text=현금 비중').or(page.locator('text=신규 매수 금지')).first();
+  42 |       await expect(decisionBox).toBeVisible();
+  43 |     });
+  44 |   });
+  45 | });
+  46 | 
+```
