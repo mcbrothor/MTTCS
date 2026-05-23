@@ -32,8 +32,8 @@ test.describe('Wave 6: Edge Cases (심화 테스트)', () => {
               ],
               positions: [],
               warnings: [
-                { type: 'exposure', message: '단일 섹터(Technology) 노출이 30%를 초과했습니다 (50.0%)' },
-                { type: 'risk', message: '총 오픈 리스크가 1%를 초과했습니다 (5.0%)' }
+                '단일 섹터(Technology) 노출이 30%를 초과했습니다 (50.0%)',
+                '총 오픈 리스크가 1%를 초과했습니다 (5.0%)'
               ]
             },
             meta: { source: 'e2e-mock-edge' }

@@ -186,9 +186,9 @@ export default function DecisionBox() {
             </div>
           </div>
 
-          {(conflictWarning || error || data.metrics.meta.warnings.length > 0) && (
+          {(conflictWarning || error || (data.metrics.meta?.warnings?.length ?? 0) > 0) && (
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-200">
-              {conflictWarning ?? userFacingIssue(error?.message) ?? data.metrics.meta.warnings[0]}
+              {conflictWarning ?? userFacingIssue(error?.message) ?? data.metrics.meta?.warnings?.[0]}
             </div>
           )}
         </div>

@@ -33,6 +33,8 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
 
   test('SCAN-02: 스캔 결과 Tier별 카운트 확인', async ({ page }) => {
     await scannerPage.goto();
+    await scannerPage.scanButton.click();
+    await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
 
     // Our fixture has 1 Recommended, 1 Action, 1 IB Review, 1 Errors
     // Cards should display these numbers
@@ -49,6 +51,8 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
 
   test('SCAN-04: 필터 탭 전환', async ({ page }) => {
     await scannerPage.goto();
+    await scannerPage.scanButton.click();
+    await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
 
     // Filter by Recommended
     const recFilter = page.locator('button:has-text("Recommended")');
@@ -61,6 +65,8 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
 
   test('SCAN-07: 종목 선택 및 카운터 증가', async ({ page }) => {
     await scannerPage.goto();
+    await scannerPage.scanButton.click();
+    await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
 
     // Checkboxes should exist for valid candidates
     const checkboxes = page.locator('input[type="checkbox"]');
@@ -78,6 +84,8 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
 
   test('SCAN-08: 종목 클릭 → VCP Drilldown 모달', async ({ page }) => {
     await scannerPage.goto();
+    await scannerPage.scanButton.click();
+    await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
 
     // Click on NVDA row/card
     const nvdaRow = page.locator('text=NVDA').first();
@@ -91,6 +99,8 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
 
   test('SCAN-10: 콘테스트로 이동 플로팅 버튼', async ({ page }) => {
     await scannerPage.goto();
+    await scannerPage.scanButton.click();
+    await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
 
     // Select one candidate
     await page.locator('input[type="checkbox"]').first().check();
