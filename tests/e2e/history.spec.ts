@@ -30,9 +30,9 @@ test.describe('TC-HIST: 성과 복기', () => {
     await historyPage.statsTab.click();
 
     // Dashboard metrics should appear
-    await expect(page.locator('text=승률')).toBeVisible();
-    await expect(page.locator('text=총 PnL')).toBeVisible();
-    await expect(page.locator('text=계획 준수율')).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^승률$/ }).first()).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^총 PnL$/ }).first()).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^계획 준수율$/ }).first()).toBeVisible();
   });
 
   test('HIST-05: 미국 ↔ 한국 시장 전환', async ({ page }) => {
@@ -44,7 +44,7 @@ test.describe('TC-HIST: 성과 복기', () => {
     await expect(page).toHaveURL(/market=KR/);
     
     // Check if UI reflects KR context
-    await expect(page.locator('text=한국')).toBeVisible();
+    await expect(page.locator('button:has-text("한국")').first()).toBeVisible();
   });
 
   test('HIST-06: 뷰 파라미터가 UI와 동기화됨', async ({ page }) => {
@@ -52,6 +52,6 @@ test.describe('TC-HIST: 성과 복기', () => {
     await historyPage.goto({ view: 'stats' });
     
     // Metric cards should be immediately visible
-    await expect(page.locator('text=승률')).toBeVisible();
+    await expect(page.locator('div').filter({ hasText: /^승률$/ }).first()).toBeVisible();
   });
 });
