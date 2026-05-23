@@ -1,0 +1,289 @@
+import { Check, Plus } from 'lucide-react';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import TradingViewWidget from '@/components/ui/TradingViewWidget';
+import { getVolumeSignalTier, type VolumeSignalTier } from '@/lib/scanner-recommendation';
+import type { ScannerResult, RecommendationTier } from '@/types';
+
+function formatMarketCap(value: number | null, currency: ScannerResult['currency'], ticker: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  
+  const isKorean = currency === 'KRW' || /^\d{6}$/.test(ticker);
+  
+  if (isKorean) {
+    const jo = value / 1_000_000_000_000;
+    if (jo >= 1) return `₩${jo.toFixed(2)}조`;
+    const eok = Math.round(value / 100_000_000);
+    return `₩${eok.toLocaleString('ko-KR')}억`;
+  }
+  
+  if (value >= 1_000_000_000_000) return `$${(value / 1_000_000_000_000).toFixed(2)}T`;
+  return `$${(value / 1_000_000_000).toFixed(1)}B`;
+}
+
+function formatPrice(value: number | null, currency: ScannerResult['currency'], ticker: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  const isKorean = currency === 'KRW' || /^\d{6}$/.test(ticker);
+  
+  return new Intl.NumberFormat(isKorean ? 'ko-KR' : 'en-US', {
+    style: 'currency',
+    currency: isKorean ? 'KRW' : 'USD',
+    maximumFractionDigits: isKorean ? 0 : 2,
+  }).format(value);
+}
+
+function tierClass(tier: RecommendationTier) {
+  if (tier === 'Recommended') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Action') return 'border-lime-500/40 bg-lime-500/10 text-lime-200';
+  if (tier === 'IB Review' || tier === 'Partial') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Watch') return 'border-sky-500/40 bg-sky-500/10 text-sky-200';
+  if (tier === 'Error') return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
+  return 'border-slate-700 bg-slate-900 text-slate-300';
+}
+
+function sepaLabel(result: ScannerResult) {
+  const corePassed = result.sepaEvidence?.summary.corePassed;
+  const coreTotal = result.sepaEvidence?.summary.coreTotal ?? 7;
+  if (result.status === 'error') return 'Error';
+  if (result.status !== 'done') return 'Pending';
+  if (result.sepaStatus === 'pass' && corePassed === coreTotal) return 'Pass';
+  if (typeof corePassed === 'number' && corePassed >= coreTotal - 1) return 'Partial';
+  return 'Weak';
+}
+
+function baseTypeLabel(result: ScannerResult) {
+  if (result.baseType === 'High_Tight_Flag') return 'HTF';
+  if (result.baseType === 'Standard_VCP') return 'Standard';
+  if (result.momentumBranch === 'EXTENDED') return 'Extended';
+  return '-';
+}
+
+function formatRs(result: ScannerResult) {
+  if (typeof result.rsRating !== 'number') return '-';
+  const rank = result.rsRank && result.rsUniverseSize ? ` #${result.rsRank}/${result.rsUniverseSize}` : '';
+  return `${result.rsRating}${rank}`;
+}
+
+function RsSourceBadge({ source }: { source: ScannerResult['rsSource'] }) {
+  if (source === 'DB_BATCH') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">DB</span>;
+  if (source === 'BENCHMARK_PROXY') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Proxy</span>;
+  if (source === 'UNIVERSE') return <span className="ml-1 rounded px-1 py-0.5 text-[9px] font-bold bg-slate-700/60 text-slate-400 border border-slate-600/40">Rank</span>;
+  return null;
+}
+
+function volumeSignalClass(tier: VolumeSignalTier) {
+  if (tier === 'Strong') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
+  if (tier === 'Watch') return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+  if (tier === 'Weak') return 'border-slate-700 bg-slate-900 text-slate-300';
+  return 'border-slate-800 bg-slate-950 text-slate-500';
+}
+
+function getSectorLabel(result: ScannerResult): string | null {
+  return result.fundamentals?.sector ?? null;
+}
+
+function sectorColorClass(sector: string): string {
+  const s = sector.toLowerCase();
+  if (s.includes('반도체') || s.includes('semiconductor')) return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
+  if (s.includes('방산') || s.includes('defense') || s.includes('aerospace')) return 'bg-red-500/15 text-red-300 border-red-500/30';
+  if (s.includes('통신') || s.includes('telecom') || s.includes('communication')) return 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+  if (s.includes('증권') || s.includes('금융') || s.includes('financial') || s.includes('bank')) return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+  if (s.includes('조선') || s.includes('shipbuilding')) return 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30';
+  if (s.includes('소프트웨어') || s.includes('software') || s.includes('technology') || s.includes('tech')) return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30';
+  if (s.includes('바이오') || s.includes('제약') || s.includes('health') || s.includes('biotech')) return 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+  if (s.includes('에너지') || s.includes('energy')) return 'bg-orange-500/15 text-orange-300 border-orange-500/30';
+  if (s.includes('자동차') || s.includes('auto') || s.includes('consumer')) return 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30';
+  if (s.includes('철강') || s.includes('소재') || s.includes('material')) return 'bg-stone-500/15 text-stone-300 border-stone-500/30';
+  return 'bg-slate-700/40 text-slate-400 border-slate-600/40';
+}
+
+function volumeSignalDetail(result: ScannerResult) {
+  const dryUp = result.volumeDryUpScore ?? '-';
+  const pocket = result.pocketPivotScore ?? '-';
+  const breakout = result.breakoutVolumeStatus || 'unknown';
+  return `DU ${dryUp} / PP ${pocket} / ${breakout}`;
+}
+
+function pivotDisplay(result: ScannerResult) {
+  if (result.distanceToPivotPct !== null && result.pivotPrice !== null) {
+    const age = typeof result.pivotAgeDays === 'number' ? ` · ${result.pivotAgeDays}일 전` : '';
+    return {
+      primary: `${result.distanceToPivotPct > 0 ? '+' : ''}${result.distanceToPivotPct}%`,
+      secondary: `VCP ${formatPrice(result.pivotPrice, result.currency, result.ticker)}${age}`,
+      tone: 'text-emerald-300',
+    };
+  }
+  if (typeof result.referenceHighPrice === 'number') {
+    const date = result.referenceHighDate ? ` · ${result.referenceHighDate.slice(5)}` : '';
+    return {
+      primary: '참고',
+      secondary: `최근 고점 ${formatPrice(result.referenceHighPrice, result.currency, result.ticker)}${date}`,
+      tone: 'text-slate-400',
+    };
+  }
+  return { primary: '-', secondary: '피벗 미확정', tone: 'text-slate-600' };
+}
+
+interface ScannerTableProps {
+  results: ScannerResult[];
+  selectedTickers: Set<string>;
+  onToggleSelect: (ticker: string) => void;
+  onRowClick: (result: ScannerResult) => void;
+}
+
+export default function ScannerTable({
+  results,
+  selectedTickers,
+  onToggleSelect,
+  onRowClick,
+}: ScannerTableProps) {
+  const selectionColumn = (result: ScannerResult) => (
+    <button
+      type="button"
+      disabled={result.status !== 'done'}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggleSelect(result.ticker);
+      }}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-full border transition-all ${
+        selectedTickers.has(result.ticker)
+          ? 'border-rose-500 bg-rose-500 text-white shadow-lg shadow-rose-500/20'
+          : 'border-slate-800 text-slate-500 hover:border-rose-500/50 hover:text-rose-400'
+      } disabled:opacity-20`}
+    >
+      {selectedTickers.has(result.ticker) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+    </button>
+  );
+
+  const tierBadge = (result: ScannerResult) => (
+    <span className={`inline-flex rounded-lg border px-2 py-1 text-xs font-bold ${tierClass(result.recommendationTier)}`}>
+      {result.recommendationTier}
+    </span>
+  );
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-800">
+      <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
+        <colgroup>
+          <col className="w-[3%]" />
+          <col className="w-[12%]" />
+          <col className="w-[6%]" />
+          <col className="w-[7%]" />
+          <col className="w-[5%]" />
+          <col className="w-[5%]" />
+          <col className="w-[6%]" />
+          <col className="w-[6%]" />
+          <col className="w-[6%]" />
+          <col className="w-[9%]" />
+          <col className="w-[7%]" />
+          <col className="w-[7%]" />
+          <col className="w-[7%]" />
+          <col className="w-[6%]" />
+        </colgroup>
+        <thead className="bg-slate-950 text-[11px] uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="px-2 py-3 text-left">#</th>
+            <th className="px-2 py-3 text-left">종목</th>
+            <th className="px-2 py-3 text-right">시총</th>
+            <th className="px-2 py-3 text-right">현재가</th>
+            <th className="px-2 py-3 text-right">등락률</th>
+            <th className="px-2 py-3 text-right">ADR%</th>
+            <th className="px-2 py-3 text-left">SEPA</th>
+            <th className="px-2 py-3 text-right">RS</th>
+            <th className="px-2 py-3 text-right">VCP</th>
+            <th className="px-2 py-3 text-left">거래량</th>
+            <th className="px-2 py-3 text-right">피벗 포인트</th>
+            <th className="px-2 py-3 text-left">등급</th>
+            <th className="px-2 py-3 text-left">패턴</th>
+            <th className="px-2 py-3 text-center">후보선택</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800 bg-slate-950/40">
+          {results.map((result) => {
+            const volumeTier = getVolumeSignalTier(result);
+            const pivot = pivotDisplay(result);
+            return (
+              <tr
+                key={result.ticker}
+                onClick={() => result.status === 'done' && onRowClick(result)}
+                className={`cursor-pointer transition-colors hover:bg-slate-900 ${selectedTickers.has(result.ticker) ? 'bg-emerald-500/5' : ''}`}
+              >
+                <td className="px-2 py-3 font-mono text-slate-400">{result.rank}</td>
+                <td className="px-2 py-3">
+                  <p className="truncate font-mono font-bold text-white">{result.ticker}</p>
+                  <div className="mt-0.5 flex items-center gap-1">
+                    {getSectorLabel(result) && (
+                      <span className={`shrink-0 rounded border px-1 py-0.5 text-[9px] font-semibold leading-none ${sectorColorClass(getSectorLabel(result)!)}`}>
+                        {getSectorLabel(result)}
+                      </span>
+                    )}
+                    <p className="truncate text-[11px] text-slate-500">{result.name}</p>
+                  </div>
+                </td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatMarketCap(result.marketCap, result.currency, result.ticker)}</td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">{formatPrice(result.currentPrice, result.currency, result.ticker)}</td>
+                <td className="px-2 py-3 text-right font-mono">
+                  {typeof result.changePercent === 'number' ? (
+                    <span className={result.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      {result.changePercent >= 0 ? '+' : ''}{result.changePercent.toFixed(2)}%
+                    </span>
+                  ) : <span className="text-slate-600">—</span>}
+                </td>
+                <td className="px-2 py-3 text-right font-mono">
+                  {typeof result.adrPct === 'number' ? (
+                    <span className={result.adrPct >= 5 ? 'text-amber-300' : 'text-slate-300'}>
+                      {result.adrPct.toFixed(1)}%
+                    </span>
+                  ) : <span className="text-slate-600">—</span>}
+                </td>
+                <td className="px-2 py-3">
+                  <span className="text-slate-300">{sepaLabel(result)}</span>
+                  {result.sepaEvidence?.summary.corePassed !== undefined && (
+                    <p className="text-[10px] text-slate-500">
+                      Core {result.sepaEvidence.summary.corePassed}/{result.sepaEvidence.summary.coreTotal}
+                    </p>
+                  )}
+                </td>
+                <td className="px-2 py-3 font-mono text-slate-200">
+                  <span className="flex items-center">
+                    {formatRs(result)}
+                    <RsSourceBadge source={result.rsSource} />
+                  </span>
+                </td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">
+                  {result.status === 'running' ? <LoadingSpinner className="ml-auto h-3 w-3" /> : result.vcpScore ?? '-'}
+                </td>
+                <td className="px-2 py-3">
+                  <span className={`inline-flex rounded-lg border px-2 py-1 text-[11px] font-bold ${volumeSignalClass(volumeTier)}`}>
+                    {volumeTier}
+                  </span>
+                  <p className="mt-1 truncate text-[10px] text-slate-500">{volumeSignalDetail(result)}</p>
+                </td>
+                <td className="px-2 py-3 text-right font-mono text-slate-300">
+                  <span className={pivot.tone}>{pivot.primary}</span>
+                  <p className="mt-1 truncate text-[10px] text-slate-500">{pivot.secondary}</p>
+                </td>
+                <td className="px-2 py-3">{tierBadge(result)}</td>
+                <td className="px-2 py-3 text-[11px] text-slate-300">
+                  <p className="truncate">{baseTypeLabel(result)}</p>
+                  {result.momentumBranch === 'EXTENDED' && <p className="text-[10px] text-amber-300">확장</p>}
+                </td>
+                <td className="px-2 py-3">
+                  <div className="flex items-center justify-center gap-1">
+                    <TradingViewWidget
+                      ticker={result.ticker}
+                      exchange={result.exchange ?? 'NAS'}
+                      pivotPrice={result.pivotPrice}
+                      stopLossPrice={(result as ScannerResult & { canslimResult?: { stopLossPrice?: number | null } }).canslimResult?.stopLossPrice}
+                      variant="icon"
+                    />
+                    {selectionColumn(result)}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}

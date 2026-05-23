@@ -1,0 +1,16 @@
+name: MTN DB Maintenance
+on:
+  schedule:
+    - cron: '0 15 * * 0' # 매주 일요일 한국시간 0시 (UTC 15:00)
+  workflow_dispatch: # 수동 실행 허용
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Retention Function
+        run: |
+          curl -X POST "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/maintain_stock_metrics_retention" \
+          -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+          -H "Content-Type: application/json"

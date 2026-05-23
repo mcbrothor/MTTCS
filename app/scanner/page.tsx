@@ -1,0 +1,612 @@
+'use client';
+
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, ScanSearch, Send, Square, Info } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import Button from '@/components/ui/Button';
+const VcpDrilldownModal = dynamic(() => import('@/components/scanner/VcpDrilldownModal'), { ssr: false });
+import ScannerTabNav from '@/components/scanner/ScannerTabNav';
+import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS, type SortKey } from '@/hooks/scanner';
+import type { ScannerUniverse } from '@/types';
+import ScannerTable from '@/components/scanner/ScannerTable';
+import ScannerCardView from '@/components/scanner/ScannerCardView';
+import MarketBanner from '@/components/ui/MarketBanner';
+import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import { useIsMobile } from '@/lib/hooks/useViewport';
+
+const MACRO_TONE = {
+  HALT: 'border-rose-400/24 bg-rose-500/10 text-rose-50',
+  REDUCED: 'border-amber-400/24 bg-amber-500/10 text-amber-50',
+  FULL: 'border-emerald-400/24 bg-emerald-500/10 text-emerald-50',
+} as const;
+
+function formatDateTime(value: string | null) {
+  if (!value) return 'No snapshot';
+  return new Date(value).toLocaleString('ko-KR');
+}
+
+const TIER_CRITERIA: Record<string, { title: string; lines: string[] }> = {
+  Recommended: {
+    title: 'Recommended — 즉시 진입 (Tier S)',
+    lines: [
+      '· SEPA core 충족 (NEUTRAL 7/7, RISK_ON 6/7, RISK_OFF 7/7+)',
+      '· RS Rating ≥ 90 (RISK_ON ≥ 85, RISK_OFF ≥ 93)',
+      '· 유효 VCP/HTF 피벗 보유 + 거리 -2% ~ +3% (RISK_ON +5%)',
+      '· Strong VCP 또는 Forming + Pocket Pivot/score ≥ 50',
+      '· MA50 이격도 ≤ 12% (과열 차단)',
+      '· 거래량 확인 (Watch 이상 또는 Breakout pending/confirmed)',
+      '예외 경로: RS 95+ & SEPA 7/7 & tightPivot, 또는 HTF + RS90 + 거래량 strong.',
+    ],
+  },
+  Action: {
+    title: 'Action — 관찰 진입 후보 (Tier A)',
+    lines: [
+      '· RS Rating ≥ 85 (RISK_ON ≥ 80)',
+      '· SEPA core ≥ coreTotal − 1 (보통 6/7)',
+      '· 건설적 VCP (Strong/Forming) 또는 vcpScore ≥ 40',
+      '· 유효 피벗 거리 -8% ~ +5%',
+      '· MA50 이격도 ≤ 15%',
+      '· 매집 신호 1개 이상 (Pocket Pivot / Volume Dry-up / Breakout)',
+      'Tier S만큼 정렬되지 않았으나 진입 윈도에 있음 → 피벗 재확인 후 결정.',
+    ],
+  },
+  'IB Review': {
+    title: 'IB Review — 투자위원회 검토 (composite 상위 cap)',
+    lines: [
+      'Path A (엄격): RS ≥ 85 · SEPA core ≥ 6/7 · 건설적 VCP · 매집 신호 · 유효 피벗 -12% ~ +8%',
+      'Path B (완화): RS ≥ 82 · SEPA core ≥ coreTotal − 2 · MA50 통제 · 기술적 단서 1개+',
+      '· composite score 상위 15개로 cap, 부족하면 RS ≥ 60 모멘텀 리더로 최소 10개 자동 승급',
+      '· 유효 피벗 미확정이면 매수 타점이 아닌 검토 대상.',
+    ],
+  },
+  Errors: {
+    title: 'Errors — 데이터/분석 예외',
+    lines: [
+      '· 가격/지표 수집 실패 (네트워크, 휴장, 신규 상장 등)',
+      '· VCP/SEPA 엔진이 충분한 캔들을 확보하지 못함',
+      '· 구조적 결격 (거래정지, 상폐 임박 등)',
+      '재시도하거나 데이터 소스를 점검하세요.',
+    ],
+  },
+  'Data Source': {
+    title: 'Data Source',
+    lines: [
+      '· 현재 유니버스와 사용된 일봉 데이터 출처/길이를 표시.',
+      '· KIS = 국내 정식 데이터, Yahoo Finance = 해외 백업 소스.',
+      '· 캔들 수가 적으면 (130일 미만) 일부 SEPA 항목이 info로 처리됩니다.',
+    ],
+  },
+};
+
+const BLOCKER_LABEL: Record<string, string> = {
+  sepa_core: 'SEPA core 미달',
+  rs_rating: 'RS 임계 미달',
+  valid_pivot: '유효 피벗 없음',
+  pivot_distance: '피벗 거리 윈도 밖',
+  vcp_strength: 'VCP 강도 부족',
+  ma50_extension: 'MA50 이격 과대 (>12%)',
+  volume_confirmation: '거래량 확인 부족',
+};
+
+function StatCard({
+  label,
+  value,
+  valueClass,
+  subtitle,
+  diagnostics,
+}: {
+  label: keyof typeof TIER_CRITERIA;
+  value: React.ReactNode;
+  valueClass: string;
+  subtitle: string;
+  diagnostics?: { nearMiss: number; histogram: Record<string, number> };
+}) {
+  const criteria = TIER_CRITERIA[label];
+  const sortedBlockers = diagnostics
+    ? Object.entries(diagnostics.histogram).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    : [];
+  return (
+    <Tooltip.Provider delayDuration={150}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <div className="group relative cursor-help rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4 transition-colors hover:border-emerald-400/40">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{label}</p>
+              <Info className="h-3 w-3 text-[var(--text-tertiary)] opacity-60 transition-opacity group-hover:opacity-100" />
+            </div>
+            <p className={`mt-2 font-mono text-2xl font-semibold ${valueClass}`}>{value}</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>
+            {diagnostics && diagnostics.nearMiss > 0 && (
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/80">
+                near-miss {diagnostics.nearMiss}
+              </p>
+            )}
+          </div>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            sideOffset={6}
+            className="z-[100] max-w-[380px] rounded-xl border border-slate-700 bg-slate-900/95 p-4 text-left shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95"
+          >
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">{criteria.title}</p>
+            <ul className="mt-2 space-y-1">
+              {criteria.lines.map((line, idx) => (
+                <li key={idx} className="text-[11px] leading-relaxed text-slate-300">{line}</li>
+              ))}
+            </ul>
+            {diagnostics && sortedBlockers.length > 0 && (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5">
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200">
+                  진단 — 차단 사유 분포
+                </p>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Tier S 도달 직전(1게이트 미달) <span className="font-semibold text-emerald-200">{diagnostics.nearMiss}</span>건
+                </p>
+                <ul className="mt-2 space-y-0.5">
+                  {sortedBlockers.map(([key, count]) => (
+                    <li key={key} className="flex items-center justify-between text-[10px] text-slate-300">
+                      <span>· {BLOCKER_LABEL[key] || key}</span>
+                      <span className="font-mono text-emerald-200">{count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <Tooltip.Arrow className="fill-slate-700" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  );
+}
+
+export default function ScannerPage() {
+  const {
+    universe,
+    isScanning,
+    progress,
+    scanStage,
+    lastScannedAt,
+    filterKey,
+    setFilterKey,
+    sortKey,
+    setSortKey,
+    viewMode,
+    setViewMode,
+    busy,
+    selectedResult,
+    setSelectedResult,
+    selectedTickers,
+    clearSelection,
+    macroTrend,
+    showAllMacroResults,
+    setShowAllMacroResults,
+    handleUniverseChange,
+    startScan,
+    stopScan,
+    addToWatchlist,
+    toggleSelected,
+    filteredResults,
+    stats,
+    dataSourceSummary,
+    isSavingWatchlist,
+    results,
+    customFilters,
+    setCustomFilters,
+    showCustomFilter,
+    setShowCustomFilter,
+    limitMessage,
+    telegramBusy,
+    telegramMessage,
+    telegramCandidates,
+    sendTelegramSummary,
+  } = useScanner();
+
+  const isMobile = useIsMobile();
+  const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
+  const scanBlocked = macroTrend?.action_level === 'HALT';
+  return (
+    <div className="space-y-6 pb-12">
+      {limitMessage && (
+        <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
+          {limitMessage}
+        </div>
+      )}
+      {telegramMessage && (
+        <div className="fixed bottom-20 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-emerald-500/40 bg-emerald-950/90 px-5 py-3 text-sm font-semibold text-emerald-100 shadow-2xl backdrop-blur-md">
+          {telegramMessage}
+        </div>
+      )}
+      <section className="panel-grid space-y-5 p-5 sm:p-6">
+        <ScannerTabNav />
+        <MarketBanner compact={true} />
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
+          <div className="space-y-4">
+            <div>
+              <h1 className="flex items-center gap-3 text-3xl font-black tracking-tightest text-[var(--text-primary)]">
+                <div className="rounded-2xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
+                  <ScanSearch className="h-6 w-6 text-emerald-300" />
+                </div>
+                미너비니 스크리너
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
+                미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                Universe <span className="ml-1 font-mono text-[var(--text-primary)]">{UNIVERSES[universe].label}</span>
+              </span>
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                Results <span className="ml-1 font-mono text-[var(--text-primary)]">{filteredResults.length}</span>
+              </span>
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
+                Selected <span className="ml-1 font-mono text-[var(--text-primary)]">{selectedTickers.size}/15</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-accent)] p-4 shadow-[var(--panel-shadow)]">
+            <div className="grid gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                  Scan Control
+                </p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                  미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+                </p>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
+                  Universe Selection
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
+                      <button
+                        key={u}
+                        onClick={() => handleUniverseChange(u)}
+                        disabled={isScanning}
+                        className={`group relative overflow-hidden rounded-xl border p-2 text-left transition-all active:scale-95 ${
+                          universe === u
+                            ? 'border-emerald-500/50 bg-emerald-500/10 text-white ring-1 ring-emerald-500/30'
+                            : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:border-emerald-500/30'
+                        }`}
+                      >
+                        <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
+                        <p className={`text-[8px] font-bold ${universe === u ? 'text-emerald-400' : 'text-slate-600'}`}>
+                          {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
+                        </p>
+                        {universe === u && (
+                          /* @ts-expect-error - framer-motion layoutId type issue */
+                          <motion.div layoutId="activeUniverseMinervini" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-emerald-500 blur-[2px]" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {!isMobile && (
+                    <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
+                      View Mode
+                      <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
+                        {(['web', 'app'] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setViewMode(mode)}
+                            className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
+                              viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
+                            }`}
+                          >
+                            {mode === 'web' ? 'TABLE' : 'CARDS'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-end">
+                    {isScanning ? (
+                      <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
+                        <Square className="h-3.5 w-3.5" /> 중단
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={startScan}
+                        disabled={busy || scanBlocked}
+                        className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border-none bg-gradient-to-br from-emerald-600 to-emerald-700 font-black text-white shadow-xl shadow-emerald-500/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 transition-all"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-white" /> {scanBlocked ? 'HALT 차단' : '스캔 시작'}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={sendTelegramSummary}
+                  disabled={telegramBusy || telegramCandidates.length === 0}
+                  className="h-10 w-full justify-center gap-2 rounded-xl border-emerald-500/30 text-emerald-100"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <StatCard
+            label="Recommended"
+            value={stats.recommended}
+            valueClass="text-emerald-300"
+            subtitle="즉시 진입 우선순위"
+            diagnostics={{ nearMiss: stats.nearMissRecommended, histogram: stats.blockerHistogram }}
+          />
+          <StatCard label="Action" value={stats.action} valueClass="text-lime-300" subtitle="관찰 진입 후보 (피벗 확인)" />
+          <StatCard label="IB Review" value={stats.partial} valueClass="text-amber-300" subtitle="위원회 검토 후보" />
+          <StatCard label="Errors" value={stats.errors} valueClass="text-rose-300" subtitle="구조적 또는 예외 확인" />
+          <StatCard
+            label="Data Source"
+            value={<span className="text-sm font-semibold text-[var(--text-primary)]">{UNIVERSES[universe].label}</span>}
+            valueClass=""
+            subtitle={dataSourceSummary}
+          />
+        </div>
+
+        {isScanning && (
+          <div className="rounded-[20px] border border-emerald-400/20 bg-emerald-500/8 px-4 py-4">
+            <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Scan Progress</p>
+                <p className="mt-1 text-sm text-[var(--text-primary)]">{scanStage}</p>
+              </div>
+              <span className="font-mono text-sm font-semibold text-emerald-100">
+                {progress.current} / {progress.total}
+              </span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-emerald-950/60">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-all duration-300"
+                style={{ width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {macroTrend && (
+        <div className={`rounded-[22px] border px-4 py-4 shadow-[var(--panel-shadow)] ${macroTone}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                Macro Action
+              </p>
+              <p className="mt-1 text-sm text-[var(--text-primary)]">
+                <span className="font-semibold">{macroTrend.action_level}</span> 쨌 {macroTrend.index_code} 기준 50일선 {macroTrend.is_uptrend_50 ? '상회' : '하회'} / 200일선 {macroTrend.is_uptrend_200 ? '상회' : '하회'}
+              </p>
+            </div>
+            {(macroTrend.action_level === 'REDUCED' || macroTrend.action_level === 'HALT') && (
+              <button
+                type="button"
+                onClick={() => setShowAllMacroResults((value) => !value)}
+                className="rounded-full border border-white/10 bg-black/10 px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)]"
+              >
+                {showAllMacroResults
+                  ? macroTrend.action_level === 'HALT' ? 'HALT 제한 보기' : 'RS 80+ 우선 보기'
+                  : macroTrend.action_level === 'HALT' ? '제한 해제하고 전체 보기' : '전체 보기'}
+              </button>
+            )}
+          </div>
+          {macroTrend.action_level === 'HALT' && !showAllMacroResults && (
+            <div className="rounded-2xl border border-rose-400/20 bg-black/10 px-3 py-3 text-sm text-rose-100">
+              시장 상태가 <strong>HALT</strong> 이므로 VCP 신규 후보 노출과 재스캔을 제한합니다. 기존 결과를 검토하시려면 오른쪽 버튼으로 전체 보기를 할 수 있습니다.
+            </div>
+          )}
+        </div>
+      )}
+
+      <section className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 shadow-[var(--panel-shadow)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {SCANNER_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setFilterKey(filter.key)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  filterKey === filter.key
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowCustomFilter((value) => !value)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                showCustomFilter
+                  ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                  : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              상세 필터
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <label className="flex items-center gap-2 text-[var(--text-secondary)]">
+              <span className="text-xs font-semibold uppercase tracking-[0.15em]">Sort</span>
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as SortKey)}
+                className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                {SORTS.map((sort) => (
+                  <option key={sort.key} value={sort.key}>{sort.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <span className="text-xs text-[var(--text-tertiary)]">
+              Last scan {formatDateTime(lastScannedAt)}
+            </span>
+          </div>
+        </div>
+
+        {showCustomFilter && (
+          <div className="mt-4 grid grid-cols-1 gap-4 rounded-[20px] border border-emerald-400/20 bg-emerald-500/6 p-4 sm:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">최소 RS Rating ({customFilters.rsMin}+)</label>
+              <input
+                type="range"
+                min="0"
+                max="99"
+                value={customFilters.rsMin}
+                onChange={(event) => setCustomFilters((prev) => ({ ...prev, rsMin: Number(event.target.value) }))}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">최소 VCP 점수 ({customFilters.vcpMin}+)</label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={customFilters.vcpMin}
+                onChange={(event) => setCustomFilters((prev) => ({ ...prev, vcpMin: Number(event.target.value) }))}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-semibold text-[var(--text-secondary)]">피벗 최대 거리 ({customFilters.distMax}%)</label>
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={customFilters.distMax > 50 ? 50 : customFilters.distMax}
+                onChange={(event) => setCustomFilters((prev) => ({ ...prev, distMax: Number(event.target.value) }))}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <AnimatePresence mode="wait">
+        {filteredResults.length > 0 ? (
+          <motion.div
+            key={`${universe}-${filterKey}-${viewMode}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {!isMobile && viewMode === 'web' ? (
+              <ScannerTable
+                results={filteredResults}
+                selectedTickers={selectedTickers}
+                onToggleSelect={toggleSelected}
+                onRowClick={(res) => setSelectedResult(res)}
+              />
+            ) : (
+              <ScannerCardView
+                results={filteredResults}
+                selectedTickers={selectedTickers}
+                onToggleSelect={toggleSelected}
+                onCardClick={(res) => setSelectedResult(res)}
+              />
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="empty-state"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-800 bg-slate-900/20 px-6 py-20 text-center backdrop-blur-sm"
+          >
+            <div className="relative mb-6">
+              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500/10" />
+              <div className="relative rounded-full bg-slate-950 p-6 ring-1 ring-white/10 shadow-2xl">
+                <ScanSearch className="h-10 w-10 text-emerald-400" />
+              </div>
+            </div>
+
+            <h3 className="text-xl font-black tracking-tight text-white">후보 발굴을 시작하세요</h3>
+            <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-400">
+              {results.length === 0
+                ? '아직 스캔 결과가 없습니다. 스캔 시작 버튼을 눌러 동일한 미너비니 로직으로 후보를 발굴하세요.'
+                : '현재 필터 조건에 맞는 종목이 없습니다. 필터를 조정하거나 다른 정렬 기준으로 확인해보세요.'}
+            </p>
+
+            <div className="mt-8 grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-left transition-colors hover:bg-white/10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Strategy Tip #1</p>
+                <p className="mt-2 text-xs text-slate-300">RS 85 이상은 IB Review 후보의 출발점이며, RS 90 이상은 실행 후보에서 우대합니다.</p>
+              </div>
+              <div className="rounded-2xl border border-white/5 bg-white/5 p-4 text-left transition-colors hover:bg-white/10">
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Strategy Tip #2</p>
+                <p className="mt-2 text-xs text-slate-300">유효 VCP/HTF 피벗이 없는 최근 고점 fallback은 매수 타점으로 취급하지 않습니다.</p>
+              </div>
+            </div>
+
+            {!isScanning && results.length === 0 && (
+              <Button
+                onClick={startScan}
+                className="mt-10 rounded-2xl bg-emerald-600 px-8 py-3 font-bold hover:bg-emerald-500 active:scale-95 shadow-xl shadow-emerald-500/20"
+              >
+                지금 스캔 실행하기
+              </Button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {selectedTickers.size > 0 && (
+        <div className="fixed bottom-8 left-1/2 z-50 flex w-[min(92vw,640px)] -translate-x-1/2 items-center justify-between gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Contest Pool</p>
+            <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{selectedTickers.size} / 15 종목 선택</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => clearSelection()}
+              className="text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+            >
+              전체 해제
+            </button>
+            <Link href="/contest">
+              <Button icon={<ScanSearch className="h-4 w-4" />} className="rounded-2xl bg-emerald-600 hover:bg-emerald-500">
+                콘테스트로 이동
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <FlowCtaButton
+        nextPath="/contest"
+        label="최고의 차트 선정하기"
+        subLabel="Step 3: Beauty Contest"
+        variant="emerald"
+      />
+
+      <VcpDrilldownModal
+        result={selectedResult}
+        onClose={() => setSelectedResult(null)}
+        onAddToWatchlist={addToWatchlist}
+        isSavingWatchlist={isSavingWatchlist}
+      />
+    </div>
+  );
+}

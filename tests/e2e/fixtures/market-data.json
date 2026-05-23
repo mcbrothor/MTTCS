@@ -1,0 +1,52 @@
+{
+  "market_state": "GREEN",
+  "macro_regime": "RISK_ON",
+  "macro_score": 78,
+  "macro_data": {
+    "score": 78,
+    "regime": "RISK_ON",
+    "spyAbove50ma": true,
+    "hygIefDiff": 0.45,
+    "vixLevel": 14.2,
+    "asOf": "2026-05-23T14:00:00.000Z",
+    "breakdown": [
+      { "component": "Credit", "score": 15, "maxScore": 20, "signal": "POSITIVE" },
+      { "component": "Rates", "score": 12, "maxScore": 20, "signal": "NEUTRAL" },
+      { "component": "Volatility", "score": 18, "maxScore": 20, "signal": "POSITIVE" },
+      { "component": "Leadership", "score": 16, "maxScore": 20, "signal": "POSITIVE" },
+      { "component": "Breadth", "score": 17, "maxScore": 20, "signal": "POSITIVE" }
+    ],
+    "data": {
+      "SPY": { "symbol": "SPY", "regularMarketPrice": 542.30, "regularMarketChangePercent": 0.85, "fiftyDayAverage": 525.10 },
+      "QQQ": { "symbol": "QQQ", "regularMarketPrice": 478.50, "regularMarketChangePercent": 1.12, "fiftyDayAverage": 460.20 },
+      "HYG": { "symbol": "HYG", "regularMarketPrice": 78.40, "regularMarketChangePercent": 0.32, "fiftyDayAverage": 77.80 },
+      "IEF": { "symbol": "IEF", "regularMarketPrice": 95.20, "regularMarketChangePercent": -0.15, "fiftyDayAverage": 96.10 },
+      "TLT": { "symbol": "TLT", "regularMarketPrice": 98.50, "regularMarketChangePercent": -0.28, "fiftyDayAverage": 99.30 },
+      "GLD": { "symbol": "GLD", "regularMarketPrice": 225.80, "regularMarketChangePercent": 0.55, "fiftyDayAverage": 220.40 },
+      "^VIX": { "symbol": "^VIX", "regularMarketPrice": 14.20, "regularMarketChangePercent": -3.40, "fiftyDayAverage": 16.80 },
+      "BTC-USD": { "symbol": "BTC-USD", "regularMarketPrice": 108500.00, "regularMarketChangePercent": 2.30, "fiftyDayAverage": 95000.00 }
+    }
+  },
+  "macro_history": {
+    "data": [
+      { "date": "2026-05-23", "macroScore": 78, "regime": "RISK_ON" },
+      { "date": "2026-05-22", "macroScore": 75, "regime": "RISK_ON" },
+      { "date": "2026-05-21", "macroScore": 72, "regime": "RISK_ON" },
+      { "date": "2026-05-20", "macroScore": 68, "regime": "NEUTRAL" },
+      { "date": "2026-05-19", "macroScore": 65, "regime": "NEUTRAL" },
+      { "date": "2026-05-18", "macroScore": 70, "regime": "RISK_ON" },
+      { "date": "2026-05-17", "macroScore": 73, "regime": "RISK_ON" }
+    ]
+  },
+  "master_filter": {
+    "state": "GREEN",
+    "market": "US",
+    "metrics": { "p3Score": 87 },
+    "trend": {
+      "action_level": "FULL",
+      "index_code": "SPY",
+      "is_uptrend_50": true,
+      "is_uptrend_200": true
+    }
+  }
+}

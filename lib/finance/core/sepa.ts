@@ -1,0 +1,434 @@
+import type {
+  AssessmentStatus,
+  FundamentalSnapshot,
+  MarketCode,
+  OHLCData,
+  SepaCriterion,
+  SepaEvidence,
+} from '../../../types/index.ts';
+import { calculateRsMetrics } from '../market/rs-proxy.ts';
+import { round } from './_shared.ts';
+import { computeMdd52w } from './mdd.ts';
+import { calculateAvgVolume, calculateMovingAverage } from './moving-average.ts';
+
+function criterion(
+  id: string,
+  label: string,
+  status: AssessmentStatus,
+  actual: number | string | null,
+  threshold: string,
+  description: string,
+  isCore: boolean = false
+): SepaCriterion {
+  return { id, label, status, actual, threshold, description, isCore };
+}
+
+function passFail(value: boolean): AssessmentStatus {
+  return value ? 'pass' : 'fail';
+}
+
+function evaluableCriterion(
+  id: string,
+  label: string,
+  actual: number | string | null,
+  canEvaluate: boolean,
+  value: boolean,
+  threshold: string,
+  description: string,
+  missingDataMsg?: string,
+  isCore: boolean = false
+) {
+  return criterion(
+    id,
+    label,
+    canEvaluate ? passFail(value) : 'info',
+    actual,
+    canEvaluate ? threshold : `${threshold} (데이터 부족, 저장 차단 제외)`,
+    canEvaluate ? description : (missingDataMsg || '필요한 가격 이력이 부족해 정보 항목으로만 표시합니다.'),
+    isCore
+  );
+}
+
+// 21~25일 구간의 MA200 시계열에 대한 단순 선형회귀 기울기 (>0이면 우상향).
+// 단일 두 점 비교는 노이즈 한 점에 fail이 결정되는 문제가 있어 회귀 기반으로 변경.
+function ma200SlopeUptrend(data: OHLCData[]): { canEvaluate: boolean; uptrend: boolean; slopePerDay: number | null } {
+  const window = 25;
+  const required = 200 + window;
+  if (data.length < required) return { canEvaluate: false, uptrend: false, slopePerDay: null };
+
+  const series: number[] = [];
+  for (let offset = window - 1; offset >= 0; offset -= 1) {
+    const slice = data.slice(0, data.length - offset);
+    const ma = calculateMovingAverage(slice, 200);
+    if (ma === null) return { canEvaluate: false, uptrend: false, slopePerDay: null };
+    series.push(ma);
+  }
+
+  const n = series.length;
+  const xMean = (n - 1) / 2;
+  const yMean = series.reduce((s, v) => s + v, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i += 1) {
+    num += (i - xMean) * (series[i] - yMean);
+    den += (i - xMean) ** 2;
+  }
+  const slope = den === 0 ? 0 : num / den;
+  return { canEvaluate: true, uptrend: slope > 0, slopePerDay: round(slope) };
+}
+
+function calculateRsProxy(data: OHLCData[], benchmarkData?: OHLCData[]) {
+  const rs = calculateRsMetrics(data, benchmarkData);
+  return {
+    ...rs,
+    stockReturn: rs.stockReturn26Week,
+    benchmarkReturn: rs.benchmarkReturn26Week,
+    rsScore: rs.benchmarkRelativeScore,
+  };
+}
+
+/**
+ * 기본적 분석 필터 — 항상 info(참고 정보)로 처리.
+ * Minervini SEPA 판정(pass/fail)에 영향을 주지 않고 UI 참고용으로만 노출합니다.
+ */
+function analyzeFundamentals(fundamentals?: FundamentalSnapshot | null) {
+  if (!fundamentals) {
+    return criterion(
+      'fundamentals',
+      'EPS/매출/ROE/부채 기본 필터',
+      'info',
+      '기본적 데이터 미제공',
+      'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
+      '가격과 거래량 기반 SEPA 판정과 분리해 참고 정보로 표시합니다.'
+    );
+  }
+
+  const knownValues = [
+    fundamentals.epsGrowthPct,
+    fundamentals.revenueGrowthPct,
+    fundamentals.roePct,
+    fundamentals.debtToEquityPct,
+  ].filter((value) => value !== null);
+
+  if (knownValues.length === 0) {
+    return criterion(
+      'fundamentals',
+      'EPS/매출/ROE/부채 기본 필터',
+      'info',
+      '기본적 데이터 미제공',
+      'EPS 20%+, 매출 15%+, ROE 17%+, 부채 40%-',
+      '가격과 거래량 기반 SEPA 판정과 분리해 참고 정보로 표시합니다.'
+    );
+  }
+
+  const items: string[] = [];
+  // CAN SLIM 임계와 정렬: EPS 25%+, 매출 15%+, ROE 17%+, 부채 40%-
+  if (fundamentals.epsGrowthPct !== null) {
+    const ok = fundamentals.epsGrowthPct >= 25;
+    items.push(`EPS ${fundamentals.epsGrowthPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('EPS —');
+  }
+  if (fundamentals.revenueGrowthPct !== null) {
+    const ok = fundamentals.revenueGrowthPct >= 15;
+    items.push(`매출 ${fundamentals.revenueGrowthPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('매출 —');
+  }
+  if (fundamentals.roePct !== null) {
+    const ok = fundamentals.roePct >= 17;
+    items.push(`ROE ${fundamentals.roePct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('ROE —');
+  }
+  if (fundamentals.debtToEquityPct !== null) {
+    const ok = fundamentals.debtToEquityPct <= 40;
+    items.push(`부채 ${fundamentals.debtToEquityPct}% ${ok ? '✅' : '⚠️'}`);
+  } else {
+    items.push('부채 —');
+  }
+
+  const actual = items.join(', ');
+
+  const sourceNote = knownValues.length < 4
+    ? `${fundamentals.source}에서 일부 항목만 확인 — 참고용으로 표시합니다.`
+    : `${fundamentals.source}에서 확인한 기본적 지표입니다. 저장을 차단하지 않으며 투자 판단의 참고용입니다.`;
+
+  return criterion(
+    'fundamentals',
+    'EPS/매출/ROE/부채 기본 필터',
+    'info',
+    actual,
+    'EPS 25%+, 매출 15%+, ROE 17%+, 부채 40%-',
+    sourceNote
+  );
+}
+
+export function analyzeSepa(
+  data: OHLCData[],
+  options: {
+    benchmarkData?: OHLCData[];
+    benchmarkTicker?: string | null;
+    fundamentals?: FundamentalSnapshot | null;
+    preCalculatedRs?: number;
+    rsSourceHint?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY';
+    market?: MarketCode;
+    exchange?: string;  // 'KOSPI' | 'KOSDAQ' | 'NASDAQ' | 'NYSE' 등
+  } = {}
+): SepaEvidence {
+  const last = data.at(-1);
+  const lastClose = last?.close ?? null;
+  const ma50 = calculateMovingAverage(data, 50);
+  const ma150 = calculateMovingAverage(data, 150);
+  const ma200 = calculateMovingAverage(data, 200);
+  const ma200PrevMonth = data.length >= 221 ? calculateMovingAverage(data.slice(0, -21), 200) : null;
+  const ma200Slope = ma200SlopeUptrend(data);
+  const high52Week = data.length >= 252 ? round(Math.max(...data.slice(-252).map((d) => d.high))) : null;
+  const distanceFromHigh52WeekPct =
+    lastClose && high52Week ? round(((high52Week - lastClose) / high52Week) * 100) : null;
+  const low52Week = data.length >= 252 ? round(Math.min(...data.slice(-252).map((d) => d.low))) : null;
+  const distanceFromLow52WeekPct =
+    lastClose && low52Week && low52Week > 0 ? round(((lastClose - low52Week) / low52Week) * 100) : null;
+  const { avgDollarVolume, dataQuality: advDataQuality } = calculateAvgVolume(data);
+  const rs = calculateRsProxy(data, options.benchmarkData);
+  const mdd52wPct = computeMdd52w(data.map((d) => d.close));
+
+  const benchmarkLabel = (options.benchmarkTicker || 'SPY').replace('^KS200', 'KOSPI 200').replace('^KQ150', 'KOSDAQ 150').replace('^GSPC', 'S&P 500');
+
+  // 시장별 거래대금 기준: US $10M, KOSPI ₩30억, KOSDAQ ₩10억
+  const isKR = options.market === 'KR';
+  const isKosdaq = options.exchange === 'KOSDAQ';
+  const volumeThreshold = isKR
+    ? (isKosdaq ? 1_000_000_000 : 3_000_000_000)
+    : 10_000_000;
+  const volumeThresholdLabel = isKR
+    ? (isKosdaq ? '₩10억 이상' : '₩30억 이상')
+    : '$10,000,000 이상';
+
+  const criteria: SepaCriterion[] = [
+    evaluableCriterion(
+      'price_vs_ma50',
+      '현재가 > 50일 이동평균',
+      ma50 ? `${round(lastClose ?? 0)} / MA50 ${ma50}` : null,
+      lastClose !== null && ma50 !== null,
+      Boolean(lastClose !== null && ma50 !== null && lastClose > ma50),
+      '현재가가 50일선 위',
+      '단기 추세가 살아 있는지 확인합니다.',
+      undefined,
+      true
+    ),
+    evaluableCriterion(
+      'price_vs_ma150',
+      '현재가 > 150일 이동평균',
+      ma150 ? `${round(lastClose ?? 0)} / MA150 ${ma150}` : null,
+      lastClose !== null && ma150 !== null,
+      Boolean(lastClose !== null && ma150 !== null && lastClose > ma150),
+      '현재가가 150일선 위',
+      '중기 추세 위에 있는 종목만 후보로 둡니다.',
+      undefined,
+      true
+    ),
+    evaluableCriterion(
+      'price_vs_ma200',
+      '현재가 > 200일 이동평균',
+      ma200 ? `${round(lastClose ?? 0)} / MA200 ${ma200}` : null,
+      lastClose !== null && ma200 !== null,
+      Boolean(lastClose !== null && ma200 !== null && lastClose > ma200),
+      '현재가가 200일선 위',
+      '장기 하락 추세 종목을 배제합니다.',
+      undefined,
+      true
+    ),
+    (() => {
+      // 부동소수점 라운딩으로 인한 동률 fail 방지: 0.05% (5bp) epsilon
+      const eps = ma200 !== null ? Math.max(ma200 * 0.0005, 0.0001) : 0;
+      const aligned = ma50 !== null && ma150 !== null && ma200 !== null
+        && ma50 > ma150 - eps && ma150 > ma200 - eps;
+      return evaluableCriterion(
+        'ma_alignment',
+        '50일선 > 150일선 > 200일선',
+        ma50 && ma150 && ma200 ? `${ma50} / ${ma150} / ${ma200}` : null,
+        ma50 !== null && ma150 !== null && ma200 !== null,
+        aligned,
+        'MA50 > MA150 > MA200 정배열',
+        '상승 추세의 정렬 상태를 확인합니다.',
+        undefined,
+        true
+      );
+    })(),
+    evaluableCriterion(
+      'ma200_uptrend',
+      '200일선 상승',
+      ma200Slope.canEvaluate
+        ? `25일 회귀 기울기 ${ma200Slope.slopePerDay}/일${ma200PrevMonth ? `, MA200 ${ma200} / 1M전 ${ma200PrevMonth}` : ''}`
+        : ma200 && ma200PrevMonth ? `${ma200} / 1개월 전 ${ma200PrevMonth}` : null,
+      ma200Slope.canEvaluate || (ma200 !== null && ma200PrevMonth !== null),
+      ma200Slope.canEvaluate
+        ? ma200Slope.uptrend
+        : Boolean(ma200 !== null && ma200PrevMonth !== null && ma200 > ma200PrevMonth),
+      '200일선 25일 회귀 기울기 > 0',
+      '단일 시점 비교의 노이즈 민감성을 줄이기 위해 25일 선형회귀 기울기로 우상향 여부를 판정합니다.',
+      undefined,
+      true
+    ),
+    evaluableCriterion(
+      'within_52w_high',
+      '52주 고점 25% 이내',
+      distanceFromHigh52WeekPct !== null ? `${distanceFromHigh52WeekPct}% 아래` : null,
+      distanceFromHigh52WeekPct !== null,
+      Boolean(distanceFromHigh52WeekPct !== null && distanceFromHigh52WeekPct <= 25),
+      '52주 고점 대비 25% 이내 (Minervini Trend Template)',
+      'VCP 베이스 형성 중인 종목 포함. 10% 이내면 피벗 근접, 25%까지는 후보군.',
+      undefined,
+      true
+    ),
+    evaluableCriterion(
+      'above_52w_low',
+      '52주 저점 대비 +30% 이상',
+      distanceFromLow52WeekPct !== null ? `+${distanceFromLow52WeekPct}%` : null,
+      distanceFromLow52WeekPct !== null,
+      Boolean(distanceFromLow52WeekPct !== null && distanceFromLow52WeekPct >= 30),
+      '52주 저점 대비 +30% 이상 (미너비니 Stage 2)',
+      '바닥에 묶여있는 종목이 템플릿을 통과하지 않도록 합니다.',
+      undefined,
+      true
+    ),
+    (() => {
+      // RS pass/fail 판정은 유니버스 백분위 기반 점수일 때만 수행 (DB_BATCH 또는 UNIVERSE).
+      // benchmarkRelativeScore(BENCHMARK_PROXY)는 단일 벤치마크 대비 수익률이라
+      // pass/fail 기준으로 쓰면 상승장 전종목 통과/하락장 전종목 탈락 오류 발생 → 'info'.
+      // RS는 미너비니 8개 trend template의 #8 항목이므로 DB/UNIVERSE 평가가 가능하면 isCore 처리.
+      const hasRealRs = options.preCalculatedRs !== undefined && options.preCalculatedRs !== null &&
+        (options.rsSourceHint === 'DB_BATCH' || options.rsSourceHint === 'UNIVERSE');
+      const rsValue = hasRealRs ? options.preCalculatedRs! : rs.rsScore;
+      const status: AssessmentStatus = rsValue === null
+        ? 'info'
+        : hasRealRs
+          ? passFail(rsValue >= 70)
+          : 'info';
+      const labelSuffix = hasRealRs
+        ? options.rsSourceHint === 'DB_BATCH'
+          ? '유니버스 백분위 공식 RS'
+          : '실시간 스캔 유니버스 백분위 RS'
+        : `참고 — ${benchmarkLabel} 대비 상대수익률 추정`;
+      return {
+        id: 'rs_rating',
+        label: '상대강도 RS',
+        status,
+        actual: rsValue !== null ? `${rsValue}점 (${labelSuffix})` : '데이터 없음',
+        threshold: hasRealRs ? '70점 이상 (유니버스 백분위)' : '70점 이상 (DB/UNIVERSE 점수 도착 시 평가)',
+        description: hasRealRs
+          ? '유니버스 백분위 기반 RS Rating. Minervini Trend Template #8 항목.'
+          : `배치 RS 미조회 상태. ${benchmarkLabel} 대비 상대수익률은 참고용으로만 표시하며 코어 판정에서 제외됩니다.`,
+        // 평가 가능한 경우(real RS 도착)에만 코어로 카운트. proxy일 때는 info로만 표시되어 자연스럽게 코어에서 빠짐.
+        isCore: hasRealRs,
+      } satisfies SepaCriterion;
+    })(),
+    evaluableCriterion(
+      'avg_dollar_volume',
+      '20일 평균 거래대금',
+      avgDollarVolume
+        ? isKR
+          ? `₩${(avgDollarVolume / 100_000_000).toFixed(0)}억`
+          : `$${avgDollarVolume.toLocaleString()}`
+        : null,
+      data.length >= 20,
+      data.length >= 20 && avgDollarVolume >= volumeThreshold,
+      volumeThresholdLabel,
+      '실제 거래가 활발하여 슬리피지 리스크가 낮은지 확인합니다.'
+    ),
+    (() => {
+      const float = options.fundamentals?.floatShares;
+      const price = lastClose;
+      const rawFloatValue = float && price ? float * price : null;
+      const isKR = options.market === 'KR';
+      
+      // 시장별 기준치 및 라벨 설정
+      const threshold = isKR ? 1_000_000_000_000 : 5_000_000_000;
+      const thresholdLabel = isKR ? '₩1조 이하' : '$5B 이하';
+      
+      let actualLabel = '데이터 부족';
+      if (rawFloatValue !== null) {
+        actualLabel = isKR 
+          ? `₩${(rawFloatValue / 1_000_000_000_000).toFixed(2)}조` 
+          : `$${(rawFloatValue / 1_000_000_000).toFixed(2)}B`;
+      }
+
+      return evaluableCriterion(
+        'dollar_float',
+        isKR ? '유동 시총' : '유동 시총 (Dollar Float)',
+        actualLabel,
+        Boolean(rawFloatValue),
+        Boolean(rawFloatValue && rawFloatValue <= threshold),
+        thresholdLabel,
+        '유동물량이 너무 무거우면 상승에 큰 에너지가 필요합니다.',
+        '펀더멘털 지표(유동주식수)가 부족해 정보 항목으로만 표시합니다.'
+      );
+    })(),
+    analyzeFundamentals(options.fundamentals),
+  ];
+
+  const summary = {
+    passed: criteria.filter((item) => item.status === 'pass').length,
+    failed: criteria.filter((item) => item.status === 'fail').length,
+    info: criteria.filter((item) => item.status === 'info').length,
+    total: criteria.length,
+    corePassed: criteria.filter((item) => item.isCore && item.status === 'pass').length,
+    coreFailed: criteria.filter((item) => item.isCore && item.status === 'fail').length,
+    coreTotal: criteria.filter((item) => item.isCore).length,
+  };
+
+  let finalStatus: 'pass' | 'fail' | 'warning' = 'pass';
+  if (summary.corePassed >= summary.coreTotal) {
+    finalStatus = 'pass';
+  } else if (summary.corePassed >= summary.coreTotal - 1) {
+    finalStatus = 'warning';
+  } else {
+    finalStatus = 'fail';
+  }
+
+  return {
+    status: finalStatus,
+    criteria,
+    summary,
+    metrics: {
+      lastClose: lastClose ? round(lastClose) : null,
+      ma50,
+      ma150,
+      ma200,
+      ma200SlopePerDay: ma200Slope.slopePerDay,
+      ma200SlopeUptrend: ma200Slope.canEvaluate ? ma200Slope.uptrend : null,
+      high52Week,
+      distanceFromHigh52WeekPct,
+      low52Week,
+      distanceFromLow52WeekPct,
+      avgDollarVolume20: avgDollarVolume || null,
+      avgDollarVolumeDataQuality: advDataQuality,
+      rsRating: options.preCalculatedRs ?? rs.rsScore,
+      rsSource: options.rsSourceHint ?? (options.preCalculatedRs !== undefined ? 'UNIVERSE' : (rs.rsScore !== null ? 'BENCHMARK_PROXY' : null)),
+      internalRsRating: null,
+      externalRsRating: null,
+      rsRank: null,
+      rsUniverseSize: null,
+      rsPercentile: null,
+      weightedMomentumScore: rs.weightedMomentumScore,
+      ibdProxyScore: rs.ibdProxyScore,
+      mansfieldRsFlag: rs.mansfieldRsFlag,
+      mansfieldRsScore: rs.mansfieldRsScore,
+      rsDataQuality: rs.rsDataQuality,
+      macroActionLevel: null,
+      benchmarkRelativeScore: rs.benchmarkRelativeScore,
+      rsLineNewHigh: rs.rsLineNewHigh,
+      rsLineNearHigh: rs.rsLineNearHigh,
+      tennisBallCount: rs.tennisBallCount,
+      tennisBallScore: rs.tennisBallScore,
+      return3m: rs.return3m,
+      return6m: rs.return6m,
+      return9m: rs.return9m,
+      return12m: rs.return12m,
+      benchmarkReturn26Week: rs.benchmarkReturn,
+      stockReturn26Week: rs.stockReturn,
+      mdd52wPct,
+    },
+  };
+}

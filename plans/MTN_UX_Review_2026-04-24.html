@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>MTN UX/UI 검토 리포트 · 2026-04-24</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --panel2:#1b2030; --line:#262c3a;
+    --t1:#f3f4f6; --t2:#b9bec9; --t3:#7b8291; --em:#34d399; --warn:#fbbf24; --bad:#f87171;
+    --accent:#60a5fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--t1);font-family:-apple-system,"Segoe UI","Pretendard",sans-serif;line-height:1.65;font-size:15px}
+  .wrap{max-width:1100px;margin:0 auto;padding:48px 28px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  h2{font-size:22px;margin:56px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--line);color:var(--em)}
+  h3{font-size:17px;margin:28px 0 10px;color:#cfe8ff}
+  h4{font-size:15px;margin:18px 0 8px;color:#e7ecf5}
+  p{color:var(--t2)}
+  code, .kbd{background:#0f131b;border:1px solid var(--line);padding:1px 6px;border-radius:4px;font-size:13px;color:#fde68a}
+  .lede{color:var(--t2);font-size:15px;margin:0 0 4px}
+  .meta{color:var(--t3);font-size:13px;margin-bottom:28px}
+  .tldr{background:linear-gradient(180deg,#141d16,#0f1613);border:1px solid #1f3a2a;border-radius:12px;padding:18px 20px;margin:24px 0 32px}
+  .tldr h3{margin-top:0;color:var(--em)}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--t2);margin-right:6px}
+  .tag.bad{color:var(--bad);border-color:#4b2127}
+  .tag.warn{color:var(--warn);border-color:#4b3a1a}
+  .tag.ok{color:var(--em);border-color:#1f4a37}
+  .tag.ac{color:var(--accent);border-color:#1e3a57}
+  ul{padding-left:20px} li{margin:4px 0;color:var(--t2)}
+  table{width:100%;border-collapse:collapse;margin:10px 0}
+  th,td{border:1px solid var(--line);padding:8px 10px;font-size:13px;text-align:left;vertical-align:top}
+  th{background:#0f131b;color:var(--t1)}
+  .quote{border-left:3px solid var(--accent);background:#0f1520;padding:10px 14px;margin:10px 0;color:#d8e2f0;font-size:13.5px}
+
+  /* ====== Mockup illustrations ====== */
+  .mock{background:#0f131b;border:1px solid var(--line);border-radius:12px;padding:14px;margin:14px 0 22px}
+  .mock-title{font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .mock-title b{color:var(--em);letter-spacing:0}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;background:#1a2130;border:1px solid var(--line);font-size:12px;color:var(--t2)}
+  .chip .q{display:inline-flex;width:16px;height:16px;border-radius:50%;background:#1e3a57;color:#cfe8ff;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:help}
+  .metric{background:#141821;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .metric .lbl{font-size:11px;color:var(--t3);display:flex;align-items:center;gap:6px}
+  .metric .val{font-size:20px;font-weight:700;margin-top:4px}
+  .metric .sub{font-size:11px;color:var(--t3);margin-top:2px}
+  .stepper{display:flex;align-items:center;gap:0;margin:6px 0 12px;font-size:12px}
+  .step{flex:1;padding:8px 10px;background:#141821;border:1px solid var(--line);color:var(--t3);position:relative}
+  .step.done{color:var(--em);border-color:#1f4a37;background:#10201a}
+  .step.now{color:#cfe8ff;border-color:#1e3a57;background:#0f1b2a}
+  .step:not(:last-child){border-right:none}
+  .step small{display:block;color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+  .tooltip{position:relative;display:inline-block}
+  .tt-box{background:#0a0f18;border:1px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:12px;color:#d8e2f0;max-width:300px;margin-top:8px;position:relative}
+  .tt-box::before{content:"";position:absolute;top:-6px;left:14px;width:10px;height:10px;background:#0a0f18;border-left:1px solid var(--accent);border-top:1px solid var(--accent);transform:rotate(45deg)}
+  .tt-box b{color:#cfe8ff}
+  .tt-box .formula{background:#0f1a2a;border:1px dashed #1e3a57;border-radius:4px;padding:6px 8px;margin-top:6px;font-family:ui-monospace,monospace;font-size:11px;color:#fde68a}
+  .accordion{border:1px solid var(--line);border-radius:6px;background:#141821}
+  .accordion-head{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#e7ecf5;cursor:pointer}
+  .accordion-head .arrow{color:var(--t3);font-size:12px}
+  .accordion-body{border-top:1px dashed var(--line);padding:10px 12px;font-size:12px;color:var(--t2)}
+  .cta{display:inline-block;background:var(--em);color:#07130d;font-weight:700;border-radius:8px;padding:8px 16px;font-size:13px}
+  .cta.ghost{background:transparent;color:var(--em);border:1px solid var(--em)}
+  .before,.after{padding:12px;border-radius:8px}
+  .before{background:#1a1216;border:1px solid #3a1e24}
+  .before::before{content:"BEFORE";display:block;font-size:10px;color:var(--bad);letter-spacing:1.5px;margin-bottom:6px;font-weight:700}
+  .after{background:#101c17;border:1px solid #1f4a37}
+  .after::before{content:"AFTER";display:block;font-size:10px;color:var(--em);letter-spacing:1.5px;margin-bottom:6px;font-weight:700}
+  .bar{height:8px;background:#1a2130;border-radius:4px;overflow:hidden;margin:4px 0}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#60a5fa)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .ok .dot{background:var(--em)} .warn2 .dot{background:var(--warn)} .bad2 .dot{background:var(--bad)}
+  .rating{display:flex;gap:2px}
+  .rating i{width:14px;height:8px;background:#2a3040;border-radius:2px}
+  .rating i.on{background:var(--em)}
+  .helpbtn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:#1e3a57;color:#cfe8ff;font-size:11px;font-weight:700;cursor:help}
+  .footer{margin-top:60px;padding-top:20px;border-top:1px solid var(--line);color:var(--t3);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>MTN UX/UI 검토 리포트</h1>
+<p class="lede">종목 발굴 → 상세 분석 → 매매 실행 → 복기 라이프사이클 관점의 진단 및 구체 개선안</p>
+<p class="meta">평가일: 2026-04-24 · 평가자 관점: UI/UX 전문가 + 주식 초심자 이중 시선</p>
+
+<div class="tldr">
+<h3>한눈에 보는 결론 (TL;DR)</h3>
+<ul>
+  <li><b>가장 큰 약점은 "알고리즘 블랙박스"</b>입니다. VCP, SEPA, RS Rating, FTD, 분산일, Macro Regime Score 등 핵심 지표가 숫자만 덩그러니 노출되고, <b>공식·임계값·해석 기준</b>이 UI 안에 보이지 않습니다. 초보자가 신뢰·학습하려면 <b>모든 지표 옆에 일관된 <span class="helpbtn">?</span> 아이콘 → 툴팁 + "자세히" 링크로 아코디언 패널</b> 2단 구조를 표준화해야 합니다.</li>
+  <li><b>라이프사이클 단계 인지가 약합니다.</b> 일부 페이지(Master-Filter, Macro)만 "STEP 01" 텍스트가 있고, 공통 <b>7단계 스테퍼 헤더</b>가 없습니다. 전 페이지 상단에 동일한 진행 스테퍼를 얹고, 각 단계 끝에 <b>"다음 단계로" CTA 버튼</b>을 고정하는 것이 급선무입니다.</li>
+  <li><b>Dashboard / Beauty-Contest 페이지가 정보 과부하</b>입니다. 8개 메트릭 카드 + 차트 3개 + 테이블을 첫 화면에 쌓지 말고, <b>"오늘의 포커스(3카드) → 상세(토글/탭)"</b> 2-tier 구조로 접어야 합니다.</li>
+  <li><b>전문용어 순화 필요:</b> VCP, SEPA, FTD, 분산일, R-multiple 등은 <b>직관적 별명 + 시각 아이콘</b>(예: VCP → "변동성 압축 🫧", 분산일 → "기관 매도일 📉")을 병기합니다.</li>
+</ul>
+</div>
+
+<!-- =================================================================== -->
+<h2>1 · 알고리즘 투명성 & 친절한 설명 <span class="tag bad">가장 시급</span></h2>
+
+<h3>1-1. 현재 상태 진단</h3>
+<p>코드 상 확인된 주요 페이지(Scanner, Master-Filter, Contest, Plan, Portfolio, Dashboard)에서 <b>지속적인 "?" 헬프 아이콘이 거의 없습니다.</b> 설명은 대부분 아래 형태로만 존재합니다.</p>
+<ul>
+  <li>빈 상태(empty state)에 박힌 긴 안내 문단 — 스캐너의 "RS Rating이 80 이상인 종목은…"</li>
+  <li>사이드 가이드라인 패널 — Master-Filter의 "GREEN: 공격적 진입…" 색상 범례</li>
+  <li>페이지 도입부 1~2줄 설명 — Plan의 "SEPA 후보 검증 → VCP 피벗 분석…"</li>
+</ul>
+<p>결과적으로 초보자는 <b>숫자가 어디서 왔는지(공식), 어떤 값이 좋은 값인지(임계), 지금 이 값이 왜 저렇게 나왔는지(해석)</b>를 UI만 보고는 알 수 없습니다. 신뢰도 문제로 직결됩니다.</p>
+
+<h3>1-2. 제안: "3-Layer Help" 표준 컴포넌트</h3>
+<p>모든 수치/지표 라벨 옆에는 다음 3단계를 둡니다. 메인 화면은 깔끔하게 유지하면서, 원할 때 깊게 팔 수 있는 구조입니다.</p>
+
+<div class="mock">
+<div class="mock-title">표준 컴포넌트 — <b>MetricWithHelp</b> (3-Layer)</div>
+<div class="grid g2">
+  <div class="metric">
+    <div class="lbl">VCP 점수 <span class="helpbtn" title="클릭: 상세">?</span></div>
+    <div class="val">78 <span style="font-size:12px;color:var(--em)">강함</span></div>
+    <div class="sub">임계: ≥70 우수 · 50~69 보통 · &lt;50 약함</div>
+    <div class="bar"><i style="width:78%"></i></div>
+  </div>
+  <div class="tt-box">
+    <b>Layer 1 — Hover 툴팁 (1초):</b><br>
+    "변동성 축소 패턴" 강도. 주가 움직임이 점점 좁아지면서 매집이 일어나는 구간을 0~100으로 점수화.
+    <div class="formula">score = 100 × (1 − σ_last / σ_first) × tightness_weight</div>
+    <div style="margin-top:6px"><a style="color:var(--accent)">자세히 보기 →</a></div>
+  </div>
+</div>
+
+<div style="margin-top:14px">
+  <div class="accordion">
+    <div class="accordion-head">
+      <span><b>Layer 2 — 아코디언 (클릭 시 펼침): "이 점수는 어떻게 계산되나요?"</b></span>
+      <span class="arrow">▾</span>
+    </div>
+    <div class="accordion-body">
+      <b>정의:</b> VCP(Volatility Contraction Pattern, 변동성 압축 패턴)는 상승 추세 종목이 매물을 소화하며 수축되는 과정을 의미합니다.<br>
+      <b>입력값:</b> 최근 3~6개의 수축(pullback) 구간의 고저 폭, 거래량, 수축 횟수 <br>
+      <b>계산:</b> <code>수축 폭 감소율 × 거래량 감소율 × tightness 가중치</code><br>
+      <b>해석:</b> 70점 이상이면 마지막 수축이 매우 타이트하여 <b>피벗 돌파 시 신뢰도 높음</b>. 50 미만이면 패턴이 느슨합니다.<br>
+      <b>주의:</b> VCP 점수가 높아도 <span class="tag warn">거래량 급감</span>이 동반되지 않으면 가짜 패턴일 수 있습니다.
+      <div style="margin-top:8px"><a class="cta ghost" style="font-size:11px;padding:4px 10px">📖 학습 가이드 &gt; VCP 상세편</a></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<h4>Layer 3 — 전용 학습 페이지 (/guide/indicators/vcp)</h4>
+<p>이미 <code>app/guide</code> 라우트가 있으므로, 각 지표 툴팁의 "자세히 보기" 링크가 가이드 페이지의 해당 섹션으로 이동하도록 앵커를 맞춥니다. 예: <code>/guide/indicators#vcp</code>.</p>
+
+<h3>1-3. 적용 우선순위 맵</h3>
+<table>
+<tr><th>페이지</th><th>설명이 꼭 필요한 지표</th><th>권장 UI</th></tr>
+<tr><td>Scanner</td><td>RS Rating, VCP 점수, 피벗 거리</td><td>컬럼 헤더 옆 ?, 사이드 드로어</td></tr>
+<tr><td>Master-Filter</td><td>FTD, 분산일, 내부 강도, 200일선 참여율</td><td>카드 우상단 ? + 아코디언</td></tr>
+<tr><td>Macro</td><td>Regime Score 6개 컴포넌트, HYG/IEF, QQQ/SPY</td><td>각 bar 옆 ? + 하단 "왜 이 점수인가?" 패널</td></tr>
+<tr><td>Plan</td><td>ATR 기반 수량, 허용 손실, R-multiple</td><td>계산식을 수식 박스로 노출</td></tr>
+<tr><td>Portfolio</td><td>오픈 리스크, 평가 R, 섹터 집중도</td><td>카드 ? + 포지션 제한 규칙 툴팁 (현재 있음 ✓)</td></tr>
+<tr><td>Dashboard</td><td>Expectancy R, Plan Adherence, SEPA Pass Rate</td><td>카드 전부 ? 필수</td></tr>
+</table>
+
+<!-- =================================================================== -->
+<h2>2 · 가독성 & 레이아웃</h2>
+
+<h3>2-1. 진단</h3>
+<div class="grid g2" style="margin-top:10px">
+  <div class="card">
+    <b style="color:var(--em)">잘 된 점</b>
+    <ul>
+      <li>Master-Filter: GREEN/YELLOW/RED 컬러 레짐이 시각적으로 직관적</li>
+      <li>Portfolio: 상단 5 메트릭 → 섹터 → 포지션 순으로 시선 흐름이 자연스러움</li>
+      <li>Scanner: 상태 카드(Recommended/Partial/Errors)로 결과를 먼저 요약</li>
+    </ul>
+  </div>
+  <div class="card">
+    <b style="color:var(--bad)">과부하 지점</b>
+    <ul>
+      <li><b>Dashboard</b>: 8 메트릭 + Advanced Chart + Equity + Discipline + Review Stats + Trades 테이블이 한 뷰</li>
+      <li><b>Beauty-Contest</b>: 6개 섹션이 수직으로 나열, LLM 프롬프트+결과 텍스트박스가 화면 절반 차지</li>
+      <li><b>History</b>: 복기 태그 필터 + 대형 테이블 동시 노출, 컬럼이 7개 이상</li>
+    </ul>
+  </div>
+</div>
+
+<h3>2-2. 개선안: Dashboard "2-tier" 리디자인</h3>
+
+<div class="mock">
+<div class="mock-title">Dashboard · <b>Before</b> (8 카드 한 줄 + 모든 차트)</div>
+<div class="before">
+<div class="grid" style="grid-template-columns:repeat(8,1fr);gap:6px">
+  <div class="metric"><div class="lbl">승률</div><div class="val" style="font-size:14px">54%</div></div>
+  <div class="metric"><div class="lbl">총 PnL</div><div class="val" style="font-size:14px">+12%</div></div>
+  <div class="metric"><div class="lbl">Avg R</div><div class="val" style="font-size:14px">1.2</div></div>
+  <div class="metric"><div class="lbl">Expec R</div><div class="val" style="font-size:14px">0.31</div></div>
+  <div class="metric"><div class="lbl">Open Risk</div><div class="val" style="font-size:14px">3.2%</div></div>
+  <div class="metric"><div class="lbl">Adherence</div><div class="val" style="font-size:14px">88%</div></div>
+  <div class="metric"><div class="lbl">Discipline</div><div class="val" style="font-size:14px">7.8</div></div>
+  <div class="metric"><div class="lbl">SEPA Pass</div><div class="val" style="font-size:14px">62%</div></div>
+</div>
+<div style="margin-top:8px;font-size:11px;color:var(--t3)">↓ 차트 3개 + 복기 대시보드 + 테이블이 아래에 쌓임 — 시선 분산, 초보자는 어디부터 봐야 할지 모름</div>
+</div>
+</div>
+
+<div class="mock">
+<div class="mock-title">Dashboard · <b>After</b> (포커스 3 + 탭 접근)</div>
+<div class="after">
+<div style="font-size:12px;color:var(--t3);margin-bottom:8px">📌 오늘의 포커스 — 이것만 보면 됩니다</div>
+<div class="grid g3">
+  <div class="metric" style="border-color:#1f4a37">
+    <div class="lbl">내 규율 점수 <span class="helpbtn">?</span></div>
+    <div class="val">7.8 <span style="font-size:11px;color:var(--em)">▲ 0.4</span></div>
+    <div class="sub">최근 10매매 중 규율 준수 88%</div>
+  </div>
+  <div class="metric">
+    <div class="lbl">기대값 (1R 당) <span class="helpbtn">?</span></div>
+    <div class="val">+0.31R</div>
+    <div class="sub">시스템이 통계적 우위 상태</div>
+  </div>
+  <div class="metric" style="border-color:#3a1e24">
+    <div class="lbl">열린 리스크 <span class="helpbtn">?</span></div>
+    <div class="val" style="color:var(--warn)">3.2%</div>
+    <div class="sub">권장 상한 5% · 안전권</div>
+  </div>
+</div>
+<div style="margin-top:14px;display:flex;gap:6px;font-size:12px">
+  <span class="chip" style="background:#1e3a57;color:#cfe8ff">📈 성과</span>
+  <span class="chip">🎯 규율</span>
+  <span class="chip">🧾 복기</span>
+  <span class="chip">📊 차트</span>
+</div>
+<div style="margin-top:6px;font-size:11px;color:var(--t3)">↓ 나머지 8개 지표·차트·테이블은 탭으로 접근 (초기 로드는 "성과" 탭만)</div>
+</div>
+</div>
+
+<h3>2-3. Beauty-Contest 리디자인 — 세로 나열 → 진행형 위저드</h3>
+<p>현재 섹션 1~6이 수직으로 펼쳐져 있어 <b>어디가 현재 단계인지, 뭘 먼저 해야 하는지</b> 모호합니다. 단계별 스테퍼 + 현재 단계 카드만 활성화하는 방식으로 바꿉니다.</p>
+<div class="mock">
+<div class="mock-title">Contest · <b>위저드형 스테퍼</b></div>
+<div class="stepper">
+  <div class="step done"><small>Step 1</small>후보 선택 ✓</div>
+  <div class="step done"><small>Step 2</small>프롬프트 생성 ✓</div>
+  <div class="step now"><small>Step 3</small>LLM 결과 입력</div>
+  <div class="step"><small>Step 4</small>최종 선정</div>
+  <div class="step"><small>Step 5</small>성과 판정</div>
+</div>
+<div class="after" style="margin-top:8px">
+  <b style="font-size:13px">현재 단계: LLM 결과를 붙여넣어 주세요</b>
+  <div style="background:#0f131b;border:1px dashed var(--line);border-radius:6px;height:80px;margin-top:8px;padding:8px;font-size:11px;color:var(--t3)">JSON 또는 리포트 텍스트 붙여넣기…</div>
+  <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+    <span class="tag ac">스키마 v1.0 · session_id, rank, overall 필수</span>
+    <span class="cta">파싱하고 다음 단계 →</span>
+  </div>
+</div>
+</div>
+
+<!-- =================================================================== -->
+<h2>3 · 페이지 간 맥락 & 연결성</h2>
+
+<h3>3-1. 진단</h3>
+<p>현재 <b>"STEP 01 · 시장 분석"</b>이라는 텍스트 배지가 Master-Filter, Macro 페이지에만 있고, 실제 <b>시각적 스테퍼/진행 바가 없습니다.</b> 초보자는 "지금 내가 종목 발굴 단계인지, 매매 계획 단계인지"를 URL로 추측해야 합니다. 또한 페이지 간 CTA가 일부만 존재합니다:</p>
+<ul>
+  <li>Scanner → Contest: 고정 바텀 배너 "콘테스트로 이동" ✓ (잘 됨)</li>
+  <li>Contest → Plan: <span class="tag bad">없음</span> — 최종 선정 후 매매 계획으로 넘어가는 버튼 부재</li>
+  <li>Plan → Portfolio: <span class="tag bad">없음</span> — 계획 저장 후 포지션 상태 확인 유도 없음</li>
+  <li>Portfolio → History: <span class="tag bad">없음</span> — 청산 시 복기 페이지로의 연결 부재</li>
+</ul>
+
+<h3>3-2. 제안: 공통 LifecycleHeader 컴포넌트</h3>
+<p>모든 페이지 상단에 동일한 스테퍼를 고정합니다. 현재 단계는 하이라이트, 완료 단계는 체크, 미방문 단계는 회색으로 표시하고, 각 스텝 클릭 시 해당 페이지로 이동합니다.</p>
+<div class="mock">
+<div class="mock-title">공통 헤더 — <b>LifecycleStepper</b></div>
+<div class="stepper">
+  <div class="step done"><small>01</small>시장 분석 ✓</div>
+  <div class="step done"><small>02</small>종목 발굴 ✓</div>
+  <div class="step done"><small>03</small>콘테스트 ✓</div>
+  <div class="step now"><small>04</small>매매 계획</div>
+  <div class="step"><small>05</small>포트폴리오</div>
+  <div class="step"><small>06</small>복기</div>
+</div>
+<div style="font-size:11px;color:var(--t3)">현재 페이지의 lifecycle 상 위치를 모든 뷰에서 3초 안에 파악 가능</div>
+</div>
+
+<h3>3-3. 페이지 끝에 "다음 단계" CTA 고정</h3>
+<div class="mock">
+<div class="mock-title"><b>StickyNextCTA</b> — 페이지 하단 고정</div>
+<div class="card" style="display:flex;justify-content:space-between;align-items:center;background:#0f1b2a;border-color:#1e3a57">
+  <div>
+    <div style="font-size:11px;color:var(--t3)">✓ 계획 저장 완료 · Centaur 체크리스트 6/6 통과</div>
+    <div style="font-size:14px;color:#cfe8ff;margin-top:2px">다음: 이 포지션이 내 포트폴리오 리스크에 주는 영향을 확인하세요</div>
+  </div>
+  <a class="cta">포트폴리오 확인 →</a>
+</div>
+</div>
+
+<h3>3-4. 라이프사이클 흐름 점검표</h3>
+<table>
+<tr><th>전환 지점</th><th>현재</th><th>개선안</th></tr>
+<tr><td>Macro → Scanner</td><td>Macro에 CTA 없음</td><td>"레짐 GREEN입니다 — 공격 후보 찾기" 버튼</td></tr>
+<tr><td>Scanner → Contest</td><td>바텀 배너 ✓</td><td>유지, "n/10" 진행 상태 유지</td></tr>
+<tr><td>Contest → Plan</td><td>연결 없음</td><td>최종 선정 테이블 각 행에 "이 종목으로 계획 작성 →"</td></tr>
+<tr><td>Plan → Portfolio</td><td>없음</td><td>저장 완료 모달에 "포트폴리오에서 확인" CTA</td></tr>
+<tr><td>Portfolio → History</td><td>없음</td><td>청산 포지션 카드에 "복기 작성" 버튼</td></tr>
+<tr><td>History → Dashboard</td><td>자동 반영만</td><td>복기 제출 후 "대시보드에서 내 통계 변화 보기"</td></tr>
+</table>
+
+<!-- =================================================================== -->
+<h2>4 · 용어의 직관성 (Jargon Check)</h2>
+
+<p>코드에서 직접 쓰이는 전문용어를 초심자용 별명 + 아이콘 + 한 줄 정의로 순화합니다. 원 용어를 없애지 말고 <b>괄호 병기</b> (학습 효과 유지).</p>
+
+<table>
+<tr><th>원 용어</th><th>초심자용 별명 + 아이콘</th><th>한 줄 정의 (툴팁)</th></tr>
+<tr><td>VCP</td><td>🫧 변동성 압축 패턴</td><td>주가 출렁임이 점점 좁아지며 힘을 모으는 구간</td></tr>
+<tr><td>SEPA</td><td>✅ 마크 미너비니 8대 조건</td><td>추세주의 기술적/수급 조건 체크리스트</td></tr>
+<tr><td>FTD (Follow-Through Day)</td><td>🚀 상승 신호일</td><td>하락 후 큰 거래량 상승으로 반전 확률이 높아지는 날</td></tr>
+<tr><td>분산일 (Distribution Day)</td><td>📉 기관 매도일</td><td>거래량 증가와 함께 하락한 날 — 기관 매도 의심</td></tr>
+<tr><td>RS Rating</td><td>💪 상대 강도 1~99</td><td>최근 1년 동안 전체 종목 대비 얼마나 잘 올랐는지 백분위</td></tr>
+<tr><td>피벗 (Pivot)</td><td>🎯 돌파 가격</td><td>매집 박스의 고점 — 이 가격을 거래량과 함께 뚫으면 매수</td></tr>
+<tr><td>R-multiple</td><td>⚖️ 손실 대비 수익 배수</td><td>1R = 최초 손절 금액. +2R = 감수한 리스크의 2배 수익</td></tr>
+<tr><td>200일선 참여율</td><td>🌊 추세 동참률</td><td>전체 종목 중 200일 이동평균선 위에 있는 비율 (시장 체력)</td></tr>
+<tr><td>이동평균선 밀집</td><td>🧲 이평선 수렴</td><td>50/150/200일선이 좁은 범위에 모여 방향 선택 임박</td></tr>
+<tr><td>Expectancy</td><td>🎰 1회 매매 기대값</td><td>(승률 × 평균수익) − (패률 × 평균손실) — 양수면 시스템 유효</td></tr>
+<tr><td>Plan Adherence</td><td>📏 계획 준수율</td><td>진입/손절/목표가를 계획대로 지킨 매매 비율</td></tr>
+<tr><td>Regime Score</td><td>🌤️ 시장 날씨 점수</td><td>6개 지표 종합 — 70↑ 맑음 · 40~70 흐림 · 40↓ 비</td></tr>
+</table>
+
+<h3>4-1. 적용 예시 — Master-Filter 메트릭 카드</h3>
+<div class="grid g2">
+<div class="before">
+<div class="metric">
+  <div class="lbl">분산일 (Distribution Day)</div>
+  <div class="val">4</div>
+  <div class="sub">최근 25일 기준</div>
+</div>
+<div style="font-size:11px;color:var(--bad);margin-top:6px">초보자 반응: "분산일? 4라는 숫자가 많은 건가 적은 건가?"</div>
+</div>
+
+<div class="after">
+<div class="metric" style="border-color:#1f4a37">
+  <div class="lbl">📉 기관 매도일 <span class="helpbtn">?</span></div>
+  <div class="val">4 <span style="font-size:11px;color:var(--warn)">주의</span></div>
+  <div class="sub">최근 25일 중 · 5개 넘으면 🔴</div>
+  <div class="bar"><i style="width:80%;background:var(--warn)"></i></div>
+  <div style="font-size:10px;color:var(--t3);margin-top:4px">원 용어: 분산일 (Distribution Day)</div>
+</div>
+</div>
+</div>
+
+<!-- =================================================================== -->
+<h2>5 · 우선순위 로드맵</h2>
+<table>
+<tr><th>우선순위</th><th>작업</th><th>영향</th><th>예상 공수</th></tr>
+<tr><td><span class="tag bad">P0</span></td><td>공통 <b>LifecycleStepper</b> 컴포넌트 + 전 페이지 헤더 적용</td><td>맥락 인지 즉시 해결</td><td>1~2일</td></tr>
+<tr><td><span class="tag bad">P0</span></td><td>표준 <b>MetricWithHelp</b> 컴포넌트 (? 아이콘 + 툴팁 + 아코디언) 제작 후 모든 지표 카드에 교체</td><td>투명성·신뢰 핵심</td><td>3~4일</td></tr>
+<tr><td><span class="tag warn">P1</span></td><td>Dashboard를 <b>포커스 3 카드 + 탭</b> 구조로 리팩터</td><td>초심자 진입 장벽 ↓</td><td>2일</td></tr>
+<tr><td><span class="tag warn">P1</span></td><td>Beauty-Contest를 <b>위저드형</b>으로 전환</td><td>정보 과부하 해소</td><td>2~3일</td></tr>
+<tr><td><span class="tag warn">P1</span></td><td>단계 전환 CTA 4곳 추가 (Contest→Plan, Plan→Portfolio, Portfolio→History, History→Dashboard)</td><td>라이프사이클 완성</td><td>1일</td></tr>
+<tr><td><span class="tag ac">P2</span></td><td>용어 사전(12개)을 <code>lib/glossary.ts</code>로 외부화하고, <b>&lt;Term code="vcp"/&gt;</b> 컴포넌트로 일괄 적용</td><td>용어 일관성</td><td>1일</td></tr>
+<tr><td><span class="tag ac">P2</span></td><td><code>/guide/indicators</code> 페이지 구축 — 툴팁 "자세히 보기"의 Layer 3</td><td>학습 경로</td><td>2일</td></tr>
+<tr><td><span class="tag ok">P3</span></td><td>History 테이블에 컬럼 선택기·집계 요약 카드 상단 추가</td><td>탐색성</td><td>0.5일</td></tr>
+</table>
+
+<!-- =================================================================== -->
+<h2>6 · 최종 메시지</h2>
+<p>MTN은 <b>라이프사이클 기반 설계라는 좋은 뼈대</b>를 이미 갖추고 있습니다. 현재 과제는 기능 추가가 아니라, <b>(1) 숫자의 출처를 드러내고, (2) 지금 어디에 있는지 보여주고, (3) 한 번에 보여주는 양을 줄이는</b> 세 가지입니다. 위 P0 두 개 — 공통 스테퍼와 MetricWithHelp — 만 도입해도 초심자 체감 품질이 가장 크게 오를 겁니다.</p>
+
+<div class="footer">
+MTN UX/UI Review Report · Generated 2026-04-24 · File: <code>MTN_UX_Review_2026-04-24.html</code>
+</div>
+
+</div>
+</body>
+</html>

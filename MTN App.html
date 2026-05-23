@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>MTN — Mantori's Trading Navigator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --c0:#040810;--c1:#070d1b;--c2:#0b1220;--c3:#101928;--c4:#162135;
+  --b1:#1a2742;--b2:#243556;--b3:#2e4268;
+  --t1:#e8edf7;--t2:#7a8fb5;--t3:#3a5070;
+  --em:#10b981;--ro:#f43f5e;--am:#f59e0b;--bl:#3b82f6;--pu:#a855f7;
+}
+html,body{height:100%;background:var(--c2);color:var(--t1);font-family:'Inter',sans-serif;font-size:13px;-webkit-font-smoothing:antialiased}
+#root{min-height:100%;display:flex;flex-direction:column}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
+input,select,textarea{font-family:'Inter',sans-serif;font-size:13px}
+input[type=range]{accent-color:var(--em)}
+input[type=checkbox]{accent-color:var(--em)}
+button{font-family:'Inter',sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ═══ BLOCK 1: DATA + UTILITIES ═══ -->
+<script type="text/babel">
+const TICKERS = [
+  {ticker:'NVDA',name:'NVIDIA',sector:'반도체',rs:96,grade:'recommended',price:127.42,chg:3.21,adr:4.2,vol:1.8,above50:true,above150:true,above200:true,contraction:3,near52:true,eps:142,vcpStage:2,pillars:6,mktCap:'$3.1T',dualTier:'TIER_1'},
+  {ticker:'005930',name:'삼성전자',sector:'반도체',rs:88,grade:'recommended',price:71200,chg:1.45,adr:2.1,vol:0.9,above50:true,above150:true,above200:true,contraction:2,near52:false,eps:89,vcpStage:3,pillars:5,mktCap:'₩450조',dualTier:'TIER_1'},
+  {ticker:'META',name:'Meta Platforms',sector:'소셜',rs:91,grade:'recommended',price:591.30,chg:2.14,adr:3.8,vol:1.2,above50:true,above150:true,above200:true,contraction:4,near52:true,eps:73,vcpStage:2,pillars:6,mktCap:'$1.5T',dualTier:'WATCHLIST'},
+  {ticker:'035720',name:'카카오',sector:'인터넷',rs:62,grade:'partial',price:43600,chg:-0.68,adr:3.5,vol:0.7,above50:false,above150:true,above200:true,contraction:5,near52:false,eps:22,vcpStage:1,pillars:3,mktCap:'₩19조',dualTier:'SHORT_TERM'},
+  {ticker:'TSLA',name:'Tesla',sector:'전기차',rs:74,grade:'partial',price:248.50,chg:-1.20,adr:5.9,vol:1.4,above50:true,above150:false,above200:false,contraction:6,near52:false,eps:18,vcpStage:2,pillars:4,mktCap:'$794B',dualTier:'SHORT_TERM'},
+  {ticker:'AAPL',name:'Apple',sector:'소비자기술',rs:83,grade:'recommended',price:196.40,chg:0.88,adr:1.9,vol:1.1,above50:true,above150:true,above200:true,contraction:3,near52:false,eps:11,vcpStage:3,pillars:5,mktCap:'$3.0T',dualTier:'WATCHLIST'},
+  {ticker:'000660',name:'SK하이닉스',sector:'반도체',rs:90,grade:'recommended',price:198500,chg:2.31,adr:3.1,vol:2.1,above50:true,above150:true,above200:true,contraction:2,near52:true,eps:310,vcpStage:1,pillars:6,mktCap:'₩144조',dualTier:'TIER_1'},
+  {ticker:'GOOGL',name:'Alphabet',sector:'인터넷',rs:85,grade:'recommended',price:162.30,chg:1.55,adr:2.4,vol:0.8,above50:true,above150:true,above200:true,contraction:4,near52:false,eps:47,vcpStage:2,pillars:5,mktCap:'$2.0T',dualTier:'WATCHLIST'},
+  {ticker:'MSFT',name:'Microsoft',sector:'SW',rs:80,grade:'partial',price:414.10,chg:0.32,adr:1.6,vol:0.6,above50:false,above150:true,above200:true,contraction:5,near52:false,eps:28,vcpStage:1,pillars:4,mktCap:'$3.1T',dualTier:'EXCLUDED'},
+  {ticker:'035420',name:'NAVER',sector:'인터넷',rs:78,grade:'partial',price:188000,chg:3.01,adr:2.8,vol:1.6,above50:true,above150:true,above200:false,contraction:3,near52:false,eps:33,vcpStage:2,pillars:4,mktCap:'₩31조',dualTier:'SHORT_TERM'},
+  {ticker:'AMD',name:'AMD',sector:'반도체',rs:71,grade:'partial',price:102.70,chg:4.12,adr:6.2,vol:2.4,above50:true,above150:false,above200:false,contraction:7,near52:false,eps:-8,vcpStage:1,pillars:3,mktCap:'$166B',dualTier:'EXCLUDED'},
+  {ticker:'AMZN',name:'Amazon',sector:'이커머스',rs:87,grade:'recommended',price:191.80,chg:1.90,adr:2.7,vol:1.3,above50:true,above150:true,above200:true,contraction:3,near52:true,eps:95,vcpStage:3,pillars:6,mktCap:'$2.0T',dualTier:'TIER_1'},
+];
+const WATCHLIST_DATA = [
+  {id:'1',ticker:'NVDA',exchange:'NAS',priority:2,memo:'VCP 3단계 수축, 피벗 근접',tags:['VCP','실적'],created_at:'2026-04-18T09:00:00Z'},
+  {id:'2',ticker:'000660',exchange:'KOSPI',priority:1,memo:'HBM 수요 급증, RS 상승세',tags:['반도체'],created_at:'2026-04-17T14:30:00Z'},
+  {id:'3',ticker:'META',exchange:'NAS',priority:0,memo:'광고 수익 회복세',tags:['소셜'],created_at:'2026-04-16T10:00:00Z'},
+  {id:'4',ticker:'AMZN',exchange:'NAS',priority:1,memo:'AWS 가속, 클라우드 확장',tags:['클라우드','실적'],created_at:'2026-04-15T08:00:00Z'},
+  {id:'5',ticker:'AAPL',exchange:'NAS',priority:0,memo:'iPhone 판매 회복 기대',tags:['소비자기술'],created_at:'2026-04-14T11:00:00Z'},
+];
+const TRADES_DATA = [
+  {id:1,ticker:'NVDA',direction:'LONG',entry:118.20,exit:127.42,stoploss:112.50,shares:80,result:'OPEN',rMultiple:null,pnl:737.6,date:'2026-04-15',discipline:85,sepa:'PASS'},
+  {id:2,ticker:'TSLA',direction:'LONG',entry:265.00,exit:241.30,stoploss:255.00,shares:40,result:'LOSS',rMultiple:-2.4,pnl:-948,date:'2026-04-10',discipline:72,sepa:'PARTIAL'},
+  {id:3,ticker:'000660',direction:'LONG',entry:182000,exit:198500,stoploss:175000,shares:5,result:'OPEN',rMultiple:null,pnl:82500,date:'2026-04-12',discipline:90,sepa:'PASS'},
+  {id:4,ticker:'META',direction:'LONG',entry:510.00,exit:591.30,stoploss:490.00,shares:15,result:'OPEN',rMultiple:null,pnl:1219.5,date:'2026-04-08',discipline:88,sepa:'PASS'},
+  {id:5,ticker:'AAPL',direction:'LONG',entry:198.50,exit:192.30,stoploss:191.00,shares:50,result:'LOSS',rMultiple:-0.82,pnl:-310,date:'2026-04-03',discipline:65,sepa:'PARTIAL'},
+  {id:6,ticker:'GOOGL',direction:'LONG',entry:148.00,exit:169.40,stoploss:142.00,shares:30,result:'WIN',rMultiple:3.6,pnl:642,date:'2026-03-28',discipline:93,sepa:'PASS'},
+  {id:7,ticker:'AMZN',direction:'LONG',entry:178.20,exit:191.80,stoploss:171.00,shares:25,result:'OPEN',rMultiple:null,pnl:340,date:'2026-04-14',discipline:87,sepa:'PASS'},
+];
+const fmtPrice = (v, ticker) => {
+  if (typeof v !== 'number') return '—';
+  return ticker && /^\d{6}$/.test(ticker) ? v.toLocaleString('ko-KR')+'원' : '$'+v.toFixed(2);
+};
+const fmtPct = v => (v>=0?'+':'')+v.toFixed(2)+'%';
+const GRADE_STYLE = {
+  recommended:{bg:'rgba(16,185,129,.1)',border:'rgba(16,185,129,.3)',text:'#6ee7b7',label:'Recommended'},
+  partial:{bg:'rgba(245,158,11,.1)',border:'rgba(245,158,11,.3)',text:'#fcd34d',label:'Partial'},
+  error:{bg:'rgba(244,63,94,.1)',border:'rgba(244,63,94,.3)',text:'#fda4af',label:'Error'},
+};
+const TIER_STYLE = {
+  TIER_1:{bg:'rgba(16,185,129,.1)',border:'rgba(16,185,129,.3)',text:'#6ee7b7',label:'TIER 1'},
+  WATCHLIST:{bg:'rgba(245,158,11,.1)',border:'rgba(245,158,11,.3)',text:'#fcd34d',label:'WATCHLIST'},
+  SHORT_TERM:{bg:'rgba(59,130,246,.1)',border:'rgba(59,130,246,.3)',text:'#93c5fd',label:'SHORT TERM'},
+  EXCLUDED:{bg:'rgba(55,65,81,.2)',border:'rgba(75,85,99,.2)',text:'#6b7280',label:'EXCLUDED'},
+};
+const NAV_STEPS = [
+  {step:'01',key:'market',  label:'시장 분석',  sub:'진입 조건 확인',  tabs:['매크로','마스터필터']},
+  {step:'02',key:'scanner', label:'종목 발굴',  sub:'VCP·CAN SLIM', tabs:['VCP 스캐너','CAN SLIM']},
+  {step:'03',key:'watchlist',label:'관심종목',  sub:'후보 추적',      tabs:[]},
+  {step:'04',key:'plan',    label:'매매 계획',  sub:'리스크 계산',    tabs:[]},
+  {step:'05',key:'portfolio',label:'포트폴리오',sub:'노출도 점검',    tabs:[]},
+  {step:'06',key:'contest', label:'콘테스트',   sub:'LLM 비교 분석', tabs:[]},
+  {step:'07',key:'review',  label:'성과 복기',  sub:'결과 축적',     tabs:['대시보드','매매복기']},
+];
+Object.assign(window,{TICKERS,WATCHLIST_DATA,TRADES_DATA,fmtPrice,fmtPct,GRADE_STYLE,TIER_STYLE,NAV_STEPS});
+</script>
+
+<!-- ═══ BLOCK 2: SHARED COMPONENTS + NAV ═══ -->
+<script type="text/babel">
+const {useState:uS,useEffect:uE,useRef:uR,useMemo:uM} = React;
+const {TICKERS,WATCHLIST_DATA,TRADES_DATA,fmtPrice,fmtPct,GRADE_STYLE,TIER_STYLE,NAV_STEPS} = window;
+
+function Badge({grade,tier}){
+  const s = tier ? TIER_STYLE[tier] : GRADE_STYLE[grade];
+  if(!s) return null;
+  return <span style={{background:s.bg,border:`1px solid ${s.border}`,color:s.text,borderRadius:4,padding:'1px 7px',fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{s.label}</span>;
+}
+function Card({children,style:sty,onClick}){
+  return <div onClick={onClick} style={{background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:10,padding:16,...sty}}>{children}</div>;
+}
+function MetricCard({label,value,sub,color}){
+  return(
+    <div style={{background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:10,padding:'14px 16px'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'var(--t3)',letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:8}}>{label}</div>
+      <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:20,color:color||'var(--t1)'}}>{value}</div>
+      {sub&&<div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{sub}</div>}
+    </div>
+  );
+}
+function TrendDots({t}){
+  return(
+    <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+      {[t.above50,t.above150,t.above200].map((ok,i)=>(
+        <div key={i} title={['50일','150일','200일'][i]+'선'} style={{width:6,height:6,borderRadius:'50%',background:ok?'var(--em)':'var(--b2)'}}/>
+      ))}
+    </div>
+  );
+}
+function PageHeader({step,eyebrow,title,desc,children}){
+  return(
+    <div style={{marginBottom:18}}>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+        <div>
+          <p style={{fontSize:10,fontWeight:700,letterSpacing:'0.1em',color:'var(--em)',textTransform:'uppercase',marginBottom:6}}>STEP {step} · {eyebrow}</p>
+          <h1 style={{fontSize:22,fontWeight:800,color:'var(--t1)',letterSpacing:'-0.02em',lineHeight:1.2}}>{title}</h1>
+          <p style={{marginTop:6,color:'var(--t2)',fontSize:12,maxWidth:580,lineHeight:1.6}}>{desc}</p>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+function FlowBanner({currentKey}){
+  const idx = NAV_STEPS.findIndex(s=>s.key===currentKey);
+  return(
+    <div style={{display:'flex',alignItems:'center',gap:0,marginBottom:18,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:8,padding:'7px 14px',overflowX:'auto',flexWrap:'nowrap'}}>
+      {NAV_STEPS.map((s,i)=>{
+        const isActive=s.key===currentKey, isDone=i<idx;
+        return(
+          <React.Fragment key={s.key}>
+            {i>0&&<div style={{width:20,height:1,background:isDone?'var(--em)':'var(--b1)',flexShrink:0,margin:'0 2px'}}/>}
+            <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0,padding:'3px 8px',borderRadius:5,background:isActive?'rgba(16,185,129,.12)':'transparent',border:isActive?'1px solid rgba(16,185,129,.3)':'1px solid transparent'}}>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:9,fontWeight:700,color:isActive||isDone?'var(--em)':'var(--t3)'}}>{s.step}</span>
+              <span style={{fontSize:10,fontWeight:isActive?700:400,color:isActive?'var(--t1)':isDone?'var(--t2)':'var(--t3)',whiteSpace:'nowrap'}}>{s.label}</span>
+              {isDone&&<span style={{fontSize:9,color:'var(--em)'}}>✓</span>}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function TopNav({page,setPage,subPage,setSubPage}){
+  const market=[['SPY','+0.82%',true],['KOSPI','-0.31%',false],['QQQ','+1.24%',true],['DXY','+0.11%',true]];
+  const cur = NAV_STEPS.find(s=>s.key===page);
+  return(
+    <div style={{position:'sticky',top:0,zIndex:100,background:'var(--c1)',borderBottom:'1px solid var(--b1)'}}>
+      {/* Main bar */}
+      <div style={{display:'flex',alignItems:'stretch',height:46,borderBottom:'1px solid var(--b1)'}}>
+        {/* Logo */}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'0 18px',borderRight:'1px solid var(--b1)',flexShrink:0}}>
+          <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:15,color:'var(--em)',letterSpacing:'-0.03em'}}>MTN</span>
+          <div style={{display:'flex',alignItems:'center',gap:4}}>
+            <div style={{width:5,height:5,borderRadius:'50%',background:'var(--em)',boxShadow:'0 0 6px var(--em)'}}/>
+            <span style={{fontSize:9,color:'var(--em)',fontWeight:700,letterSpacing:'0.1em'}}>LIVE</span>
+          </div>
+        </div>
+        {/* Steps */}
+        <div style={{display:'flex',flex:1,overflowX:'auto'}}>
+          {NAV_STEPS.map(s=>{
+            const active=s.key===page;
+            return(
+              <button key={s.key} onClick={()=>{setPage(s.key);if(s.tabs.length)setSubPage(s.tabs[0]);}} style={{display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'flex-start',padding:'0 16px',background:'none',border:'none',borderBottom:active?'2px solid var(--em)':'2px solid transparent',cursor:'pointer',flexShrink:0,gap:2}}>
+                <span style={{fontSize:9,color:active?'var(--em)':'var(--t3)',fontWeight:700,letterSpacing:'0.08em',fontFamily:'JetBrains Mono'}}>{s.step}</span>
+                <span style={{fontSize:12,color:active?'var(--t1)':'var(--t2)',fontWeight:active?700:500}}>{s.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {/* Market strip */}
+        <div style={{display:'flex',alignItems:'stretch',borderLeft:'1px solid var(--b1)',flexShrink:0}}>
+          {market.map(([n,v,up])=>(
+            <div key={n} style={{display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',padding:'0 12px',borderRight:'1px solid var(--b1)',gap:2}}>
+              <span style={{fontSize:9,color:'var(--t3)',fontWeight:700,letterSpacing:'0.07em'}}>{n}</span>
+              <span style={{fontFamily:'JetBrains Mono',fontSize:11,color:up?'var(--em)':'var(--ro)',fontWeight:600}}>{v}</span>
+            </div>
+          ))}
+          <div style={{display:'flex',alignItems:'center',padding:'0 14px',fontFamily:'JetBrains Mono',fontSize:11,color:'var(--t3)'}}>09:31 KST</div>
+        </div>
+      </div>
+      {/* Sub-tabs */}
+      {cur&&cur.tabs.length>0&&(
+        <div style={{display:'flex',alignItems:'stretch',background:'var(--c0)',height:33,padding:'0 18px',gap:0}}>
+          {cur.tabs.map(tab=>{
+            const active=subPage===tab;
+            return(
+              <button key={tab} onClick={()=>setSubPage(tab)} style={{background:'none',border:'none',borderBottom:active?'2px solid var(--em)':'2px solid transparent',color:active?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:active?700:400,padding:'0 14px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                {tab}
+              </button>
+            );
+          })}
+          <div style={{flex:1}}/>
+          <div style={{display:'flex',alignItems:'center',fontSize:10,color:'var(--t3)',fontStyle:'italic'}}>{cur.sub}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+Object.assign(window,{Badge,Card,MetricCard,TrendDots,PageHeader,FlowBanner,TopNav});
+</script>
+
+<!-- ═══ BLOCK 3: PAGES 1–5 ═══ -->
+<script type="text/babel">
+const {useState:us3,useEffect:ue3,useRef:ur3,useMemo:um3} = React;
+const {TICKERS,WATCHLIST_DATA,fmtPrice,fmtPct,GRADE_STYLE,TIER_STYLE} = window;
+const {Badge,Card,MetricCard,TrendDots,PageHeader,FlowBanner} = window;
+
+/* ── 1. Macro Dashboard ─────────────────────────────────────── */
+function MacroPage(){
+  const breakdown=[
+    {label:'SPY 추세',score:20,weight:25,desc:'50일선 상회'},
+    {label:'HYG/IEF 크레딧',score:18,weight:20,desc:'Risk-ON'},
+    {label:'VIX 레벨',score:14,weight:15,desc:'16.4 정상'},
+    {label:'달러·금리',score:10,weight:15,desc:'중립'},
+    {label:'구리/금',score:9,weight:12,desc:'구리 소폭 우위'},
+    {label:'시장 폭',score:11,weight:13,desc:'균형 상승'},
+  ];
+  const score=breakdown.reduce((a,b)=>a+b.score,0);
+  const assets=[
+    ['SPY','$521.4','+0.82%',true,'S&P 500이 50일선 상회'],
+    ['QQQ','$446.2','+1.24%',true,'기술주 강세 지속'],
+    ['HYG','$79.2','+0.31%',true,'Risk-ON 신호'],
+    ['IEF','$95.1','-0.18%',false,'안전채권 약세'],
+    ['TLT','$88.4','-0.42%',false,'장기국채 하락'],
+    ['GLD','$315.0','+0.55%',true,'금 소폭 상승'],
+    ['VIX','16.4','-4.2%',false,'공포지수 완화'],
+    ['BTC','$94,821','+1.4%',true,'위험선호 확대'],
+  ];
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      <FlowBanner currentKey="market"/>
+      <PageHeader step="01" eyebrow="시장 분석 / 매크로" title="매크로 분석" desc="글로벌 자금 흐름과 리스크 선호도를 6개 컴포넌트로 점수화합니다. 스캔 전 반드시 확인하세요."/>
+      <div style={{display:'grid',gridTemplateColumns:'300px 1fr',gap:16,alignItems:'start'}}>
+        <Card>
+          <div style={{textAlign:'center',marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--t3)',letterSpacing:'0.1em',marginBottom:10}}>MACRO REGIME</div>
+            <div style={{fontFamily:'JetBrains Mono',fontWeight:800,fontSize:42,color:'var(--em)',letterSpacing:'-0.03em',lineHeight:1}}>{score}</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginTop:6}}>/100 · <span style={{color:'var(--em)',fontWeight:700}}>RISK-ON</span></div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{height:8,background:'var(--c4)',borderRadius:4,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${score}%`,background:'linear-gradient(90deg,#059669,var(--em))',borderRadius:4}}/>
+            </div>
+            <div style={{display:'flex',justifyContent:'space-between',marginTop:4,fontSize:9,color:'var(--t3)'}}>
+              <span>Risk-OFF</span><span>Neutral 45–69</span><span>Risk-ON ≥70</span>
+            </div>
+          </div>
+          {breakdown.map(b=>{
+            const ratio=b.score/b.weight;
+            const c=ratio>.7?'var(--em)':ratio>.4?'var(--am)':'var(--ro)';
+            return(
+              <div key={b.label} style={{marginBottom:8}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--t2)',marginBottom:3}}>
+                  <span>{b.label} <span style={{color:'var(--t3)'}}>{b.desc}</span></span>
+                  <span style={{fontFamily:'JetBrains Mono',color:c}}>{b.score}/{b.weight}</span>
+                </div>
+                <div style={{height:3,background:'var(--c4)',borderRadius:2,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:`${ratio*100}%`,background:c,borderRadius:2}}/>
+                </div>
+              </div>
+            );
+          })}
+          <div style={{marginTop:14,padding:'10px 12px',background:'rgba(16,185,129,.07)',border:'1px solid rgba(16,185,129,.2)',borderRadius:7,fontSize:11,color:'#a7f3d0',lineHeight:1.6}}>
+            S&P 500이 50일선 위에 위치하고 하이일드 채권으로 자금이 유입 중입니다. VCP 돌파 성공률이 높은 환경입니다.
+          </div>
+        </Card>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+          {assets.map(([sym,price,chg,up,desc])=>(
+            <Card key={sym} style={{padding:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                <span style={{fontFamily:'JetBrains Mono',fontSize:11,fontWeight:700,color:'var(--t2)'}}>{sym}</span>
+                <span style={{fontFamily:'JetBrains Mono',fontSize:10,color:up?'var(--em)':'var(--ro)',fontWeight:700}}>{chg}</span>
+              </div>
+              <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:15,marginBottom:6}}>{price}</div>
+              <div style={{padding:'3px 6px',borderRadius:4,background:up?'rgba(16,185,129,.08)':'rgba(244,63,94,.08)',border:`1px solid ${up?'rgba(16,185,129,.2)':'rgba(244,63,94,.2)'}`}}>
+                <span style={{fontSize:9,color:up?'#6ee7b7':'#fda4af',lineHeight:1.4}}>{desc}</span>
+              </div>
+            </Card>
+          ))}
+          <Card style={{gridColumn:'1/-1',padding:'12px 16px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+              {[['QQQ/SPY','기술주 쏠림','QQQ +1.24% vs SPY +0.82%','빅테크 주도 장세','var(--em)'],['IWM/SPY','중소형 순환매','IWM +0.41% vs SPY +0.82%','대형주 집중, 소형주 약세','var(--am)'],['HYG/IEF','신용 스프레드','HYG +0.31% vs IEF -0.18%','Risk-ON 확연','var(--em)']].map(([label,sub,detail,desc,c])=>(
+                <div key={label} style={{padding:'10px 12px',background:'var(--c4)',borderRadius:8,border:`1px solid ${c}22`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontSize:11,fontWeight:700,color:c}}>{label}</span>
+                    <span style={{fontSize:10,color:'var(--t3)'}}>{sub}</span>
+                  </div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:10,color:'var(--t2)',marginBottom:4}}>{detail}</div>
+                  <div style={{fontSize:10,color:'var(--t2)'}}>{desc}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 2. Master Filter ───────────────────────────────────────── */
+function MasterFilterPage(){
+  const [market,setMkt]=us3('US');
+  const state='GREEN';
+  const stateColor={'GREEN':'var(--em)','YELLOW':'var(--am)','RED':'var(--ro)'}[state];
+  const metrics=[
+    {label:'FTD 상태',value:'확인됨',sub:'2026.04.10 돌파 확인',color:'var(--em)'},
+    {label:'분산일 수',value:'2일',sub:'주의 기준: 4일 이상',color:'var(--am)'},
+    {label:'200일선 참여율',value:'68%',sub:'S&P 500 기준',color:'var(--em)'},
+    {label:'섹터 로테이션',value:'공격적',sub:'반도체·기술주 주도',color:'var(--em)'},
+    {label:'내부 강도',value:'74/100',sub:'RS 라인 신고가 비율',color:'var(--em)'},
+    {label:'종합 점수',value:'82/100',sub:'이번 주 기준',color:'var(--em)'},
+  ];
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      <FlowBanner currentKey="market"/>
+      <PageHeader step="01" eyebrow="시장 분석 / 마스터 필터" title="마스터 필터" desc="FTD, 분산일, 내부 강도, 200일선 참여율, 섹터 로테이션으로 시장 기류를 점수화합니다. GREEN이 아니면 신규 진입을 자제하세요.">
+        <div style={{display:'flex',gap:3,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:7,padding:3}}>
+          {[['US','🇺🇸 미국'],['KR','🇰🇷 한국']].map(([m,l])=>(
+            <button key={m} onClick={()=>setMkt(m)} style={{padding:'6px 14px',borderRadius:5,border:'none',cursor:'pointer',background:market===m?'var(--b2)':'transparent',color:market===m?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:600}}>{l}</button>
+          ))}
+        </div>
+      </PageHeader>
+      <div style={{display:'grid',gridTemplateColumns:'260px 1fr',gap:16}}>
+        <Card style={{textAlign:'center',padding:'28px 20px',display:'flex',flexDirection:'column',gap:14,alignItems:'center'}}>
+          <div style={{fontSize:10,color:'var(--t3)',fontWeight:700,letterSpacing:'0.1em'}}>MARKET STATE</div>
+          <div style={{fontSize:52,fontWeight:900,color:stateColor,fontFamily:'JetBrains Mono',letterSpacing:'-0.03em',textShadow:`0 0 40px ${stateColor}55`}}>{state}</div>
+          <div style={{width:'100%',height:8,background:'var(--c4)',borderRadius:4,overflow:'hidden'}}>
+            <div style={{height:'100%',width:'82%',background:`linear-gradient(90deg, var(--ro), var(--am), var(--em))`,borderRadius:4}}/>
+          </div>
+          <div style={{fontSize:11,color:'var(--t2)'}}>종합 점수 82/100</div>
+          <div style={{padding:'10px 12px',borderRadius:8,background:`${stateColor}11`,border:`1px solid ${stateColor}33`,fontSize:11,color:state==='GREEN'?'#a7f3d0':state==='YELLOW'?'#fde68a':'#fecdd3',lineHeight:1.6,textAlign:'left'}}>
+            {state==='GREEN'?'강세장 패턴의 돌파 성공 확률이 높습니다. 계획된 진입을 실행하세요.':state==='YELLOW'?'신규 진입 비중을 줄이고 리스크 관리를 강화하세요.':'신규 매수를 중단하고 현금 비중을 높이세요.'}
+          </div>
+        </Card>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+            {metrics.map(m=><MetricCard key={m.label} {...m}/>)}
+          </div>
+          <Card>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--t1)',marginBottom:12}}>운영 가이드라인</div>
+            {[['GREEN','var(--em)','공격적인 후보 선별과 계획된 진입을 허용합니다.'],['YELLOW','var(--am)','신규 진입 비중을 줄이고 리스크 관리를 강화합니다.'],['RED','var(--ro)','신규 매수를 중단하고 현금 비중을 높입니다.']].map(([l,c,t])=>(
+              <div key={l} style={{display:'flex',gap:8,fontSize:12,color:'var(--t2)',marginBottom:8,alignItems:'flex-start'}}>
+                <span style={{fontWeight:700,color:c,flexShrink:0,minWidth:52}}>{l}:</span>
+                <span>{t}</span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 3. VCP Scanner ─────────────────────────────────────────── */
+function VCPScannerPage(){
+  const [filter,setFilter]=us3('all');
+  const [sort,setSort]=us3('rs');
+  const [viewMode,setViewMode]=us3('web');
+  const [scanning,setScanning]=us3(false);
+  const [progress,setProgress]=us3(0);
+  const [stage,setStage]=us3('');
+  const [hasData,setHasData]=us3(true);
+  const [selected,setSelected]=us3(new Set());
+  const [drilldown,setDrilldown]=us3(null);
+  const scanRef=ur3(null);
+  const STAGES=['유니버스 API 조회 중...','KIS 가격 데이터 수집 중...','Yahoo Finance fallback...','벤치마크 조회 중...','SEPA/VCP 계산 중...'];
+  const startScan=()=>{
+    setScanning(true);setProgress(0);setStage(STAGES[0]);setHasData(false);
+    let p=0,si=0;
+    scanRef.current=setInterval(()=>{
+      p+=Math.random()*4+2;si=Math.min(Math.floor(p/21),STAGES.length-1);
+      setStage(STAGES[si]);setProgress(Math.min(p,100));
+      if(p>=100){clearInterval(scanRef.current);setScanning(false);setHasData(true);setStage('완료');}
+    },90);
+  };
+  const results=um3(()=>{
+    let list=[...TICKERS];
+    if(filter==='recommended')list=list.filter(r=>r.grade==='recommended');
+    else if(filter==='partial')list=list.filter(r=>r.grade==='partial');
+    else if(filter==='near52')list=list.filter(r=>r.near52);
+    if(sort==='rs')list.sort((a,b)=>b.rs-a.rs);
+    else if(sort==='chg')list.sort((a,b)=>b.chg-a.chg);
+    else if(sort==='vol')list.sort((a,b)=>b.vol-a.vol);
+    return list;
+  },[filter,sort]);
+  const toggle=t=>setSelected(p=>{const n=new Set(p);if(n.has(t))n.delete(t);else if(n.size<10)n.add(t);return n;});
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="scanner"/>
+      <PageHeader step="02" eyebrow="종목 발굴 / VCP 스캐너" title="VCP 마스터 스캐너" desc="SEPA/VCP 조건과 예외 신호를 함께 판단해 콘테스트 비교 후보를 만듭니다.">
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{display:'flex',background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:7,padding:2}}>
+            {[['web','표보기'],['app','카드']].map(([m,l])=>(
+              <button key={m} onClick={()=>setViewMode(m)} style={{padding:'5px 12px',borderRadius:5,border:'none',cursor:'pointer',background:viewMode===m?'var(--em)':'transparent',color:viewMode===m?'#000':'var(--t2)',fontSize:11,fontWeight:700}}>{l}</button>
+            ))}
+          </div>
+          <button onClick={scanning?()=>{clearInterval(scanRef.current);setScanning(false);}:startScan} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 18px',background:scanning?'rgba(244,63,94,.1)':'var(--em)',border:scanning?'1px solid var(--ro)':'none',borderRadius:8,color:scanning?'var(--ro)':'#000',fontWeight:700,fontSize:12,cursor:'pointer'}}>
+            {scanning?'⏹ 중단':'▶ 스캔 시작'}
+          </button>
+        </div>
+      </PageHeader>
+      {/* Status */}
+      <Card>
+        <div style={{display:'flex',gap:16,flexWrap:'wrap',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:600,fontSize:13}}>S&P 500</div>
+            <div style={{color:'var(--t2)',fontSize:11,marginTop:3}}>미국 대형주 500종목을 스캔합니다.</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            {[['Recommended',TICKERS.filter(r=>r.grade==='recommended').length,'var(--em)'],['Partial',TICKERS.filter(r=>r.grade==='partial').length,'var(--am)'],['Error',0,'var(--ro)']].map(([l,n,c])=>(
+              <div key={l} style={{padding:'7px 14px',borderRadius:7,background:`${c}11`,border:`1px solid ${c}33`,textAlign:'center'}}>
+                <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:16,color:c}}>{n}</div>
+                <div style={{fontSize:9,color:c,opacity:.8,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        {scanning&&(
+          <div style={{marginTop:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:11}}>
+              <span style={{color:'var(--em)',fontWeight:600}}>{stage}</span>
+              <span style={{fontFamily:'JetBrains Mono',color:'var(--t2)'}}>{Math.round(progress)}%</span>
+            </div>
+            <div style={{height:5,background:'var(--c4)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${progress}%`,background:'linear-gradient(90deg,#059669,var(--em))',borderRadius:3,transition:'width .15s'}}/>
+            </div>
+          </div>
+        )}
+      </Card>
+      {/* Filters */}
+      <div style={{display:'flex',gap:8,justifyContent:'space-between',flexWrap:'wrap',alignItems:'center',borderBottom:'1px solid var(--b1)',paddingBottom:12}}>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[['all','전체'],['recommended','Recommended'],['partial','Partial'],['near52','52주 신고가 근접']].map(([k,l])=>(
+            <button key={k} onClick={()=>setFilter(k)} style={{padding:'4px 12px',borderRadius:20,border:'none',cursor:'pointer',background:filter===k?'var(--em)':'var(--c3)',color:filter===k?'#000':'var(--t2)',fontSize:11,fontWeight:600}}>{l}</button>
+          ))}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11,color:'var(--t3)'}}>정렬:</span>
+          <select value={sort} onChange={e=>setSort(e.target.value)} style={{background:'transparent',border:'none',color:'var(--t2)',fontSize:11,outline:'none',cursor:'pointer'}}>
+            {[['rs','RS 점수'],['chg','등락률'],['vol','거래량비']].map(([k,l])=><option key={k} value={k}>{l}</option>)}
+          </select>
+        </div>
+      </div>
+      {/* Table */}
+      {hasData&&viewMode==='web'&&(
+        <div style={{overflowX:'auto',borderRadius:10,border:'1px solid var(--b1)'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:820}}>
+            <thead>
+              <tr style={{background:'var(--c3)',borderBottom:'1px solid var(--b1)'}}>
+                {['','종목','RS','현재가','등락률','ADR%','수축','거래량비','추세','등급'].map((h,i)=>(
+                  <th key={i} style={{padding:'9px 12px',textAlign:i>1?'right':'left',color:'var(--t3)',fontSize:10,fontWeight:700,letterSpacing:'0.05em',whiteSpace:'nowrap'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r,i)=>{
+                const sel=selected.has(r.ticker);
+                return(
+                  <tr key={r.ticker} onClick={()=>setDrilldown(r)} style={{background:sel?'rgba(16,185,129,.04)':i%2===0?'var(--c3)':'transparent',borderBottom:'1px solid var(--b1)',cursor:'pointer'}}>
+                    <td style={{padding:'9px 12px'}} onClick={e=>{e.stopPropagation();toggle(r.ticker);}}>
+                      <div style={{width:16,height:16,borderRadius:4,border:sel?'2px solid var(--em)':'2px solid var(--b2)',background:sel?'var(--em)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                        {sel&&<span style={{color:'#000',fontSize:9,fontWeight:900}}>✓</span>}
+                      </div>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12}}>{r.ticker}</div>
+                      <div style={{color:'var(--t3)',fontSize:10,marginTop:1}}>{r.name} · {r.sector}</div>
+                    </td>
+                    <td style={{padding:'9px 12px',textAlign:'right',fontFamily:'JetBrains Mono',fontWeight:700,fontSize:13,color:r.rs>=90?'var(--em)':r.rs>=75?'var(--am)':'var(--t2)'}}>{r.rs}</td>
+                    <td style={{padding:'9px 12px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{fmtPrice(r.price,r.ticker)}</td>
+                    <td style={{padding:'9px 12px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:r.chg>=0?'var(--em)':'var(--ro)',fontWeight:600}}>{fmtPct(r.chg)}</td>
+                    <td style={{padding:'9px 12px',textAlign:'right',color:'var(--t2)',fontSize:11}}>{r.adr}%</td>
+                    <td style={{padding:'9px 12px',textAlign:'right',color:'var(--t2)',fontSize:11}}>{r.contraction}</td>
+                    <td style={{padding:'9px 12px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:r.vol>=1.5?'var(--em)':'var(--t2)',fontWeight:r.vol>=1.5?700:400}}>{r.vol.toFixed(1)}×</td>
+                    <td style={{padding:'9px 12px',textAlign:'right'}}><TrendDots t={r}/></td>
+                    <td style={{padding:'9px 12px',textAlign:'right'}}><Badge grade={r.grade}/></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {hasData&&viewMode==='app'&&(
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
+          {results.map(r=>(
+            <Card key={r.ticker} style={{cursor:'pointer',padding:14}} onClick={()=>setDrilldown(r)}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+                <div>
+                  <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:15}}>{r.ticker}</div>
+                  <div style={{color:'var(--t3)',fontSize:10,marginTop:2}}>{r.name}</div>
+                </div>
+                <Badge grade={r.grade}/>
+              </div>
+              <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:16}}>{fmtPrice(r.price,r.ticker)}</div>
+              <div style={{fontFamily:'JetBrains Mono',fontSize:11,color:r.chg>=0?'var(--em)':'var(--ro)',fontWeight:600,marginTop:2}}>{fmtPct(r.chg)}</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,marginTop:10}}>
+                {[['RS',r.rs],['ADR',r.adr+'%'],['수축',r.contraction+'회']].map(([k,v])=>(
+                  <div key={k} style={{background:'var(--c4)',borderRadius:5,padding:'5px 8px'}}>
+                    <div style={{color:'var(--t3)',fontSize:9,marginBottom:2}}>{k}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {/* Selection bar */}
+      {selected.size>0&&(
+        <div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'rgba(4,8,16,.92)',border:'1px solid rgba(16,185,129,.3)',borderRadius:12,padding:'12px 24px',display:'flex',alignItems:'center',gap:20,backdropFilter:'blur(16px)',boxShadow:'0 20px 60px rgba(0,0,0,.5)',zIndex:50,whiteSpace:'nowrap'}}>
+          <div>
+            <div style={{fontSize:10,color:'var(--em)',fontWeight:700,letterSpacing:'0.06em'}}>콘테스트 후보</div>
+            <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:18}}>{selected.size} <span style={{color:'var(--t3)',fontSize:12,fontWeight:400}}>/ 10</span></div>
+          </div>
+          <div style={{width:1,height:32,background:'var(--b1)'}}/>
+          <button onClick={()=>setSelected(new Set())} style={{background:'none',border:'none',color:'var(--t2)',cursor:'pointer',fontSize:12}}>전체 해제</button>
+          <button style={{padding:'8px 16px',background:'#059669',border:'none',borderRadius:8,color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer'}}>콘테스트로 이동</button>
+        </div>
+      )}
+      {/* Drilldown */}
+      {drilldown&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(4,8,16,.85)',backdropFilter:'blur(8px)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={()=>setDrilldown(null)}>
+          <Card style={{width:'100%',maxWidth:560,maxHeight:'88vh',overflow:'auto',padding:0}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:'16px 20px',borderBottom:'1px solid var(--b1)',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,background:'var(--c3)',zIndex:1}}>
+              <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:18}}>{drilldown.ticker}</span>
+                <Badge grade={drilldown.grade}/>
+              </div>
+              <button onClick={()=>setDrilldown(null)} style={{background:'none',border:'none',color:'var(--t2)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+            </div>
+            <div style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <div style={{fontFamily:'JetBrains Mono',fontWeight:800,fontSize:26}}>{fmtPrice(drilldown.price,drilldown.ticker)}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontSize:13,color:drilldown.chg>=0?'var(--em)':'var(--ro)',fontWeight:600,marginTop:4}}>{fmtPct(drilldown.chg)} 오늘</div>
+                </div>
+                <div style={{height:50,width:120,background:'var(--c4)',borderRadius:7,overflow:'hidden'}}>
+                  <svg width="100%" height="50" viewBox="0 0 120 50" preserveAspectRatio="none">
+                    <polyline points="0,38 15,32 30,26 45,30 60,20 75,16 90,12 105,10 120,7" fill="none" stroke={drilldown.chg>=0?'var(--em)':'var(--ro)'} strokeWidth="1.5"/>
+                  </svg>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                {[['RS 점수',drilldown.rs,drilldown.rs>=85?'var(--em)':drilldown.rs>=70?'var(--am)':'var(--t1)'],['ADR %',drilldown.adr+'%','var(--t1)'],['거래량비',drilldown.vol.toFixed(1)+'×',drilldown.vol>=1.5?'var(--em)':'var(--t1)'],['수축횟수',drilldown.contraction+'회','var(--t1)'],['EPS성장',(drilldown.eps>=0?'+':'')+drilldown.eps+'%',drilldown.eps>=25?'var(--em)':drilldown.eps<0?'var(--ro)':'var(--t1)'],['VCP단계',drilldown.vcpStage+'단계','var(--bl)']].map(([l,v,c])=>(
+                  <div key={l} style={{background:'var(--c4)',border:'1px solid var(--b1)',borderRadius:8,padding:'10px 12px'}}>
+                    <div style={{fontSize:10,color:'var(--t3)',marginBottom:5}}>{l}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:16,color:c}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+                  <span style={{fontSize:12,fontWeight:700}}>SEPA 조건 점검</span>
+                  <span style={{fontFamily:'JetBrains Mono',fontSize:11,color:'var(--em)',fontWeight:700}}>
+                    {[drilldown.above50,drilldown.above150,drilldown.above200,drilldown.near52,drilldown.rs>=70,drilldown.adr<=7,drilldown.contraction>=2].filter(Boolean).length} / 7
+                  </span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {[['현재가 > 50일 이동평균',drilldown.above50],['현재가 > 150일 이동평균',drilldown.above150],['현재가 > 200일 이동평균',drilldown.above200],['52주 신고가 근접 (75%+)',drilldown.near52],['RS ≥ 70',drilldown.rs>=70],['ADR ≤ 7%',drilldown.adr<=7],['수축 패턴 ≥ 2회',drilldown.contraction>=2]].map(([l,ok])=>(
+                    <div key={l} style={{display:'flex',gap:8,alignItems:'center',padding:'7px 10px',borderRadius:6,background:ok?'rgba(16,185,129,.07)':'rgba(255,255,255,.02)',border:`1px solid ${ok?'rgba(16,185,129,.2)':'var(--b1)'}`}}>
+                      <div style={{width:15,height:15,borderRadius:'50%',background:ok?'var(--em)':'var(--b2)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <span style={{color:ok?'#000':'var(--t3)',fontSize:9,fontWeight:900}}>{ok?'✓':'×'}</span>
+                      </div>
+                      <span style={{fontSize:11,color:ok?'var(--t1)':'var(--t3)'}}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{background:'var(--c4)',border:'1px solid var(--b1)',borderRadius:9,height:100,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:5}}>
+                <span style={{color:'var(--t3)',fontSize:12}}>120일 OHLCV 차트 플레이스홀더</span>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button style={{flex:1,padding:'10px 0',borderRadius:8,border:'none',background:'var(--em)',color:'#000',fontWeight:700,fontSize:12,cursor:'pointer'}}>워치리스트 추가</button>
+                <button style={{padding:'10px 16px',borderRadius:8,border:'1px solid var(--b2)',background:'transparent',color:'var(--t2)',cursor:'pointer',fontSize:12}}>차트 보기</button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── 4. CAN SLIM Scanner ────────────────────────────────────── */
+function CANSLIMPage(){
+  const [universe,setUniverse]=us3('NASDAQ100');
+  const PILLARS=['M','C','A','N','S','L','I'];
+  const PLABELS={M:'Market Direction',C:'Current Earnings',A:'Annual Earnings',N:'New Product / High',S:'Supply & Demand',L:'Leader vs Laggard',I:'Institutional Sponsorship'};
+  const seeded=um3(()=>TICKERS.map(t=>({
+    ...t,
+    ps:PILLARS.map(p=>({p,ok:Math.random()>(t.grade==='recommended'?.25:.55)})),
+    conf:t.grade==='recommended'?(t.rs>=90?'HIGH':'MEDIUM'):'LOW',
+  })),[universe]);
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="scanner"/>
+      <PageHeader step="02" eyebrow="종목 발굴 / CAN SLIM" title="CAN SLIM 스캐너" desc="윌리엄 오닐의 7 Pillar(M·C·A·N·S·L·I) 필터와 VCP 이중 검증으로 주도주를 발굴합니다.">
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {['NASDAQ100','SP500','KOSPI200','KOSDAQ150'].map(u=>(
+            <button key={u} onClick={()=>setUniverse(u)} style={{padding:'6px 12px',borderRadius:7,border:`1px solid ${u===universe?'var(--em)':'var(--b1)'}`,background:u===universe?'rgba(16,185,129,.1)':'transparent',color:u===universe?'var(--em)':'var(--t2)',fontSize:11,fontWeight:600,cursor:'pointer'}}>{u}</button>
+          ))}
+        </div>
+      </PageHeader>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+        {[['PASS 유력','var(--em)',seeded.filter(r=>r.grade==='recommended').length],['TIER 1','var(--em)',seeded.filter(r=>r.dualTier==='TIER_1').length],['WATCHLIST','var(--am)',seeded.filter(r=>r.dualTier==='WATCHLIST').length],['SHORT TERM','var(--bl)',seeded.filter(r=>r.dualTier==='SHORT_TERM').length],['에러','var(--t3)',0]].map(([l,c,n])=>(
+          <Card key={l} style={{textAlign:'center',padding:'12px 8px'}}>
+            <div style={{fontFamily:'JetBrains Mono',fontWeight:800,fontSize:22,color:c}}>{n}</div>
+            <div style={{fontSize:9,color:c,fontWeight:700,marginTop:3,letterSpacing:'0.06em'}}>{l}</div>
+          </Card>
+        ))}
+      </div>
+      <div style={{overflowX:'auto',borderRadius:10,border:'1px solid var(--b1)'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
+          <thead>
+            <tr style={{background:'var(--c3)',borderBottom:'1px solid var(--b1)'}}>
+              {['종목','시가총액','이중 검증','신뢰도','RS','7 PILLAR 스코어','패턴','선정'].map((h,i)=>(
+                <th key={i} style={{padding:'9px 12px',textAlign:i<2?'left':'center',color:'var(--t3)',fontSize:10,fontWeight:700,letterSpacing:'0.05em',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {seeded.map((r,i)=>{
+              const ts=TIER_STYLE[r.dualTier];
+              return(
+                <tr key={r.ticker} style={{background:i%2===0?'var(--c3)':'transparent',borderBottom:'1px solid var(--b1)',cursor:'pointer'}}>
+                  <td style={{padding:'9px 12px'}}>
+                    <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12}}>{r.ticker}</div>
+                    <div style={{color:'var(--t3)',fontSize:10,marginTop:1}}>{r.name}</div>
+                  </td>
+                  <td style={{padding:'9px 12px',fontFamily:'JetBrains Mono',fontSize:11,color:'var(--t2)'}}>{r.mktCap}</td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>
+                    <span style={{background:ts.bg,border:`1px solid ${ts.border}`,color:ts.text,borderRadius:4,padding:'2px 7px',fontSize:10,fontWeight:700}}>{ts.label}</span>
+                  </td>
+                  <td style={{padding:'9px 12px',textAlign:'center',fontFamily:'JetBrains Mono',fontSize:11,fontWeight:700,color:r.conf==='HIGH'?'var(--em)':r.conf==='MEDIUM'?'var(--am)':'var(--ro)'}}>{r.conf}</td>
+                  <td style={{padding:'9px 12px',textAlign:'center',fontFamily:'JetBrains Mono',fontWeight:700,fontSize:13,color:r.rs>=90?'var(--em)':r.rs>=75?'var(--am)':'var(--t2)'}}>{r.rs}</td>
+                  <td style={{padding:'9px 16px'}}>
+                    <div style={{display:'flex',gap:2,justifyContent:'center',marginBottom:3}}>
+                      {r.ps.map(({p,ok})=>(<div key={p} title={PLABELS[p]} style={{width:18,height:5,borderRadius:2,background:ok?'var(--em)':'var(--b2)'}}/>))}
+                    </div>
+                    <div style={{display:'flex',gap:2,justifyContent:'center'}}>
+                      {PILLARS.map(p=><span key={p} style={{fontSize:8,color:'var(--t3)',width:18,textAlign:'center'}}>{p}</span>)}
+                    </div>
+                  </td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>
+                    <span style={{fontSize:10,background:'rgba(99,102,241,.1)',border:'1px solid rgba(99,102,241,.2)',color:'#a5b4fc',borderRadius:4,padding:'2px 7px'}}>VCP {r.vcpStage}</span>
+                  </td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>
+                    <div style={{width:24,height:24,borderRadius:'50%',border:'1px solid var(--b2)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',cursor:'pointer',color:'var(--t2)',fontSize:16}}>+</div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ── 5. Watchlist ───────────────────────────────────────────── */
+function WatchlistPage(){
+  const [items]=us3([...WATCHLIST_DATA]);
+  const PS={2:['var(--ro)','rgba(244,63,94,.1)','긴급'],1:['var(--am)','rgba(245,158,11,.1)','높음'],0:['var(--t2)','rgba(100,116,139,.1)','보통']};
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="watchlist"/>
+      <PageHeader step="03" eyebrow="후보 추적" title="관심종목" desc="추적할 종목을 저장하고, 행을 눌러 최근 가격과 SEPA/VCP 요약을 빠르게 확인합니다.">
+        <button style={{padding:'8px 16px',background:'var(--em)',border:'none',borderRadius:8,color:'#000',fontWeight:700,fontSize:12,cursor:'pointer'}}>+ 종목 추가</button>
+      </PageHeader>
+      <Card>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}>
+          <span style={{fontWeight:700,fontSize:13}}>등록 종목 {items.length}개</span>
+          <span style={{fontSize:11,color:'var(--t3)'}}>행을 클릭하면 상세 설정이 열립니다.</span>
+        </div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:680}}>
+            <thead>
+              <tr style={{borderBottom:'1px solid var(--b1)'}}>
+                {['우선순위','티커','거래소','메모','태그','등록일','작업'].map((h,i)=>(
+                  <th key={i} style={{padding:'8px 12px',textAlign:i===6?'right':'left',color:'var(--t3)',fontSize:10,fontWeight:700,letterSpacing:'0.05em'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map(item=>{
+                const [pc,pbg,pl]=PS[item.priority];
+                return(
+                  <tr key={item.id} style={{borderBottom:'1px solid var(--b1)',cursor:'pointer'}}>
+                    <td style={{padding:'10px 12px'}}>
+                      <span style={{fontSize:10,fontWeight:700,color:pc,background:pbg,borderRadius:4,padding:'2px 8px',border:`1px solid ${pc}44`}}>{pl}</span>
+                    </td>
+                    <td style={{padding:'10px 12px',fontFamily:'JetBrains Mono',fontWeight:700,fontSize:13}}>{item.ticker}</td>
+                    <td style={{padding:'10px 12px',color:'var(--t2)',fontSize:11}}>{item.exchange}</td>
+                    <td style={{padding:'10px 12px',color:'var(--t2)',fontSize:11,maxWidth:200}}>
+                      <span style={{display:'block',overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis',maxWidth:180}}>{item.memo||'—'}</span>
+                    </td>
+                    <td style={{padding:'10px 12px'}}>
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                        {item.tags.map(t=><span key={t} style={{fontSize:9,background:'var(--c4)',borderRadius:10,padding:'2px 7px',color:'var(--t2)'}}>{t}</span>)}
+                      </div>
+                    </td>
+                    <td style={{padding:'10px 12px',fontSize:10,color:'var(--t3)'}}>{new Date(item.created_at).toLocaleDateString('ko-KR')}</td>
+                    <td style={{padding:'10px 12px',textAlign:'right'}}>
+                      <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                        <button style={{fontSize:10,background:'rgba(16,185,129,.1)',border:'1px solid rgba(16,185,129,.2)',color:'var(--em)',borderRadius:5,padding:'4px 10px',cursor:'pointer'}}>계획</button>
+                        <button style={{fontSize:10,background:'rgba(244,63,94,.1)',border:'1px solid rgba(244,63,94,.2)',color:'var(--ro)',borderRadius:5,padding:'4px 8px',cursor:'pointer'}}>삭제</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+Object.assign(window,{MacroPage,MasterFilterPage,VCPScannerPage,CANSLIMPage,WatchlistPage});
+</script>
+
+<!-- ═══ BLOCK 4: PAGES 6–10 ═══ -->
+<script type="text/babel">
+const {useState:us4,useEffect:ue4} = React;
+const {TICKERS,TRADES_DATA,fmtPrice,fmtPct} = window;
+const {Badge,Card,MetricCard,PageHeader,FlowBanner} = window;
+
+/* ── 6. Plan ─────────────────────────────────────────────────── */
+function PlanPage(){
+  const [ticker,setTicker]=us4('');
+  const [analyzed,setAnalyzed]=us4(false);
+  const [loading,setLoading]=us4(false);
+  const analyze=()=>{if(!ticker.trim())return;setLoading(true);setTimeout(()=>{setLoading(false);setAnalyzed(true);},1100);};
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14,maxWidth:880,margin:'0 auto',width:'100%'}}>
+      <FlowBanner currentKey="plan"/>
+      <PageHeader step="04" eyebrow="매매 실행" title="신규 매매 계획" desc="SEPA 후보 검증 → VCP 피벗 분석 → 패턴 무효화 기반 수량 산출 → Centaur 체크리스트를 한 흐름으로 실행합니다."/>
+      <Card>
+        <div style={{display:'flex',gap:10,alignItems:'flex-end',flexWrap:'wrap'}}>
+          <div style={{flex:'1 1 180px'}}>
+            <div style={{fontSize:10,color:'var(--t3)',fontWeight:700,marginBottom:6}}>티커 *</div>
+            <input value={ticker} onChange={e=>setTicker(e.target.value.toUpperCase())} onKeyDown={e=>e.key==='Enter'&&analyze()} placeholder="AAPL, 005930..." style={{width:'100%',background:'var(--c4)',border:'1px solid var(--b1)',borderRadius:7,padding:'9px 12px',color:'var(--t1)',fontSize:13,fontFamily:'JetBrains Mono',outline:'none'}}/>
+          </div>
+          <div style={{flex:'0 0 140px'}}>
+            <div style={{fontSize:10,color:'var(--t3)',fontWeight:700,marginBottom:6}}>총 자산</div>
+            <input defaultValue="50,000,000" style={{width:'100%',background:'var(--c4)',border:'1px solid var(--b1)',borderRadius:7,padding:'9px 12px',color:'var(--t1)',fontSize:12,fontFamily:'JetBrains Mono',outline:'none'}}/>
+          </div>
+          <div style={{flex:'0 0 80px'}}>
+            <div style={{fontSize:10,color:'var(--t3)',fontWeight:700,marginBottom:6}}>리스크 %</div>
+            <input defaultValue="1.0" style={{width:'100%',background:'var(--c4)',border:'1px solid var(--b1)',borderRadius:7,padding:'9px 12px',color:'var(--t1)',fontSize:12,fontFamily:'JetBrains Mono',outline:'none'}}/>
+          </div>
+          <button onClick={analyze} disabled={loading||!ticker.trim()} style={{padding:'9px 20px',background:'var(--em)',border:'none',borderRadius:8,color:'#000',fontWeight:700,fontSize:12,cursor:'pointer',opacity:loading?.7:1}}>{loading?'분석 중...':'분석 시작'}</button>
+        </div>
+      </Card>
+      {analyzed&&(
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+            <Card>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}>
+                <span style={{fontWeight:700,fontSize:13}}>SEPA 후보 검증</span>
+                <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12,color:'var(--em)'}}>7/7 PASS</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {['현재가 > 50일선','현재가 > 150일선','현재가 > 200일선','52주 신고가 근접','RS 96 (85+ 기준 충족)','ADR 4.2% (7% 이하)','수축 3회 (2회+ 기준 충족)'].map((s,i)=>(
+                  <div key={i} style={{display:'flex',gap:6,alignItems:'center',fontSize:11,color:'var(--t2)'}}>
+                    <span style={{color:'var(--em)',fontSize:11,flexShrink:0}}>✓</span>{s}
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>VCP 피벗 분석</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {[['피벗 가격','$128.40','var(--em)'],['현재 이격','1.2%','var(--am)'],['VCP 단계','2단계','var(--bl)'],['패턴 무효화','$119.80','var(--ro)']].map(([l,v,c])=>(
+                  <div key={l} style={{background:'var(--c4)',borderRadius:7,padding:'10px 12px'}}>
+                    <div style={{fontSize:10,color:'var(--t3)',marginBottom:5}}>{l}</div>
+                    <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:15,color:c}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+          <Card>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>리스크 계산</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
+              {[['진입가','$127.50','var(--t1)'],['손절가','$119.80','var(--ro)'],['목표 R1','$135.20','var(--em)'],['목표 R2','$146.80','var(--em)']].map(([l,v,c])=>(
+                <div key={l} style={{background:'var(--c4)',borderRadius:8,padding:'12px'}}>
+                  <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>{l}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:17,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+              {[['매수 수량','80주','var(--t1)'],['허용 손실','$616','var(--am)'],['리스크 비율','1.23%','var(--am)']].map(([l,v,c])=>(
+                <div key={l} style={{background:'var(--c4)',borderRadius:8,padding:'12px'}}>
+                  <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>{l}</div>
+                  <div style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:18,color:c}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>Centaur 체크리스트</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8}}>
+              {['SEPA 조건 충족 확인','리스크 계산 완료','진입 타점 설정 (피벗 +0~3%)','손절선 설정 (패턴 무효화선)','R 목표가 설정 (최소 2R)','매매 심리 준비 완료'].map((c,i)=>(
+                <label key={i} style={{display:'flex',gap:8,alignItems:'center',cursor:'pointer',fontSize:12,color:'var(--t2)'}}>
+                  <input type="checkbox" style={{accentColor:'var(--em)'}}/>
+                  {c}
+                </label>
+              ))}
+            </div>
+          </Card>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+            <button style={{padding:'10px 20px',borderRadius:8,border:'1px solid var(--b2)',background:'transparent',color:'var(--t2)',cursor:'pointer',fontSize:12}}>취소</button>
+            <button style={{padding:'10px 28px',background:'var(--em)',border:'none',borderRadius:9,color:'#000',fontWeight:700,fontSize:13,cursor:'pointer'}}>계획 저장</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── 7. Portfolio ─────────────────────────────────────────────── */
+function PortfolioPage(){
+  const [market,setM]=us4('US');
+  const sectors=[{sector:'반도체',count:3,exp:44.8,pct:42},{sector:'인터넷·소프트웨어',count:2,exp:27.6,pct:26},{sector:'소비자기술',count:1,exp:18.1,pct:17},{sector:'전기차',count:1,exp:9.6,pct:9},{sector:'이커머스',count:1,exp:6.4,pct:6}];
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="portfolio"/>
+      <PageHeader step="05" eyebrow="포트폴리오 점검" title="총 노출도와 오픈 리스크" desc="활성 포지션 수, 섹터 집중도, 시드 규모별 최대 보유 수를 점검합니다. 섹터 과집중은 리스크 관리의 핵심입니다.">
+        <div style={{display:'flex',gap:3,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:7,padding:3}}>
+          {['US','KR'].map(m=><button key={m} onClick={()=>setM(m)} style={{padding:'5px 14px',borderRadius:5,border:'none',cursor:'pointer',background:market===m?'var(--b2)':'transparent',color:market===m?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:600}}>{m}</button>)}
+        </div>
+      </PageHeader>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10}}>
+        {[['총 자산','$106,458','','var(--t1)'],['투자 원금','$84,200','$22,258 현금 보유','var(--t1)'],['현금 비중','20.9%','$22,258','var(--em)'],['오픈 리스크','3.2%','$3,406 / 포지션 7개','var(--am)'],['포지션','7/10','활성 / 최대','var(--t1)']].map(([l,v,s,c])=>(
+          <MetricCard key={l} label={l} value={v} sub={s} color={c}/>
+        ))}
+      </div>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:14}}>섹터 노출도</div>
+        {sectors.map(s=>(
+          <div key={s.sector} style={{marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12}}>
+              <span style={{color:'var(--t2)'}}>{s.sector} <span style={{color:'var(--t3)',fontSize:10}}>({s.count})</span></span>
+              <span style={{fontFamily:'JetBrains Mono',color:'var(--t2)',fontSize:11}}>${s.exp}K · {s.pct}%</span>
+            </div>
+            <div style={{height:6,background:'var(--c4)',borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${s.pct}%`,background:s.pct>35?'var(--am)':'var(--em)',borderRadius:3}}/>
+            </div>
+          </div>
+        ))}
+        <div style={{marginTop:4,padding:'9px 12px',borderRadius:7,background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',fontSize:11,color:'#fcd34d'}}>
+          ⚠ 반도체 섹터 집중도 42%로 권고 기준(35%)을 초과했습니다. 신규 반도체 진입 자제를 권고합니다.
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ── 8. Contest ───────────────────────────────────────────────── */
+function ContestPage(){
+  const [step,setStep]=us4(1);
+  const [sel,setSel]=us4(['NVDA','000660','META','AMZN']);
+  const pool=TICKERS.filter(t=>t.grade==='recommended').slice(0,8);
+  const toggle=t=>setSel(p=>p.includes(t)?p.filter(x=>x!==t):p.length<10?[...p,t]:p);
+  const sessions=[{id:'s1',date:'2026-04-15',u:'NASDAQ100',n:4,stat:'LLM_DONE'},];
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="contest"/>
+      <PageHeader step="06" eyebrow="LLM 비교 분석" title="스캐너 후보 비교와 성과 복기" desc="Recommended/Partial 후보를 최대 10개까지 골라 외부 LLM에 분석시키고, 1주·1개월 상대 성과를 DB에 축적합니다."/>
+      <div style={{display:'flex',gap:2,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:9,padding:3,width:'fit-content'}}>
+        {['1. 후보 선택','2. 프롬프트','3. 결과 등록','4. 성과 판정'].map((l,i)=>(
+          <button key={i} onClick={()=>setStep(i+1)} style={{padding:'6px 16px',borderRadius:7,border:'none',cursor:'pointer',background:step===i+1?'var(--b2)':'transparent',color:step===i+1?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:step===i+1?700:400}}>{l}</button>
+        ))}
+      </div>
+      {step===1&&(
+        <Card>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>스캐너 후보 풀에서 분석 대상 선택</div>
+          <div style={{fontSize:11,color:'var(--t2)',marginBottom:14}}>Recommended/Partial 후보를 우선 불러옵니다. 최대 10개 선택 가능합니다.</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:10}}>
+            {pool.map(r=>{
+              const checked=sel.includes(r.ticker);
+              return(
+                <div key={r.ticker} onClick={()=>toggle(r.ticker)} style={{padding:12,borderRadius:9,border:`1px solid ${checked?'rgba(16,185,129,.4)':'var(--b1)'}`,background:checked?'rgba(16,185,129,.07)':'var(--c4)',cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                    <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:14}}>{r.ticker}</span>
+                    <Badge grade={r.grade}/>
+                  </div>
+                  <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>{r.name}</div>
+                  <div style={{display:'flex',gap:12,fontSize:10,color:'var(--t2)'}}>
+                    <span>RS {r.rs}</span><span>VCP {r.vcpStage}</span><span>ADR {r.adr}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:11,color:'var(--t2)'}}>선택 {sel.length}/10</span>
+            <button onClick={()=>setStep(2)} style={{padding:'8px 20px',background:'var(--em)',border:'none',borderRadius:8,color:'#000',fontWeight:700,fontSize:12,cursor:'pointer'}}>다음 →</button>
+          </div>
+        </Card>
+      )}
+      {step===2&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+          <Card>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>LLM 프롬프트 생성</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginBottom:12}}>세션 저장 후 후보 ID와 마스터 필터 컨텍스트가 포함된 한국어 프롬프트를 복사합니다.</div>
+            <button onClick={()=>setStep(3)} style={{padding:'9px 20px',background:'var(--em)',border:'none',borderRadius:8,color:'#000',fontWeight:700,fontSize:12,cursor:'pointer',marginBottom:14}}>세션 저장 및 프롬프트 복사 📋</button>
+            <div style={{background:'var(--c0)',border:'1px solid var(--b1)',borderRadius:7,padding:12,fontSize:10,fontFamily:'JetBrains Mono',color:'var(--t2)',lineHeight:1.6}}>
+              <div>다음 {sel.length}개 종목에 대해 CAN SLIM 및 SEPA 기준으로 순위를 매겨주세요:</div>
+              <div style={{color:'var(--em)',marginTop:4}}>{sel.join(', ')}</div>
+              <div style={{marginTop:6}}>시장 상태: Risk-ON · 마스터 필터 82/100 · GREEN</div>
+              <div style={{marginTop:4}}>각 종목: llm_rank, comment, thesis를 JSON으로 반환</div>
+            </div>
+          </Card>
+          <Card>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>외부 LLM 결과 등록</div>
+            <div style={{fontSize:11,color:'var(--t2)',marginBottom:10}}>JSON만 붙여넣어도 되고, LLM 리포트 전문을 붙여넣어도 MTN이 JSON을 추출합니다.</div>
+            <textarea placeholder='{"rankings":[...]} 또는 LLM 전체 리포트를 붙여넣으세요.' style={{width:'100%',height:160,background:'var(--c0)',border:'1px solid var(--b1)',borderRadius:7,padding:10,color:'var(--t1)',fontSize:11,fontFamily:'JetBrains Mono',outline:'none',resize:'vertical'}}/>
+            <button onClick={()=>setStep(4)} style={{marginTop:10,padding:'8px 18px',background:'transparent',border:'1px solid var(--b2)',borderRadius:7,color:'var(--t1)',fontSize:12,cursor:'pointer'}}>LLM 분석 저장</button>
+          </Card>
+        </div>
+      )}
+      {(step===3||step===4)&&(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {[['1주 성과 판정','PASS','선정 평균 +4.2% vs 미선정 +1.8% → +2.4%p','var(--em)'],['1개월 성과 판정','보류','복기 가격 대기 중','var(--am)']].map(([l,v,s,c])=>(
+              <div key={l} style={{padding:14,borderRadius:9,border:`1px solid ${c}44`,background:`${c}0d`}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:4}}>{l}</div>
+                <div style={{fontFamily:'JetBrains Mono',fontWeight:800,fontSize:22,color:c}}>{v}</div>
+                <div style={{fontSize:11,color:'var(--t2)',marginTop:4}}>{s}</div>
+              </div>
+            ))}
+          </div>
+          <Card>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>후보 목록 — LLM 순위 반영</div>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {sel.map((ticker,i)=>{
+                const t=TICKERS.find(x=>x.ticker===ticker);
+                return(
+                  <div key={ticker} style={{display:'flex',gap:12,alignItems:'center',padding:'9px 12px',borderRadius:8,background:'var(--c4)',border:'1px solid var(--b1)'}}>
+                    <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:11,color:'var(--em)',width:22}}>#{i+1}</span>
+                    <span style={{fontFamily:'JetBrains Mono',fontWeight:700,fontSize:14}}>{ticker}</span>
+                    <span style={{fontSize:11,color:'var(--t2)',flex:1}}>{t?.name}</span>
+                    <span style={{fontFamily:'JetBrains Mono',fontSize:11,color:i<2?'var(--em)':'var(--t2)'}}>RS {t?.rs}</span>
+                    <button style={{fontSize:10,padding:'3px 10px',borderRadius:5,border:'1px solid var(--b2)',background:'transparent',color:'var(--t2)',cursor:'pointer'}}>최종 선정</button>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── 9. Dashboard ─────────────────────────────────────────────── */
+function DashboardPage(){
+  const [market,setM]=us4('US');
+  const curve=[100,102,99,104,108,106,112,110,115,113,118,120,117,122,126,124,128,131,129,134];
+  const max=Math.max(...curve),min=Math.min(...curve);
+  const ty=v=>55-((v-min)/(max-min))*50;
+  const pts=curve.map((v,i)=>`${(i/(curve.length-1))*300},${ty(v)}`).join(' ');
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="review"/>
+      <PageHeader step="07" eyebrow="성과 복기 / 대시보드" title="대시보드" desc="MTN 매매 성과와 규칙 준수율을 추적합니다. 꾸준한 기록이 시스템 트레이딩의 핵심입니다.">
+        <div style={{display:'flex',gap:3,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:7,padding:3}}>
+          {[['US','🇺🇸 미국'],['KR','🇰🇷 한국']].map(([m,l])=>(
+            <button key={m} onClick={()=>setM(m)} style={{padding:'5px 14px',borderRadius:5,border:'none',cursor:'pointer',background:market===m?'var(--b2)':'transparent',color:market===m?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:600}}>{l}</button>
+          ))}
+        </div>
+      </PageHeader>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+        {[['승률','64.3%','14/22 거래','var(--em)'],['총 손익','+$2,481','실현 손익 기준','var(--em)'],['평균 R배수','1.84R','목표 2.0R','var(--am)'],['기대값 (E)','0.68R','양수 = 엣지 있음','var(--em)'],['오픈 리스크','3.2%','$3,406 / 7포지션','var(--am)'],['계획 준수율','87.5%','21/24 계획','var(--em)'],['SEPA 통과율','72.7%','16/22 스캔 통과','var(--em)'],['규율 점수','83.2','평균 규율 점수','var(--t1)']].map(([l,v,s,c])=>(
+          <MetricCard key={l} label={l} value={v} sub={s} color={c}/>
+        ))}
+      </div>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>자산 곡선</div>
+        <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
+          <defs><linearGradient id="eqG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#10b981" stopOpacity=".25"/><stop offset="100%" stopColor="#10b981" stopOpacity="0"/></linearGradient></defs>
+          <polygon points={`0,${ty(curve[0])} ${pts} 300,60 0,60`} fill="url(#eqG)"/>
+          <polyline points={pts} fill="none" stroke="var(--em)" strokeWidth="1.5"/>
+        </svg>
+      </Card>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>최근 매매 기록</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:680}}>
+            <thead><tr style={{borderBottom:'1px solid var(--b1)'}}>
+              {['종목','방향','진입가','손절가','현재/청산가','수량','결과','R배수','손익'].map((h,i)=>(
+                <th key={i} style={{padding:'7px 10px',textAlign:i>1?'right':'left',color:'var(--t3)',fontSize:9,fontWeight:700,letterSpacing:'0.05em'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {TRADES_DATA.map((t,i)=>(
+                <tr key={t.id} style={{borderBottom:'1px solid var(--b1)',background:i%2===0?'var(--c3)':'transparent'}}>
+                  <td style={{padding:'8px 10px',fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12}}>{t.ticker}</td>
+                  <td style={{padding:'8px 10px',fontSize:10,color:'var(--em)',fontWeight:700}}>{t.direction}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{fmtPrice(t.entry,t.ticker)}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:'var(--ro)'}}>{fmtPrice(t.stoploss,t.ticker)}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:t.result==='OPEN'?'var(--am)':'var(--t2)'}}>{fmtPrice(t.exit,t.ticker)}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{t.shares}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right'}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:4,background:t.result==='WIN'?'rgba(16,185,129,.1)':t.result==='LOSS'?'rgba(244,63,94,.1)':'rgba(245,158,11,.1)',color:t.result==='WIN'?'var(--em)':t.result==='LOSS'?'var(--ro)':'var(--am)'}}>{t.result}</span>
+                  </td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:(t.rMultiple||0)>=0?'var(--em)':'var(--ro)'}}>{t.rMultiple?(t.rMultiple>0?'+':'')+t.rMultiple+'R':'—'}</td>
+                  <td style={{padding:'8px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:t.pnl>=0?'var(--em)':'var(--ro)',fontWeight:700}}>{t.pnl>=0?'+':''}{t.pnl.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/* ── 10. History ──────────────────────────────────────────────── */
+function HistoryPage(){
+  const [market,setM]=us4('US');
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      <FlowBanner currentKey="review"/>
+      <PageHeader step="07" eyebrow="성과 복기 / 매매 복기" title="매매 복기" desc="저장된 계획과 완료된 매매의 근거, 리스크, 결과를 다시 확인하고 다음 콘테스트를 위한 교훈을 남깁니다.">
+        <div style={{display:'flex',gap:3,background:'var(--c3)',border:'1px solid var(--b1)',borderRadius:7,padding:3}}>
+          {[['US','미국 주식'],['KR','한국 주식']].map(([m,l])=>(
+            <button key={m} onClick={()=>setM(m)} style={{padding:'5px 14px',borderRadius:5,border:'none',cursor:'pointer',background:market===m?'var(--b2)':'transparent',color:market===m?'var(--t1)':'var(--t2)',fontSize:11,fontWeight:600}}>{l}</button>
+          ))}
+        </div>
+      </PageHeader>
+      <Card>
+        <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>{market==='US'?'미국':'한국'} 전체 매매 복기</div>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',minWidth:820}}>
+            <thead><tr style={{borderBottom:'1px solid var(--b1)'}}>
+              {['종목','방향','진입일','진입가','손절가','청산가','수량','결과','R배수','손익','규율','SEPA'].map((h,i)=>(
+                <th key={i} style={{padding:'8px 10px',textAlign:i>=2?'right':'left',color:'var(--t3)',fontSize:9,fontWeight:700,letterSpacing:'0.05em'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {TRADES_DATA.map((t,i)=>(
+                <tr key={t.id} style={{borderBottom:'1px solid var(--b1)',background:i%2===0?'var(--c3)':'transparent',cursor:'pointer'}}>
+                  <td style={{padding:'9px 10px',fontFamily:'JetBrains Mono',fontWeight:700,fontSize:12}}>{t.ticker}</td>
+                  <td style={{padding:'9px 10px',fontSize:10,color:'var(--em)',fontWeight:700}}>{t.direction}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontSize:10,color:'var(--t2)'}}>{t.date}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{fmtPrice(t.entry,t.ticker)}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:'var(--ro)'}}>{fmtPrice(t.stoploss,t.ticker)}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{fmtPrice(t.exit,t.ticker)}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11}}>{t.shares}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right'}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:4,background:t.result==='WIN'?'rgba(16,185,129,.1)':t.result==='LOSS'?'rgba(244,63,94,.1)':'rgba(245,158,11,.1)',color:t.result==='WIN'?'var(--em)':t.result==='LOSS'?'var(--ro)':'var(--am)'}}>{t.result}</span>
+                  </td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:(t.rMultiple||0)>=0?'var(--em)':'var(--ro)'}}>{t.rMultiple?(t.rMultiple>0?'+':'')+t.rMultiple+'R':'—'}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:t.pnl>=0?'var(--em)':'var(--ro)',fontWeight:700}}>{t.pnl>=0?'+':''}{t.pnl.toLocaleString()}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontFamily:'JetBrains Mono',fontSize:11,color:t.discipline>=85?'var(--em)':t.discipline>=70?'var(--am)':'var(--ro)'}}>{t.discipline}</td>
+                  <td style={{padding:'9px 10px',textAlign:'right',fontSize:10,color:t.sepa==='PASS'?'var(--em)':'var(--am)',fontWeight:700}}>{t.sepa}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+Object.assign(window,{PlanPage,PortfolioPage,ContestPage,DashboardPage,HistoryPage});
+</script>
+
+<!-- ═══ BLOCK 5: APP SHELL ═══ -->
+<script type="text/babel">
+const {useState:us5,useEffect:ue5} = React;
+const {TopNav,FlowBanner,MacroPage,MasterFilterPage,VCPScannerPage,CANSLIMPage,WatchlistPage,PlanPage,PortfolioPage,ContestPage,DashboardPage,HistoryPage,NAV_STEPS} = window;
+
+function App(){
+  const [page,setPage]=us5('market');
+  const [sub,setSub]=us5('매크로');
+  const [tweaksOn,setTweaksOn]=us5(false);
+  const TWEAK_DEFAULTS=/*EDITMODE-BEGIN*/{
+    "macroRegime": "RISK_ON",
+    "marketState": "GREEN",
+    "density": "normal"
+  }/*EDITMODE-END*/;
+  const [tweaks,setTweaks]=us5(TWEAK_DEFAULTS);
+
+  ue5(()=>{
+    const h=e=>{
+      if(e.data?.type==='__activate_edit_mode')setTweaksOn(true);
+      if(e.data?.type==='__deactivate_edit_mode')setTweaksOn(false);
+    };
+    window.addEventListener('message',h);
+    window.parent.postMessage({type:'__edit_mode_available'},'*');
+    return()=>window.removeEventListener('message',h);
+  },[]);
+
+  const applyTweak=(k,v)=>{
+    const n={...tweaks,[k]:v};setTweaks(n);
+    window.parent.postMessage({type:'__edit_mode_set_keys',edits:{[k]:v}},'*');
+  };
+
+  const renderPage=()=>{
+    if(page==='market') return sub==='매크로'?<MacroPage/>:<MasterFilterPage/>;
+    if(page==='scanner') return sub==='VCP 스캐너'?<VCPScannerPage/>:<CANSLIMPage/>;
+    if(page==='watchlist') return <WatchlistPage/>;
+    if(page==='plan') return <PlanPage/>;
+    if(page==='portfolio') return <PortfolioPage/>;
+    if(page==='contest') return <ContestPage/>;
+    if(page==='review') return sub==='대시보드'?<DashboardPage/>:<HistoryPage/>;
+    return null;
+  };
+
+  return(
+    <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'var(--c2)'}}>
+      <TopNav page={page} setPage={setPage} subPage={sub} setSubPage={setSub}/>
+      <main style={{flex:1,padding:'20px 24px',paddingBottom:80,maxWidth:1440,margin:'0 auto',width:'100%'}}>
+        {renderPage()}
+      </main>
+
+      {/* Tweaks */}
+      {tweaksOn&&(
+        <div style={{position:'fixed',bottom:20,right:20,zIndex:200,width:250,background:'var(--c3)',border:'1px solid var(--b2)',borderRadius:12,padding:16,boxShadow:'0 20px 40px rgba(0,0,0,.6)'}}>
+          <div style={{fontSize:12,fontWeight:700,marginBottom:14,color:'var(--t1)'}}>Tweaks</div>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div>
+              <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>매크로 레짐</div>
+              <div style={{display:'flex',gap:3}}>
+                {['RISK_ON','NEUTRAL','RISK_OFF'].map(v=>(
+                  <button key={v} onClick={()=>applyTweak('macroRegime',v)} style={{flex:1,padding:'5px 0',borderRadius:5,border:'none',cursor:'pointer',fontSize:9,fontWeight:700,background:tweaks.macroRegime===v?(v==='RISK_ON'?'var(--em)':v==='NEUTRAL'?'var(--am)':'var(--ro)'):'var(--c4)',color:tweaks.macroRegime===v?'#000':'var(--t2)'}}>{v.replace('_','-')}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>마스터 필터 상태</div>
+              <div style={{display:'flex',gap:3}}>
+                {['GREEN','YELLOW','RED'].map(v=>(
+                  <button key={v} onClick={()=>applyTweak('marketState',v)} style={{flex:1,padding:'5px 0',borderRadius:5,border:'none',cursor:'pointer',fontSize:10,fontWeight:700,background:tweaks.marketState===v?(v==='GREEN'?'var(--em)':v==='YELLOW'?'var(--am)':'var(--ro)'):'var(--c4)',color:tweaks.marketState===v?'#000':'var(--t2)'}}>{v}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:'var(--t3)',marginBottom:6}}>활성 페이지 이동</div>
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {NAV_STEPS.map(s=>(
+                  <button key={s.key} onClick={()=>{setPage(s.key);if(s.tabs.length)setSub(s.tabs[0]);}} style={{padding:'5px 10px',borderRadius:5,border:'none',cursor:'pointer',background:page===s.key?'var(--b2)':'var(--c4)',color:page===s.key?'var(--t1)':'var(--t2)',fontSize:10,fontWeight:page===s.key?700:400,textAlign:'left'}}>
+                    {s.step} · {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

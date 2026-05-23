@@ -1,0 +1,60 @@
+{
+  "response_schema_version": "mtn-contest-v3",
+  "session_id": "test-session-us-1",
+  "rankings": [
+    {
+      "session_id": "test-session-us-1",
+      "candidate_id": "cand-nvda",
+      "ticker": "NVDA",
+      "rank": 1,
+      "overall": "POSITIVE",
+      "key_strength": "Explosive earnings growth with tight VCP base near all-time highs. RS 97 with volume dry-up confirming institutional accumulation.",
+      "key_risk": "Breakout may fail on exhaustion gap if market breadth narrows. Semiconductor cycle peaking risk.",
+      "recommendation": "PROCEED",
+      "confidence": 0.88,
+      "comment": "Top leadership candidate. Strong SEPA alignment and confirmed breakout volume.",
+      "analysis": {
+        "technical": 92,
+        "fundamental": 88,
+        "market_fit": 90,
+        "risk_reward": 85
+      }
+    },
+    {
+      "session_id": "test-session-us-1",
+      "candidate_id": "cand-meta",
+      "ticker": "META",
+      "rank": 2,
+      "overall": "NEUTRAL",
+      "key_strength": "Persistent RS near highs with improving ad revenue trajectory.",
+      "key_risk": "VCP still forming — breakout not yet confirmed. Extended from last base.",
+      "recommendation": "WATCH",
+      "confidence": 0.65,
+      "comment": "Wait for cleaner pivot confirmation before committing capital.",
+      "analysis": {
+        "technical": 78,
+        "fundamental": 85,
+        "market_fit": 80,
+        "risk_reward": 72
+      }
+    },
+    {
+      "session_id": "test-session-us-1",
+      "candidate_id": "cand-snow",
+      "ticker": "SNOW",
+      "rank": 3,
+      "overall": "NEGATIVE",
+      "key_strength": "Loose constructive bounce with improving revenue growth.",
+      "key_risk": "Not enough institutional confirmation. SEPA core weakness. Wide and loose base.",
+      "recommendation": "SKIP",
+      "confidence": 0.55,
+      "comment": "Too early for a full position. Wait for tighter price contraction.",
+      "analysis": {
+        "technical": 55,
+        "fundamental": 68,
+        "market_fit": 60,
+        "risk_reward": 50
+      }
+    }
+  ]
+}

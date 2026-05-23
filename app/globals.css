@@ -1,0 +1,230 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+
+@theme {
+  --color-emerald-500: #10b981;
+  --color-coral-red: #ef4444;
+  --color-electric-blue: #3b82f6;
+  --color-amber-500: #f59e0b;
+}
+
+@layer base {
+  :root {
+    --font-sans: 'Outfit', 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --c0: #040810;
+    --c1: #070d1b;
+    --c2: #0b1220;
+    --c3: #101928;
+    --c4: #162135;
+    --b1: rgba(58, 80, 112, 0.34);
+    --b2: rgba(122, 143, 181, 0.26);
+    --t1: #e8edf7;
+    --t2: #96a9c7;
+    --t3: #516886;
+    --background: var(--c0);
+    --foreground: var(--t1);
+    --card: rgba(16, 25, 40, 0.8);
+    --border: rgba(96, 116, 150, 0.28);
+    --border-strong: rgba(122, 143, 181, 0.42);
+    --surface-soft: rgba(14, 23, 40, 0.62);
+    --surface-strong: rgba(16, 25, 40, 0.88);
+    --surface-accent: rgba(22, 33, 53, 0.92);
+    --text-primary: var(--t1);
+    --text-secondary: var(--t2);
+    --text-tertiary: var(--t3);
+    --panel-shadow: 0 24px 70px rgba(2, 6, 23, 0.42);
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    color-scheme: dark;
+    font-family: var(--font-sans);
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 28%),
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 24%),
+      linear-gradient(180deg, var(--c1) 0%, var(--c0) 42%, #02050d 100%);
+    color: var(--foreground);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-family: var(--font-sans);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(122, 143, 181, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(122, 143, 181, 0.03) 1px, transparent 1px);
+    background-size: 72px 72px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent 85%);
+    opacity: 0.35;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::selection {
+    background: rgba(16, 185, 129, 0.28);
+    color: var(--t1);
+  }
+}
+
+@layer utilities {
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .glass-card {
+    background:
+      linear-gradient(180deg, rgba(17, 27, 44, 0.94), rgba(10, 17, 32, 0.88));
+    backdrop-filter: blur(16px);
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    box-shadow: var(--panel-shadow);
+    transition: all 0.3s ease-in-out;
+  }
+
+  .glass-card:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 24px 70px rgba(2, 6, 23, 0.56);
+  }
+
+  .panel-grid {
+    background:
+      linear-gradient(180deg, rgba(17, 27, 44, 0.92), rgba(10, 17, 32, 0.86));
+    border: 1px solid var(--border);
+    border-radius: 1.5rem;
+    box-shadow: var(--panel-shadow);
+    backdrop-filter: blur(18px);
+  }
+
+  .text-glow-emerald {
+    text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  }
+
+  .bg-glass {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .tracking-tightest {
+    letter-spacing: -0.05em;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* IB Investment Committee Report — markdown typography (dark) */
+  .ib-report {
+    font-size: 0.9375rem;
+    line-height: 1.75;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report h1 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: rgb(255, 255, 255);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.25);
+  }
+  .ib-report h1:first-child { margin-top: 0; }
+  .ib-report h2 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: rgb(199, 210, 254);
+    margin-top: 2rem;
+    margin-bottom: 0.875rem;
+  }
+  .ib-report h3 {
+    font-size: 1.0625rem;
+    font-weight: 700;
+    color: rgb(255, 255, 255);
+    margin-top: 1.5rem;
+    margin-bottom: 0.625rem;
+  }
+  .ib-report h4 {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: rgb(203, 213, 225);
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+  .ib-report p { margin: 0.75rem 0; color: rgb(203, 213, 225); }
+  .ib-report strong { color: rgb(255, 255, 255); font-weight: 700; }
+  .ib-report em { color: rgb(165, 180, 252); }
+  .ib-report ul, .ib-report ol { margin: 0.75rem 0 0.75rem 1.25rem; }
+  .ib-report ul { list-style: disc; }
+  .ib-report ol { list-style: decimal; }
+  .ib-report li { margin: 0.25rem 0; color: rgb(203, 213, 225); }
+  .ib-report blockquote {
+    margin: 1rem 0;
+    padding: 0.875rem 1rem;
+    border-left: 3px solid rgb(99, 102, 241);
+    background: rgba(99, 102, 241, 0.08);
+    border-radius: 0 0.5rem 0.5rem 0;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report blockquote p { margin: 0.25rem 0; }
+  .ib-report hr {
+    margin: 2rem 0;
+    border: 0;
+    border-top: 1px dashed rgba(148, 163, 184, 0.25);
+  }
+  .ib-report code {
+    background: rgba(15, 23, 42, 0.8);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+    color: rgb(226, 232, 240);
+  }
+  .ib-report table {
+    width: 100%;
+    margin: 1rem 0;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .ib-report thead { background: rgba(99, 102, 241, 0.12); }
+  .ib-report th, .ib-report td {
+    padding: 0.625rem 0.875rem;
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    text-align: left;
+  }
+  .ib-report th { font-weight: 700; color: rgb(199, 210, 254); }
+  .ib-report tbody tr:nth-child(even) { background: rgba(15, 23, 42, 0.4); }
+  .ib-report a { color: rgb(129, 140, 248); text-decoration: underline; }
+}

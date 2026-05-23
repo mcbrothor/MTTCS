@@ -1,0 +1,9 @@
+.env
+.env.*
+.env*.local
+.next
+node_modules
+coverage
+dev-server*.log
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,88 @@
+/**
+ * CAN SLIM threshold definitions.
+ *
+ * These numbers are intentionally centralized so rule tuning stays explicit
+ * and reviewable instead of being scattered through the engine.
+ */
+
+export const CANSLIM_CRITERIA = {
+  // C: Current quarterly earnings
+  MIN_CURRENT_EPS_GROWTH: 25,
+  PREFERRED_EPS_GROWTH: 40,
+  MIN_CURRENT_SALES_GROWTH: 15,
+  PREFERRED_CURRENT_SALES_GROWTH: 20,
+  MIN_CONSECUTIVE_GROWTH_QTRS: 3,
+
+  // A: Annual earnings growth
+  MIN_ANNUAL_EPS_GROWTH: 25,
+  MIN_ROE: 17,
+
+  // N: New high / base pattern (Minervini Trend Template 원전: 25% 이내)
+  // 베이스 패턴(컵-위드-핸들 등)이 감지되면 베이스 깊이를 인정해 33%까지 허용 (O'Neil 본가 레인지)
+  MAX_DIST_FROM_52W_HIGH: 0.25,
+  LOOSE_DIST_FROM_52W_HIGH: 0.33,
+  PIVOT_BUY_ZONE_MAX: 0.06,
+  PIVOT_EXTENDED_MAX: 0.10,
+
+  // S: Supply and demand
+  MIN_BREAKOUT_VOLUME_RATIO: 1.5,
+  PREFERRED_MAX_FLOAT: 50_000_000,
+  LARGE_FLOAT_THRESHOLD: 200_000_000,
+  PREFERRED_MAX_DOLLAR_FLOAT: 1_000_000_000,
+  LARGE_DOLLAR_FLOAT_THRESHOLD: 5_000_000_000,
+
+  // L: Leadership
+  MIN_RS_RATING: 80,
+  PREFERRED_RS_RATING: 90,
+
+  // I: Institutional sponsorship
+  MIN_INSTITUTIONAL_HOLDERS: 3,
+  MIN_INSTITUTIONAL_OWNERSHIP_PCT: 20,
+  MAX_INSTITUTIONAL_OWNERSHIP_PCT: 80,
+
+  // Risk management
+  STOP_LOSS_PCT: 0.08,
+} as const;
+
+export const MACRO_CRITERIA = {
+  DISTRIBUTION_DAY_REDUCED_THRESHOLD: 4,
+  DISTRIBUTION_DAY_HALT_THRESHOLD: 6,
+  FTD_MIN_GAIN_PCT: 1.5,
+  FTD_EARLIEST_DAY: 4,
+  DISTRIBUTION_DAY_DROP_PCT: 0.2,
+  DISTRIBUTION_DAY_LOOKBACK_WEEKS: 5,
+} as const;
+
+export const BASE_PATTERN_CRITERIA = {
+  CUP_WITH_HANDLE: {
+    MIN_WEEKS: 7,
+    MIN_DEPTH_PCT: 12,
+    MAX_DEPTH_PCT: 33,
+    MIN_RIGHT_SIDE_RECOVERY: 0.95,
+    MAX_HANDLE_DEPTH_PCT: 12,
+    PIVOT_OFFSET: 0.10,
+  },
+  DOUBLE_BOTTOM: {
+    MIN_WEEKS: 7,
+    MIN_DEPTH_PCT: 15,
+    MAX_DEPTH_PCT: 33,
+    MAX_BOTTOM_DIFF_PCT: 3,
+    PIVOT_OFFSET: 0.10,
+  },
+  FLAT_BASE: {
+    MIN_WEEKS: 5,
+    MIN_DEPTH_PCT: 0,
+    MAX_DEPTH_PCT: 15,
+    PIVOT_OFFSET: 0.10,
+  },
+  VCP: {
+    MIN_WEEKS: 3,
+    MIN_CONTRACTIONS: 3,
+  },
+} as const;
+
+export const DATA_QUALITY = {
+  STALE_THRESHOLD_DAYS: 90,
+  PARTIAL_LABEL: 'DATA_PARTIAL',
+  STALE_LABEL: 'DATA_STALE',
+} as const;
