@@ -234,16 +234,46 @@ export async function upsertMacroTrend(row: MacroRow) {
   return row;
 }
 
+/** 동시성 제한 병렬 실행 헬퍼. 워커 풀 패턴. */
+async function parallelLimit<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  limit: number
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+const RS_CHUNK_CONCURRENCY = 5;
+
 export async function runRsMetricsChunk(input: MetricInput) {
   const chunkSize = input.chunkSize || 50;
   const chunkIndex = input.chunkIndex || 0;
   const universe = await getStandardScannerUniverse(input.market);
   const chunk = universe.slice(chunkIndex * chunkSize, (chunkIndex + 1) * chunkSize);
+
+  // 벤치마크 데이터를 사전 워밍업하여 병렬 실행 중 경합 방지
   const benchmarkCache = new Map<string, OHLCData[]>();
-  const rows: MetricRow[] = [];
-  for (const item of chunk) {
-    rows.push(await computeStockMetric(item, input.market, input.calcDate, benchmarkCache));
-  }
+  const exchangesInChunk = Array.from(new Set(chunk.map((c) => c.exchange)));
+  await Promise.all(
+    exchangesInChunk.map((exchange) => fetchBenchmarkBars(exchange, benchmarkCache).catch(() => {}))
+  );
+
+  // 동시성 5로 병렬 처리 — 개별 종목 실패 시에도 나머지 종목 처리 계속
+  const rows = await parallelLimit(
+    chunk,
+    async (item) => computeStockMetric(item, input.market, input.calcDate, benchmarkCache),
+    RS_CHUNK_CONCURRENCY
+  );
+
   await upsertStockMetrics(rows);
   return {
     market: input.market,

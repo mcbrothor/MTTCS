@@ -11,32 +11,55 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
     return _crumbCache;
   }
 
-  const cookieRes = await fetch('https://finance.yahoo.com/', {
-    headers: {
-      'User-Agent': BROWSER_UA,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-    },
-    redirect: 'follow',
-  });
+  try {
+    // Yahoo 홈페이지는 수십 개의 Set-Cookie 헤더를 반환하여
+    // Node.js undici의 기본 헤더 한도(16KB)를 초과할 수 있습니다.
+    // maxHeaderSize를 64KB로 확장하여 UND_ERR_HEADERS_OVERFLOW를 방지합니다.
+    let fetchOptions: RequestInit & { dispatcher?: unknown } = {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      },
+      redirect: 'follow' as RequestRedirect,
+    };
 
-  const rawCookies: string[] = typeof cookieRes.headers.getSetCookie === 'function'
-    ? cookieRes.headers.getSetCookie()
-    : [(cookieRes.headers.get('set-cookie') || '')];
-  const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+    // undici Agent로 헤더 크기 한도 확장 (Node.js 18+ 내장)
+    try {
+      const { Agent } = await import('undici');
+      fetchOptions = { ...fetchOptions, dispatcher: new Agent({ maxHeaderSize: 65536 }) };
+    } catch {
+      // undici 미설치 또는 import 불가 시 기본 fetch 사용
+    }
 
-  const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: {
-      'User-Agent': BROWSER_UA,
-      'Cookie': cookieString,
-      'Accept': '*/*',
-      'Referer': 'https://finance.yahoo.com/',
-    },
-  });
+    const cookieRes = await fetch('https://finance.yahoo.com/', fetchOptions);
 
-  const crumb = (await crumbRes.text()).trim();
-  _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
-  return _crumbCache;
+    const rawCookies: string[] = typeof cookieRes.headers.getSetCookie === 'function'
+      ? cookieRes.headers.getSetCookie()
+      : [(cookieRes.headers.get('set-cookie') || '')];
+    const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+
+    const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Cookie': cookieString,
+        'Accept': '*/*',
+        'Referer': 'https://finance.yahoo.com/',
+      },
+    });
+
+    const crumb = (await crumbRes.text()).trim();
+    _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
+    return _crumbCache;
+  } catch (err) {
+    // Crumb fetch 실패 시 빈 crumb으로 fallback.
+    // Yahoo API는 crumb 없이도 일부 엔드포인트에서 동작합니다.
+    console.warn('[Yahoo API] Crumb fetch failed, using empty crumb fallback:', err instanceof Error ? err.message : err);
+    const fallback = { crumb: '', cookie: '' };
+    // 실패한 경우에도 짧은 TTL(5분)로 캐싱하여 반복 실패 시도를 방지
+    _crumbCache = { ...fallback, fetchedAt: Date.now() - CRUMB_TTL_MS + 5 * 60 * 1000 };
+    return fallback;
+  }
 }
 
 function rawNumber(value: unknown): number | null {

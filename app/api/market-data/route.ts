@@ -6,7 +6,7 @@ import { calculateATR, calculateEntryPrice } from '@/lib/finance/core/moving-ave
 import { calculateMinerviniRiskPlan } from '@/lib/finance/core/position-sizing';
 import { fetchAggregatedFundamentals } from '@/lib/finance/market/fundamental-fetcher';
 import { analyzeVcp } from '@/lib/finance/engines/vcp';
-import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
+import { cacheKey, tieredCacheGet, tieredCacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
 import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
@@ -307,7 +307,7 @@ export async function GET(request: Request) {
 
   try {
     const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
-    const cached = cacheGet<MarketAnalysisResponse>(cacheId);
+    const cached = await tieredCacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
       const { metric, macroTrend } = skipStandardMetrics
         ? { metric: null as StockMetric | null, macroTrend: null as MacroTrend | null }
@@ -422,7 +422,7 @@ export async function GET(request: Request) {
       warnings,
     };
 
-    cacheSet(cacheId, response);
+    tieredCacheSet(cacheId, response);
 
     return NextResponse.json({
       ...response,
