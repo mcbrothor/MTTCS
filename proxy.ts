@@ -14,7 +14,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Rate Limiting for Login (BUG-014)
-  if (pathname === '/api/auth/login' && request.method === 'POST') {
+  if (pathname === '/api/auth/login' && request.method === 'POST' && process.env.MTN_TEST_ENVIRONMENT !== 'true') {
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const now = Date.now();
     const windowMs = 60 * 1000; // 1 minute
@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Protect all API routes except auth, cron, and telegram-webhook (self-validates via X-Telegram-Bot-Api-Secret-Token)
+  // Protect API routes
   if (
     pathname.startsWith('/api/') &&
     !pathname.startsWith('/api/auth') &&
@@ -49,11 +49,21 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // Protect frontend pages
+  const isPublicPage = pathname === '/login' || pathname.startsWith('/_next') || pathname === '/favicon.ico' || pathname.startsWith('/api/');
+  
+  if (!isPublicPage) {
+    const token = request.cookies.get('mtn_session')?.value;
+    const session = await verifySessionToken(token);
+
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    '/api/:path*',
-  ]
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };

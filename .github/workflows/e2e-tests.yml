@@ -1,0 +1,60 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps chromium
+      
+    - name: Build Next.js
+      run: npm run build
+      env:
+        # These are dummy values to satisfy the build process
+        # Actual E2E tests use the mock server and .env.test
+        NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+        SUPABASE_SERVICE_ROLE_KEY: dummy-service-key
+        MTN_AUTH_ENABLED: true
+        MTN_AUTH_SECRET: ci-dummy-secret-at-least-32-characters
+        MTN_ADMIN_USERNAME: testadmin
+        MTN_ADMIN_PASSWORD: TestPassword123!
+        CRON_SECRET: dummy-cron-secret
+        MTN_BASE_URL: http://localhost:3000
+        KIS_APP_KEY: dummy
+        KIS_APP_SECRET: dummy
+        TELEGRAM_BOT_TOKEN: dummy
+        TELEGRAM_ALLOWED_CHAT_IDS: 123
+        TELEGRAM_WEBHOOK_SECRET: dummy
+        GEMINI_API_KEY: dummy
+      
+    - name: Run Playwright tests
+      run: npx playwright test
+      
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 14
