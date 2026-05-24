@@ -14,29 +14,21 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
   try {
     // Yahoo 홈페이지는 수십 개의 Set-Cookie 헤더를 반환하여
     // Node.js undici의 기본 헤더 한도(16KB)를 초과할 수 있습니다.
-    // maxHeaderSize를 64KB로 확장하여 UND_ERR_HEADERS_OVERFLOW를 방지합니다.
-    let fetchOptions: RequestInit & { dispatcher?: unknown } = {
+    // axios는 Node.js http 모듈을 사용하므로 이 제한을 받지 않습니다.
+    const cookieRes = await axios.get('https://finance.yahoo.com/', {
       headers: {
         'User-Agent': BROWSER_UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.5',
       },
-      redirect: 'follow' as RequestRedirect,
-    };
+      maxRedirects: 5,
+      // 응답 본문은 불필요하므로 최소한만 수신
+      maxContentLength: 512 * 1024,
+      validateStatus: () => true,
+    });
 
-    // undici Agent로 헤더 크기 한도 확장 (Node.js 18+ 내장)
-    try {
-      const { Agent } = await import('undici');
-      fetchOptions = { ...fetchOptions, dispatcher: new Agent({ maxHeaderSize: 65536 }) };
-    } catch {
-      // undici 미설치 또는 import 불가 시 기본 fetch 사용
-    }
-
-    const cookieRes = await fetch('https://finance.yahoo.com/', fetchOptions);
-
-    const rawCookies: string[] = typeof cookieRes.headers.getSetCookie === 'function'
-      ? cookieRes.headers.getSetCookie()
-      : [(cookieRes.headers.get('set-cookie') || '')];
+    const setCookieHeader = cookieRes.headers['set-cookie'] || [];
+    const rawCookies: string[] = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
     const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
 
     const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
