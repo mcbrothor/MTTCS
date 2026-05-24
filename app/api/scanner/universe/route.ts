@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
 import { getScannerUniverse } from '@/lib/finance/market/scanner-universes';
+import { getLatestStockMetricsCalcDate, marketForUniverse } from '@/lib/finance/market/stock-metrics';
 import type { ScannerUniverse, ScannerUniverseResponse } from '@/types';
 
 const UNIVERSE_TTL_MS = 30 * 60 * 1000;
@@ -27,11 +28,26 @@ export async function GET(request: Request) {
   try {
     const key = cacheKey('scanner-universe', universe);
     const cached = cacheGet<ScannerUniverseResponse>(key);
-    if (cached) return NextResponse.json(cached);
+    
+    const market = marketForUniverse(universe);
+    const { calcDate, isFresh } = await getLatestStockMetricsCalcDate(market);
+
+    if (cached) {
+      return NextResponse.json({
+        ...cached,
+        latestRsCalcDate: calcDate,
+        isRsFresh: isFresh,
+      });
+    }
 
     const response = await getScannerUniverse(universe);
     cacheSet(key, response, UNIVERSE_TTL_MS);
-    return NextResponse.json(response);
+    
+    return NextResponse.json({
+      ...response,
+      latestRsCalcDate: calcDate,
+      isRsFresh: isFresh,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : '종목군을 불러오지 못했습니다.';
     return apiError(message, 'UNIVERSE_FETCH_FAILED', 500);

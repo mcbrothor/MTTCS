@@ -336,3 +336,26 @@ export async function finalizeRsMetrics(market: MarketCode, calcDate = todayIso(
 
   return { market, calcDate, ranked: ranked.length, universeSize, macro };
 }
+
+/**
+ * stock_metrics 테이블에서 특정 시장의 가장 최근 계산일(calc_date)과 신선도 유효 여부를 리턴합니다.
+ */
+export async function getLatestStockMetricsCalcDate(market: MarketCode): Promise<{ calcDate: string | null; isFresh: boolean }> {
+  const { data, error } = await supabaseServer
+    .from('stock_metrics')
+    .select('calc_date')
+    .eq('market', market)
+    .order('calc_date', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error('[stock-metrics] Failed to fetch latest stock_metrics calc_date:', error);
+    return { calcDate: null, isFresh: false };
+  }
+
+  const calcDate = data?.[0]?.calc_date ?? null;
+  return {
+    calcDate,
+    isFresh: isFreshCalcDate(calcDate),
+  };
+}

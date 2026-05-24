@@ -265,6 +265,8 @@ export default function CanslimScannerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('web');
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
+  const [latestRsCalcDate, setLatestRsCalcDate] = useState<string | null>(null);
+  const [isRsFresh, setIsRsFresh] = useState<boolean>(false);
   const {
     selectedTickers,
     toggleSelection: baseToggleSelection,
@@ -305,7 +307,21 @@ export default function CanslimScannerPage() {
 
   const abortRef = useRef<AbortController | null>(null);
 
-  // 초기 복원
+  // 유니버스 메타데이터(크론 갱신 일자 등) 실시간 fetch
+  const fetchUniverseMeta = async (u: ScannerUniverse) => {
+    try {
+      const resp = await fetch(`/api/scanner/universe?universe=${u}`);
+      if (resp.ok) {
+        const meta = await resp.json() as { latestRsCalcDate?: string | null; isRsFresh?: boolean };
+        setLatestRsCalcDate(meta.latestRsCalcDate ?? null);
+        setIsRsFresh(meta.isRsFresh ?? false);
+      }
+    } catch {
+      // 무시
+    }
+  };
+
+  // 초기 복원 및 메타 로드
   useEffect(() => {
     (async () => {
       const snapshot = await readSnapshot(universe);
@@ -314,10 +330,9 @@ export default function CanslimScannerPage() {
         setMacro(snapshot.macro);
         setLastScannedAt(snapshot.savedAt);
       }
+      await fetchUniverseMeta(universe);
     })();
   }, [universe]);
-
-
 
   const handleToggleSelected = (ticker: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -337,6 +352,7 @@ export default function CanslimScannerPage() {
       setMacro(null);
       setLastScannedAt(null);
     }
+    await fetchUniverseMeta(u);
   };
 
   // === 스캔 시작 ===
@@ -353,7 +369,10 @@ export default function CanslimScannerPage() {
     try {
       const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abort.signal });
       if (!resp.ok) throw new Error(`유니버스 로딩 실패 (${resp.status})`);
-      const meta = await resp.json() as ScannerUniverseResponse;
+      const meta = await resp.json() as ScannerUniverseResponse & { latestRsCalcDate?: string | null; isRsFresh?: boolean };
+
+      setLatestRsCalcDate(meta.latestRsCalcDate ?? null);
+      setIsRsFresh(meta.isRsFresh ?? false);
 
       const items = meta.items;
       setProgress({ current: 0, total: items.length });
@@ -922,6 +941,25 @@ export default function CanslimScannerPage() {
               <span className="rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-400">
                 Selected <span className="ml-1 font-mono text-white">{selectedTickers.size}/10</span>
               </span>
+              {latestRsCalcDate ? (
+                <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                  isRsFresh 
+                    ? 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300' 
+                    : 'border-amber-500/20 bg-amber-500/5 text-amber-300'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    isRsFresh 
+                      ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse' 
+                      : 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
+                  }`} />
+                  RS 갱신: {latestRsCalcDate} {isRsFresh ? '(정상)' : '(만료)'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-700" />
+                  RS 데이터 없음
+                </span>
+              )}
             </div>
           </div>
 

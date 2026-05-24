@@ -474,7 +474,7 @@ export function scannerReviewScore(result: Partial<ScannerResult>) {
 export function applyScannerReviewPoolRankings(
   results: ScannerResult[],
   maxReviewPool = 15,
-  minReviewPool = 10,
+  minReviewPool = 5,
 ): ScannerResult[] {
   const reviewed = results.map((item) => ({
     ...item,

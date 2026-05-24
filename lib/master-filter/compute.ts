@@ -267,11 +267,15 @@ export function computeP3(
     (sectorRiskOnCount >= 1 ? 0.5 : 0);
 
   // Trend Veto: 가격이 200MA 아래거나 50MA가 200MA 아래면 무조건 RED (추세추종 핵심 조건)
-  // Distribution Veto: O'Neil 기준 6일+ 누적 분산일 시 자동 RED
+  // Distribution Veto: O'Neil 기준 6일+ 누적 분산일 시 자동 RED.
+  // 다만 강세 정배열(종가 > 50MA > 200MA) 하에서는 과잉 방어(False Positive)를 예방하기 위해 임계치를 8일로 자동 완화합니다.
+  const isStrongUptrend = lastClose > ma50 && ma50 > ma200;
+  const effectiveDistVetoThreshold = isStrongUptrend ? 8 : DISTRIBUTION_VETO_THRESHOLD;
+
   let state: MarketState = 'RED';
   if (lastClose < ma200 || ma50 < ma200) {
     state = 'RED'; // Trend veto
-  } else if (distributionDays >= DISTRIBUTION_VETO_THRESHOLD) {
+  } else if (distributionDays >= effectiveDistVetoThreshold) {
     state = 'RED'; // Distribution veto
   } else if (p3Score >= 75) {
     state = 'GREEN';
