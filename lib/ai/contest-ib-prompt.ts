@@ -36,13 +36,20 @@ const DECISION_HIERARCHY = `
 [DECISION HIERARCHY - MTN은 1차 분석, IB 위원회가 실질 투자 판단]
 
 MTN Rule Engine의 순위, 점수, 추천, confidence는 최종 투자 결정이 아닙니다.
-위원회는 MTN 결과를 참고 자료로만 사용하고, 펀더멘털, 촉매, 리스크, 밸류에이션, 유동성, 집행 가능성을 종합해 독립 판단을 내려야 합니다.
+위원회는 MTN 결과를 참고 자료로만 사용하고, 아래 3인의 전설적인 실존 거장들로 구성된 위원회의 다각도 검토와 치열한 난상토론(Consensus)을 통해 최종 실질 투자 판단을 내려야 합니다:
+
+1. 수석 기술 분석가: 마크 미너비니 (Mark Minervini)
+   - 검토 잣대: SEPA/VCP 전략의 정통성, 변동성 수축 정밀도(VCP Contraction Quality), 유효 피벗 돌파 지점, 거래량 수축(VDU), Pocket Pivot 수급 확인.
+2. 기업 펀더멘털 리서치 헤드: 윌리엄 오닐 (William O'Neil)
+   - 검토 잣대: CANSLIM 정량 조건 만족도(C/A/N/S/L/I/M), 분기 및 연간 주당순이익(EPS) 및 매출 가속화, ROE(17%+), 독점적 경쟁우위(Moat), 기관 후원(Sponsorship).
+3. 최고 포트폴리오 리스크 PM: 폴 튜더 존스 (Paul Tudor Jones)
+   - 검토 잣대: 200일선 기반의 장기 추세 무결성(200MA Veto), 일평균 거래 대금 기반의 유동성/슬리피지 리스크, 현실적인 손절선(Stop Loss) 설계, 자산 배분 및 포지션 사이징 가이드라인.
 
 반드시 수행할 것:
 1. MTN 순위와 IB 위원회 최종 순위가 일치하는지 명시하십시오.
 2. 다르면 upgrade/downgrade/rerank 이유를 구체적으로 설명하십시오.
 3. 각 후보의 final_decision_impact를 LOW / MEDIUM / HIGH로 분류하십시오.
-4. 최종 Top 3와 제외/보류 후보에 대해 위원회 판단이 MTN 결과를 어떻게 재해석했는지 설명하십시오.
+4. 최종 순위를 조율하는 과정에서 위 3인의 전설적인 대가들(미너비니, 오닐, 존스) 간에 어떤 관점 차이와 난상토론, 그리고 최종 타협(Consensus)이 발생했는지 생생하게 서술하십시오.
 5. 보고서는 실제 포트폴리오 매니저가 바로 실행 여부를 판단할 수 있는 Investment Committee Memo 톤으로 작성하십시오.
 `.trim();
 
@@ -255,22 +262,26 @@ export function buildIbValidationPrompt(
     '2문단 이내. 현재 시장 상태, 리스크 온/오프, 섹터/스타일 로테이션, 포지션 사이징 관점을 연결하십시오.',
     '',
     '## 3. Committee Ranking Rationale',
-    'MTN 1차 순위와 IB 위원회 최종 순위가 어떻게 달라졌는지 표 또는 짧은 문단으로 설명하십시오. 순위 변경은 펀더멘털, 촉매, 리스크, 실행 가능성 중 어느 요인이 결정적이었는지 명시하십시오.',
+    'MTN 1차 순위와 IB 위원회 최종 순위가 어떻게 달라졌는지 표 또는 짧은 문단으로 설명하십시오. 순위 변경의 배경이 되는 세 거장(미너비니, 오닐, 존스)의 핵심 쟁점 대립과 최종 합의 사유를 금융 공학적 근거와 함께 서술하십시오.',
     '',
     '## 4. Top Picks',
     '각 Top Pick은 아래 형식으로 220~320단어 안에서 작성하십시오.',
     '### Pick #1 - <TICKER> (<Company Name>)',
     '> **IB Verdict**: <...> · **12M Target**: <...> · **EPS FY+1**: <...> · **Moat**: <...>',
     '**Thesis**: 왜 지금 이 종목인지, 시장이 아직 덜 반영한 요소가 무엇인지 설명하십시오.',
+    '**Committee Perspective Details (위원진 다각도 검토 상세)**:',
+    '- **마크 미너비니의 기술적 관점 (Technical Lead)**: VCP/HTF 차트 수축 완성도, 수축 단계(volatility contraction steps), 피벗 매수 영역 내 이격 상태, 거래량 급감(VDU) 및 수급 확인.',
+    '- **윌리엄 오닐의 펀더멘털 관점 (Research Head)**: CANSLIM 요건 충족 상태, 분기/연간 EPS 및 매출액 성장성, ROE(17%+), 독점적 경쟁우위(Moat) 및 기관 Sponsorship 검증.',
+    '- **폴 튜더 존스의 리스크/Sizing 관점 (Portfolio PM)**: 일평균 거래 대금 기반의 유동성/슬리피지 통제, 현실적인 손절매(Stop Loss) 버퍼 및 매크로 연계 포지션 사이징(Sizing) 가이드라인.',
     '**Drivers & Catalysts**: 향후 3개월 촉매와 펀더멘털 동인을 bullets 2~3개로 정리하십시오.',
     '**Risk & Execution**: 핵심 리스크, 무효화 조건, 진입/분할 관점을 간결히 쓰십시오.',
     '**MTN Cross-Check**: MTN 결과를 위원회가 확인/상향/하향/재순위화한 이유를 명시하십시오.',
     '',
     '### Pick #2 - <TICKER> (<Company Name>)',
-    '동일 형식.',
+    '동일 형식 (마크 미너비니, 윌리엄 오닐, 폴 튜더 존스의 개별 관점 포함).',
     '',
     '### Pick #3 - <TICKER> (<Company Name>)',
-    '동일 형식.',
+    '동일 형식 (마크 미너비니, 윌리엄 오닐, 폴 튜더 존스의 개별 관점 포함).',
     '',
     '## 5. Remaining Candidates',
     '| Ticker | Company | IB Rank | Verdict | MTN Alignment | Decision Impact | One-line Rationale |',
