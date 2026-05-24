@@ -597,7 +597,8 @@ export interface WatchlistItem {
 }
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY';
-export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules';
+export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules' | 'local-llm';
+
 
 export interface AiFallbackAttempt {
   provider: string; model: string; status: 'success' | 'failed' | 'skipped'; message?: string;

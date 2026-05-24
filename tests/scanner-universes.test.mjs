@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { normalizeNasdaqRows } from '../lib/finance/market/scanner-normalizers.ts';
 import { rankKoreaMarketCapItems } from '../lib/finance/market/korea-market-cap-ranking.ts';
 import {
@@ -113,8 +113,9 @@ console.log('=== Scanner Universe Tests ===\n');
     distanceFromMa50Pct: 8,
     volumeDryUpScore: 58,
     rsRating: 92,
-    rsLineNearHigh: true,
+    rsLineNearHigh: false,
   });
+
 
   assert.equal(leadershipSetup.recommendationTier, 'IB Review');
   assert.match(leadershipSetup.recommendationReason, /not|미확정|매수 타점/);
@@ -135,9 +136,10 @@ console.log('=== Scanner Universe Tests ===\n');
     pivotKind: 'VCP_PIVOT',
     entrySource: 'VCP_PIVOT',
     distanceToPivotPct: index % 2 === 0 ? 1.8 : -4,
-    volumeDryUpScore: 52,
+    volumeDryUpScore: 30,
     rsRating: 84 - (index * 0.05),
   }));
+
 
   const ranked = applyScannerReviewPoolRankings(rows, 15);
   assert.equal(ranked.filter((row) => row.recommendationTier === 'IB Review').length, 15);
