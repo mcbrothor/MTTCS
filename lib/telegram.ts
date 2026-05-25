@@ -45,7 +45,18 @@ export async function sendTelegramMessage(text: string) {
   let sent = 0;
   for (const chatId of allowedChatIds) {
     for (const chunk of chunks) {
-      await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+      try {
+        await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+      } catch (err: unknown) {
+        // LLM이 생성한 텍스트의 마크다운 특수 기호 불량 등으로 발송 실패 시, 유실 방지를 위해 Plain Text로 안전 재시도
+        console.warn(`[Telegram] Markdown sending failed, retrying as Plain Text:`, err);
+        try {
+          await bot.api.sendMessage(chatId, chunk);
+        } catch (retryErr: unknown) {
+          console.error(`[Telegram] Retry as Plain Text also failed:`, retryErr);
+          throw retryErr;
+        }
+      }
     }
     sent += 1;
   }

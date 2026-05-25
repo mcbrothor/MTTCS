@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { buildIbValidationPrompt, IB_PROMPT_VERSION, IB_RESPONSE_SCHEMA_VERSION } from '@/lib/ai/contest-ib-prompt';
 import { runContestAnalysis } from '@/lib/ai/contest-analysis';
 import { supabaseServer } from '@/lib/supabase/server';
-import type { BeautyContestSession, ContestCandidate, MasterFilterResponse } from '@/types';
+import type { BeautyContestSession, ContestCandidate, MasterFilterResponse, AiFallbackAttempt } from '@/types';
+import { callLocalLlmModel, LOCAL_LLM_MODEL } from '@/lib/ai/gemini';
+import { sendTelegramMessage } from '@/lib/telegram';
 
 // IB 프롬프트는 대형 컨텍스트 + 긴 마크다운 리포트 생성 필요 → 충분한 실행 시간 확보
 export const maxDuration = 120;
@@ -213,8 +215,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 // POST: 외부 LLM 호출 및 IB 분석 결과 저장
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: sessionId } = await params;
+
+  let forceLocal = false;
+  let sendTelegram = false;
+  try {
+    const body = await req.json();
+    forceLocal = !!body.forceLocal;
+    sendTelegram = !!body.sendTelegram;
+  } catch {
+    // Body is empty or not JSON
+  }
 
   try {
     const { data: session, error: sessionError } = await supabaseServer
@@ -244,9 +256,28 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       marketContext,
     );
 
-    // 2. 외부 LLM 호출 (Gemini → Groq → Cerebras 폴백)
-    const { rawResponse, providerUsed, modelUsed, fallbackChain } =
-      await runContestAnalysis(prompt);
+    // 2. LLM 호출
+    let rawResponse = '';
+    let providerUsed = 'local-llm';
+    let modelUsed = LOCAL_LLM_MODEL;
+    let fallbackChain: AiFallbackAttempt[] = [];
+
+    if (forceLocal) {
+      // 로컬 LLM 전용 실행 시 Vercel 타임아웃을 건너뛰도록 forceLargeTimeout = true 전달
+      rawResponse = await callLocalLlmModel(
+        prompt,
+        'You are a Senior Investment Bank Committee Member.',
+        8192,
+        true
+      );
+      fallbackChain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
+    } else {
+      const result = await runContestAnalysis(prompt);
+      rawResponse = result.rawResponse;
+      providerUsed = result.providerUsed;
+      modelUsed = result.modelUsed;
+      fallbackChain = result.fallbackChain;
+    }
 
     // 3. 메타데이터 + 마크다운 리포트 분리 파싱
     const { metadata, reportMarkdown, parseFailed } = parseIbResponse(rawResponse);
@@ -273,6 +304,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       .eq('id', sessionId);
 
     if (updateError) throw updateError;
+
+    // 5. 텔레그램 전송이 요청되었고 리포트가 있으면 전송 실행
+    if (sendTelegram && reportMarkdown) {
+      const telegramHeader = `📊 *[MTN 6대 거장 투자위원회 분석 리포트]*\n`;
+      const telegramFooter = `\n---------------------------------------\n*세션 ID*: \`${sessionId}\`\n*엔진*: \`${providerUsed} (${modelUsed})\`\n[대시보드 바로가기](https://mttcs.vercel.app)`;
+      const fullTelegramText = `${telegramHeader}\n${reportMarkdown}${telegramFooter}`;
+      
+      await sendTelegramMessage(fullTelegramText);
+    }
 
     return NextResponse.json({
       success: true,

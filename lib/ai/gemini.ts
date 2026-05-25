@@ -473,11 +473,12 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
 export async function callLocalLlmModel(
   prompt: string,
   systemPrompt = 'You are a Senior Investment Bank Committee Member.',
-  maxOutputTokens = 8192
+  maxOutputTokens = 8192,
+  forceLargeTimeout = false
 ): Promise<string> {
   const isVercel = process.env.VERCEL === '1';
-  // Vercel 환경에서는 Hobby 10초 제한시간 방어를 위해 5.5초 타임아웃, 로컬 환경에서는 120초 여유 부여
-  const timeoutMs = isVercel ? 5500 : 120000;
+  // Vercel 환경이고 forceLargeTimeout이 아닐 때만 5.5초 타임아웃 적용 (로컬 전용 강제 호출 시에는 120초 적용)
+  const timeoutMs = (isVercel && !forceLargeTimeout) ? 5500 : 120000;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

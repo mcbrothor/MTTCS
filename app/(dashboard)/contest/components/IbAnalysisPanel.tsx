@@ -7,6 +7,7 @@ import {
   Clipboard,
   Target,
   Users,
+  Send,
 } from 'lucide-react';
 
 import Button from '@/components/ui/Button';
@@ -42,12 +43,14 @@ interface IbCommitteeAnalysis {
 interface IbAnalysisPanelProps {
   ibAnalysis: IbCommitteeAnalysis | null;
   ibBusy: boolean;
+  localIbBusy: boolean;
   ibError: string | null;
   ibPromptOpen: boolean;
   ibPromptText: string | null;
   activeSession: BeautyContestSession | null;
   copyIbPrompt: () => void;
   runIbValidation: () => void;
+  runLocalTelegramIbValidation: () => void;
   setIbPromptOpen: (open: boolean) => void;
 }
 
@@ -122,12 +125,14 @@ function renderEngineBadge(providerString?: string | null) {
 const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
   ibAnalysis,
   ibBusy,
+  localIbBusy,
   ibError,
   ibPromptOpen,
   ibPromptText,
   activeSession,
   copyIbPrompt,
   runIbValidation,
+  runLocalTelegramIbValidation,
   setIbPromptOpen,
 }) => {
   const topTickers = (ibAnalysis?.committee_consensus?.top3_tickers || []) as string[];
@@ -152,11 +157,19 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
             </Button>
             <Button
               onClick={runIbValidation}
-              disabled={ibBusy}
+              disabled={ibBusy || localIbBusy}
               className="h-12 gap-2 rounded-xl border-none bg-indigo-600 px-8 font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500"
             >
               {ibBusy ? <LoadingSpinner /> : <BrainCircuit className="h-5 w-5" />}
               인앱 리포트 생성
+            </Button>
+            <Button
+              onClick={runLocalTelegramIbValidation}
+              disabled={localIbBusy || ibBusy}
+              className="h-12 gap-2 rounded-xl border-none bg-sky-600 px-8 font-bold text-white shadow-lg shadow-sky-600/20 hover:bg-sky-500"
+            >
+              {localIbBusy ? <LoadingSpinner /> : <Send className="h-5 w-5" />}
+              로컬 LLM + 텔레그램 전송 ✈️
             </Button>
           </div>
           {ibError && <p className="text-xs font-medium text-rose-400">오류: {ibError}</p>}
@@ -185,12 +198,21 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                 </Button>
                 <Button
                   onClick={runIbValidation}
-                  disabled={ibBusy}
+                  disabled={ibBusy || localIbBusy}
                   size="sm"
                   className="h-9 gap-2 rounded-xl border-none bg-indigo-600 px-4 text-xs font-bold text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-500"
                 >
                   {ibBusy ? <LoadingSpinner /> : <BrainCircuit className="h-4 w-4" />}
                   인앱 리포트 생성
+                </Button>
+                <Button
+                  onClick={runLocalTelegramIbValidation}
+                  disabled={localIbBusy || ibBusy}
+                  size="sm"
+                  className="h-9 gap-2 rounded-xl border-none bg-sky-600 px-4 text-xs font-bold text-white shadow-lg shadow-sky-600/20 hover:bg-sky-500"
+                >
+                  {localIbBusy ? <LoadingSpinner /> : <Send className="h-3.5 w-3.5" />}
+                  로컬 LLM + 텔레그램 전송 ✈️
                 </Button>
                 <div className="mx-1 hidden h-4 w-px bg-slate-800 sm:block" />
                 <Button onClick={() => setIbPromptOpen(!ibPromptOpen)} variant="ghost" size="sm" className="h-9 gap-2 px-3 text-xs text-slate-500 hover:text-slate-300">

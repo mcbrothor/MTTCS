@@ -381,6 +381,7 @@ function ContestPageContent() {
   const [marketContext, setMarketContext] = useState<MasterFilterResponse | null>(null);
   const [step, setStep] = useState<ContestStep>('selection');
   const [ibBusy, setIbBusy] = useState(false);
+  const [localIbBusy, setLocalIbBusy] = useState(false);
   const [ibError, setIbError] = useState<string | null>(null);
   const [ibAnalysis, setIbAnalysis] = useState<IbCommitteeAnalysis | null>(null);
   const [ibPromptOpen, setIbPromptOpen] = useState(false);
@@ -669,6 +670,46 @@ function ContestPageContent() {
     }
   };
 
+  const runLocalTelegramIbValidation = async () => {
+    if (!activeSession) return;
+    setLocalIbBusy(true);
+    setIbError(null);
+    try {
+      const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ forceLocal: true, sendTelegram: true }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        let errorMessageStr = `서버에서 오류를 반환했습니다. (상태 코드: ${response.status})`;
+        if (response.status === 504) {
+          errorMessageStr = '로컬 LLM 및 텔레그램 연동 시간 초과 (Vercel 10초 제한). 로컬 개발 환경(npm run dev)에서 실행해 주세요.';
+        } else if (errorText.includes('An error occurred')) {
+          errorMessageStr = 'Vercel 서버 시간 초과 또는 연동 실패. 로컬 개발 환경(npm run dev)에서 실행해 주세요.';
+        } else {
+          try {
+            const errJson = JSON.parse(errorText);
+            if (errJson.error) errorMessageStr = errJson.error;
+          } catch {}
+        }
+        throw new Error(errorMessageStr);
+      }
+      const result = await response.json();
+      if (result.success) {
+        setIbAnalysis(result.data.ib_analysis);
+        setNotice('로컬 LLM 보고서 생성 및 텔레그램 발송 완료 ✈️');
+        await loadSessions(activeSession.id);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err: unknown) {
+      setIbError(errorMessage(err, '로컬 LLM 보고서 생성 및 텔레그램 발송 실패'));
+    } finally {
+      setLocalIbBusy(false);
+    }
+  };
+
   const summaryCard = (horizon: Horizon, summary: ReturnType<typeof performanceSummary>) => (
     <div className={`rounded-lg border p-4 ${summary.status === 'PASS' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : summary.status === 'FAIL' ? 'border-rose-500/30 bg-rose-500/10 text-rose-100' : 'border-slate-800 bg-slate-900/60 text-slate-300'}`}>
       <div className="flex items-center justify-between gap-3">
@@ -810,7 +851,19 @@ function ContestPageContent() {
             ))}
           </div>
           <CandidateResultTable candidates={activeCandidates} busyId={busyId} updateCandidate={updateCandidate} getContestStructuredVerdict={getContestStructuredVerdict} />
-          <IbAnalysisPanel ibAnalysis={ibAnalysis} ibBusy={ibBusy} ibError={ibError} ibPromptOpen={ibPromptOpen} ibPromptText={ibPromptText} activeSession={activeSession} copyIbPrompt={copyIbPrompt} runIbValidation={runIbValidation} setIbPromptOpen={setIbPromptOpen} />
+          <IbAnalysisPanel
+            ibAnalysis={ibAnalysis}
+            ibBusy={ibBusy}
+            localIbBusy={localIbBusy}
+            ibError={ibError}
+            ibPromptOpen={ibPromptOpen}
+            ibPromptText={ibPromptText}
+            activeSession={activeSession}
+            copyIbPrompt={copyIbPrompt}
+            runIbValidation={runIbValidation}
+            runLocalTelegramIbValidation={runLocalTelegramIbValidation}
+            setIbPromptOpen={setIbPromptOpen}
+          />
           <section className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-3xl border border-slate-800 bg-slate-950/30 p-6 space-y-6">
               <h3 className="text-lg font-bold text-white">성과 판정 및 복기</h3>
