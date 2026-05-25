@@ -616,6 +616,10 @@ function ContestPageContent() {
     setIbError(null);
     try {
       const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(errorText || `서버 오류 (상태 코드: ${response.status})`);
+      }
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
 
@@ -632,12 +636,37 @@ function ContestPageContent() {
   const runIbValidation = async () => {
     if (!activeSession) return;
     setIbBusy(true);
+    setIbError(null);
     try {
       const response = await fetch(`/api/contest/sessions/${activeSession.id}/ib-validate`, { method: 'POST' });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        let errorMessageStr = `서버에서 오류를 반환했습니다. (상태 코드: ${response.status})`;
+        if (response.status === 504) {
+          errorMessageStr = 'AI 서버 연동 시간 초과 (Timeout). Vercel Hobby Plan의 10초 제한시간을 초과했습니다. 로컬 개발 환경(npm run dev)에서 실행하시거나, 외부 LLM 복사 프롬프트를 활용해 주세요.';
+        } else if (errorText.includes('An error occurred')) {
+          errorMessageStr = 'Vercel 서버 시간 초과 또는 연동 실패. 로컬 개발 환경(npm run dev)에서 실행하시거나, 외부 LLM 복사 프롬프트를 활용해 주세요.';
+        } else {
+          try {
+            const errJson = JSON.parse(errorText);
+            if (errJson.error) errorMessageStr = errJson.error;
+          } catch {}
+        }
+        throw new Error(errorMessageStr);
+      }
       const result = await response.json();
-      if (result.success) { setIbAnalysis(result.data.ib_analysis); setNotice('IB 검증 완료'); await loadSessions(activeSession.id); }
-      else throw new Error(result.error);
-    } catch (err: unknown) { setIbError(errorMessage(err, 'Failed to run IB validation')); } finally { setIbBusy(false); }
+      if (result.success) {
+        setIbAnalysis(result.data.ib_analysis);
+        setNotice('IB 검증 완료');
+        await loadSessions(activeSession.id);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err: unknown) {
+      setIbError(errorMessage(err, 'Failed to run IB validation'));
+    } finally {
+      setIbBusy(false);
+    }
   };
 
   const summaryCard = (horizon: Horizon, summary: ReturnType<typeof performanceSummary>) => (

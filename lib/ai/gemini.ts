@@ -475,33 +475,50 @@ export async function callLocalLlmModel(
   systemPrompt = 'You are a Senior Investment Bank Committee Member.',
   maxOutputTokens = 8192
 ): Promise<string> {
-  const url = `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: LOCAL_LLM_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: maxOutputTokens,
-      options: {
-        num_ctx: 16384, // 6인 대가의 긴 복기 리포트 생성을 위해 컨텍스트 윈도우 16k 확장
-      }
-    }),
-  });
+  const isVercel = process.env.VERCEL === '1';
+  // Vercel 환경에서는 Hobby 10초 제한시간 방어를 위해 5.5초 타임아웃, 로컬 환경에서는 120초 여유 부여
+  const timeoutMs = isVercel ? 5500 : 120000;
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Local LLM ${response.status}: ${body.slice(0, 500) || response.statusText}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const url = `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: LOCAL_LLM_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: maxOutputTokens,
+        options: {
+          num_ctx: 16384, // 6인 대가의 긴 복기 리포트 생성을 위해 컨텍스트 윈도우 16k 확장
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`Local LLM ${response.status}: ${body.slice(0, 500) || response.statusText}`);
+    }
+
+    const payload = await response.json() as { choices?: { message?: { content?: string } }[] };
+    const text = payload.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error('Local LLM returned an empty response.');
+    return text;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Local LLM call timed out after ${timeoutMs}ms (Vercel Serverless limit defense).`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const payload = await response.json() as { choices?: { message?: { content?: string } }[] };
-  const text = payload.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error('Local LLM returned an empty response.');
-  return text;
 }
