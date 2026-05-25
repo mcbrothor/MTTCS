@@ -173,7 +173,7 @@ function buildKeyRisk(snap: Record<string, unknown>, scores: ScoreBreakdown): st
   const sepaFail = n(snap.sepa_failed);
   const sepaTotal = sepaPass + sepaFail;
   const sepaRate = sepaTotal > 0 ? sepaPass / sepaTotal : 0;
-
+  if (pivotDist >= 999) return `피벗 기준가 미확인 — 가격 베이스 수축 및 돌파 타점 대기 필요`;
   if (pivotDist > 15) return `피벗 이격 ${pivotDist.toFixed(0)}% 초과, 추격 진입 시 손절 폭 과대`;
   if (sepaRate < 0.5 && sepaTotal >= 5) return `SEPA ${sepaPass}/${sepaTotal} 충족에 그침, 기술적 완성도 미흡`;
   if (hasRs && rs < 70) return `RS 등급 ${rs} — 유니버스 대비 상대강도 부진`;
