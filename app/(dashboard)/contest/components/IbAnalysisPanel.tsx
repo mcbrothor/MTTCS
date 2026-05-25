@@ -76,6 +76,49 @@ function reportText(ibAnalysis: IbCommitteeAnalysis | null) {
     : '리포트 내용이 없습니다.';
 }
 
+function renderEngineBadge(providerString?: string | null) {
+  if (!providerString) return null;
+  const lower = providerString.toLowerCase();
+  
+  if (lower.includes('local-llm') || lower.includes('ollama')) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-black tracking-wide text-emerald-300">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+        </span>
+        🟢 Local M4 Engine (Qwen3.6:14B)
+      </span>
+    );
+  }
+  
+  if (lower.includes('gemini')) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-[10px] font-black tracking-wide text-purple-300">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-75"></span>
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-purple-500"></span>
+        </span>
+        ⚡ Gemini Cloud (1.5 Pro)
+      </span>
+    );
+  }
+
+  let displayName = 'Cloud Fallback';
+  if (lower.includes('groq')) displayName = 'Groq Cloud (Llama)';
+  else if (lower.includes('cerebras')) displayName = 'Cerebras Cloud (Llama)';
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-black tracking-wide text-amber-300">
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+      </span>
+      ⚠️ {displayName}
+    </span>
+  );
+}
+
+
 const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
   ibAnalysis,
   ibBusy,
@@ -127,7 +170,10 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                   <BrainCircuit className="h-8 w-8 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-white">IB 투자 위원회 분석 완료</h3>
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                    <h3 className="text-xl font-black text-white">IB 투자 위원회 분석 완료</h3>
+                    {renderEngineBadge(activeSession?.ib_provider)}
+                  </div>
                   <p className="mt-1 text-xs font-medium text-slate-400">
                     {ibAnalysis.committee_consensus?.regime_label || '시장 국면 고려'} · {ibAnalysis.committee_consensus?.mtn_alignment || 'IB 최종 판단'}
                   </p>
@@ -169,9 +215,16 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
                       <p className="mt-0.5 text-[11px] text-slate-500">전문 리서치 메모 형식 · 전체 본문 스크롤 가능</p>
                     </div>
                   </div>
-                  <span className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                    IB Final Judgment
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {activeSession?.ib_provider && (
+                      <span className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                        {activeSession.ib_provider}
+                      </span>
+                    )}
+                    <span className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      IB Final Judgment
+                    </span>
+                  </div>
                 </div>
                 <div className="max-h-[72vh] overflow-y-auto px-5 py-5 sm:px-8 sm:py-7">
                   <div className="prose prose-invert prose-sm max-w-none prose-headings:scroll-mt-24 prose-headings:font-black prose-headings:text-white prose-h1:border-b prose-h1:border-slate-800 prose-h1:pb-3 prose-h2:mt-8 prose-h2:text-indigo-200 prose-h3:text-emerald-200 prose-strong:text-white prose-li:marker:text-indigo-400 prose-blockquote:border-l-indigo-500 prose-blockquote:bg-indigo-500/5 prose-blockquote:px-4 prose-blockquote:py-2 prose-table:text-xs prose-th:border-slate-700 prose-td:border-slate-800">

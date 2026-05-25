@@ -12,6 +12,10 @@ const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-
 const CEREBRAS_CHAT_COMPLETIONS_URL = 'https://api.cerebras.ai/v1/chat/completions';
 const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || 9000);
 
+export const LOCAL_LLM_ENABLED = process.env.LOCAL_LLM_ENABLED?.toLowerCase() === 'true';
+export const LOCAL_LLM_API_URL = process.env.LOCAL_LLM_API_URL || 'http://localhost:11434/v1';
+export const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen3.6:14b';
+
 export interface MarketAnalysisInput {
   marketState: string;
   metrics: {
@@ -380,10 +384,29 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
   }
 }
 
+async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+  if (!LOCAL_LLM_ENABLED) {
+    const message = 'Local LLM is not enabled.';
+    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message, priority });
+  }
+
+  try {
+    const raw = await withTimeout(callLocalLlmModel(prompt, 'You are a concise Korean market-regime analyst.', 900), `local-llm/${LOCAL_LLM_MODEL}`);
+    const { structured, text } = parseStructuredInsight(raw);
+    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
+    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success', text, ...structured, priority });
+  } catch (error: unknown) {
+    const message = compactMessage(error);
+    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'failed', message });
+    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'failed', message, priority });
+  }
+}
+
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
   const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
+    collectLocalLlm(prompt, chain, 0), // 로컬 LLM을 우선순위 0번으로 최우선 탐색!
     collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 1),
     collectGroq(prompt, chain, 3),
     collectCerebras(prompt, chain, 4),
@@ -442,4 +465,43 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     modelInsights: [...modelInsights, { ...ruleInsight, selected: true }],
     errorSummary: failedMessages || 'No LLM provider was configured.',
   };
+}
+
+/**
+ * 로컬 Ollama LLM(기본 qwen3.6:14b)의 OpenAI 호환 completions 엔드포인트를 호출합니다.
+ */
+export async function callLocalLlmModel(
+  prompt: string,
+  systemPrompt = 'You are a Senior Investment Bank Committee Member.',
+  maxOutputTokens = 8192
+): Promise<string> {
+  const url = `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: LOCAL_LLM_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.7,
+      max_tokens: maxOutputTokens,
+      options: {
+        num_ctx: 16384, // 6인 대가의 긴 복기 리포트 생성을 위해 컨텍스트 윈도우 16k 확장
+      }
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Local LLM ${response.status}: ${body.slice(0, 500) || response.statusText}`);
+  }
+
+  const payload = await response.json() as { choices?: { message?: { content?: string } }[] };
+  const text = payload.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error('Local LLM returned an empty response.');
+  return text;
 }

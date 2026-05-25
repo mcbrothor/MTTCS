@@ -2,7 +2,10 @@ import {
   callGeminiModel, 
   callGroqModel, 
   callCerebrasModel, 
-  extractStructuredJson 
+  callLocalLlmModel,
+  extractStructuredJson,
+  LOCAL_LLM_ENABLED,
+  LOCAL_LLM_MODEL
 } from './gemini';
 import type { AiFallbackAttempt } from '@/types';
 
@@ -32,6 +35,33 @@ function errorMessage(error: unknown) {
 
 export async function runContestAnalysis(prompt: string): Promise<ContestAnalysisResult> {
   const fallbackChain: AiFallbackAttempt[] = [];
+
+  // 0. 로컬 LLM (Ollama 최우선)
+  if (LOCAL_LLM_ENABLED) {
+    try {
+      const response = await callLocalLlmModel(prompt, 'You are a Senior Investment Bank Committee Member.', IB_MAX_OUTPUT_TOKENS);
+      const analysis = extractStructuredJson(response);
+      fallbackChain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
+      return {
+        rawResponse: response,
+        analysis,
+        providerUsed: 'local-llm',
+        modelUsed: LOCAL_LLM_MODEL,
+        fallbackChain
+      };
+    } catch (error: unknown) {
+      const message = errorMessage(error);
+      fallbackChain.push({ 
+        provider: 'local-llm', 
+        model: LOCAL_LLM_MODEL, 
+        status: 'failed', 
+        message 
+      });
+      console.warn('Local LLM analysis failed, falling back to Gemini:', message);
+    }
+  } else {
+    fallbackChain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message: 'Local LLM not enabled' });
+  }
   
   // 1. Gemini (우선순위 1)
   if (GEMINI_API_KEY) {
