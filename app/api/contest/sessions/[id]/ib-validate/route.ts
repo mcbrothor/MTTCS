@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { buildIbValidationPrompt, IB_PROMPT_VERSION, IB_RESPONSE_SCHEMA_VERSION } from '@/lib/ai/contest-ib-prompt';
 import { runContestAnalysis } from '@/lib/ai/contest-analysis';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -255,6 +255,62 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       candidates,
       marketContext,
     );
+
+    // 로컬 LLM + 텔레그램 전송일 경우 Vercel 10초 타임아웃 방지를 위해 백그라운드 스케줄링(after) 처리
+    if (forceLocal && sendTelegram) {
+      after(async () => {
+        try {
+          console.log('[Background Task] Starting Local LLM generation...');
+          const bgRawResponse = await callLocalLlmModel(
+            prompt,
+            'You are a Senior Investment Bank Committee Member.',
+            8192,
+            true // forceLargeTimeout = true
+          );
+          console.log('[Background Task] Local LLM completed. Parsing...');
+          const { metadata: bgMetadata, reportMarkdown: bgReportMarkdown, parseFailed: bgParseFailed } = parseIbResponse(bgRawResponse);
+
+          const bgIbAnalysis: Record<string, unknown> = {
+            ...(bgMetadata ?? {}),
+            report_markdown: bgReportMarkdown,
+            schema_version: IB_RESPONSE_SCHEMA_VERSION,
+            prompt_version: IB_PROMPT_VERSION,
+            generated_at: new Date().toISOString(),
+            parse_failed: bgParseFailed,
+            ...(bgParseFailed ? { raw_text: bgRawResponse } : {}),
+          };
+
+          console.log('[Background Task] Saving to Supabase...');
+          await supabaseServer
+            .from('beauty_contest_sessions')
+            .update({
+              ib_raw_response: bgRawResponse,
+              ib_analysis: bgIbAnalysis,
+              ib_provider: `local-llm (${LOCAL_LLM_MODEL})`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', sessionId);
+
+          if (bgReportMarkdown) {
+            console.log('[Background Task] Sending Telegram message...');
+            const telegramHeader = `📊 *[MTN 6대 거장 투자위원회 분석 리포트]*\n`;
+            const telegramFooter = `\n---------------------------------------\n*세션 ID*: \`${sessionId}\`\n*엔진*: \`local-llm (${LOCAL_LLM_MODEL})\`\n[대시보드 바로가기](https://mttcs.vercel.app)`;
+            const fullTelegramText = `${telegramHeader}\n${bgReportMarkdown}${telegramFooter}`;
+            
+            await sendTelegramMessage(fullTelegramText);
+            console.log('[Background Task] Telegram sent.');
+          }
+        } catch (bgError) {
+          console.error('[Background Task] Error in background execution:', bgError);
+        }
+      });
+
+      return NextResponse.json({
+        success: true,
+        background: true,
+        message: '로컬 LLM 분석 및 텔레그램 발송을 백그라운드에서 시작했습니다. 약 30~60초 후 텔레그램에서 리포트를 받아보실 수 있습니다.',
+      });
+    }
 
     // 2. LLM 호출
     let rawResponse = '';

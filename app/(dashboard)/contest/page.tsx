@@ -697,9 +697,13 @@ function ContestPageContent() {
       }
       const result = await response.json();
       if (result.success) {
-        setIbAnalysis(result.data.ib_analysis);
-        setNotice('로컬 LLM 보고서 생성 및 텔레그램 발송 완료 ✈️');
-        await loadSessions(activeSession.id);
+        if (result.background) {
+          setNotice(result.message || '로컬 LLM 분석 및 텔레그램 발송이 백그라운드에서 시작되었습니다. 약 30~60초 후 텔레그램에서 리포트를 받아보실 수 있습니다.');
+        } else {
+          setIbAnalysis(result.data.ib_analysis);
+          setNotice('로컬 LLM 보고서 생성 및 텔레그램 발송 완료 ✈️');
+          await loadSessions(activeSession.id);
+        }
       } else {
         throw new Error(result.error);
       }
