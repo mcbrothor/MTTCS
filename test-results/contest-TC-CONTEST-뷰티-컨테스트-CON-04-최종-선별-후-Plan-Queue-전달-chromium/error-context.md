@@ -75,7 +75,7 @@ Call log:
   - paragraph: MTN Beauty Contest
   - heading "분석 대상 종목 선정" [level=1]
   - paragraph: 상세 투자 검토에 올릴 10개를 선택합니다.
-  - text: Internal|UNKNOWN|2026. 05. 24. 오전 01:12
+  - text: Internal|UNKNOWN|2026. 05. 24. 오전 01:25
   - heading "1 분석 후보 선택" [level=2]
   - paragraph: Minervini SEPA/VCP 스캔 결과에서 15개를 선택합니다. 선택 후 AI가 분석합니다.
   - combobox:

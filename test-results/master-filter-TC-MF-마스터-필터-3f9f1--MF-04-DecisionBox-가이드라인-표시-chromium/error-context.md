@@ -31,7 +31,7 @@ Call log:
     - /url: /
     - text: MTN Live
     - paragraph: Mantori's Trading Navigator
-  - text: "S&P500 -- -- KIS NASDAQ -- -- KIS KOSPI -- -- KIS KOSDAQ -- -- KIS USD/KRW -- -- Yahoo Last Updated: 2026.05.24. 01:13:12"
+  - text: "S&P500 -- -- KIS NASDAQ -- -- KIS KOSPI -- -- KIS KOSDAQ -- -- KIS USD/KRW -- -- Yahoo Last Updated: 2026.05.24. 01:26:00"
   - link "오늘":
     - /url: /
   - link "시장 분석":

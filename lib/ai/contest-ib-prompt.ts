@@ -219,10 +219,11 @@ export function buildIbValidationPrompt(
     '',
     '# Output Contract',
     includeJsonMetadata
-      ? '응답은 반드시 Part 1 JSON metadata fence로 시작하고, 그 뒤에 Part 2 markdown report를 코드블록 없이 작성하십시오.'
+      ? '응답은 반드시 두 파트로 명확하게 분리해서 작성하십시오. 먼저 [PART 1: JSON METADATA] 구분자 아래에 JSON 데이터를 넣고, 그 다음 [PART 2: MARKDOWN REPORT] 구분자 아래에 Markdown 리포트를 작성하십시오.'
       : '아래 구조의 markdown report만 작성하십시오. JSON metadata는 출력하지 마십시오.',
     '',
     ...(includeJsonMetadata ? [
+      '[PART 1: JSON METADATA]',
       '```json',
       `{`,
       `  "schema_version": "${IB_RESPONSE_SCHEMA_VERSION}",`,
@@ -256,6 +257,7 @@ export function buildIbValidationPrompt(
       `}`,
       '```',
       '',
+      '[PART 2: MARKDOWN REPORT]',
     ] : []),
     '# Investment Committee Memorandum',
     `**Universe**: ${session.universe} · **Market**: ${session.market} · **Date**: <YYYY-MM-DD>`,

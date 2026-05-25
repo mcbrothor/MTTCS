@@ -115,8 +115,8 @@ Call log:
   32  |               ],
   33  |               positions: [],
   34  |               warnings: [
-  35  |                 { type: 'exposure', message: '단일 섹터(Technology) 노출이 30%를 초과했습니다 (50.0%)' },
-  36  |                 { type: 'risk', message: '총 오픈 리스크가 1%를 초과했습니다 (5.0%)' }
+  35  |                 '단일 섹터(Technology) 노출이 30%를 초과했습니다 (50.0%)',
+  36  |                 '총 오픈 리스크가 1%를 초과했습니다 (5.0%)'
   37  |               ]
   38  |             },
   39  |             meta: { source: 'e2e-mock-edge' }

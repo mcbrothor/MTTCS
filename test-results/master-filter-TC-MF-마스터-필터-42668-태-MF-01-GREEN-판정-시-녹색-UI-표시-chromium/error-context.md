@@ -16,10 +16,9 @@ Error: expect(locator).toBeVisible() failed
 
 Locator: locator('text=마스터 필터')
 Expected: visible
-Error: strict mode violation: locator('text=마스터 필터') resolved to 3 elements:
+Error: strict mode violation: locator('text=마스터 필터') resolved to 2 elements:
     1) <a href="/master-filter" class="rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByRole('link', { name: '마스터 필터' })
     2) <a href="/master-filter" class="shrink-0 rounded-md border px-3 py-1 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByText('마스터 필터').nth(1)
-    3) <a href="/master-filter" class="shrink-0 rounded-md border px-3 py-1 text-xs font-semibold transition-colors border-sky-400/35 bg-sky-400/12 text-sky-100">마스터 필터</a> aka getByText('마스터 필터').nth(2)
 
 Call log:
   - Expect "toBeVisible" with timeout 10000ms

@@ -31,7 +31,7 @@ Call log:
     - /url: /
     - text: MTN Live
     - paragraph: Mantori's Trading Navigator
-  - text: "S&P500 -- -- KIS NASDAQ -- -- KIS KOSPI -- -- KIS KOSDAQ -- -- KIS USD/KRW -- -- Yahoo Last Updated: 2026.05.24. 01:13:00"
+  - text: "S&P500 -- -- KIS NASDAQ -- -- KIS KOSPI -- -- KIS KOSDAQ -- -- KIS USD/KRW -- -- Yahoo Last Updated: 2026.05.24. 01:25:48"
   - link "오늘":
     - /url: /
   - link "시장 분석":
@@ -76,9 +76,87 @@ Call log:
 - link "07 성과 복기 결과 축적":
   - /url: /history
 - main:
-  - paragraph: 오류가 발생했습니다
-  - paragraph: Cannot read properties of undefined (reading 'updatedAt')
-  - button "다시 시도"
+  - link "Scanner Mode 미너비니 스캐너 Active SEPA · pivot · contraction quality":
+    - /url: /scanner
+    - text: Scanner Mode
+    - paragraph: 미너비니 스캐너
+    - text: Active
+    - paragraph: SEPA · pivot · contraction quality
+  - link "Scanner Mode 오닐 스캐너 7 pillars · earnings leadership":
+    - /url: /canslim
+    - text: Scanner Mode
+    - paragraph: 오닐 스캐너
+    - paragraph: 7 pillars · earnings leadership
+  - heading "미너비니 스크리너" [level=1]
+  - paragraph: 미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+  - text: Universe NASDAQ 100 Results 0 Selected 0/15
+  - paragraph: Scan Control
+  - paragraph: 미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+  - text: Universe Selection
+  - button "NASDAQ 100 TECH GROWTH":
+    - paragraph: NASDAQ 100
+    - paragraph: TECH GROWTH
+  - button "S&P 500 US MARKET":
+    - paragraph: S&P 500
+    - paragraph: US MARKET
+  - button "KOSPI 시총 상위 200 KR MARKET":
+    - paragraph: KOSPI 시총 상위 200
+    - paragraph: KR MARKET
+  - button "KOSDAQ 시총 상위 150 KR MARKET":
+    - paragraph: KOSDAQ 시총 상위 150
+    - paragraph: KR MARKET
+  - text: View Mode
+  - button "TABLE"
+  - button "CARDS"
+  - button "스캔 시작"
+  - button "텔레그램 전송 (0)" [disabled]
+  - paragraph: Recommended
+  - paragraph: "0"
+  - paragraph: 즉시 진입 우선순위
+  - paragraph: Action
+  - paragraph: "0"
+  - paragraph: 관찰 진입 후보 (피벗 확인)
+  - paragraph: IB Review
+  - paragraph: "0"
+  - paragraph: 위원회 검토 후보
+  - paragraph: Errors
+  - paragraph: "0"
+  - paragraph: 구조적 또는 예외 확인
+  - paragraph: Data Source
+  - paragraph: NASDAQ 100
+  - paragraph: "유니버스: 공식/공개 구성종목 API · 가격/분석: KIS → Yahoo fallback"
+  - button "전체"
+  - button "SEPA 통과"
+  - button "Recommended"
+  - button "Action"
+  - button "IB Review"
+  - button "IB 검토 풀"
+  - button "피벗 5% 이내"
+  - button "거래량 신호"
+  - button "RS 90+"
+  - button "오류"
+  - button "상세 필터"
+  - text: Sort
+  - combobox "Sort":
+    - option "시가총액순" [selected]
+    - option "추천 우선"
+    - option "VCP 점수순"
+    - option "피벗 근접순"
+    - option "SEPA 우선"
+    - option "RS 우선"
+  - text: Last scan No snapshot
+  - heading "후보 발굴을 시작하세요" [level=3]
+  - paragraph: 아직 스캔 결과가 없습니다. 스캔 시작 버튼을 눌러 동일한 미너비니 로직으로 후보를 발굴하세요.
+  - paragraph: "Strategy Tip #1"
+  - paragraph: RS 85 이상은 IB Review 후보의 출발점이며, RS 90 이상은 실행 후보에서 우대합니다.
+  - paragraph: "Strategy Tip #2"
+  - paragraph: 유효 VCP/HTF 피벗이 없는 최근 고점 fallback은 매수 타점으로 취급하지 않습니다.
+  - button "지금 스캔 실행하기"
+  - 'link "Step 3: Beauty Contest 최고의 차트 선정하기"':
+    - /url: /contest
+    - 'button "Step 3: Beauty Contest 최고의 차트 선정하기"':
+      - paragraph: "Step 3: Beauty Contest"
+      - paragraph: 최고의 차트 선정하기
 - alert
 ```
 

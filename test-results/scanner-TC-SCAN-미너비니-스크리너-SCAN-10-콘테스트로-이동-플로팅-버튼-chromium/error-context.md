@@ -7,7 +7,7 @@
 # Test info
 
 - Name: scanner.spec.ts >> TC-SCAN: 미너비니 스크리너 >> SCAN-10: 콘테스트로 이동 플로팅 버튼
-- Location: tests/e2e/scanner.spec.ts:92:7
+- Location: tests/e2e/scanner.spec.ts:100:7
 
 # Error details
 
@@ -21,7 +21,7 @@ Call log:
 # Page snapshot
 
 ```yaml
-- generic [active] [ref=e1]:
+- generic [ref=e1]:
   - generic [ref=e2]:
     - generic [ref=e3]:
       - navigation [ref=e4]:
@@ -149,20 +149,3061 @@ Call log:
     - main [ref=e115]:
       - generic [ref=e116]:
         - generic [ref=e117]:
-          - paragraph [ref=e118]: 오류가 발생했습니다
-          - paragraph [ref=e119]: Cannot read properties of undefined (reading 'updatedAt')
-        - button "다시 시도" [ref=e120]
-  - alert [ref=e121]
+          - generic [ref=e118]:
+            - link "Scanner Mode 미너비니 스캐너 Active SEPA · pivot · contraction quality" [ref=e119] [cursor=pointer]:
+              - /url: /scanner
+              - generic [ref=e120]:
+                - generic [ref=e121]:
+                  - img [ref=e123]
+                  - generic [ref=e125]:
+                    - generic [ref=e127]: Scanner Mode
+                    - paragraph [ref=e129]: 미너비니 스캐너
+                - generic [ref=e130]: Active
+              - paragraph [ref=e131]: SEPA · pivot · contraction quality
+            - link "Scanner Mode 오닐 스캐너 7 pillars · earnings leadership" [ref=e132] [cursor=pointer]:
+              - /url: /canslim
+              - generic [ref=e134]:
+                - img [ref=e136]
+                - generic [ref=e143]:
+                  - generic [ref=e145]: Scanner Mode
+                  - paragraph [ref=e147]: 오닐 스캐너
+              - paragraph [ref=e148]: 7 pillars · earnings leadership
+          - generic [ref=e149]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - heading "미너비니 스크리너" [level=1] [ref=e152]:
+                  - img [ref=e154]
+                  - text: 미너비니 스크리너
+                - paragraph [ref=e161]: 미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+              - generic [ref=e162]:
+                - generic [ref=e163]: Universe NASDAQ 100
+                - generic [ref=e164]: Results 100
+                - generic [ref=e165]:
+                  - text: Selected
+                  - generic [ref=e166]: 0/15
+            - generic [ref=e168]:
+              - generic [ref=e169]:
+                - paragraph [ref=e170]: Scan Control
+                - paragraph [ref=e171]: 미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+              - generic [ref=e172]:
+                - generic [ref=e173]:
+                  - text: Universe Selection
+                  - generic [ref=e174]:
+                    - button "NASDAQ 100 TECH GROWTH" [disabled] [ref=e175]:
+                      - paragraph [ref=e176]: NASDAQ 100
+                      - paragraph [ref=e177]: TECH GROWTH
+                    - button "S&P 500 US MARKET" [disabled] [ref=e179]:
+                      - paragraph [ref=e180]: S&P 500
+                      - paragraph [ref=e181]: US MARKET
+                    - button "KOSPI 시총 상위 200 KR MARKET" [disabled] [ref=e182]:
+                      - paragraph [ref=e183]: KOSPI 시총 상위 200
+                      - paragraph [ref=e184]: KR MARKET
+                    - button "KOSDAQ 시총 상위 150 KR MARKET" [disabled] [ref=e185]:
+                      - paragraph [ref=e186]: KOSDAQ 시총 상위 150
+                      - paragraph [ref=e187]: KR MARKET
+                - generic [ref=e188]:
+                  - generic [ref=e189]:
+                    - text: View Mode
+                    - generic [ref=e190]:
+                      - button "TABLE" [ref=e191]
+                      - button "CARDS" [ref=e192]
+                  - button "중단" [active] [ref=e194]:
+                    - img [ref=e195]
+                    - text: 중단
+                - button "텔레그램 전송 (0)" [disabled] [ref=e197]:
+                  - img [ref=e198]
+                  - text: 텔레그램 전송 (0)
+          - generic [ref=e201]:
+            - generic [ref=e202]:
+              - generic [ref=e203]:
+                - paragraph [ref=e204]: Recommended
+                - img [ref=e205]
+              - paragraph [ref=e207]: "0"
+              - paragraph [ref=e208]: 즉시 진입 우선순위
+            - generic [ref=e209]:
+              - generic [ref=e210]:
+                - paragraph [ref=e211]: Action
+                - img [ref=e212]
+              - paragraph [ref=e214]: "0"
+              - paragraph [ref=e215]: 관찰 진입 후보 (피벗 확인)
+            - generic [ref=e216]:
+              - generic [ref=e217]:
+                - paragraph [ref=e218]: IB Review
+                - img [ref=e219]
+              - paragraph [ref=e221]: "0"
+              - paragraph [ref=e222]: 위원회 검토 후보
+            - generic [ref=e223]:
+              - generic [ref=e224]:
+                - paragraph [ref=e225]: Errors
+                - img [ref=e226]
+              - paragraph [ref=e228]: "0"
+              - paragraph [ref=e229]: 구조적 또는 예외 확인
+            - generic [ref=e230]:
+              - generic [ref=e231]:
+                - paragraph [ref=e232]: Data Source
+                - img [ref=e233]
+              - paragraph [ref=e235]: NASDAQ 100
+              - paragraph [ref=e236]: Nasdaq delayed quote
+          - generic [ref=e238]:
+            - generic [ref=e239]:
+              - paragraph [ref=e240]: Scan Progress
+              - paragraph [ref=e241]: KIS 가격 조회 → Yahoo fallback → 벤치마크 → SEPA/VCP 계산
+            - generic [ref=e242]: 0 / 100
+        - generic [ref=e245]:
+          - generic [ref=e246]:
+            - button "전체" [ref=e247]
+            - button "SEPA 통과" [ref=e248]
+            - button "Recommended" [ref=e249]
+            - button "Action" [ref=e250]
+            - button "IB Review" [ref=e251]
+            - button "IB 검토 풀" [ref=e252]
+            - button "피벗 5% 이내" [ref=e253]
+            - button "거래량 신호" [ref=e254]
+            - button "RS 90+" [ref=e255]
+            - button "오류" [ref=e256]
+            - button "상세 필터" [ref=e257]
+          - generic [ref=e258]:
+            - generic [ref=e259]:
+              - generic [ref=e260]: Sort
+              - combobox "Sort" [ref=e261]:
+                - option "시가총액순" [selected]
+                - option "추천 우선"
+                - option "VCP 점수순"
+                - option "피벗 근접순"
+                - option "SEPA 우선"
+                - option "RS 우선"
+            - generic [ref=e262]: Last scan No snapshot
+        - table [ref=e265]:
+          - rowgroup [ref=e281]:
+            - row "# 종목 시총 현재가 등락률 ADR% SEPA RS VCP 거래량 피벗 포인트 등급 패턴 후보선택" [ref=e282]:
+              - columnheader "#" [ref=e283]
+              - columnheader "종목" [ref=e284]
+              - columnheader "시총" [ref=e285]
+              - columnheader "현재가" [ref=e286]
+              - columnheader "등락률" [ref=e287]
+              - columnheader "ADR%" [ref=e288]
+              - columnheader "SEPA" [ref=e289]
+              - columnheader "RS" [ref=e290]
+              - columnheader "VCP" [ref=e291]
+              - columnheader "거래량" [ref=e292]
+              - columnheader "피벗 포인트" [ref=e293]
+              - columnheader "등급" [ref=e294]
+              - columnheader "패턴" [ref=e295]
+              - columnheader "후보선택" [ref=e296]
+          - rowgroup [ref=e297]:
+            - row "1 NVDA NVIDIA Corporation $5.21T $215.33 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e298] [cursor=pointer]:
+              - cell "1" [ref=e299]
+              - cell "NVDA NVIDIA Corporation" [ref=e300]:
+                - paragraph [ref=e301]: NVDA
+                - paragraph [ref=e303]: NVIDIA Corporation
+              - cell "$5.21T" [ref=e304]
+              - cell "$215.33" [ref=e305]
+              - cell "—" [ref=e306]
+              - cell "—" [ref=e307]
+              - cell "Pending" [ref=e308]
+              - cell "-" [ref=e309]:
+                - generic [ref=e310]: "-"
+              - cell [ref=e311]
+              - cell "Unknown DU - / PP - / unknown" [ref=e314]:
+                - generic [ref=e315]: Unknown
+                - paragraph [ref=e316]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e317]:
+                - text: "-"
+                - paragraph [ref=e318]: 피벗 미확정
+              - cell "Low Priority" [ref=e319]:
+                - generic [ref=e320]: Low Priority
+              - cell "-" [ref=e321]:
+                - paragraph [ref=e322]: "-"
+              - cell [ref=e323]:
+                - generic [ref=e324]:
+                  - button "NVDA 차트 보기" [ref=e325]:
+                    - img [ref=e326]
+                  - button [disabled] [ref=e329]:
+                    - img [ref=e330]
+            - row "2 GOOGL Alphabet Inc. $4.64T $382.97 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e331] [cursor=pointer]:
+              - cell "2" [ref=e332]
+              - cell "GOOGL Alphabet Inc." [ref=e333]:
+                - paragraph [ref=e334]: GOOGL
+                - paragraph [ref=e336]: Alphabet Inc.
+              - cell "$4.64T" [ref=e337]
+              - cell "$382.97" [ref=e338]
+              - cell "—" [ref=e339]
+              - cell "—" [ref=e340]
+              - cell "Pending" [ref=e341]
+              - cell "-" [ref=e342]:
+                - generic [ref=e343]: "-"
+              - cell [ref=e344]
+              - cell "Unknown DU - / PP - / unknown" [ref=e347]:
+                - generic [ref=e348]: Unknown
+                - paragraph [ref=e349]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e350]:
+                - text: "-"
+                - paragraph [ref=e351]: 피벗 미확정
+              - cell "Low Priority" [ref=e352]:
+                - generic [ref=e353]: Low Priority
+              - cell "-" [ref=e354]:
+                - paragraph [ref=e355]: "-"
+              - cell [ref=e356]:
+                - generic [ref=e357]:
+                  - button "GOOGL 차트 보기" [ref=e358]:
+                    - img [ref=e359]
+                  - button [disabled] [ref=e362]:
+                    - img [ref=e363]
+            - row "3 GOOG Alphabet Inc. $4.60T $379.38 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e364] [cursor=pointer]:
+              - cell "3" [ref=e365]
+              - cell "GOOG Alphabet Inc." [ref=e366]:
+                - paragraph [ref=e367]: GOOG
+                - paragraph [ref=e369]: Alphabet Inc.
+              - cell "$4.60T" [ref=e370]
+              - cell "$379.38" [ref=e371]
+              - cell "—" [ref=e372]
+              - cell "—" [ref=e373]
+              - cell "Pending" [ref=e374]
+              - cell "-" [ref=e375]:
+                - generic [ref=e376]: "-"
+              - cell [ref=e377]
+              - cell "Unknown DU - / PP - / unknown" [ref=e380]:
+                - generic [ref=e381]: Unknown
+                - paragraph [ref=e382]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e383]:
+                - text: "-"
+                - paragraph [ref=e384]: 피벗 미확정
+              - cell "Low Priority" [ref=e385]:
+                - generic [ref=e386]: Low Priority
+              - cell "-" [ref=e387]:
+                - paragraph [ref=e388]: "-"
+              - cell [ref=e389]:
+                - generic [ref=e390]:
+                  - button "GOOG 차트 보기" [ref=e391]:
+                    - img [ref=e392]
+                  - button [disabled] [ref=e395]:
+                    - img [ref=e396]
+            - row "4 AAPL Apple Inc. $4.54T $308.82 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e397] [cursor=pointer]:
+              - cell "4" [ref=e398]
+              - cell "AAPL Apple Inc." [ref=e399]:
+                - paragraph [ref=e400]: AAPL
+                - paragraph [ref=e402]: Apple Inc.
+              - cell "$4.54T" [ref=e403]
+              - cell "$308.82" [ref=e404]
+              - cell "—" [ref=e405]
+              - cell "—" [ref=e406]
+              - cell "Pending" [ref=e407]
+              - cell "-" [ref=e408]:
+                - generic [ref=e409]: "-"
+              - cell [ref=e410]
+              - cell "Unknown DU - / PP - / unknown" [ref=e413]:
+                - generic [ref=e414]: Unknown
+                - paragraph [ref=e415]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e416]:
+                - text: "-"
+                - paragraph [ref=e417]: 피벗 미확정
+              - cell "Low Priority" [ref=e418]:
+                - generic [ref=e419]: Low Priority
+              - cell "-" [ref=e420]:
+                - paragraph [ref=e421]: "-"
+              - cell [ref=e422]:
+                - generic [ref=e423]:
+                  - button "AAPL 차트 보기" [ref=e424]:
+                    - img [ref=e425]
+                  - button [disabled] [ref=e428]:
+                    - img [ref=e429]
+            - row "5 MSFT Microsoft Corporation $3.11T $418.57 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e430] [cursor=pointer]:
+              - cell "5" [ref=e431]
+              - cell "MSFT Microsoft Corporation" [ref=e432]:
+                - paragraph [ref=e433]: MSFT
+                - paragraph [ref=e435]: Microsoft Corporation
+              - cell "$3.11T" [ref=e436]
+              - cell "$418.57" [ref=e437]
+              - cell "—" [ref=e438]
+              - cell "—" [ref=e439]
+              - cell "Pending" [ref=e440]
+              - cell "-" [ref=e441]:
+                - generic [ref=e442]: "-"
+              - cell [ref=e443]
+              - cell "Unknown DU - / PP - / unknown" [ref=e446]:
+                - generic [ref=e447]: Unknown
+                - paragraph [ref=e448]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e449]:
+                - text: "-"
+                - paragraph [ref=e450]: 피벗 미확정
+              - cell "Low Priority" [ref=e451]:
+                - generic [ref=e452]: Low Priority
+              - cell "-" [ref=e453]:
+                - paragraph [ref=e454]: "-"
+              - cell [ref=e455]:
+                - generic [ref=e456]:
+                  - button "MSFT 차트 보기" [ref=e457]:
+                    - img [ref=e458]
+                  - button [disabled] [ref=e461]:
+                    - img [ref=e462]
+            - row "6 AMZN Amazon.com, Inc. $2.86T $266.32 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e463] [cursor=pointer]:
+              - cell "6" [ref=e464]
+              - cell "AMZN Amazon.com, Inc." [ref=e465]:
+                - paragraph [ref=e466]: AMZN
+                - paragraph [ref=e468]: Amazon.com, Inc.
+              - cell "$2.86T" [ref=e469]
+              - cell "$266.32" [ref=e470]
+              - cell "—" [ref=e471]
+              - cell "—" [ref=e472]
+              - cell "Pending" [ref=e473]
+              - cell "-" [ref=e474]:
+                - generic [ref=e475]: "-"
+              - cell [ref=e476]
+              - cell "Unknown DU - / PP - / unknown" [ref=e479]:
+                - generic [ref=e480]: Unknown
+                - paragraph [ref=e481]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e482]:
+                - text: "-"
+                - paragraph [ref=e483]: 피벗 미확정
+              - cell "Low Priority" [ref=e484]:
+                - generic [ref=e485]: Low Priority
+              - cell "-" [ref=e486]:
+                - paragraph [ref=e487]: "-"
+              - cell [ref=e488]:
+                - generic [ref=e489]:
+                  - button "AMZN 차트 보기" [ref=e490]:
+                    - img [ref=e491]
+                  - button [disabled] [ref=e494]:
+                    - img [ref=e495]
+            - row "7 AVGO Broadcom Inc. $1.96T $414.14 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e496] [cursor=pointer]:
+              - cell "7" [ref=e497]
+              - cell "AVGO Broadcom Inc." [ref=e498]:
+                - paragraph [ref=e499]: AVGO
+                - paragraph [ref=e501]: Broadcom Inc.
+              - cell "$1.96T" [ref=e502]
+              - cell "$414.14" [ref=e503]
+              - cell "—" [ref=e504]
+              - cell "—" [ref=e505]
+              - cell "Pending" [ref=e506]
+              - cell "-" [ref=e507]:
+                - generic [ref=e508]: "-"
+              - cell [ref=e509]
+              - cell "Unknown DU - / PP - / unknown" [ref=e512]:
+                - generic [ref=e513]: Unknown
+                - paragraph [ref=e514]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e515]:
+                - text: "-"
+                - paragraph [ref=e516]: 피벗 미확정
+              - cell "Low Priority" [ref=e517]:
+                - generic [ref=e518]: Low Priority
+              - cell "-" [ref=e519]:
+                - paragraph [ref=e520]: "-"
+              - cell [ref=e521]:
+                - generic [ref=e522]:
+                  - button "AVGO 차트 보기" [ref=e523]:
+                    - img [ref=e524]
+                  - button [disabled] [ref=e527]:
+                    - img [ref=e528]
+            - row "8 TSLA Tesla, Inc. $1.60T $426.01 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e529] [cursor=pointer]:
+              - cell "8" [ref=e530]
+              - cell "TSLA Tesla, Inc." [ref=e531]:
+                - paragraph [ref=e532]: TSLA
+                - paragraph [ref=e534]: Tesla, Inc.
+              - cell "$1.60T" [ref=e535]
+              - cell "$426.01" [ref=e536]
+              - cell "—" [ref=e537]
+              - cell "—" [ref=e538]
+              - cell "Pending" [ref=e539]
+              - cell "-" [ref=e540]:
+                - generic [ref=e541]: "-"
+              - cell [ref=e542]
+              - cell "Unknown DU - / PP - / unknown" [ref=e545]:
+                - generic [ref=e546]: Unknown
+                - paragraph [ref=e547]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e548]:
+                - text: "-"
+                - paragraph [ref=e549]: 피벗 미확정
+              - cell "Low Priority" [ref=e550]:
+                - generic [ref=e551]: Low Priority
+              - cell "-" [ref=e552]:
+                - paragraph [ref=e553]: "-"
+              - cell [ref=e554]:
+                - generic [ref=e555]:
+                  - button "TSLA 차트 보기" [ref=e556]:
+                    - img [ref=e557]
+                  - button [disabled] [ref=e560]:
+                    - img [ref=e561]
+            - row "9 META Meta Platforms, Inc. $1.55T $610.26 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e562] [cursor=pointer]:
+              - cell "9" [ref=e563]
+              - cell "META Meta Platforms, Inc." [ref=e564]:
+                - paragraph [ref=e565]: META
+                - paragraph [ref=e567]: Meta Platforms, Inc.
+              - cell "$1.55T" [ref=e568]
+              - cell "$610.26" [ref=e569]
+              - cell "—" [ref=e570]
+              - cell "—" [ref=e571]
+              - cell "Pending" [ref=e572]
+              - cell "-" [ref=e573]:
+                - generic [ref=e574]: "-"
+              - cell [ref=e575]
+              - cell "Unknown DU - / PP - / unknown" [ref=e578]:
+                - generic [ref=e579]: Unknown
+                - paragraph [ref=e580]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e581]:
+                - text: "-"
+                - paragraph [ref=e582]: 피벗 미확정
+              - cell "Low Priority" [ref=e583]:
+                - generic [ref=e584]: Low Priority
+              - cell "-" [ref=e585]:
+                - paragraph [ref=e586]: "-"
+              - cell [ref=e587]:
+                - generic [ref=e588]:
+                  - button "META 차트 보기" [ref=e589]:
+                    - img [ref=e590]
+                  - button [disabled] [ref=e593]:
+                    - img [ref=e594]
+            - row "10 WMT Walmart Inc. $958.8B $120.27 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e595] [cursor=pointer]:
+              - cell "10" [ref=e596]
+              - cell "WMT Walmart Inc." [ref=e597]:
+                - paragraph [ref=e598]: WMT
+                - paragraph [ref=e600]: Walmart Inc.
+              - cell "$958.8B" [ref=e601]
+              - cell "$120.27" [ref=e602]
+              - cell "—" [ref=e603]
+              - cell "—" [ref=e604]
+              - cell "Pending" [ref=e605]
+              - cell "-" [ref=e606]:
+                - generic [ref=e607]: "-"
+              - cell [ref=e608]
+              - cell "Unknown DU - / PP - / unknown" [ref=e611]:
+                - generic [ref=e612]: Unknown
+                - paragraph [ref=e613]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e614]:
+                - text: "-"
+                - paragraph [ref=e615]: 피벗 미확정
+              - cell "Low Priority" [ref=e616]:
+                - generic [ref=e617]: Low Priority
+              - cell "-" [ref=e618]:
+                - paragraph [ref=e619]: "-"
+              - cell [ref=e620]:
+                - generic [ref=e621]:
+                  - button "WMT 차트 보기" [ref=e622]:
+                    - img [ref=e623]
+                  - button [disabled] [ref=e626]:
+                    - img [ref=e627]
+            - row "11 MU Micron Technology, Inc. $846.9B $751.00 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e628] [cursor=pointer]:
+              - cell "11" [ref=e629]
+              - cell "MU Micron Technology, Inc." [ref=e630]:
+                - paragraph [ref=e631]: MU
+                - paragraph [ref=e633]: Micron Technology, Inc.
+              - cell "$846.9B" [ref=e634]
+              - cell "$751.00" [ref=e635]
+              - cell "—" [ref=e636]
+              - cell "—" [ref=e637]
+              - cell "Pending" [ref=e638]
+              - cell "-" [ref=e639]:
+                - generic [ref=e640]: "-"
+              - cell [ref=e641]
+              - cell "Unknown DU - / PP - / unknown" [ref=e644]:
+                - generic [ref=e645]: Unknown
+                - paragraph [ref=e646]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e647]:
+                - text: "-"
+                - paragraph [ref=e648]: 피벗 미확정
+              - cell "Low Priority" [ref=e649]:
+                - generic [ref=e650]: Low Priority
+              - cell "-" [ref=e651]:
+                - paragraph [ref=e652]: "-"
+              - cell [ref=e653]:
+                - generic [ref=e654]:
+                  - button "MU 차트 보기" [ref=e655]:
+                    - img [ref=e656]
+                  - button [disabled] [ref=e659]:
+                    - img [ref=e660]
+            - row "12 AMD Advanced Micro Devices, Inc. $762.3B $467.51 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e661] [cursor=pointer]:
+              - cell "12" [ref=e662]
+              - cell "AMD Advanced Micro Devices, Inc." [ref=e663]:
+                - paragraph [ref=e664]: AMD
+                - paragraph [ref=e666]: Advanced Micro Devices, Inc.
+              - cell "$762.3B" [ref=e667]
+              - cell "$467.51" [ref=e668]
+              - cell "—" [ref=e669]
+              - cell "—" [ref=e670]
+              - cell "Pending" [ref=e671]
+              - cell "-" [ref=e672]:
+                - generic [ref=e673]: "-"
+              - cell [ref=e674]
+              - cell "Unknown DU - / PP - / unknown" [ref=e677]:
+                - generic [ref=e678]: Unknown
+                - paragraph [ref=e679]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e680]:
+                - text: "-"
+                - paragraph [ref=e681]: 피벗 미확정
+              - cell "Low Priority" [ref=e682]:
+                - generic [ref=e683]: Low Priority
+              - cell "-" [ref=e684]:
+                - paragraph [ref=e685]: "-"
+              - cell [ref=e686]:
+                - generic [ref=e687]:
+                  - button "AMD 차트 보기" [ref=e688]:
+                    - img [ref=e689]
+                  - button [disabled] [ref=e692]:
+                    - img [ref=e693]
+            - row "13 ASML ASML Holding N.V. New York Registry Shares $629.3B $1,632.90 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e694] [cursor=pointer]:
+              - cell "13" [ref=e695]
+              - cell "ASML ASML Holding N.V. New York Registry Shares" [ref=e696]:
+                - paragraph [ref=e697]: ASML
+                - paragraph [ref=e699]: ASML Holding N.V. New York Registry Shares
+              - cell "$629.3B" [ref=e700]
+              - cell "$1,632.90" [ref=e701]
+              - cell "—" [ref=e702]
+              - cell "—" [ref=e703]
+              - cell "Pending" [ref=e704]
+              - cell "-" [ref=e705]:
+                - generic [ref=e706]: "-"
+              - cell [ref=e707]
+              - cell "Unknown DU - / PP - / unknown" [ref=e710]:
+                - generic [ref=e711]: Unknown
+                - paragraph [ref=e712]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e713]:
+                - text: "-"
+                - paragraph [ref=e714]: 피벗 미확정
+              - cell "Low Priority" [ref=e715]:
+                - generic [ref=e716]: Low Priority
+              - cell "-" [ref=e717]:
+                - paragraph [ref=e718]: "-"
+              - cell [ref=e719]:
+                - generic [ref=e720]:
+                  - button "ASML 차트 보기" [ref=e721]:
+                    - img [ref=e722]
+                  - button [disabled] [ref=e725]:
+                    - img [ref=e726]
+            - row "14 INTC Intel Corporation $602.3B $119.84 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e727] [cursor=pointer]:
+              - cell "14" [ref=e728]
+              - cell "INTC Intel Corporation" [ref=e729]:
+                - paragraph [ref=e730]: INTC
+                - paragraph [ref=e732]: Intel Corporation
+              - cell "$602.3B" [ref=e733]
+              - cell "$119.84" [ref=e734]
+              - cell "—" [ref=e735]
+              - cell "—" [ref=e736]
+              - cell "Pending" [ref=e737]
+              - cell "-" [ref=e738]:
+                - generic [ref=e739]: "-"
+              - cell [ref=e740]
+              - cell "Unknown DU - / PP - / unknown" [ref=e743]:
+                - generic [ref=e744]: Unknown
+                - paragraph [ref=e745]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e746]:
+                - text: "-"
+                - paragraph [ref=e747]: 피벗 미확정
+              - cell "Low Priority" [ref=e748]:
+                - generic [ref=e749]: Low Priority
+              - cell "-" [ref=e750]:
+                - paragraph [ref=e751]: "-"
+              - cell [ref=e752]:
+                - generic [ref=e753]:
+                  - button "INTC 차트 보기" [ref=e754]:
+                    - img [ref=e755]
+                  - button [disabled] [ref=e758]:
+                    - img [ref=e759]
+            - row "15 CSCO Cisco Systems, Inc. $474.6B $120.41 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e760] [cursor=pointer]:
+              - cell "15" [ref=e761]
+              - cell "CSCO Cisco Systems, Inc." [ref=e762]:
+                - paragraph [ref=e763]: CSCO
+                - paragraph [ref=e765]: Cisco Systems, Inc.
+              - cell "$474.6B" [ref=e766]
+              - cell "$120.41" [ref=e767]
+              - cell "—" [ref=e768]
+              - cell "—" [ref=e769]
+              - cell "Pending" [ref=e770]
+              - cell "-" [ref=e771]:
+                - generic [ref=e772]: "-"
+              - cell [ref=e773]
+              - cell "Unknown DU - / PP - / unknown" [ref=e776]:
+                - generic [ref=e777]: Unknown
+                - paragraph [ref=e778]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e779]:
+                - text: "-"
+                - paragraph [ref=e780]: 피벗 미확정
+              - cell "Low Priority" [ref=e781]:
+                - generic [ref=e782]: Low Priority
+              - cell "-" [ref=e783]:
+                - paragraph [ref=e784]: "-"
+              - cell [ref=e785]:
+                - generic [ref=e786]:
+                  - button "CSCO 차트 보기" [ref=e787]:
+                    - img [ref=e788]
+                  - button [disabled] [ref=e791]:
+                    - img [ref=e792]
+            - row "16 COST Costco Wholesale Corporation $456.2B $1,028.24 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e793] [cursor=pointer]:
+              - cell "16" [ref=e794]
+              - cell "COST Costco Wholesale Corporation" [ref=e795]:
+                - paragraph [ref=e796]: COST
+                - paragraph [ref=e798]: Costco Wholesale Corporation
+              - cell "$456.2B" [ref=e799]
+              - cell "$1,028.24" [ref=e800]
+              - cell "—" [ref=e801]
+              - cell "—" [ref=e802]
+              - cell "Pending" [ref=e803]
+              - cell "-" [ref=e804]:
+                - generic [ref=e805]: "-"
+              - cell [ref=e806]
+              - cell "Unknown DU - / PP - / unknown" [ref=e809]:
+                - generic [ref=e810]: Unknown
+                - paragraph [ref=e811]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e812]:
+                - text: "-"
+                - paragraph [ref=e813]: 피벗 미확정
+              - cell "Low Priority" [ref=e814]:
+                - generic [ref=e815]: Low Priority
+              - cell "-" [ref=e816]:
+                - paragraph [ref=e817]: "-"
+              - cell [ref=e818]:
+                - generic [ref=e819]:
+                  - button "COST 차트 보기" [ref=e820]:
+                    - img [ref=e821]
+                  - button [disabled] [ref=e824]:
+                    - img [ref=e825]
+            - row "17 LRCX Lam Research Corporation $381.9B $305.35 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e826] [cursor=pointer]:
+              - cell "17" [ref=e827]
+              - cell "LRCX Lam Research Corporation" [ref=e828]:
+                - paragraph [ref=e829]: LRCX
+                - paragraph [ref=e831]: Lam Research Corporation
+              - cell "$381.9B" [ref=e832]
+              - cell "$305.35" [ref=e833]
+              - cell "—" [ref=e834]
+              - cell "—" [ref=e835]
+              - cell "Pending" [ref=e836]
+              - cell "-" [ref=e837]:
+                - generic [ref=e838]: "-"
+              - cell [ref=e839]
+              - cell "Unknown DU - / PP - / unknown" [ref=e842]:
+                - generic [ref=e843]: Unknown
+                - paragraph [ref=e844]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e845]:
+                - text: "-"
+                - paragraph [ref=e846]: 피벗 미확정
+              - cell "Low Priority" [ref=e847]:
+                - generic [ref=e848]: Low Priority
+              - cell "-" [ref=e849]:
+                - paragraph [ref=e850]: "-"
+              - cell [ref=e851]:
+                - generic [ref=e852]:
+                  - button "LRCX 차트 보기" [ref=e853]:
+                    - img [ref=e854]
+                  - button [disabled] [ref=e857]:
+                    - img [ref=e858]
+            - row "18 NFLX Netflix, Inc. $373.1B $88.60 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e859] [cursor=pointer]:
+              - cell "18" [ref=e860]
+              - cell "NFLX Netflix, Inc." [ref=e861]:
+                - paragraph [ref=e862]: NFLX
+                - paragraph [ref=e864]: Netflix, Inc.
+              - cell "$373.1B" [ref=e865]
+              - cell "$88.60" [ref=e866]
+              - cell "—" [ref=e867]
+              - cell "—" [ref=e868]
+              - cell "Pending" [ref=e869]
+              - cell "-" [ref=e870]:
+                - generic [ref=e871]: "-"
+              - cell [ref=e872]
+              - cell "Unknown DU - / PP - / unknown" [ref=e875]:
+                - generic [ref=e876]: Unknown
+                - paragraph [ref=e877]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e878]:
+                - text: "-"
+                - paragraph [ref=e879]: 피벗 미확정
+              - cell "Low Priority" [ref=e880]:
+                - generic [ref=e881]: Low Priority
+              - cell "-" [ref=e882]:
+                - paragraph [ref=e883]: "-"
+              - cell [ref=e884]:
+                - generic [ref=e885]:
+                  - button "NFLX 차트 보기" [ref=e886]:
+                    - img [ref=e887]
+                  - button [disabled] [ref=e890]:
+                    - img [ref=e891]
+            - row "19 AMAT Applied Materials, Inc. $343.0B $432.16 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e892] [cursor=pointer]:
+              - cell "19" [ref=e893]
+              - cell "AMAT Applied Materials, Inc." [ref=e894]:
+                - paragraph [ref=e895]: AMAT
+                - paragraph [ref=e897]: Applied Materials, Inc.
+              - cell "$343.0B" [ref=e898]
+              - cell "$432.16" [ref=e899]
+              - cell "—" [ref=e900]
+              - cell "—" [ref=e901]
+              - cell "Pending" [ref=e902]
+              - cell "-" [ref=e903]:
+                - generic [ref=e904]: "-"
+              - cell [ref=e905]
+              - cell "Unknown DU - / PP - / unknown" [ref=e908]:
+                - generic [ref=e909]: Unknown
+                - paragraph [ref=e910]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e911]:
+                - text: "-"
+                - paragraph [ref=e912]: 피벗 미확정
+              - cell "Low Priority" [ref=e913]:
+                - generic [ref=e914]: Low Priority
+              - cell "-" [ref=e915]:
+                - paragraph [ref=e916]: "-"
+              - cell [ref=e917]:
+                - generic [ref=e918]:
+                  - button "AMAT 차트 보기" [ref=e919]:
+                    - img [ref=e920]
+                  - button [disabled] [ref=e923]:
+                    - img [ref=e924]
+            - row "20 PLTR Palantir Technologies Inc. $328.1B $136.88 — — Pending - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e925] [cursor=pointer]:
+              - cell "20" [ref=e926]
+              - cell "PLTR Palantir Technologies Inc." [ref=e927]:
+                - paragraph [ref=e928]: PLTR
+                - paragraph [ref=e930]: Palantir Technologies Inc.
+              - cell "$328.1B" [ref=e931]
+              - cell "$136.88" [ref=e932]
+              - cell "—" [ref=e933]
+              - cell "—" [ref=e934]
+              - cell "Pending" [ref=e935]
+              - cell "-" [ref=e936]:
+                - generic [ref=e937]: "-"
+              - cell [ref=e938]
+              - cell "Unknown DU - / PP - / unknown" [ref=e941]:
+                - generic [ref=e942]: Unknown
+                - paragraph [ref=e943]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e944]:
+                - text: "-"
+                - paragraph [ref=e945]: 피벗 미확정
+              - cell "Low Priority" [ref=e946]:
+                - generic [ref=e947]: Low Priority
+              - cell "-" [ref=e948]:
+                - paragraph [ref=e949]: "-"
+              - cell [ref=e950]:
+                - generic [ref=e951]:
+                  - button "PLTR 차트 보기" [ref=e952]:
+                    - img [ref=e953]
+                  - button [disabled] [ref=e956]:
+                    - img [ref=e957]
+            - row "21 ARM Arm Holdings plc $324.7B $306.51 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e958] [cursor=pointer]:
+              - cell "21" [ref=e959]
+              - cell "ARM Arm Holdings plc" [ref=e960]:
+                - paragraph [ref=e961]: ARM
+                - paragraph [ref=e963]: Arm Holdings plc
+              - cell "$324.7B" [ref=e964]
+              - cell "$306.51" [ref=e965]
+              - cell "—" [ref=e966]
+              - cell "—" [ref=e967]
+              - cell "Pending" [ref=e968]
+              - cell "-" [ref=e969]:
+                - generic [ref=e970]: "-"
+              - cell "-" [ref=e971]
+              - cell "Unknown DU - / PP - / unknown" [ref=e972]:
+                - generic [ref=e973]: Unknown
+                - paragraph [ref=e974]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e975]:
+                - text: "-"
+                - paragraph [ref=e976]: 피벗 미확정
+              - cell "Low Priority" [ref=e977]:
+                - generic [ref=e978]: Low Priority
+              - cell "-" [ref=e979]:
+                - paragraph [ref=e980]: "-"
+              - cell [ref=e981]:
+                - generic [ref=e982]:
+                  - button "ARM 차트 보기" [ref=e983]:
+                    - img [ref=e984]
+                  - button [disabled] [ref=e987]:
+                    - img [ref=e988]
+            - row "22 TXN Texas Instruments Incorporated $281.4B $309.21 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e989] [cursor=pointer]:
+              - cell "22" [ref=e990]
+              - cell "TXN Texas Instruments Incorporated" [ref=e991]:
+                - paragraph [ref=e992]: TXN
+                - paragraph [ref=e994]: Texas Instruments Incorporated
+              - cell "$281.4B" [ref=e995]
+              - cell "$309.21" [ref=e996]
+              - cell "—" [ref=e997]
+              - cell "—" [ref=e998]
+              - cell "Pending" [ref=e999]
+              - cell "-" [ref=e1000]:
+                - generic [ref=e1001]: "-"
+              - cell "-" [ref=e1002]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1003]:
+                - generic [ref=e1004]: Unknown
+                - paragraph [ref=e1005]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1006]:
+                - text: "-"
+                - paragraph [ref=e1007]: 피벗 미확정
+              - cell "Low Priority" [ref=e1008]:
+                - generic [ref=e1009]: Low Priority
+              - cell "-" [ref=e1010]:
+                - paragraph [ref=e1011]: "-"
+              - cell [ref=e1012]:
+                - generic [ref=e1013]:
+                  - button "TXN 차트 보기" [ref=e1014]:
+                    - img [ref=e1015]
+                  - button [disabled] [ref=e1018]:
+                    - img [ref=e1019]
+            - row "23 QCOM QUALCOMM Incorporated $251.0B $238.16 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1020] [cursor=pointer]:
+              - cell "23" [ref=e1021]
+              - cell "QCOM QUALCOMM Incorporated" [ref=e1022]:
+                - paragraph [ref=e1023]: QCOM
+                - paragraph [ref=e1025]: QUALCOMM Incorporated
+              - cell "$251.0B" [ref=e1026]
+              - cell "$238.16" [ref=e1027]
+              - cell "—" [ref=e1028]
+              - cell "—" [ref=e1029]
+              - cell "Pending" [ref=e1030]
+              - cell "-" [ref=e1031]:
+                - generic [ref=e1032]: "-"
+              - cell "-" [ref=e1033]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1034]:
+                - generic [ref=e1035]: Unknown
+                - paragraph [ref=e1036]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1037]:
+                - text: "-"
+                - paragraph [ref=e1038]: 피벗 미확정
+              - cell "Low Priority" [ref=e1039]:
+                - generic [ref=e1040]: Low Priority
+              - cell "-" [ref=e1041]:
+                - paragraph [ref=e1042]: "-"
+              - cell [ref=e1043]:
+                - generic [ref=e1044]:
+                  - button "QCOM 차트 보기" [ref=e1045]:
+                    - img [ref=e1046]
+                  - button [disabled] [ref=e1049]:
+                    - img [ref=e1050]
+            - row "24 KLAC KLA Corporation $246.7B $1,888.38 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1051] [cursor=pointer]:
+              - cell "24" [ref=e1052]
+              - cell "KLAC KLA Corporation" [ref=e1053]:
+                - paragraph [ref=e1054]: KLAC
+                - paragraph [ref=e1056]: KLA Corporation
+              - cell "$246.7B" [ref=e1057]
+              - cell "$1,888.38" [ref=e1058]
+              - cell "—" [ref=e1059]
+              - cell "—" [ref=e1060]
+              - cell "Pending" [ref=e1061]
+              - cell "-" [ref=e1062]:
+                - generic [ref=e1063]: "-"
+              - cell "-" [ref=e1064]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1065]:
+                - generic [ref=e1066]: Unknown
+                - paragraph [ref=e1067]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1068]:
+                - text: "-"
+                - paragraph [ref=e1069]: 피벗 미확정
+              - cell "Low Priority" [ref=e1070]:
+                - generic [ref=e1071]: Low Priority
+              - cell "-" [ref=e1072]:
+                - paragraph [ref=e1073]: "-"
+              - cell [ref=e1074]:
+                - generic [ref=e1075]:
+                  - button "KLAC 차트 보기" [ref=e1076]:
+                    - img [ref=e1077]
+                  - button [disabled] [ref=e1080]:
+                    - img [ref=e1081]
+            - row "25 LIN Linde plc $239.4B $517.58 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1082] [cursor=pointer]:
+              - cell "25" [ref=e1083]
+              - cell "LIN Linde plc" [ref=e1084]:
+                - paragraph [ref=e1085]: LIN
+                - paragraph [ref=e1087]: Linde plc
+              - cell "$239.4B" [ref=e1088]
+              - cell "$517.58" [ref=e1089]
+              - cell "—" [ref=e1090]
+              - cell "—" [ref=e1091]
+              - cell "Pending" [ref=e1092]
+              - cell "-" [ref=e1093]:
+                - generic [ref=e1094]: "-"
+              - cell "-" [ref=e1095]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1096]:
+                - generic [ref=e1097]: Unknown
+                - paragraph [ref=e1098]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1099]:
+                - text: "-"
+                - paragraph [ref=e1100]: 피벗 미확정
+              - cell "Low Priority" [ref=e1101]:
+                - generic [ref=e1102]: Low Priority
+              - cell "-" [ref=e1103]:
+                - paragraph [ref=e1104]: "-"
+              - cell [ref=e1105]:
+                - generic [ref=e1106]:
+                  - button "LIN 차트 보기" [ref=e1107]:
+                    - img [ref=e1108]
+                  - button [disabled] [ref=e1111]:
+                    - img [ref=e1112]
+            - row "26 SNDK Sandisk Corporation $219.0B $1,478.69 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1113] [cursor=pointer]:
+              - cell "26" [ref=e1114]
+              - cell "SNDK Sandisk Corporation" [ref=e1115]:
+                - paragraph [ref=e1116]: SNDK
+                - paragraph [ref=e1118]: Sandisk Corporation
+              - cell "$219.0B" [ref=e1119]
+              - cell "$1,478.69" [ref=e1120]
+              - cell "—" [ref=e1121]
+              - cell "—" [ref=e1122]
+              - cell "Pending" [ref=e1123]
+              - cell "-" [ref=e1124]:
+                - generic [ref=e1125]: "-"
+              - cell "-" [ref=e1126]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1127]:
+                - generic [ref=e1128]: Unknown
+                - paragraph [ref=e1129]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1130]:
+                - text: "-"
+                - paragraph [ref=e1131]: 피벗 미확정
+              - cell "Low Priority" [ref=e1132]:
+                - generic [ref=e1133]: Low Priority
+              - cell "-" [ref=e1134]:
+                - paragraph [ref=e1135]: "-"
+              - cell [ref=e1136]:
+                - generic [ref=e1137]:
+                  - button "SNDK 차트 보기" [ref=e1138]:
+                    - img [ref=e1139]
+                  - button [disabled] [ref=e1142]:
+                    - img [ref=e1143]
+            - row "27 PANW Palo Alto Networks, Inc. $212.6B $260.58 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1144] [cursor=pointer]:
+              - cell "27" [ref=e1145]
+              - cell "PANW Palo Alto Networks, Inc." [ref=e1146]:
+                - paragraph [ref=e1147]: PANW
+                - paragraph [ref=e1149]: Palo Alto Networks, Inc.
+              - cell "$212.6B" [ref=e1150]
+              - cell "$260.58" [ref=e1151]
+              - cell "—" [ref=e1152]
+              - cell "—" [ref=e1153]
+              - cell "Pending" [ref=e1154]
+              - cell "-" [ref=e1155]:
+                - generic [ref=e1156]: "-"
+              - cell "-" [ref=e1157]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1158]:
+                - generic [ref=e1159]: Unknown
+                - paragraph [ref=e1160]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1161]:
+                - text: "-"
+                - paragraph [ref=e1162]: 피벗 미확정
+              - cell "Low Priority" [ref=e1163]:
+                - generic [ref=e1164]: Low Priority
+              - cell "-" [ref=e1165]:
+                - paragraph [ref=e1166]: "-"
+              - cell [ref=e1167]:
+                - generic [ref=e1168]:
+                  - button "PANW 차트 보기" [ref=e1169]:
+                    - img [ref=e1170]
+                  - button [disabled] [ref=e1173]:
+                    - img [ref=e1174]
+            - row "28 TMUS T-Mobile US, Inc. $207.2B $191.47 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1175] [cursor=pointer]:
+              - cell "28" [ref=e1176]
+              - cell "TMUS T-Mobile US, Inc." [ref=e1177]:
+                - paragraph [ref=e1178]: TMUS
+                - paragraph [ref=e1180]: T-Mobile US, Inc.
+              - cell "$207.2B" [ref=e1181]
+              - cell "$191.47" [ref=e1182]
+              - cell "—" [ref=e1183]
+              - cell "—" [ref=e1184]
+              - cell "Pending" [ref=e1185]
+              - cell "-" [ref=e1186]:
+                - generic [ref=e1187]: "-"
+              - cell "-" [ref=e1188]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1189]:
+                - generic [ref=e1190]: Unknown
+                - paragraph [ref=e1191]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1192]:
+                - text: "-"
+                - paragraph [ref=e1193]: 피벗 미확정
+              - cell "Low Priority" [ref=e1194]:
+                - generic [ref=e1195]: Low Priority
+              - cell "-" [ref=e1196]:
+                - paragraph [ref=e1197]: "-"
+              - cell [ref=e1198]:
+                - generic [ref=e1199]:
+                  - button "TMUS 차트 보기" [ref=e1200]:
+                    - img [ref=e1201]
+                  - button [disabled] [ref=e1204]:
+                    - img [ref=e1205]
+            - row "29 PEP PepsiCo, Inc. $205.8B $150.57 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1206] [cursor=pointer]:
+              - cell "29" [ref=e1207]
+              - cell "PEP PepsiCo, Inc." [ref=e1208]:
+                - paragraph [ref=e1209]: PEP
+                - paragraph [ref=e1211]: PepsiCo, Inc.
+              - cell "$205.8B" [ref=e1212]
+              - cell "$150.57" [ref=e1213]
+              - cell "—" [ref=e1214]
+              - cell "—" [ref=e1215]
+              - cell "Pending" [ref=e1216]
+              - cell "-" [ref=e1217]:
+                - generic [ref=e1218]: "-"
+              - cell "-" [ref=e1219]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1220]:
+                - generic [ref=e1221]: Unknown
+                - paragraph [ref=e1222]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1223]:
+                - text: "-"
+                - paragraph [ref=e1224]: 피벗 미확정
+              - cell "Low Priority" [ref=e1225]:
+                - generic [ref=e1226]: Low Priority
+              - cell "-" [ref=e1227]:
+                - paragraph [ref=e1228]: "-"
+              - cell [ref=e1229]:
+                - generic [ref=e1230]:
+                  - button "PEP 차트 보기" [ref=e1231]:
+                    - img [ref=e1232]
+                  - button [disabled] [ref=e1235]:
+                    - img [ref=e1236]
+            - row "30 ADI Analog Devices, Inc. $193.4B $397.07 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1237] [cursor=pointer]:
+              - cell "30" [ref=e1238]
+              - cell "ADI Analog Devices, Inc." [ref=e1239]:
+                - paragraph [ref=e1240]: ADI
+                - paragraph [ref=e1242]: Analog Devices, Inc.
+              - cell "$193.4B" [ref=e1243]
+              - cell "$397.07" [ref=e1244]
+              - cell "—" [ref=e1245]
+              - cell "—" [ref=e1246]
+              - cell "Pending" [ref=e1247]
+              - cell "-" [ref=e1248]:
+                - generic [ref=e1249]: "-"
+              - cell "-" [ref=e1250]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1251]:
+                - generic [ref=e1252]: Unknown
+                - paragraph [ref=e1253]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1254]:
+                - text: "-"
+                - paragraph [ref=e1255]: 피벗 미확정
+              - cell "Low Priority" [ref=e1256]:
+                - generic [ref=e1257]: Low Priority
+              - cell "-" [ref=e1258]:
+                - paragraph [ref=e1259]: "-"
+              - cell [ref=e1260]:
+                - generic [ref=e1261]:
+                  - button "ADI 차트 보기" [ref=e1262]:
+                    - img [ref=e1263]
+                  - button [disabled] [ref=e1266]:
+                    - img [ref=e1267]
+            - row "31 AMGN Amgen Inc. $183.1B $339.30 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1268] [cursor=pointer]:
+              - cell "31" [ref=e1269]
+              - cell "AMGN Amgen Inc." [ref=e1270]:
+                - paragraph [ref=e1271]: AMGN
+                - paragraph [ref=e1273]: Amgen Inc.
+              - cell "$183.1B" [ref=e1274]
+              - cell "$339.30" [ref=e1275]
+              - cell "—" [ref=e1276]
+              - cell "—" [ref=e1277]
+              - cell "Pending" [ref=e1278]
+              - cell "-" [ref=e1279]:
+                - generic [ref=e1280]: "-"
+              - cell "-" [ref=e1281]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1282]:
+                - generic [ref=e1283]: Unknown
+                - paragraph [ref=e1284]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1285]:
+                - text: "-"
+                - paragraph [ref=e1286]: 피벗 미확정
+              - cell "Low Priority" [ref=e1287]:
+                - generic [ref=e1288]: Low Priority
+              - cell "-" [ref=e1289]:
+                - paragraph [ref=e1290]: "-"
+              - cell [ref=e1291]:
+                - generic [ref=e1292]:
+                  - button "AMGN 차트 보기" [ref=e1293]:
+                    - img [ref=e1294]
+                  - button [disabled] [ref=e1297]:
+                    - img [ref=e1298]
+            - row "32 STX Seagate Technology Holdings PLC $182.2B $812.73 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1299] [cursor=pointer]:
+              - cell "32" [ref=e1300]
+              - cell "STX Seagate Technology Holdings PLC" [ref=e1301]:
+                - paragraph [ref=e1302]: STX
+                - paragraph [ref=e1304]: Seagate Technology Holdings PLC
+              - cell "$182.2B" [ref=e1305]
+              - cell "$812.73" [ref=e1306]
+              - cell "—" [ref=e1307]
+              - cell "—" [ref=e1308]
+              - cell "Pending" [ref=e1309]
+              - cell "-" [ref=e1310]:
+                - generic [ref=e1311]: "-"
+              - cell "-" [ref=e1312]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1313]:
+                - generic [ref=e1314]: Unknown
+                - paragraph [ref=e1315]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1316]:
+                - text: "-"
+                - paragraph [ref=e1317]: 피벗 미확정
+              - cell "Low Priority" [ref=e1318]:
+                - generic [ref=e1319]: Low Priority
+              - cell "-" [ref=e1320]:
+                - paragraph [ref=e1321]: "-"
+              - cell [ref=e1322]:
+                - generic [ref=e1323]:
+                  - button "STX 차트 보기" [ref=e1324]:
+                    - img [ref=e1325]
+                  - button [disabled] [ref=e1328]:
+                    - img [ref=e1329]
+            - row "33 MRVL Marvell Technology, Inc. $171.9B $196.33 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1330] [cursor=pointer]:
+              - cell "33" [ref=e1331]
+              - cell "MRVL Marvell Technology, Inc." [ref=e1332]:
+                - paragraph [ref=e1333]: MRVL
+                - paragraph [ref=e1335]: Marvell Technology, Inc.
+              - cell "$171.9B" [ref=e1336]
+              - cell "$196.33" [ref=e1337]
+              - cell "—" [ref=e1338]
+              - cell "—" [ref=e1339]
+              - cell "Pending" [ref=e1340]
+              - cell "-" [ref=e1341]:
+                - generic [ref=e1342]: "-"
+              - cell "-" [ref=e1343]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1344]:
+                - generic [ref=e1345]: Unknown
+                - paragraph [ref=e1346]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1347]:
+                - text: "-"
+                - paragraph [ref=e1348]: 피벗 미확정
+              - cell "Low Priority" [ref=e1349]:
+                - generic [ref=e1350]: Low Priority
+              - cell "-" [ref=e1351]:
+                - paragraph [ref=e1352]: "-"
+              - cell [ref=e1353]:
+                - generic [ref=e1354]:
+                  - button "MRVL 차트 보기" [ref=e1355]:
+                    - img [ref=e1356]
+                  - button [disabled] [ref=e1359]:
+                    - img [ref=e1360]
+            - row "34 CRWD CrowdStrike Holdings, Inc. $168.9B $663.46 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1361] [cursor=pointer]:
+              - cell "34" [ref=e1362]
+              - cell "CRWD CrowdStrike Holdings, Inc." [ref=e1363]:
+                - paragraph [ref=e1364]: CRWD
+                - paragraph [ref=e1366]: CrowdStrike Holdings, Inc.
+              - cell "$168.9B" [ref=e1367]
+              - cell "$663.46" [ref=e1368]
+              - cell "—" [ref=e1369]
+              - cell "—" [ref=e1370]
+              - cell "Pending" [ref=e1371]
+              - cell "-" [ref=e1372]:
+                - generic [ref=e1373]: "-"
+              - cell "-" [ref=e1374]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1375]:
+                - generic [ref=e1376]: Unknown
+                - paragraph [ref=e1377]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1378]:
+                - text: "-"
+                - paragraph [ref=e1379]: 피벗 미확정
+              - cell "Low Priority" [ref=e1380]:
+                - generic [ref=e1381]: Low Priority
+              - cell "-" [ref=e1382]:
+                - paragraph [ref=e1383]: "-"
+              - cell [ref=e1384]:
+                - generic [ref=e1385]:
+                  - button "CRWD 차트 보기" [ref=e1386]:
+                    - img [ref=e1387]
+                  - button [disabled] [ref=e1390]:
+                    - img [ref=e1391]
+            - row "35 WDC Western Digital Corporation $166.9B $484.28 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1392] [cursor=pointer]:
+              - cell "35" [ref=e1393]
+              - cell "WDC Western Digital Corporation" [ref=e1394]:
+                - paragraph [ref=e1395]: WDC
+                - paragraph [ref=e1397]: Western Digital Corporation
+              - cell "$166.9B" [ref=e1398]
+              - cell "$484.28" [ref=e1399]
+              - cell "—" [ref=e1400]
+              - cell "—" [ref=e1401]
+              - cell "Pending" [ref=e1402]
+              - cell "-" [ref=e1403]:
+                - generic [ref=e1404]: "-"
+              - cell "-" [ref=e1405]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1406]:
+                - generic [ref=e1407]: Unknown
+                - paragraph [ref=e1408]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1409]:
+                - text: "-"
+                - paragraph [ref=e1410]: 피벗 미확정
+              - cell "Low Priority" [ref=e1411]:
+                - generic [ref=e1412]: Low Priority
+              - cell "-" [ref=e1413]:
+                - paragraph [ref=e1414]: "-"
+              - cell [ref=e1415]:
+                - generic [ref=e1416]:
+                  - button "WDC 차트 보기" [ref=e1417]:
+                    - img [ref=e1418]
+                  - button [disabled] [ref=e1421]:
+                    - img [ref=e1422]
+            - row "36 GILD Gilead Sciences, Inc. $166.8B $134.36 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1423] [cursor=pointer]:
+              - cell "36" [ref=e1424]
+              - cell "GILD Gilead Sciences, Inc." [ref=e1425]:
+                - paragraph [ref=e1426]: GILD
+                - paragraph [ref=e1428]: Gilead Sciences, Inc.
+              - cell "$166.8B" [ref=e1429]
+              - cell "$134.36" [ref=e1430]
+              - cell "—" [ref=e1431]
+              - cell "—" [ref=e1432]
+              - cell "Pending" [ref=e1433]
+              - cell "-" [ref=e1434]:
+                - generic [ref=e1435]: "-"
+              - cell "-" [ref=e1436]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1437]:
+                - generic [ref=e1438]: Unknown
+                - paragraph [ref=e1439]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1440]:
+                - text: "-"
+                - paragraph [ref=e1441]: 피벗 미확정
+              - cell "Low Priority" [ref=e1442]:
+                - generic [ref=e1443]: Low Priority
+              - cell "-" [ref=e1444]:
+                - paragraph [ref=e1445]: "-"
+              - cell [ref=e1446]:
+                - generic [ref=e1447]:
+                  - button "GILD 차트 보기" [ref=e1448]:
+                    - img [ref=e1449]
+                  - button [disabled] [ref=e1452]:
+                    - img [ref=e1453]
+            - row "37 APP Applovin Corporation $161.8B $481.68 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1454] [cursor=pointer]:
+              - cell "37" [ref=e1455]
+              - cell "APP Applovin Corporation" [ref=e1456]:
+                - paragraph [ref=e1457]: APP
+                - paragraph [ref=e1459]: Applovin Corporation
+              - cell "$161.8B" [ref=e1460]
+              - cell "$481.68" [ref=e1461]
+              - cell "—" [ref=e1462]
+              - cell "—" [ref=e1463]
+              - cell "Pending" [ref=e1464]
+              - cell "-" [ref=e1465]:
+                - generic [ref=e1466]: "-"
+              - cell "-" [ref=e1467]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1468]:
+                - generic [ref=e1469]: Unknown
+                - paragraph [ref=e1470]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1471]:
+                - text: "-"
+                - paragraph [ref=e1472]: 피벗 미확정
+              - cell "Low Priority" [ref=e1473]:
+                - generic [ref=e1474]: Low Priority
+              - cell "-" [ref=e1475]:
+                - paragraph [ref=e1476]: "-"
+              - cell [ref=e1477]:
+                - generic [ref=e1478]:
+                  - button "APP 차트 보기" [ref=e1479]:
+                    - img [ref=e1480]
+                  - button [disabled] [ref=e1483]:
+                    - img [ref=e1484]
+            - row "38 ISRG Intuitive Surgical, Inc. $155.2B $438.10 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1485] [cursor=pointer]:
+              - cell "38" [ref=e1486]
+              - cell "ISRG Intuitive Surgical, Inc." [ref=e1487]:
+                - paragraph [ref=e1488]: ISRG
+                - paragraph [ref=e1490]: Intuitive Surgical, Inc.
+              - cell "$155.2B" [ref=e1491]
+              - cell "$438.10" [ref=e1492]
+              - cell "—" [ref=e1493]
+              - cell "—" [ref=e1494]
+              - cell "Pending" [ref=e1495]
+              - cell "-" [ref=e1496]:
+                - generic [ref=e1497]: "-"
+              - cell "-" [ref=e1498]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1499]:
+                - generic [ref=e1500]: Unknown
+                - paragraph [ref=e1501]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1502]:
+                - text: "-"
+                - paragraph [ref=e1503]: 피벗 미확정
+              - cell "Low Priority" [ref=e1504]:
+                - generic [ref=e1505]: Low Priority
+              - cell "-" [ref=e1506]:
+                - paragraph [ref=e1507]: "-"
+              - cell [ref=e1508]:
+                - generic [ref=e1509]:
+                  - button "ISRG 차트 보기" [ref=e1510]:
+                    - img [ref=e1511]
+                  - button [disabled] [ref=e1514]:
+                    - img [ref=e1515]
+            - row "39 HON Honeywell International Inc. $144.4B $227.92 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1516] [cursor=pointer]:
+              - cell "39" [ref=e1517]
+              - cell "HON Honeywell International Inc." [ref=e1518]:
+                - paragraph [ref=e1519]: HON
+                - paragraph [ref=e1521]: Honeywell International Inc.
+              - cell "$144.4B" [ref=e1522]
+              - cell "$227.92" [ref=e1523]
+              - cell "—" [ref=e1524]
+              - cell "—" [ref=e1525]
+              - cell "Pending" [ref=e1526]
+              - cell "-" [ref=e1527]:
+                - generic [ref=e1528]: "-"
+              - cell "-" [ref=e1529]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1530]:
+                - generic [ref=e1531]: Unknown
+                - paragraph [ref=e1532]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1533]:
+                - text: "-"
+                - paragraph [ref=e1534]: 피벗 미확정
+              - cell "Low Priority" [ref=e1535]:
+                - generic [ref=e1536]: Low Priority
+              - cell "-" [ref=e1537]:
+                - paragraph [ref=e1538]: "-"
+              - cell [ref=e1539]:
+                - generic [ref=e1540]:
+                  - button "HON 차트 보기" [ref=e1541]:
+                    - img [ref=e1542]
+                  - button [disabled] [ref=e1545]:
+                    - img [ref=e1546]
+            - row "40 PDD PDD Holdings Inc. $134.5B $94.52 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1547] [cursor=pointer]:
+              - cell "40" [ref=e1548]
+              - cell "PDD PDD Holdings Inc." [ref=e1549]:
+                - paragraph [ref=e1550]: PDD
+                - paragraph [ref=e1552]: PDD Holdings Inc.
+              - cell "$134.5B" [ref=e1553]
+              - cell "$94.52" [ref=e1554]
+              - cell "—" [ref=e1555]
+              - cell "—" [ref=e1556]
+              - cell "Pending" [ref=e1557]
+              - cell "-" [ref=e1558]:
+                - generic [ref=e1559]: "-"
+              - cell "-" [ref=e1560]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1561]:
+                - generic [ref=e1562]: Unknown
+                - paragraph [ref=e1563]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1564]:
+                - text: "-"
+                - paragraph [ref=e1565]: 피벗 미확정
+              - cell "Low Priority" [ref=e1566]:
+                - generic [ref=e1567]: Low Priority
+              - cell "-" [ref=e1568]:
+                - paragraph [ref=e1569]: "-"
+              - cell [ref=e1570]:
+                - generic [ref=e1571]:
+                  - button "PDD 차트 보기" [ref=e1572]:
+                    - img [ref=e1573]
+                  - button [disabled] [ref=e1576]:
+                    - img [ref=e1577]
+            - row "41 SHOP Shopify Inc. $133.5B $103.00 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1578] [cursor=pointer]:
+              - cell "41" [ref=e1579]
+              - cell "SHOP Shopify Inc." [ref=e1580]:
+                - paragraph [ref=e1581]: SHOP
+                - paragraph [ref=e1583]: Shopify Inc.
+              - cell "$133.5B" [ref=e1584]
+              - cell "$103.00" [ref=e1585]
+              - cell "—" [ref=e1586]
+              - cell "—" [ref=e1587]
+              - cell "Pending" [ref=e1588]
+              - cell "-" [ref=e1589]:
+                - generic [ref=e1590]: "-"
+              - cell "-" [ref=e1591]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1592]:
+                - generic [ref=e1593]: Unknown
+                - paragraph [ref=e1594]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1595]:
+                - text: "-"
+                - paragraph [ref=e1596]: 피벗 미확정
+              - cell "Low Priority" [ref=e1597]:
+                - generic [ref=e1598]: Low Priority
+              - cell "-" [ref=e1599]:
+                - paragraph [ref=e1600]: "-"
+              - cell [ref=e1601]:
+                - generic [ref=e1602]:
+                  - button "SHOP 차트 보기" [ref=e1603]:
+                    - img [ref=e1604]
+                  - button [disabled] [ref=e1607]:
+                    - img [ref=e1608]
+            - row "42 BKNG Booking Holdings Inc. $124.8B $161.06 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1609] [cursor=pointer]:
+              - cell "42" [ref=e1610]
+              - cell "BKNG Booking Holdings Inc." [ref=e1611]:
+                - paragraph [ref=e1612]: BKNG
+                - paragraph [ref=e1614]: Booking Holdings Inc.
+              - cell "$124.8B" [ref=e1615]
+              - cell "$161.06" [ref=e1616]
+              - cell "—" [ref=e1617]
+              - cell "—" [ref=e1618]
+              - cell "Pending" [ref=e1619]
+              - cell "-" [ref=e1620]:
+                - generic [ref=e1621]: "-"
+              - cell "-" [ref=e1622]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1623]:
+                - generic [ref=e1624]: Unknown
+                - paragraph [ref=e1625]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1626]:
+                - text: "-"
+                - paragraph [ref=e1627]: 피벗 미확정
+              - cell "Low Priority" [ref=e1628]:
+                - generic [ref=e1629]: Low Priority
+              - cell "-" [ref=e1630]:
+                - paragraph [ref=e1631]: "-"
+              - cell [ref=e1632]:
+                - generic [ref=e1633]:
+                  - button "BKNG 차트 보기" [ref=e1634]:
+                    - img [ref=e1635]
+                  - button [disabled] [ref=e1638]:
+                    - img [ref=e1639]
+            - row "43 SBUX Starbucks Corporation $117.5B $103.11 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1640] [cursor=pointer]:
+              - cell "43" [ref=e1641]
+              - cell "SBUX Starbucks Corporation" [ref=e1642]:
+                - paragraph [ref=e1643]: SBUX
+                - paragraph [ref=e1645]: Starbucks Corporation
+              - cell "$117.5B" [ref=e1646]
+              - cell "$103.11" [ref=e1647]
+              - cell "—" [ref=e1648]
+              - cell "—" [ref=e1649]
+              - cell "Pending" [ref=e1650]
+              - cell "-" [ref=e1651]:
+                - generic [ref=e1652]: "-"
+              - cell "-" [ref=e1653]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1654]:
+                - generic [ref=e1655]: Unknown
+                - paragraph [ref=e1656]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1657]:
+                - text: "-"
+                - paragraph [ref=e1658]: 피벗 미확정
+              - cell "Low Priority" [ref=e1659]:
+                - generic [ref=e1660]: Low Priority
+              - cell "-" [ref=e1661]:
+                - paragraph [ref=e1662]: "-"
+              - cell [ref=e1663]:
+                - generic [ref=e1664]:
+                  - button "SBUX 차트 보기" [ref=e1665]:
+                    - img [ref=e1666]
+                  - button [disabled] [ref=e1669]:
+                    - img [ref=e1670]
+            - row "44 VRTX Vertex Pharmaceuticals Incorporated $110.3B $434.52 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1671] [cursor=pointer]:
+              - cell "44" [ref=e1672]
+              - cell "VRTX Vertex Pharmaceuticals Incorporated" [ref=e1673]:
+                - paragraph [ref=e1674]: VRTX
+                - paragraph [ref=e1676]: Vertex Pharmaceuticals Incorporated
+              - cell "$110.3B" [ref=e1677]
+              - cell "$434.52" [ref=e1678]
+              - cell "—" [ref=e1679]
+              - cell "—" [ref=e1680]
+              - cell "Pending" [ref=e1681]
+              - cell "-" [ref=e1682]:
+                - generic [ref=e1683]: "-"
+              - cell "-" [ref=e1684]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1685]:
+                - generic [ref=e1686]: Unknown
+                - paragraph [ref=e1687]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1688]:
+                - text: "-"
+                - paragraph [ref=e1689]: 피벗 미확정
+              - cell "Low Priority" [ref=e1690]:
+                - generic [ref=e1691]: Low Priority
+              - cell "-" [ref=e1692]:
+                - paragraph [ref=e1693]: "-"
+              - cell [ref=e1694]:
+                - generic [ref=e1695]:
+                  - button "VRTX 차트 보기" [ref=e1696]:
+                    - img [ref=e1697]
+                  - button [disabled] [ref=e1700]:
+                    - img [ref=e1701]
+            - row "45 CEG Constellation Energy Corporation $106.2B $294.07 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1702] [cursor=pointer]:
+              - cell "45" [ref=e1703]
+              - cell "CEG Constellation Energy Corporation" [ref=e1704]:
+                - paragraph [ref=e1705]: CEG
+                - paragraph [ref=e1707]: Constellation Energy Corporation
+              - cell "$106.2B" [ref=e1708]
+              - cell "$294.07" [ref=e1709]
+              - cell "—" [ref=e1710]
+              - cell "—" [ref=e1711]
+              - cell "Pending" [ref=e1712]
+              - cell "-" [ref=e1713]:
+                - generic [ref=e1714]: "-"
+              - cell "-" [ref=e1715]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1716]:
+                - generic [ref=e1717]: Unknown
+                - paragraph [ref=e1718]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1719]:
+                - text: "-"
+                - paragraph [ref=e1720]: 피벗 미확정
+              - cell "Low Priority" [ref=e1721]:
+                - generic [ref=e1722]: Low Priority
+              - cell "-" [ref=e1723]:
+                - paragraph [ref=e1724]: "-"
+              - cell [ref=e1725]:
+                - generic [ref=e1726]:
+                  - button "CEG 차트 보기" [ref=e1727]:
+                    - img [ref=e1728]
+                  - button [disabled] [ref=e1731]:
+                    - img [ref=e1732]
+            - row "46 CDNS Cadence Design Systems, Inc. $103.0B $373.59 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1733] [cursor=pointer]:
+              - cell "46" [ref=e1734]
+              - cell "CDNS Cadence Design Systems, Inc." [ref=e1735]:
+                - paragraph [ref=e1736]: CDNS
+                - paragraph [ref=e1738]: Cadence Design Systems, Inc.
+              - cell "$103.0B" [ref=e1739]
+              - cell "$373.59" [ref=e1740]
+              - cell "—" [ref=e1741]
+              - cell "—" [ref=e1742]
+              - cell "Pending" [ref=e1743]
+              - cell "-" [ref=e1744]:
+                - generic [ref=e1745]: "-"
+              - cell "-" [ref=e1746]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1747]:
+                - generic [ref=e1748]: Unknown
+                - paragraph [ref=e1749]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1750]:
+                - text: "-"
+                - paragraph [ref=e1751]: 피벗 미확정
+              - cell "Low Priority" [ref=e1752]:
+                - generic [ref=e1753]: Low Priority
+              - cell "-" [ref=e1754]:
+                - paragraph [ref=e1755]: "-"
+              - cell [ref=e1756]:
+                - generic [ref=e1757]:
+                  - button "CDNS 차트 보기" [ref=e1758]:
+                    - img [ref=e1759]
+                  - button [disabled] [ref=e1762]:
+                    - img [ref=e1763]
+            - row "47 SNPS Synopsys, Inc. $100.5B $524.74 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1764] [cursor=pointer]:
+              - cell "47" [ref=e1765]
+              - cell "SNPS Synopsys, Inc." [ref=e1766]:
+                - paragraph [ref=e1767]: SNPS
+                - paragraph [ref=e1769]: Synopsys, Inc.
+              - cell "$100.5B" [ref=e1770]
+              - cell "$524.74" [ref=e1771]
+              - cell "—" [ref=e1772]
+              - cell "—" [ref=e1773]
+              - cell "Pending" [ref=e1774]
+              - cell "-" [ref=e1775]:
+                - generic [ref=e1776]: "-"
+              - cell "-" [ref=e1777]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1778]:
+                - generic [ref=e1779]: Unknown
+                - paragraph [ref=e1780]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1781]:
+                - text: "-"
+                - paragraph [ref=e1782]: 피벗 미확정
+              - cell "Low Priority" [ref=e1783]:
+                - generic [ref=e1784]: Low Priority
+              - cell "-" [ref=e1785]:
+                - paragraph [ref=e1786]: "-"
+              - cell [ref=e1787]:
+                - generic [ref=e1788]:
+                  - button "SNPS 차트 보기" [ref=e1789]:
+                    - img [ref=e1790]
+                  - button [disabled] [ref=e1793]:
+                    - img [ref=e1794]
+            - row "48 ADBE Adobe Inc. $98.9B $244.76 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1795] [cursor=pointer]:
+              - cell "48" [ref=e1796]
+              - cell "ADBE Adobe Inc." [ref=e1797]:
+                - paragraph [ref=e1798]: ADBE
+                - paragraph [ref=e1800]: Adobe Inc.
+              - cell "$98.9B" [ref=e1801]
+              - cell "$244.76" [ref=e1802]
+              - cell "—" [ref=e1803]
+              - cell "—" [ref=e1804]
+              - cell "Pending" [ref=e1805]
+              - cell "-" [ref=e1806]:
+                - generic [ref=e1807]: "-"
+              - cell "-" [ref=e1808]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1809]:
+                - generic [ref=e1810]: Unknown
+                - paragraph [ref=e1811]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1812]:
+                - text: "-"
+                - paragraph [ref=e1813]: 피벗 미확정
+              - cell "Low Priority" [ref=e1814]:
+                - generic [ref=e1815]: Low Priority
+              - cell "-" [ref=e1816]:
+                - paragraph [ref=e1817]: "-"
+              - cell [ref=e1818]:
+                - generic [ref=e1819]:
+                  - button "ADBE 차트 보기" [ref=e1820]:
+                    - img [ref=e1821]
+                  - button [disabled] [ref=e1824]:
+                    - img [ref=e1825]
+            - row "49 FTNT Fortinet, Inc. $98.1B $133.93 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1826] [cursor=pointer]:
+              - cell "49" [ref=e1827]
+              - cell "FTNT Fortinet, Inc." [ref=e1828]:
+                - paragraph [ref=e1829]: FTNT
+                - paragraph [ref=e1831]: Fortinet, Inc.
+              - cell "$98.1B" [ref=e1832]
+              - cell "$133.93" [ref=e1833]
+              - cell "—" [ref=e1834]
+              - cell "—" [ref=e1835]
+              - cell "Pending" [ref=e1836]
+              - cell "-" [ref=e1837]:
+                - generic [ref=e1838]: "-"
+              - cell "-" [ref=e1839]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1840]:
+                - generic [ref=e1841]: Unknown
+                - paragraph [ref=e1842]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1843]:
+                - text: "-"
+                - paragraph [ref=e1844]: 피벗 미확정
+              - cell "Low Priority" [ref=e1845]:
+                - generic [ref=e1846]: Low Priority
+              - cell "-" [ref=e1847]:
+                - paragraph [ref=e1848]: "-"
+              - cell [ref=e1849]:
+                - generic [ref=e1850]:
+                  - button "FTNT 차트 보기" [ref=e1851]:
+                    - img [ref=e1852]
+                  - button [disabled] [ref=e1855]:
+                    - img [ref=e1856]
+            - row "50 MAR Marriott International $97.3B $369.15 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1857] [cursor=pointer]:
+              - cell "50" [ref=e1858]
+              - cell "MAR Marriott International" [ref=e1859]:
+                - paragraph [ref=e1860]: MAR
+                - paragraph [ref=e1862]: Marriott International
+              - cell "$97.3B" [ref=e1863]
+              - cell "$369.15" [ref=e1864]
+              - cell "—" [ref=e1865]
+              - cell "—" [ref=e1866]
+              - cell "Pending" [ref=e1867]
+              - cell "-" [ref=e1868]:
+                - generic [ref=e1869]: "-"
+              - cell "-" [ref=e1870]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1871]:
+                - generic [ref=e1872]: Unknown
+                - paragraph [ref=e1873]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1874]:
+                - text: "-"
+                - paragraph [ref=e1875]: 피벗 미확정
+              - cell "Low Priority" [ref=e1876]:
+                - generic [ref=e1877]: Low Priority
+              - cell "-" [ref=e1878]:
+                - paragraph [ref=e1879]: "-"
+              - cell [ref=e1880]:
+                - generic [ref=e1881]:
+                  - button "MAR 차트 보기" [ref=e1882]:
+                    - img [ref=e1883]
+                  - button [disabled] [ref=e1886]:
+                    - img [ref=e1887]
+            - row "51 ADP Automatic Data Processing, Inc. $90.7B $225.31 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1888] [cursor=pointer]:
+              - cell "51" [ref=e1889]
+              - cell "ADP Automatic Data Processing, Inc." [ref=e1890]:
+                - paragraph [ref=e1891]: ADP
+                - paragraph [ref=e1893]: Automatic Data Processing, Inc.
+              - cell "$90.7B" [ref=e1894]
+              - cell "$225.31" [ref=e1895]
+              - cell "—" [ref=e1896]
+              - cell "—" [ref=e1897]
+              - cell "Pending" [ref=e1898]
+              - cell "-" [ref=e1899]:
+                - generic [ref=e1900]: "-"
+              - cell "-" [ref=e1901]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1902]:
+                - generic [ref=e1903]: Unknown
+                - paragraph [ref=e1904]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1905]:
+                - text: "-"
+                - paragraph [ref=e1906]: 피벗 미확정
+              - cell "Low Priority" [ref=e1907]:
+                - generic [ref=e1908]: Low Priority
+              - cell "-" [ref=e1909]:
+                - paragraph [ref=e1910]: "-"
+              - cell [ref=e1911]:
+                - generic [ref=e1912]:
+                  - button "ADP 차트 보기" [ref=e1913]:
+                    - img [ref=e1914]
+                  - button [disabled] [ref=e1917]:
+                    - img [ref=e1918]
+            - row "52 CMCSA Comcast Corporation $90.1B $25.21 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1919] [cursor=pointer]:
+              - cell "52" [ref=e1920]
+              - cell "CMCSA Comcast Corporation" [ref=e1921]:
+                - paragraph [ref=e1922]: CMCSA
+                - paragraph [ref=e1924]: Comcast Corporation
+              - cell "$90.1B" [ref=e1925]
+              - cell "$25.21" [ref=e1926]
+              - cell "—" [ref=e1927]
+              - cell "—" [ref=e1928]
+              - cell "Pending" [ref=e1929]
+              - cell "-" [ref=e1930]:
+                - generic [ref=e1931]: "-"
+              - cell "-" [ref=e1932]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1933]:
+                - generic [ref=e1934]: Unknown
+                - paragraph [ref=e1935]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1936]:
+                - text: "-"
+                - paragraph [ref=e1937]: 피벗 미확정
+              - cell "Low Priority" [ref=e1938]:
+                - generic [ref=e1939]: Low Priority
+              - cell "-" [ref=e1940]:
+                - paragraph [ref=e1941]: "-"
+              - cell [ref=e1942]:
+                - generic [ref=e1943]:
+                  - button "CMCSA 차트 보기" [ref=e1944]:
+                    - img [ref=e1945]
+                  - button [disabled] [ref=e1948]:
+                    - img [ref=e1949]
+            - row "53 INTU Intuit Inc. $87.5B $319.94 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1950] [cursor=pointer]:
+              - cell "53" [ref=e1951]
+              - cell "INTU Intuit Inc." [ref=e1952]:
+                - paragraph [ref=e1953]: INTU
+                - paragraph [ref=e1955]: Intuit Inc.
+              - cell "$87.5B" [ref=e1956]
+              - cell "$319.94" [ref=e1957]
+              - cell "—" [ref=e1958]
+              - cell "—" [ref=e1959]
+              - cell "Pending" [ref=e1960]
+              - cell "-" [ref=e1961]:
+                - generic [ref=e1962]: "-"
+              - cell "-" [ref=e1963]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1964]:
+                - generic [ref=e1965]: Unknown
+                - paragraph [ref=e1966]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1967]:
+                - text: "-"
+                - paragraph [ref=e1968]: 피벗 미확정
+              - cell "Low Priority" [ref=e1969]:
+                - generic [ref=e1970]: Low Priority
+              - cell "-" [ref=e1971]:
+                - paragraph [ref=e1972]: "-"
+              - cell [ref=e1973]:
+                - generic [ref=e1974]:
+                  - button "INTU 차트 보기" [ref=e1975]:
+                    - img [ref=e1976]
+                  - button [disabled] [ref=e1979]:
+                    - img [ref=e1980]
+            - row "54 MNST Monster Beverage Corporation $84.9B $86.79 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e1981] [cursor=pointer]:
+              - cell "54" [ref=e1982]
+              - cell "MNST Monster Beverage Corporation" [ref=e1983]:
+                - paragraph [ref=e1984]: MNST
+                - paragraph [ref=e1986]: Monster Beverage Corporation
+              - cell "$84.9B" [ref=e1987]
+              - cell "$86.79" [ref=e1988]
+              - cell "—" [ref=e1989]
+              - cell "—" [ref=e1990]
+              - cell "Pending" [ref=e1991]
+              - cell "-" [ref=e1992]:
+                - generic [ref=e1993]: "-"
+              - cell "-" [ref=e1994]
+              - cell "Unknown DU - / PP - / unknown" [ref=e1995]:
+                - generic [ref=e1996]: Unknown
+                - paragraph [ref=e1997]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e1998]:
+                - text: "-"
+                - paragraph [ref=e1999]: 피벗 미확정
+              - cell "Low Priority" [ref=e2000]:
+                - generic [ref=e2001]: Low Priority
+              - cell "-" [ref=e2002]:
+                - paragraph [ref=e2003]: "-"
+              - cell [ref=e2004]:
+                - generic [ref=e2005]:
+                  - button "MNST 차트 보기" [ref=e2006]:
+                    - img [ref=e2007]
+                  - button [disabled] [ref=e2010]:
+                    - img [ref=e2011]
+            - row "55 CSX CSX Corporation $84.6B $45.52 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2012] [cursor=pointer]:
+              - cell "55" [ref=e2013]
+              - cell "CSX CSX Corporation" [ref=e2014]:
+                - paragraph [ref=e2015]: CSX
+                - paragraph [ref=e2017]: CSX Corporation
+              - cell "$84.6B" [ref=e2018]
+              - cell "$45.52" [ref=e2019]
+              - cell "—" [ref=e2020]
+              - cell "—" [ref=e2021]
+              - cell "Pending" [ref=e2022]
+              - cell "-" [ref=e2023]:
+                - generic [ref=e2024]: "-"
+              - cell "-" [ref=e2025]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2026]:
+                - generic [ref=e2027]: Unknown
+                - paragraph [ref=e2028]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2029]:
+                - text: "-"
+                - paragraph [ref=e2030]: 피벗 미확정
+              - cell "Low Priority" [ref=e2031]:
+                - generic [ref=e2032]: Low Priority
+              - cell "-" [ref=e2033]:
+                - paragraph [ref=e2034]: "-"
+              - cell [ref=e2035]:
+                - generic [ref=e2036]:
+                  - button "CSX 차트 보기" [ref=e2037]:
+                    - img [ref=e2038]
+                  - button [disabled] [ref=e2041]:
+                    - img [ref=e2042]
+            - row "56 MELI MercadoLibre, Inc. $84.4B $1,664.42 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2043] [cursor=pointer]:
+              - cell "56" [ref=e2044]
+              - cell "MELI MercadoLibre, Inc." [ref=e2045]:
+                - paragraph [ref=e2046]: MELI
+                - paragraph [ref=e2048]: MercadoLibre, Inc.
+              - cell "$84.4B" [ref=e2049]
+              - cell "$1,664.42" [ref=e2050]
+              - cell "—" [ref=e2051]
+              - cell "—" [ref=e2052]
+              - cell "Pending" [ref=e2053]
+              - cell "-" [ref=e2054]:
+                - generic [ref=e2055]: "-"
+              - cell "-" [ref=e2056]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2057]:
+                - generic [ref=e2058]: Unknown
+                - paragraph [ref=e2059]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2060]:
+                - text: "-"
+                - paragraph [ref=e2061]: 피벗 미확정
+              - cell "Low Priority" [ref=e2062]:
+                - generic [ref=e2063]: Low Priority
+              - cell "-" [ref=e2064]:
+                - paragraph [ref=e2065]: "-"
+              - cell [ref=e2066]:
+                - generic [ref=e2067]:
+                  - button "MELI 차트 보기" [ref=e2068]:
+                    - img [ref=e2069]
+                  - button [disabled] [ref=e2072]:
+                    - img [ref=e2073]
+            - row "57 NXPI NXP Semiconductors N.V. $79.9B $316.47 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2074] [cursor=pointer]:
+              - cell "57" [ref=e2075]
+              - cell "NXPI NXP Semiconductors N.V." [ref=e2076]:
+                - paragraph [ref=e2077]: NXPI
+                - paragraph [ref=e2079]: NXP Semiconductors N.V.
+              - cell "$79.9B" [ref=e2080]
+              - cell "$316.47" [ref=e2081]
+              - cell "—" [ref=e2082]
+              - cell "—" [ref=e2083]
+              - cell "Pending" [ref=e2084]
+              - cell "-" [ref=e2085]:
+                - generic [ref=e2086]: "-"
+              - cell "-" [ref=e2087]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2088]:
+                - generic [ref=e2089]: Unknown
+                - paragraph [ref=e2090]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2091]:
+                - text: "-"
+                - paragraph [ref=e2092]: 피벗 미확정
+              - cell "Low Priority" [ref=e2093]:
+                - generic [ref=e2094]: Low Priority
+              - cell "-" [ref=e2095]:
+                - paragraph [ref=e2096]: "-"
+              - cell [ref=e2097]:
+                - generic [ref=e2098]:
+                  - button "NXPI 차트 보기" [ref=e2099]:
+                    - img [ref=e2100]
+                  - button [disabled] [ref=e2103]:
+                    - img [ref=e2104]
+            - row "58 ABNB Airbnb, Inc. $79.8B $132.35 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2105] [cursor=pointer]:
+              - cell "58" [ref=e2106]
+              - cell "ABNB Airbnb, Inc." [ref=e2107]:
+                - paragraph [ref=e2108]: ABNB
+                - paragraph [ref=e2110]: Airbnb, Inc.
+              - cell "$79.8B" [ref=e2111]
+              - cell "$132.35" [ref=e2112]
+              - cell "—" [ref=e2113]
+              - cell "—" [ref=e2114]
+              - cell "Pending" [ref=e2115]
+              - cell "-" [ref=e2116]:
+                - generic [ref=e2117]: "-"
+              - cell "-" [ref=e2118]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2119]:
+                - generic [ref=e2120]: Unknown
+                - paragraph [ref=e2121]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2122]:
+                - text: "-"
+                - paragraph [ref=e2123]: 피벗 미확정
+              - cell "Low Priority" [ref=e2124]:
+                - generic [ref=e2125]: Low Priority
+              - cell "-" [ref=e2126]:
+                - paragraph [ref=e2127]: "-"
+              - cell [ref=e2128]:
+                - generic [ref=e2129]:
+                  - button "ABNB 차트 보기" [ref=e2130]:
+                    - img [ref=e2131]
+                  - button [disabled] [ref=e2134]:
+                    - img [ref=e2135]
+            - row "59 MDLZ Mondelez International, Inc. $79.3B $61.76 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2136] [cursor=pointer]:
+              - cell "59" [ref=e2137]
+              - cell "MDLZ Mondelez International, Inc." [ref=e2138]:
+                - paragraph [ref=e2139]: MDLZ
+                - paragraph [ref=e2141]: Mondelez International, Inc.
+              - cell "$79.3B" [ref=e2142]
+              - cell "$61.76" [ref=e2143]
+              - cell "—" [ref=e2144]
+              - cell "—" [ref=e2145]
+              - cell "Pending" [ref=e2146]
+              - cell "-" [ref=e2147]:
+                - generic [ref=e2148]: "-"
+              - cell "-" [ref=e2149]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2150]:
+                - generic [ref=e2151]: Unknown
+                - paragraph [ref=e2152]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2153]:
+                - text: "-"
+                - paragraph [ref=e2154]: 피벗 미확정
+              - cell "Low Priority" [ref=e2155]:
+                - generic [ref=e2156]: Low Priority
+              - cell "-" [ref=e2157]:
+                - paragraph [ref=e2158]: "-"
+              - cell [ref=e2159]:
+                - generic [ref=e2160]:
+                  - button "MDLZ 차트 보기" [ref=e2161]:
+                    - img [ref=e2162]
+                  - button [disabled] [ref=e2165]:
+                    - img [ref=e2166]
+            - row "60 DDOG Datadog, Inc. $79.1B $222.32 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2167] [cursor=pointer]:
+              - cell "60" [ref=e2168]
+              - cell "DDOG Datadog, Inc." [ref=e2169]:
+                - paragraph [ref=e2170]: DDOG
+                - paragraph [ref=e2172]: Datadog, Inc.
+              - cell "$79.1B" [ref=e2173]
+              - cell "$222.32" [ref=e2174]
+              - cell "—" [ref=e2175]
+              - cell "—" [ref=e2176]
+              - cell "Pending" [ref=e2177]
+              - cell "-" [ref=e2178]:
+                - generic [ref=e2179]: "-"
+              - cell "-" [ref=e2180]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2181]:
+                - generic [ref=e2182]: Unknown
+                - paragraph [ref=e2183]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2184]:
+                - text: "-"
+                - paragraph [ref=e2185]: 피벗 미확정
+              - cell "Low Priority" [ref=e2186]:
+                - generic [ref=e2187]: Low Priority
+              - cell "-" [ref=e2188]:
+                - paragraph [ref=e2189]: "-"
+              - cell [ref=e2190]:
+                - generic [ref=e2191]:
+                  - button "DDOG 차트 보기" [ref=e2192]:
+                    - img [ref=e2193]
+                  - button [disabled] [ref=e2196]:
+                    - img [ref=e2197]
+            - row "61 MPWR Monolithic Power Systems, Inc. $78.1B $1,589.81 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2198] [cursor=pointer]:
+              - cell "61" [ref=e2199]
+              - cell "MPWR Monolithic Power Systems, Inc." [ref=e2200]:
+                - paragraph [ref=e2201]: MPWR
+                - paragraph [ref=e2203]: Monolithic Power Systems, Inc.
+              - cell "$78.1B" [ref=e2204]
+              - cell "$1,589.81" [ref=e2205]
+              - cell "—" [ref=e2206]
+              - cell "—" [ref=e2207]
+              - cell "Pending" [ref=e2208]
+              - cell "-" [ref=e2209]:
+                - generic [ref=e2210]: "-"
+              - cell "-" [ref=e2211]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2212]:
+                - generic [ref=e2213]: Unknown
+                - paragraph [ref=e2214]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2215]:
+                - text: "-"
+                - paragraph [ref=e2216]: 피벗 미확정
+              - cell "Low Priority" [ref=e2217]:
+                - generic [ref=e2218]: Low Priority
+              - cell "-" [ref=e2219]:
+                - paragraph [ref=e2220]: "-"
+              - cell [ref=e2221]:
+                - generic [ref=e2222]:
+                  - button "MPWR 차트 보기" [ref=e2223]:
+                    - img [ref=e2224]
+                  - button [disabled] [ref=e2227]:
+                    - img [ref=e2228]
+            - row "62 ORLY O'Reilly Automotive, Inc. $76.0B $91.74 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2229] [cursor=pointer]:
+              - cell "62" [ref=e2230]
+              - cell "ORLY O'Reilly Automotive, Inc." [ref=e2231]:
+                - paragraph [ref=e2232]: ORLY
+                - paragraph [ref=e2234]: O'Reilly Automotive, Inc.
+              - cell "$76.0B" [ref=e2235]
+              - cell "$91.74" [ref=e2236]
+              - cell "—" [ref=e2237]
+              - cell "—" [ref=e2238]
+              - cell "Pending" [ref=e2239]
+              - cell "-" [ref=e2240]:
+                - generic [ref=e2241]: "-"
+              - cell "-" [ref=e2242]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2243]:
+                - generic [ref=e2244]: Unknown
+                - paragraph [ref=e2245]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2246]:
+                - text: "-"
+                - paragraph [ref=e2247]: 피벗 미확정
+              - cell "Low Priority" [ref=e2248]:
+                - generic [ref=e2249]: Low Priority
+              - cell "-" [ref=e2250]:
+                - paragraph [ref=e2251]: "-"
+              - cell [ref=e2252]:
+                - generic [ref=e2253]:
+                  - button "ORLY 차트 보기" [ref=e2254]:
+                    - img [ref=e2255]
+                  - button [disabled] [ref=e2258]:
+                    - img [ref=e2259]
+            - row "63 ROST Ross Stores, Inc. $75.6B $234.81 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2260] [cursor=pointer]:
+              - cell "63" [ref=e2261]
+              - cell "ROST Ross Stores, Inc." [ref=e2262]:
+                - paragraph [ref=e2263]: ROST
+                - paragraph [ref=e2265]: Ross Stores, Inc.
+              - cell "$75.6B" [ref=e2266]
+              - cell "$234.81" [ref=e2267]
+              - cell "—" [ref=e2268]
+              - cell "—" [ref=e2269]
+              - cell "Pending" [ref=e2270]
+              - cell "-" [ref=e2271]:
+                - generic [ref=e2272]: "-"
+              - cell "-" [ref=e2273]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2274]:
+                - generic [ref=e2275]: Unknown
+                - paragraph [ref=e2276]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2277]:
+                - text: "-"
+                - paragraph [ref=e2278]: 피벗 미확정
+              - cell "Low Priority" [ref=e2279]:
+                - generic [ref=e2280]: Low Priority
+              - cell "-" [ref=e2281]:
+                - paragraph [ref=e2282]: "-"
+              - cell [ref=e2283]:
+                - generic [ref=e2284]:
+                  - button "ROST 차트 보기" [ref=e2285]:
+                    - img [ref=e2286]
+                  - button [disabled] [ref=e2289]:
+                    - img [ref=e2290]
+            - row "64 LITE Lumentum Holdings Inc. $73.7B $946.90 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2291] [cursor=pointer]:
+              - cell "64" [ref=e2292]
+              - cell "LITE Lumentum Holdings Inc." [ref=e2293]:
+                - paragraph [ref=e2294]: LITE
+                - paragraph [ref=e2296]: Lumentum Holdings Inc.
+              - cell "$73.7B" [ref=e2297]
+              - cell "$946.90" [ref=e2298]
+              - cell "—" [ref=e2299]
+              - cell "—" [ref=e2300]
+              - cell "Pending" [ref=e2301]
+              - cell "-" [ref=e2302]:
+                - generic [ref=e2303]: "-"
+              - cell "-" [ref=e2304]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2305]:
+                - generic [ref=e2306]: Unknown
+                - paragraph [ref=e2307]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2308]:
+                - text: "-"
+                - paragraph [ref=e2309]: 피벗 미확정
+              - cell "Low Priority" [ref=e2310]:
+                - generic [ref=e2311]: Low Priority
+              - cell "-" [ref=e2312]:
+                - paragraph [ref=e2313]: "-"
+              - cell [ref=e2314]:
+                - generic [ref=e2315]:
+                  - button "LITE 차트 보기" [ref=e2316]:
+                    - img [ref=e2317]
+                  - button [disabled] [ref=e2320]:
+                    - img [ref=e2321]
+            - row "65 AEP American Electric Power Company, Inc. $71.6B $131.59 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2322] [cursor=pointer]:
+              - cell "65" [ref=e2323]
+              - cell "AEP American Electric Power Company, Inc." [ref=e2324]:
+                - paragraph [ref=e2325]: AEP
+                - paragraph [ref=e2327]: American Electric Power Company, Inc.
+              - cell "$71.6B" [ref=e2328]
+              - cell "$131.59" [ref=e2329]
+              - cell "—" [ref=e2330]
+              - cell "—" [ref=e2331]
+              - cell "Pending" [ref=e2332]
+              - cell "-" [ref=e2333]:
+                - generic [ref=e2334]: "-"
+              - cell "-" [ref=e2335]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2336]:
+                - generic [ref=e2337]: Unknown
+                - paragraph [ref=e2338]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2339]:
+                - text: "-"
+                - paragraph [ref=e2340]: 피벗 미확정
+              - cell "Low Priority" [ref=e2341]:
+                - generic [ref=e2342]: Low Priority
+              - cell "-" [ref=e2343]:
+                - paragraph [ref=e2344]: "-"
+              - cell [ref=e2345]:
+                - generic [ref=e2346]:
+                  - button "AEP 차트 보기" [ref=e2347]:
+                    - img [ref=e2348]
+                  - button [disabled] [ref=e2351]:
+                    - img [ref=e2352]
+            - row "66 DASH DoorDash, Inc. $69.8B $160.25 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2353] [cursor=pointer]:
+              - cell "66" [ref=e2354]
+              - cell "DASH DoorDash, Inc." [ref=e2355]:
+                - paragraph [ref=e2356]: DASH
+                - paragraph [ref=e2358]: DoorDash, Inc.
+              - cell "$69.8B" [ref=e2359]
+              - cell "$160.25" [ref=e2360]
+              - cell "—" [ref=e2361]
+              - cell "—" [ref=e2362]
+              - cell "Pending" [ref=e2363]
+              - cell "-" [ref=e2364]:
+                - generic [ref=e2365]: "-"
+              - cell "-" [ref=e2366]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2367]:
+                - generic [ref=e2368]: Unknown
+                - paragraph [ref=e2369]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2370]:
+                - text: "-"
+                - paragraph [ref=e2371]: 피벗 미확정
+              - cell "Low Priority" [ref=e2372]:
+                - generic [ref=e2373]: Low Priority
+              - cell "-" [ref=e2374]:
+                - paragraph [ref=e2375]: "-"
+              - cell [ref=e2376]:
+                - generic [ref=e2377]:
+                  - button "DASH 차트 보기" [ref=e2378]:
+                    - img [ref=e2379]
+                  - button [disabled] [ref=e2382]:
+                    - img [ref=e2383]
+            - row "67 CTAS Cintas Corporation $69.2B $172.93 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2384] [cursor=pointer]:
+              - cell "67" [ref=e2385]
+              - cell "CTAS Cintas Corporation" [ref=e2386]:
+                - paragraph [ref=e2387]: CTAS
+                - paragraph [ref=e2389]: Cintas Corporation
+              - cell "$69.2B" [ref=e2390]
+              - cell "$172.93" [ref=e2391]
+              - cell "—" [ref=e2392]
+              - cell "—" [ref=e2393]
+              - cell "Pending" [ref=e2394]
+              - cell "-" [ref=e2395]:
+                - generic [ref=e2396]: "-"
+              - cell "-" [ref=e2397]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2398]:
+                - generic [ref=e2399]: Unknown
+                - paragraph [ref=e2400]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2401]:
+                - text: "-"
+                - paragraph [ref=e2402]: 피벗 미확정
+              - cell "Low Priority" [ref=e2403]:
+                - generic [ref=e2404]: Low Priority
+              - cell "-" [ref=e2405]:
+                - paragraph [ref=e2406]: "-"
+              - cell [ref=e2407]:
+                - generic [ref=e2408]:
+                  - button "CTAS 차트 보기" [ref=e2409]:
+                    - img [ref=e2410]
+                  - button [disabled] [ref=e2413]:
+                    - img [ref=e2414]
+            - row "68 WBD Warner Bros. Discovery, Inc. Series A $67.8B $27.03 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2415] [cursor=pointer]:
+              - cell "68" [ref=e2416]
+              - cell "WBD Warner Bros. Discovery, Inc. Series A" [ref=e2417]:
+                - paragraph [ref=e2418]: WBD
+                - paragraph [ref=e2420]: Warner Bros. Discovery, Inc. Series A
+              - cell "$67.8B" [ref=e2421]
+              - cell "$27.03" [ref=e2422]
+              - cell "—" [ref=e2423]
+              - cell "—" [ref=e2424]
+              - cell "Pending" [ref=e2425]
+              - cell "-" [ref=e2426]:
+                - generic [ref=e2427]: "-"
+              - cell "-" [ref=e2428]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2429]:
+                - generic [ref=e2430]: Unknown
+                - paragraph [ref=e2431]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2432]:
+                - text: "-"
+                - paragraph [ref=e2433]: 피벗 미확정
+              - cell "Low Priority" [ref=e2434]:
+                - generic [ref=e2435]: Low Priority
+              - cell "-" [ref=e2436]:
+                - paragraph [ref=e2437]: "-"
+              - cell [ref=e2438]:
+                - generic [ref=e2439]:
+                  - button "WBD 차트 보기" [ref=e2440]:
+                    - img [ref=e2441]
+                  - button [disabled] [ref=e2444]:
+                    - img [ref=e2445]
+            - row "69 REGN Regeneron Pharmaceuticals, Inc. $67.0B $638.88 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2446] [cursor=pointer]:
+              - cell "69" [ref=e2447]
+              - cell "REGN Regeneron Pharmaceuticals, Inc." [ref=e2448]:
+                - paragraph [ref=e2449]: REGN
+                - paragraph [ref=e2451]: Regeneron Pharmaceuticals, Inc.
+              - cell "$67.0B" [ref=e2452]
+              - cell "$638.88" [ref=e2453]
+              - cell "—" [ref=e2454]
+              - cell "—" [ref=e2455]
+              - cell "Pending" [ref=e2456]
+              - cell "-" [ref=e2457]:
+                - generic [ref=e2458]: "-"
+              - cell "-" [ref=e2459]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2460]:
+                - generic [ref=e2461]: Unknown
+                - paragraph [ref=e2462]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2463]:
+                - text: "-"
+                - paragraph [ref=e2464]: 피벗 미확정
+              - cell "Low Priority" [ref=e2465]:
+                - generic [ref=e2466]: Low Priority
+              - cell "-" [ref=e2467]:
+                - paragraph [ref=e2468]: "-"
+              - cell [ref=e2469]:
+                - generic [ref=e2470]:
+                  - button "REGN 차트 보기" [ref=e2471]:
+                    - img [ref=e2472]
+                  - button [disabled] [ref=e2475]:
+                    - img [ref=e2476]
+            - row "70 BKR Baker Hughes Company $65.5B $66.06 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2477] [cursor=pointer]:
+              - cell "70" [ref=e2478]
+              - cell "BKR Baker Hughes Company" [ref=e2479]:
+                - paragraph [ref=e2480]: BKR
+                - paragraph [ref=e2482]: Baker Hughes Company
+              - cell "$65.5B" [ref=e2483]
+              - cell "$66.06" [ref=e2484]
+              - cell "—" [ref=e2485]
+              - cell "—" [ref=e2486]
+              - cell "Pending" [ref=e2487]
+              - cell "-" [ref=e2488]:
+                - generic [ref=e2489]: "-"
+              - cell "-" [ref=e2490]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2491]:
+                - generic [ref=e2492]: Unknown
+                - paragraph [ref=e2493]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2494]:
+                - text: "-"
+                - paragraph [ref=e2495]: 피벗 미확정
+              - cell "Low Priority" [ref=e2496]:
+                - generic [ref=e2497]: Low Priority
+              - cell "-" [ref=e2498]:
+                - paragraph [ref=e2499]: "-"
+              - cell [ref=e2500]:
+                - generic [ref=e2501]:
+                  - button "BKR 차트 보기" [ref=e2502]:
+                    - img [ref=e2503]
+                  - button [disabled] [ref=e2506]:
+                    - img [ref=e2507]
+            - row "71 PCAR PACCAR Inc. $57.5B $109.35 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2508] [cursor=pointer]:
+              - cell "71" [ref=e2509]
+              - cell "PCAR PACCAR Inc." [ref=e2510]:
+                - paragraph [ref=e2511]: PCAR
+                - paragraph [ref=e2513]: PACCAR Inc.
+              - cell "$57.5B" [ref=e2514]
+              - cell "$109.35" [ref=e2515]
+              - cell "—" [ref=e2516]
+              - cell "—" [ref=e2517]
+              - cell "Pending" [ref=e2518]
+              - cell "-" [ref=e2519]:
+                - generic [ref=e2520]: "-"
+              - cell "-" [ref=e2521]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2522]:
+                - generic [ref=e2523]: Unknown
+                - paragraph [ref=e2524]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2525]:
+                - text: "-"
+                - paragraph [ref=e2526]: 피벗 미확정
+              - cell "Low Priority" [ref=e2527]:
+                - generic [ref=e2528]: Low Priority
+              - cell "-" [ref=e2529]:
+                - paragraph [ref=e2530]: "-"
+              - cell [ref=e2531]:
+                - generic [ref=e2532]:
+                  - button "PCAR 차트 보기" [ref=e2533]:
+                    - img [ref=e2534]
+                  - button [disabled] [ref=e2537]:
+                    - img [ref=e2538]
+            - row "72 FANG Diamondback Energy, Inc. $56.5B $200.71 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2539] [cursor=pointer]:
+              - cell "72" [ref=e2540]
+              - cell "FANG Diamondback Energy, Inc." [ref=e2541]:
+                - paragraph [ref=e2542]: FANG
+                - paragraph [ref=e2544]: Diamondback Energy, Inc.
+              - cell "$56.5B" [ref=e2545]
+              - cell "$200.71" [ref=e2546]
+              - cell "—" [ref=e2547]
+              - cell "—" [ref=e2548]
+              - cell "Pending" [ref=e2549]
+              - cell "-" [ref=e2550]:
+                - generic [ref=e2551]: "-"
+              - cell "-" [ref=e2552]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2553]:
+                - generic [ref=e2554]: Unknown
+                - paragraph [ref=e2555]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2556]:
+                - text: "-"
+                - paragraph [ref=e2557]: 피벗 미확정
+              - cell "Low Priority" [ref=e2558]:
+                - generic [ref=e2559]: Low Priority
+              - cell "-" [ref=e2560]:
+                - paragraph [ref=e2561]: "-"
+              - cell [ref=e2562]:
+                - generic [ref=e2563]:
+                  - button "FANG 차트 보기" [ref=e2564]:
+                    - img [ref=e2565]
+                  - button [disabled] [ref=e2568]:
+                    - img [ref=e2569]
+            - row "73 MSTR Strategy Inc $56.0B $159.89 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2570] [cursor=pointer]:
+              - cell "73" [ref=e2571]
+              - cell "MSTR Strategy Inc" [ref=e2572]:
+                - paragraph [ref=e2573]: MSTR
+                - paragraph [ref=e2575]: Strategy Inc
+              - cell "$56.0B" [ref=e2576]
+              - cell "$159.89" [ref=e2577]
+              - cell "—" [ref=e2578]
+              - cell "—" [ref=e2579]
+              - cell "Pending" [ref=e2580]
+              - cell "-" [ref=e2581]:
+                - generic [ref=e2582]: "-"
+              - cell "-" [ref=e2583]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2584]:
+                - generic [ref=e2585]: Unknown
+                - paragraph [ref=e2586]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2587]:
+                - text: "-"
+                - paragraph [ref=e2588]: 피벗 미확정
+              - cell "Low Priority" [ref=e2589]:
+                - generic [ref=e2590]: Low Priority
+              - cell "-" [ref=e2591]:
+                - paragraph [ref=e2592]: "-"
+              - cell [ref=e2593]:
+                - generic [ref=e2594]:
+                  - button "MSTR 차트 보기" [ref=e2595]:
+                    - img [ref=e2596]
+                  - button [disabled] [ref=e2599]:
+                    - img [ref=e2600]
+            - row "74 ADSK Autodesk, Inc. $50.9B $240.99 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2601] [cursor=pointer]:
+              - cell "74" [ref=e2602]
+              - cell "ADSK Autodesk, Inc." [ref=e2603]:
+                - paragraph [ref=e2604]: ADSK
+                - paragraph [ref=e2606]: Autodesk, Inc.
+              - cell "$50.9B" [ref=e2607]
+              - cell "$240.99" [ref=e2608]
+              - cell "—" [ref=e2609]
+              - cell "—" [ref=e2610]
+              - cell "Pending" [ref=e2611]
+              - cell "-" [ref=e2612]:
+                - generic [ref=e2613]: "-"
+              - cell "-" [ref=e2614]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2615]:
+                - generic [ref=e2616]: Unknown
+                - paragraph [ref=e2617]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2618]:
+                - text: "-"
+                - paragraph [ref=e2619]: 피벗 미확정
+              - cell "Low Priority" [ref=e2620]:
+                - generic [ref=e2621]: Low Priority
+              - cell "-" [ref=e2622]:
+                - paragraph [ref=e2623]: "-"
+              - cell [ref=e2624]:
+                - generic [ref=e2625]:
+                  - button "ADSK 차트 보기" [ref=e2626]:
+                    - img [ref=e2627]
+                  - button [disabled] [ref=e2630]:
+                    - img [ref=e2631]
+            - row "75 XEL Xcel Energy Inc. $50.6B $81.08 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2632] [cursor=pointer]:
+              - cell "75" [ref=e2633]
+              - cell "XEL Xcel Energy Inc." [ref=e2634]:
+                - paragraph [ref=e2635]: XEL
+                - paragraph [ref=e2637]: Xcel Energy Inc.
+              - cell "$50.6B" [ref=e2638]
+              - cell "$81.08" [ref=e2639]
+              - cell "—" [ref=e2640]
+              - cell "—" [ref=e2641]
+              - cell "Pending" [ref=e2642]
+              - cell "-" [ref=e2643]:
+                - generic [ref=e2644]: "-"
+              - cell "-" [ref=e2645]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2646]:
+                - generic [ref=e2647]: Unknown
+                - paragraph [ref=e2648]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2649]:
+                - text: "-"
+                - paragraph [ref=e2650]: 피벗 미확정
+              - cell "Low Priority" [ref=e2651]:
+                - generic [ref=e2652]: Low Priority
+              - cell "-" [ref=e2653]:
+                - paragraph [ref=e2654]: "-"
+              - cell [ref=e2655]:
+                - generic [ref=e2656]:
+                  - button "XEL 차트 보기" [ref=e2657]:
+                    - img [ref=e2658]
+                  - button [disabled] [ref=e2661]:
+                    - img [ref=e2662]
+            - row "76 MCHP Microchip Technology Incorporated $50.6B $93.43 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2663] [cursor=pointer]:
+              - cell "76" [ref=e2664]
+              - cell "MCHP Microchip Technology Incorporated" [ref=e2665]:
+                - paragraph [ref=e2666]: MCHP
+                - paragraph [ref=e2668]: Microchip Technology Incorporated
+              - cell "$50.6B" [ref=e2669]
+              - cell "$93.43" [ref=e2670]
+              - cell "—" [ref=e2671]
+              - cell "—" [ref=e2672]
+              - cell "Pending" [ref=e2673]
+              - cell "-" [ref=e2674]:
+                - generic [ref=e2675]: "-"
+              - cell "-" [ref=e2676]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2677]:
+                - generic [ref=e2678]: Unknown
+                - paragraph [ref=e2679]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2680]:
+                - text: "-"
+                - paragraph [ref=e2681]: 피벗 미확정
+              - cell "Low Priority" [ref=e2682]:
+                - generic [ref=e2683]: Low Priority
+              - cell "-" [ref=e2684]:
+                - paragraph [ref=e2685]: "-"
+              - cell [ref=e2686]:
+                - generic [ref=e2687]:
+                  - button "MCHP 차트 보기" [ref=e2688]:
+                    - img [ref=e2689]
+                  - button [disabled] [ref=e2692]:
+                    - img [ref=e2693]
+            - row "77 FAST Fastenal Company $50.4B $43.94 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2694] [cursor=pointer]:
+              - cell "77" [ref=e2695]
+              - cell "FAST Fastenal Company" [ref=e2696]:
+                - paragraph [ref=e2697]: FAST
+                - paragraph [ref=e2699]: Fastenal Company
+              - cell "$50.4B" [ref=e2700]
+              - cell "$43.94" [ref=e2701]
+              - cell "—" [ref=e2702]
+              - cell "—" [ref=e2703]
+              - cell "Pending" [ref=e2704]
+              - cell "-" [ref=e2705]:
+                - generic [ref=e2706]: "-"
+              - cell "-" [ref=e2707]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2708]:
+                - generic [ref=e2709]: Unknown
+                - paragraph [ref=e2710]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2711]:
+                - text: "-"
+                - paragraph [ref=e2712]: 피벗 미확정
+              - cell "Low Priority" [ref=e2713]:
+                - generic [ref=e2714]: Low Priority
+              - cell "-" [ref=e2715]:
+                - paragraph [ref=e2716]: "-"
+              - cell [ref=e2717]:
+                - generic [ref=e2718]:
+                  - button "FAST 차트 보기" [ref=e2719]:
+                    - img [ref=e2720]
+                  - button [disabled] [ref=e2723]:
+                    - img [ref=e2724]
+            - row "78 EA Electronic Arts Inc. $50.4B $200.97 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2725] [cursor=pointer]:
+              - cell "78" [ref=e2726]
+              - cell "EA Electronic Arts Inc." [ref=e2727]:
+                - paragraph [ref=e2728]: EA
+                - paragraph [ref=e2730]: Electronic Arts Inc.
+              - cell "$50.4B" [ref=e2731]
+              - cell "$200.97" [ref=e2732]
+              - cell "—" [ref=e2733]
+              - cell "—" [ref=e2734]
+              - cell "Pending" [ref=e2735]
+              - cell "-" [ref=e2736]:
+                - generic [ref=e2737]: "-"
+              - cell "-" [ref=e2738]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2739]:
+                - generic [ref=e2740]: Unknown
+                - paragraph [ref=e2741]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2742]:
+                - text: "-"
+                - paragraph [ref=e2743]: 피벗 미확정
+              - cell "Low Priority" [ref=e2744]:
+                - generic [ref=e2745]: Low Priority
+              - cell "-" [ref=e2746]:
+                - paragraph [ref=e2747]: "-"
+              - cell [ref=e2748]:
+                - generic [ref=e2749]:
+                  - button "EA 차트 보기" [ref=e2750]:
+                    - img [ref=e2751]
+                  - button [disabled] [ref=e2754]:
+                    - img [ref=e2755]
+            - row "79 FER Ferrovial N.V. $48.5B $67.48 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2756] [cursor=pointer]:
+              - cell "79" [ref=e2757]
+              - cell "FER Ferrovial N.V." [ref=e2758]:
+                - paragraph [ref=e2759]: FER
+                - paragraph [ref=e2761]: Ferrovial N.V.
+              - cell "$48.5B" [ref=e2762]
+              - cell "$67.48" [ref=e2763]
+              - cell "—" [ref=e2764]
+              - cell "—" [ref=e2765]
+              - cell "Pending" [ref=e2766]
+              - cell "-" [ref=e2767]:
+                - generic [ref=e2768]: "-"
+              - cell "-" [ref=e2769]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2770]:
+                - generic [ref=e2771]: Unknown
+                - paragraph [ref=e2772]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2773]:
+                - text: "-"
+                - paragraph [ref=e2774]: 피벗 미확정
+              - cell "Low Priority" [ref=e2775]:
+                - generic [ref=e2776]: Low Priority
+              - cell "-" [ref=e2777]:
+                - paragraph [ref=e2778]: "-"
+              - cell [ref=e2779]:
+                - generic [ref=e2780]:
+                  - button "FER 차트 보기" [ref=e2781]:
+                    - img [ref=e2782]
+                  - button [disabled] [ref=e2785]:
+                    - img [ref=e2786]
+            - row "80 EXC Exelon Corporation $47.3B $46.23 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2787] [cursor=pointer]:
+              - cell "80" [ref=e2788]
+              - cell "EXC Exelon Corporation" [ref=e2789]:
+                - paragraph [ref=e2790]: EXC
+                - paragraph [ref=e2792]: Exelon Corporation
+              - cell "$47.3B" [ref=e2793]
+              - cell "$46.23" [ref=e2794]
+              - cell "—" [ref=e2795]
+              - cell "—" [ref=e2796]
+              - cell "Pending" [ref=e2797]
+              - cell "-" [ref=e2798]:
+                - generic [ref=e2799]: "-"
+              - cell "-" [ref=e2800]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2801]:
+                - generic [ref=e2802]: Unknown
+                - paragraph [ref=e2803]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2804]:
+                - text: "-"
+                - paragraph [ref=e2805]: 피벗 미확정
+              - cell "Low Priority" [ref=e2806]:
+                - generic [ref=e2807]: Low Priority
+              - cell "-" [ref=e2808]:
+                - paragraph [ref=e2809]: "-"
+              - cell [ref=e2810]:
+                - generic [ref=e2811]:
+                  - button "EXC 차트 보기" [ref=e2812]:
+                    - img [ref=e2813]
+                  - button [disabled] [ref=e2816]:
+                    - img [ref=e2817]
+            - row "81 IDXX IDEXX Laboratories, Inc. $44.1B $559.37 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2818] [cursor=pointer]:
+              - cell "81" [ref=e2819]
+              - cell "IDXX IDEXX Laboratories, Inc." [ref=e2820]:
+                - paragraph [ref=e2821]: IDXX
+                - paragraph [ref=e2823]: IDEXX Laboratories, Inc.
+              - cell "$44.1B" [ref=e2824]
+              - cell "$559.37" [ref=e2825]
+              - cell "—" [ref=e2826]
+              - cell "—" [ref=e2827]
+              - cell "Pending" [ref=e2828]
+              - cell "-" [ref=e2829]:
+                - generic [ref=e2830]: "-"
+              - cell "-" [ref=e2831]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2832]:
+                - generic [ref=e2833]: Unknown
+                - paragraph [ref=e2834]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2835]:
+                - text: "-"
+                - paragraph [ref=e2836]: 피벗 미확정
+              - cell "Low Priority" [ref=e2837]:
+                - generic [ref=e2838]: Low Priority
+              - cell "-" [ref=e2839]:
+                - paragraph [ref=e2840]: "-"
+              - cell [ref=e2841]:
+                - generic [ref=e2842]:
+                  - button "IDXX 차트 보기" [ref=e2843]:
+                    - img [ref=e2844]
+                  - button [disabled] [ref=e2847]:
+                    - img [ref=e2848]
+            - row "82 ODFL Old Dominion Freight Line, Inc. $43.8B $210.47 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2849] [cursor=pointer]:
+              - cell "82" [ref=e2850]
+              - cell "ODFL Old Dominion Freight Line, Inc." [ref=e2851]:
+                - paragraph [ref=e2852]: ODFL
+                - paragraph [ref=e2854]: Old Dominion Freight Line, Inc.
+              - cell "$43.8B" [ref=e2855]
+              - cell "$210.47" [ref=e2856]
+              - cell "—" [ref=e2857]
+              - cell "—" [ref=e2858]
+              - cell "Pending" [ref=e2859]
+              - cell "-" [ref=e2860]:
+                - generic [ref=e2861]: "-"
+              - cell "-" [ref=e2862]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2863]:
+                - generic [ref=e2864]: Unknown
+                - paragraph [ref=e2865]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2866]:
+                - text: "-"
+                - paragraph [ref=e2867]: 피벗 미확정
+              - cell "Low Priority" [ref=e2868]:
+                - generic [ref=e2869]: Low Priority
+              - cell "-" [ref=e2870]:
+                - paragraph [ref=e2871]: "-"
+              - cell [ref=e2872]:
+                - generic [ref=e2873]:
+                  - button "ODFL 차트 보기" [ref=e2874]:
+                    - img [ref=e2875]
+                  - button [disabled] [ref=e2878]:
+                    - img [ref=e2879]
+            - row "83 CCEP Coca-Cola Europacific Partners plc $42.7B $94.12 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2880] [cursor=pointer]:
+              - cell "83" [ref=e2881]
+              - cell "CCEP Coca-Cola Europacific Partners plc" [ref=e2882]:
+                - paragraph [ref=e2883]: CCEP
+                - paragraph [ref=e2885]: Coca-Cola Europacific Partners plc
+              - cell "$42.7B" [ref=e2886]
+              - cell "$94.12" [ref=e2887]
+              - cell "—" [ref=e2888]
+              - cell "—" [ref=e2889]
+              - cell "Pending" [ref=e2890]
+              - cell "-" [ref=e2891]:
+                - generic [ref=e2892]: "-"
+              - cell "-" [ref=e2893]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2894]:
+                - generic [ref=e2895]: Unknown
+                - paragraph [ref=e2896]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2897]:
+                - text: "-"
+                - paragraph [ref=e2898]: 피벗 미확정
+              - cell "Low Priority" [ref=e2899]:
+                - generic [ref=e2900]: Low Priority
+              - cell "-" [ref=e2901]:
+                - paragraph [ref=e2902]: "-"
+              - cell [ref=e2903]:
+                - generic [ref=e2904]:
+                  - button "CCEP 차트 보기" [ref=e2905]:
+                    - img [ref=e2906]
+                  - button [disabled] [ref=e2909]:
+                    - img [ref=e2910]
+            - row "84 TTWO Take-Two Interactive Software, Inc. $42.1B $227.55 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2911] [cursor=pointer]:
+              - cell "84" [ref=e2912]
+              - cell "TTWO Take-Two Interactive Software, Inc." [ref=e2913]:
+                - paragraph [ref=e2914]: TTWO
+                - paragraph [ref=e2916]: Take-Two Interactive Software, Inc.
+              - cell "$42.1B" [ref=e2917]
+              - cell "$227.55" [ref=e2918]
+              - cell "—" [ref=e2919]
+              - cell "—" [ref=e2920]
+              - cell "Pending" [ref=e2921]
+              - cell "-" [ref=e2922]:
+                - generic [ref=e2923]: "-"
+              - cell "-" [ref=e2924]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2925]:
+                - generic [ref=e2926]: Unknown
+                - paragraph [ref=e2927]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2928]:
+                - text: "-"
+                - paragraph [ref=e2929]: 피벗 미확정
+              - cell "Low Priority" [ref=e2930]:
+                - generic [ref=e2931]: Low Priority
+              - cell "-" [ref=e2932]:
+                - paragraph [ref=e2933]: "-"
+              - cell [ref=e2934]:
+                - generic [ref=e2935]:
+                  - button "TTWO 차트 보기" [ref=e2936]:
+                    - img [ref=e2937]
+                  - button [disabled] [ref=e2940]:
+                    - img [ref=e2941]
+            - row "85 ALNY Alnylam Pharmaceuticals, Inc. $39.7B $297.45 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2942] [cursor=pointer]:
+              - cell "85" [ref=e2943]
+              - cell "ALNY Alnylam Pharmaceuticals, Inc." [ref=e2944]:
+                - paragraph [ref=e2945]: ALNY
+                - paragraph [ref=e2947]: Alnylam Pharmaceuticals, Inc.
+              - cell "$39.7B" [ref=e2948]
+              - cell "$297.45" [ref=e2949]
+              - cell "—" [ref=e2950]
+              - cell "—" [ref=e2951]
+              - cell "Pending" [ref=e2952]
+              - cell "-" [ref=e2953]:
+                - generic [ref=e2954]: "-"
+              - cell "-" [ref=e2955]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2956]:
+                - generic [ref=e2957]: Unknown
+                - paragraph [ref=e2958]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2959]:
+                - text: "-"
+                - paragraph [ref=e2960]: 피벗 미확정
+              - cell "Low Priority" [ref=e2961]:
+                - generic [ref=e2962]: Low Priority
+              - cell "-" [ref=e2963]:
+                - paragraph [ref=e2964]: "-"
+              - cell [ref=e2965]:
+                - generic [ref=e2966]:
+                  - button "ALNY 차트 보기" [ref=e2967]:
+                    - img [ref=e2968]
+                  - button [disabled] [ref=e2971]:
+                    - img [ref=e2972]
+            - row "86 KDP Keurig Dr Pepper Inc. $39.6B $29.12 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e2973] [cursor=pointer]:
+              - cell "86" [ref=e2974]
+              - cell "KDP Keurig Dr Pepper Inc." [ref=e2975]:
+                - paragraph [ref=e2976]: KDP
+                - paragraph [ref=e2978]: Keurig Dr Pepper Inc.
+              - cell "$39.6B" [ref=e2979]
+              - cell "$29.12" [ref=e2980]
+              - cell "—" [ref=e2981]
+              - cell "—" [ref=e2982]
+              - cell "Pending" [ref=e2983]
+              - cell "-" [ref=e2984]:
+                - generic [ref=e2985]: "-"
+              - cell "-" [ref=e2986]
+              - cell "Unknown DU - / PP - / unknown" [ref=e2987]:
+                - generic [ref=e2988]: Unknown
+                - paragraph [ref=e2989]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e2990]:
+                - text: "-"
+                - paragraph [ref=e2991]: 피벗 미확정
+              - cell "Low Priority" [ref=e2992]:
+                - generic [ref=e2993]: Low Priority
+              - cell "-" [ref=e2994]:
+                - paragraph [ref=e2995]: "-"
+              - cell [ref=e2996]:
+                - generic [ref=e2997]:
+                  - button "KDP 차트 보기" [ref=e2998]:
+                    - img [ref=e2999]
+                  - button [disabled] [ref=e3002]:
+                    - img [ref=e3003]
+            - row "87 PYPL PayPal Holdings, Inc. $39.0B $44.23 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3004] [cursor=pointer]:
+              - cell "87" [ref=e3005]
+              - cell "PYPL PayPal Holdings, Inc." [ref=e3006]:
+                - paragraph [ref=e3007]: PYPL
+                - paragraph [ref=e3009]: PayPal Holdings, Inc.
+              - cell "$39.0B" [ref=e3010]
+              - cell "$44.23" [ref=e3011]
+              - cell "—" [ref=e3012]
+              - cell "—" [ref=e3013]
+              - cell "Pending" [ref=e3014]
+              - cell "-" [ref=e3015]:
+                - generic [ref=e3016]: "-"
+              - cell "-" [ref=e3017]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3018]:
+                - generic [ref=e3019]: Unknown
+                - paragraph [ref=e3020]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3021]:
+                - text: "-"
+                - paragraph [ref=e3022]: 피벗 미확정
+              - cell "Low Priority" [ref=e3023]:
+                - generic [ref=e3024]: Low Priority
+              - cell "-" [ref=e3025]:
+                - paragraph [ref=e3026]: "-"
+              - cell [ref=e3027]:
+                - generic [ref=e3028]:
+                  - button "PYPL 차트 보기" [ref=e3029]:
+                    - img [ref=e3030]
+                  - button [disabled] [ref=e3033]:
+                    - img [ref=e3034]
+            - row "88 TRI Thomson Reuters Corporation Common Shares $37.5B $85.86 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3035] [cursor=pointer]:
+              - cell "88" [ref=e3036]
+              - cell "TRI Thomson Reuters Corporation Common Shares" [ref=e3037]:
+                - paragraph [ref=e3038]: TRI
+                - paragraph [ref=e3040]: Thomson Reuters Corporation Common Shares
+              - cell "$37.5B" [ref=e3041]
+              - cell "$85.86" [ref=e3042]
+              - cell "—" [ref=e3043]
+              - cell "—" [ref=e3044]
+              - cell "Pending" [ref=e3045]
+              - cell "-" [ref=e3046]:
+                - generic [ref=e3047]: "-"
+              - cell "-" [ref=e3048]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3049]:
+                - generic [ref=e3050]: Unknown
+                - paragraph [ref=e3051]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3052]:
+                - text: "-"
+                - paragraph [ref=e3053]: 피벗 미확정
+              - cell "Low Priority" [ref=e3054]:
+                - generic [ref=e3055]: Low Priority
+              - cell "-" [ref=e3056]:
+                - paragraph [ref=e3057]: "-"
+              - cell [ref=e3058]:
+                - generic [ref=e3059]:
+                  - button "TRI 차트 보기" [ref=e3060]:
+                    - img [ref=e3061]
+                  - button [disabled] [ref=e3064]:
+                    - img [ref=e3065]
+            - row "89 PAYX Paychex, Inc. $34.8B $97.00 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3066] [cursor=pointer]:
+              - cell "89" [ref=e3067]
+              - cell "PAYX Paychex, Inc." [ref=e3068]:
+                - paragraph [ref=e3069]: PAYX
+                - paragraph [ref=e3071]: Paychex, Inc.
+              - cell "$34.8B" [ref=e3072]
+              - cell "$97.00" [ref=e3073]
+              - cell "—" [ref=e3074]
+              - cell "—" [ref=e3075]
+              - cell "Pending" [ref=e3076]
+              - cell "-" [ref=e3077]:
+                - generic [ref=e3078]: "-"
+              - cell "-" [ref=e3079]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3080]:
+                - generic [ref=e3081]: Unknown
+                - paragraph [ref=e3082]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3083]:
+                - text: "-"
+                - paragraph [ref=e3084]: 피벗 미확정
+              - cell "Low Priority" [ref=e3085]:
+                - generic [ref=e3086]: Low Priority
+              - cell "-" [ref=e3087]:
+                - paragraph [ref=e3088]: "-"
+              - cell [ref=e3089]:
+                - generic [ref=e3090]:
+                  - button "PAYX 차트 보기" [ref=e3091]:
+                    - img [ref=e3092]
+                  - button [disabled] [ref=e3095]:
+                    - img [ref=e3096]
+            - row "90 ROP Roper Technologies, Inc. $33.0B $326.94 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3097] [cursor=pointer]:
+              - cell "90" [ref=e3098]
+              - cell "ROP Roper Technologies, Inc." [ref=e3099]:
+                - paragraph [ref=e3100]: ROP
+                - paragraph [ref=e3102]: Roper Technologies, Inc.
+              - cell "$33.0B" [ref=e3103]
+              - cell "$326.94" [ref=e3104]
+              - cell "—" [ref=e3105]
+              - cell "—" [ref=e3106]
+              - cell "Pending" [ref=e3107]
+              - cell "-" [ref=e3108]:
+                - generic [ref=e3109]: "-"
+              - cell "-" [ref=e3110]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3111]:
+                - generic [ref=e3112]: Unknown
+                - paragraph [ref=e3113]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3114]:
+                - text: "-"
+                - paragraph [ref=e3115]: 피벗 미확정
+              - cell "Low Priority" [ref=e3116]:
+                - generic [ref=e3117]: Low Priority
+              - cell "-" [ref=e3118]:
+                - paragraph [ref=e3119]: "-"
+              - cell [ref=e3120]:
+                - generic [ref=e3121]:
+                  - button "ROP 차트 보기" [ref=e3122]:
+                    - img [ref=e3123]
+                  - button [disabled] [ref=e3126]:
+                    - img [ref=e3127]
+            - row "91 CPRT Copart, Inc. (DE) $32.6B $33.79 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3128] [cursor=pointer]:
+              - cell "91" [ref=e3129]
+              - cell "CPRT Copart, Inc. (DE)" [ref=e3130]:
+                - paragraph [ref=e3131]: CPRT
+                - paragraph [ref=e3133]: Copart, Inc. (DE)
+              - cell "$32.6B" [ref=e3134]
+              - cell "$33.79" [ref=e3135]
+              - cell "—" [ref=e3136]
+              - cell "—" [ref=e3137]
+              - cell "Pending" [ref=e3138]
+              - cell "-" [ref=e3139]:
+                - generic [ref=e3140]: "-"
+              - cell "-" [ref=e3141]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3142]:
+                - generic [ref=e3143]: Unknown
+                - paragraph [ref=e3144]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3145]:
+                - text: "-"
+                - paragraph [ref=e3146]: 피벗 미확정
+              - cell "Low Priority" [ref=e3147]:
+                - generic [ref=e3148]: Low Priority
+              - cell "-" [ref=e3149]:
+                - paragraph [ref=e3150]: "-"
+              - cell [ref=e3151]:
+                - generic [ref=e3152]:
+                  - button "CPRT 차트 보기" [ref=e3153]:
+                    - img [ref=e3154]
+                  - button [disabled] [ref=e3157]:
+                    - img [ref=e3158]
+            - row "92 WDAY Workday, Inc. $32.0B $128.14 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3159] [cursor=pointer]:
+              - cell "92" [ref=e3160]
+              - cell "WDAY Workday, Inc." [ref=e3161]:
+                - paragraph [ref=e3162]: WDAY
+                - paragraph [ref=e3164]: Workday, Inc.
+              - cell "$32.0B" [ref=e3165]
+              - cell "$128.14" [ref=e3166]
+              - cell "—" [ref=e3167]
+              - cell "—" [ref=e3168]
+              - cell "Pending" [ref=e3169]
+              - cell "-" [ref=e3170]:
+                - generic [ref=e3171]: "-"
+              - cell "-" [ref=e3172]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3173]:
+                - generic [ref=e3174]: Unknown
+                - paragraph [ref=e3175]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3176]:
+                - text: "-"
+                - paragraph [ref=e3177]: 피벗 미확정
+              - cell "Low Priority" [ref=e3178]:
+                - generic [ref=e3179]: Low Priority
+              - cell "-" [ref=e3180]:
+                - paragraph [ref=e3181]: "-"
+              - cell [ref=e3182]:
+                - generic [ref=e3183]:
+                  - button "WDAY 차트 보기" [ref=e3184]:
+                    - img [ref=e3185]
+                  - button [disabled] [ref=e3188]:
+                    - img [ref=e3189]
+            - row "93 AXON Axon Enterprise, Inc. $31.1B $386.00 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3190] [cursor=pointer]:
+              - cell "93" [ref=e3191]
+              - cell "AXON Axon Enterprise, Inc." [ref=e3192]:
+                - paragraph [ref=e3193]: AXON
+                - paragraph [ref=e3195]: Axon Enterprise, Inc.
+              - cell "$31.1B" [ref=e3196]
+              - cell "$386.00" [ref=e3197]
+              - cell "—" [ref=e3198]
+              - cell "—" [ref=e3199]
+              - cell "Pending" [ref=e3200]
+              - cell "-" [ref=e3201]:
+                - generic [ref=e3202]: "-"
+              - cell "-" [ref=e3203]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3204]:
+                - generic [ref=e3205]: Unknown
+                - paragraph [ref=e3206]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3207]:
+                - text: "-"
+                - paragraph [ref=e3208]: 피벗 미확정
+              - cell "Low Priority" [ref=e3209]:
+                - generic [ref=e3210]: Low Priority
+              - cell "-" [ref=e3211]:
+                - paragraph [ref=e3212]: "-"
+              - cell [ref=e3213]:
+                - generic [ref=e3214]:
+                  - button "AXON 차트 보기" [ref=e3215]:
+                    - img [ref=e3216]
+                  - button [disabled] [ref=e3219]:
+                    - img [ref=e3220]
+            - row "94 ZS Zscaler, Inc. $29.3B $182.37 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3221] [cursor=pointer]:
+              - cell "94" [ref=e3222]
+              - cell "ZS Zscaler, Inc." [ref=e3223]:
+                - paragraph [ref=e3224]: ZS
+                - paragraph [ref=e3226]: Zscaler, Inc.
+              - cell "$29.3B" [ref=e3227]
+              - cell "$182.37" [ref=e3228]
+              - cell "—" [ref=e3229]
+              - cell "—" [ref=e3230]
+              - cell "Pending" [ref=e3231]
+              - cell "-" [ref=e3232]:
+                - generic [ref=e3233]: "-"
+              - cell "-" [ref=e3234]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3235]:
+                - generic [ref=e3236]: Unknown
+                - paragraph [ref=e3237]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3238]:
+                - text: "-"
+                - paragraph [ref=e3239]: 피벗 미확정
+              - cell "Low Priority" [ref=e3240]:
+                - generic [ref=e3241]: Low Priority
+              - cell "-" [ref=e3242]:
+                - paragraph [ref=e3243]: "-"
+              - cell [ref=e3244]:
+                - generic [ref=e3245]:
+                  - button "ZS 차트 보기" [ref=e3246]:
+                    - img [ref=e3247]
+                  - button [disabled] [ref=e3250]:
+                    - img [ref=e3251]
+            - row "95 GEHC GE HealthCare Technologies Inc. $29.2B $64.23 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3252] [cursor=pointer]:
+              - cell "95" [ref=e3253]
+              - cell "GEHC GE HealthCare Technologies Inc." [ref=e3254]:
+                - paragraph [ref=e3255]: GEHC
+                - paragraph [ref=e3257]: GE HealthCare Technologies Inc.
+              - cell "$29.2B" [ref=e3258]
+              - cell "$64.23" [ref=e3259]
+              - cell "—" [ref=e3260]
+              - cell "—" [ref=e3261]
+              - cell "Pending" [ref=e3262]
+              - cell "-" [ref=e3263]:
+                - generic [ref=e3264]: "-"
+              - cell "-" [ref=e3265]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3266]:
+                - generic [ref=e3267]: Unknown
+                - paragraph [ref=e3268]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3269]:
+                - text: "-"
+                - paragraph [ref=e3270]: 피벗 미확정
+              - cell "Low Priority" [ref=e3271]:
+                - generic [ref=e3272]: Low Priority
+              - cell "-" [ref=e3273]:
+                - paragraph [ref=e3274]: "-"
+              - cell [ref=e3275]:
+                - generic [ref=e3276]:
+                  - button "GEHC 차트 보기" [ref=e3277]:
+                    - img [ref=e3278]
+                  - button [disabled] [ref=e3281]:
+                    - img [ref=e3282]
+            - row "96 KHC The Kraft Heinz Company $28.2B $23.79 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3283] [cursor=pointer]:
+              - cell "96" [ref=e3284]
+              - cell "KHC The Kraft Heinz Company" [ref=e3285]:
+                - paragraph [ref=e3286]: KHC
+                - paragraph [ref=e3288]: The Kraft Heinz Company
+              - cell "$28.2B" [ref=e3289]
+              - cell "$23.79" [ref=e3290]
+              - cell "—" [ref=e3291]
+              - cell "—" [ref=e3292]
+              - cell "Pending" [ref=e3293]
+              - cell "-" [ref=e3294]:
+                - generic [ref=e3295]: "-"
+              - cell "-" [ref=e3296]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3297]:
+                - generic [ref=e3298]: Unknown
+                - paragraph [ref=e3299]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3300]:
+                - text: "-"
+                - paragraph [ref=e3301]: 피벗 미확정
+              - cell "Low Priority" [ref=e3302]:
+                - generic [ref=e3303]: Low Priority
+              - cell "-" [ref=e3304]:
+                - paragraph [ref=e3305]: "-"
+              - cell [ref=e3306]:
+                - generic [ref=e3307]:
+                  - button "KHC 차트 보기" [ref=e3308]:
+                    - img [ref=e3309]
+                  - button [disabled] [ref=e3312]:
+                    - img [ref=e3313]
+            - row "97 DXCM DexCom, Inc. $27.8B $72.10 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3314] [cursor=pointer]:
+              - cell "97" [ref=e3315]
+              - cell "DXCM DexCom, Inc." [ref=e3316]:
+                - paragraph [ref=e3317]: DXCM
+                - paragraph [ref=e3319]: DexCom, Inc.
+              - cell "$27.8B" [ref=e3320]
+              - cell "$72.10" [ref=e3321]
+              - cell "—" [ref=e3322]
+              - cell "—" [ref=e3323]
+              - cell "Pending" [ref=e3324]
+              - cell "-" [ref=e3325]:
+                - generic [ref=e3326]: "-"
+              - cell "-" [ref=e3327]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3328]:
+                - generic [ref=e3329]: Unknown
+                - paragraph [ref=e3330]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3331]:
+                - text: "-"
+                - paragraph [ref=e3332]: 피벗 미확정
+              - cell "Low Priority" [ref=e3333]:
+                - generic [ref=e3334]: Low Priority
+              - cell "-" [ref=e3335]:
+                - paragraph [ref=e3336]: "-"
+              - cell [ref=e3337]:
+                - generic [ref=e3338]:
+                  - button "DXCM 차트 보기" [ref=e3339]:
+                    - img [ref=e3340]
+                  - button [disabled] [ref=e3343]:
+                    - img [ref=e3344]
+            - row "98 CTSH Cognizant Technology Solutions Corporation $25.0B $52.75 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3345] [cursor=pointer]:
+              - cell "98" [ref=e3346]
+              - cell "CTSH Cognizant Technology Solutions Corporation" [ref=e3347]:
+                - paragraph [ref=e3348]: CTSH
+                - paragraph [ref=e3350]: Cognizant Technology Solutions Corporation
+              - cell "$25.0B" [ref=e3351]
+              - cell "$52.75" [ref=e3352]
+              - cell "—" [ref=e3353]
+              - cell "—" [ref=e3354]
+              - cell "Pending" [ref=e3355]
+              - cell "-" [ref=e3356]:
+                - generic [ref=e3357]: "-"
+              - cell "-" [ref=e3358]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3359]:
+                - generic [ref=e3360]: Unknown
+                - paragraph [ref=e3361]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3362]:
+                - text: "-"
+                - paragraph [ref=e3363]: 피벗 미확정
+              - cell "Low Priority" [ref=e3364]:
+                - generic [ref=e3365]: Low Priority
+              - cell "-" [ref=e3366]:
+                - paragraph [ref=e3367]: "-"
+              - cell [ref=e3368]:
+                - generic [ref=e3369]:
+                  - button "CTSH 차트 보기" [ref=e3370]:
+                    - img [ref=e3371]
+                  - button [disabled] [ref=e3374]:
+                    - img [ref=e3375]
+            - row "99 INSM Insmed Incorporated $23.0B $106.24 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3376] [cursor=pointer]:
+              - cell "99" [ref=e3377]
+              - cell "INSM Insmed Incorporated" [ref=e3378]:
+                - paragraph [ref=e3379]: INSM
+                - paragraph [ref=e3381]: Insmed Incorporated
+              - cell "$23.0B" [ref=e3382]
+              - cell "$106.24" [ref=e3383]
+              - cell "—" [ref=e3384]
+              - cell "—" [ref=e3385]
+              - cell "Pending" [ref=e3386]
+              - cell "-" [ref=e3387]:
+                - generic [ref=e3388]: "-"
+              - cell "-" [ref=e3389]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3390]:
+                - generic [ref=e3391]: Unknown
+                - paragraph [ref=e3392]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3393]:
+                - text: "-"
+                - paragraph [ref=e3394]: 피벗 미확정
+              - cell "Low Priority" [ref=e3395]:
+                - generic [ref=e3396]: Low Priority
+              - cell "-" [ref=e3397]:
+                - paragraph [ref=e3398]: "-"
+              - cell [ref=e3399]:
+                - generic [ref=e3400]:
+                  - button "INSM 차트 보기" [ref=e3401]:
+                    - img [ref=e3402]
+                  - button [disabled] [ref=e3405]:
+                    - img [ref=e3406]
+            - row "100 VRSK Verisk Analytics, Inc. $22.4B $171.11 — — Pending - - Unknown DU - / PP - / unknown - 피벗 미확정 Low Priority -" [ref=e3407] [cursor=pointer]:
+              - cell "100" [ref=e3408]
+              - cell "VRSK Verisk Analytics, Inc." [ref=e3409]:
+                - paragraph [ref=e3410]: VRSK
+                - paragraph [ref=e3412]: Verisk Analytics, Inc.
+              - cell "$22.4B" [ref=e3413]
+              - cell "$171.11" [ref=e3414]
+              - cell "—" [ref=e3415]
+              - cell "—" [ref=e3416]
+              - cell "Pending" [ref=e3417]
+              - cell "-" [ref=e3418]:
+                - generic [ref=e3419]: "-"
+              - cell "-" [ref=e3420]
+              - cell "Unknown DU - / PP - / unknown" [ref=e3421]:
+                - generic [ref=e3422]: Unknown
+                - paragraph [ref=e3423]: DU - / PP - / unknown
+              - cell "- 피벗 미확정" [ref=e3424]:
+                - text: "-"
+                - paragraph [ref=e3425]: 피벗 미확정
+              - cell "Low Priority" [ref=e3426]:
+                - generic [ref=e3427]: Low Priority
+              - cell "-" [ref=e3428]:
+                - paragraph [ref=e3429]: "-"
+              - cell [ref=e3430]:
+                - generic [ref=e3431]:
+                  - button "VRSK 차트 보기" [ref=e3432]:
+                    - img [ref=e3433]
+                  - button [disabled] [ref=e3436]:
+                    - img [ref=e3437]
+        - 'link "Step 3: Beauty Contest 최고의 차트 선정하기" [ref=e3440] [cursor=pointer]':
+          - /url: /contest
+          - 'button "Step 3: Beauty Contest 최고의 차트 선정하기" [ref=e3441]':
+            - generic [ref=e3442]:
+              - paragraph [ref=e3443]: "Step 3: Beauty Contest"
+              - paragraph [ref=e3444]: 최고의 차트 선정하기
+            - img [ref=e3446]
+  - alert [ref=e3449]
 ```
 
 # Test source
 
 ```ts
-  1   | import { test, expect } from '@playwright/test';
-  2   | import { login } from './helpers/auth';
-  3   | import { setupAllMocks } from './mocks/handlers';
-  4   | import { ScannerPage } from './helpers/page-objects';
-  5   | 
   6   | test.describe('TC-SCAN: 미너비니 스크리너', () => {
   7   |   let scannerPage: ScannerPage;
   8   | 
@@ -193,76 +3234,86 @@ Call log:
   33  | 
   34  |   test('SCAN-02: 스캔 결과 Tier별 카운트 확인', async ({ page }) => {
   35  |     await scannerPage.goto();
-  36  | 
-  37  |     // Our fixture has 1 Recommended, 1 Action, 1 IB Review, 1 Errors
-  38  |     // Cards should display these numbers
-  39  |     const recommendedCount = await scannerPage.getStatCardValue('Recommended');
-  40  |     const actionCount = await scannerPage.getStatCardValue('Action');
-  41  |     const ibReviewCount = await scannerPage.getStatCardValue('IB Review');
-  42  |     const errorsCount = await scannerPage.getStatCardValue('Errors');
-  43  | 
-  44  |     expect(recommendedCount.trim()).toBe('1');
-  45  |     expect(actionCount.trim()).toBe('1');
-  46  |     expect(ibReviewCount.trim()).toBe('1');
-  47  |     expect(errorsCount.trim()).toBe('1');
-  48  |   });
-  49  | 
-  50  |   test('SCAN-04: 필터 탭 전환', async ({ page }) => {
-  51  |     await scannerPage.goto();
-  52  | 
-  53  |     // Filter by Recommended
-  54  |     const recFilter = page.locator('button:has-text("Recommended")');
-  55  |     await recFilter.click();
+  36  |     await scannerPage.scanButton.click();
+  37  |     await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
+  38  | 
+  39  |     // Our fixture has 1 Recommended, 1 Action, 1 IB Review, 1 Errors
+  40  |     // Cards should display these numbers
+  41  |     const recommendedCount = await scannerPage.getStatCardValue('Recommended');
+  42  |     const actionCount = await scannerPage.getStatCardValue('Action');
+  43  |     const ibReviewCount = await scannerPage.getStatCardValue('IB Review');
+  44  |     const errorsCount = await scannerPage.getStatCardValue('Errors');
+  45  | 
+  46  |     expect(recommendedCount.trim()).toBe('1');
+  47  |     expect(actionCount.trim()).toBe('1');
+  48  |     expect(ibReviewCount.trim()).toBe('1');
+  49  |     expect(errorsCount.trim()).toBe('1');
+  50  |   });
+  51  | 
+  52  |   test('SCAN-04: 필터 탭 전환', async ({ page }) => {
+  53  |     await scannerPage.goto();
+  54  |     await scannerPage.scanButton.click();
+  55  |     await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
   56  | 
-  57  |     // Only NVDA should be visible
-  58  |     await expect(page.locator('text=NVDA')).toBeVisible();
-  59  |     await expect(page.locator('text=META')).not.toBeVisible();
-  60  |   });
-  61  | 
-  62  |   test('SCAN-07: 종목 선택 및 카운터 증가', async ({ page }) => {
-  63  |     await scannerPage.goto();
-  64  | 
-  65  |     // Checkboxes should exist for valid candidates
-  66  |     const checkboxes = page.locator('input[type="checkbox"]');
-  67  |     
-  68  |     // Select first one
-  69  |     await checkboxes.first().check();
-  70  |     
-  71  |     // Check selected count
-  72  |     await expect(scannerPage.selectedCount).toHaveText(/1/);
-  73  | 
-  74  |     // Select second one
-  75  |     await checkboxes.nth(1).check();
-  76  |     await expect(scannerPage.selectedCount).toHaveText(/2/);
-  77  |   });
-  78  | 
-  79  |   test('SCAN-08: 종목 클릭 → VCP Drilldown 모달', async ({ page }) => {
-  80  |     await scannerPage.goto();
-  81  | 
-  82  |     // Click on NVDA row/card
-  83  |     const nvdaRow = page.locator('text=NVDA').first();
-  84  |     await nvdaRow.click();
-  85  | 
-  86  |     // Modal should appear
-  87  |     const modal = page.locator('div[role="dialog"]');
-  88  |     await expect(modal).toBeVisible();
-  89  |     await expect(modal.locator('text=VCP Analysis')).toBeVisible();
-  90  |   });
-  91  | 
-  92  |   test('SCAN-10: 콘테스트로 이동 플로팅 버튼', async ({ page }) => {
-  93  |     await scannerPage.goto();
-  94  | 
-  95  |     // Select one candidate
-> 96  |     await page.locator('input[type="checkbox"]').first().check();
+  57  |     // Filter by Recommended
+  58  |     const recFilter = page.locator('button:has-text("Recommended")');
+  59  |     await recFilter.click();
+  60  | 
+  61  |     // Only NVDA should be visible
+  62  |     await expect(page.locator('text=NVDA')).toBeVisible();
+  63  |     await expect(page.locator('text=META')).not.toBeVisible();
+  64  |   });
+  65  | 
+  66  |   test('SCAN-07: 종목 선택 및 카운터 증가', async ({ page }) => {
+  67  |     await scannerPage.goto();
+  68  |     await scannerPage.scanButton.click();
+  69  |     await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
+  70  | 
+  71  |     // Checkboxes should exist for valid candidates
+  72  |     const checkboxes = page.locator('input[type="checkbox"]');
+  73  |     
+  74  |     // Select first one
+  75  |     await checkboxes.first().check();
+  76  |     
+  77  |     // Check selected count
+  78  |     await expect(scannerPage.selectedCount).toHaveText(/1/);
+  79  | 
+  80  |     // Select second one
+  81  |     await checkboxes.nth(1).check();
+  82  |     await expect(scannerPage.selectedCount).toHaveText(/2/);
+  83  |   });
+  84  | 
+  85  |   test('SCAN-08: 종목 클릭 → VCP Drilldown 모달', async ({ page }) => {
+  86  |     await scannerPage.goto();
+  87  |     await scannerPage.scanButton.click();
+  88  |     await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
+  89  | 
+  90  |     // Click on NVDA row/card
+  91  |     const nvdaRow = page.locator('text=NVDA').first();
+  92  |     await nvdaRow.click();
+  93  | 
+  94  |     // Modal should appear
+  95  |     const modal = page.locator('div[role="dialog"]');
+  96  |     await expect(modal).toBeVisible();
+  97  |     await expect(modal.locator('text=VCP Analysis')).toBeVisible();
+  98  |   });
+  99  | 
+  100 |   test('SCAN-10: 콘테스트로 이동 플로팅 버튼', async ({ page }) => {
+  101 |     await scannerPage.goto();
+  102 |     await scannerPage.scanButton.click();
+  103 |     await expect(page.locator('text=NVDA')).toBeVisible({ timeout: 15_000 });
+  104 | 
+  105 |     // Select one candidate
+> 106 |     await page.locator('input[type="checkbox"]').first().check();
       |                                                          ^ TimeoutError: locator.check: Timeout 15000ms exceeded.
-  97  | 
-  98  |     // Contest button should become active and clickable
-  99  |     await expect(scannerPage.contestButton).toBeEnabled();
-  100 |     await scannerPage.contestButton.click();
-  101 | 
-  102 |     // Should navigate to contest page
-  103 |     await expect(page).toHaveURL(/\/contest/);
-  104 |   });
-  105 | });
-  106 | 
+  107 | 
+  108 |     // Contest button should become active and clickable
+  109 |     await expect(scannerPage.contestButton).toBeEnabled();
+  110 |     await scannerPage.contestButton.click();
+  111 | 
+  112 |     // Should navigate to contest page
+  113 |     await expect(page).toHaveURL(/\/contest/);
+  114 |   });
+  115 | });
+  116 | 
 ```

@@ -33,6 +33,30 @@ function parseIbResponse(raw: string): {
 } {
   const trimmed = raw.trim();
 
+  // Strategy 0: Explicit PART markers
+  const part1Idx = trimmed.indexOf('[PART 1: JSON METADATA]');
+  const part2Idx = trimmed.indexOf('[PART 2: MARKDOWN REPORT]');
+
+  if (part1Idx !== -1 && part2Idx !== -1 && part2Idx > part1Idx) {
+    const part1Block = trimmed.slice(part1Idx + '[PART 1: JSON METADATA]'.length, part2Idx).trim();
+    const part2Block = trimmed.slice(part2Idx + '[PART 2: MARKDOWN REPORT]'.length).trim();
+    
+    // extract json from part1Block
+    const fenceMatch = part1Block.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    let jsonStr = fenceMatch ? fenceMatch[1] : part1Block;
+    try {
+      const start = jsonStr.indexOf('{');
+      if (start !== -1) {
+        const close = findBalancedClose(jsonStr, start, 0);
+        if (close !== -1) jsonStr = jsonStr.slice(start, close + 1);
+      }
+      const metadata = JSON.parse(jsonStr) as Record<string, unknown>;
+      return { metadata, reportMarkdown: sanitizeReportMarkdown(part2Block), parseFailed: false };
+    } catch {
+      // Fall through to other strategies
+    }
+  }
+
   // Strategy 1: ```json 펜스
   const fenceRegex = /```(?:json)?\s*([\s\S]*?)\s*```/i;
   const match = trimmed.match(fenceRegex);
@@ -60,12 +84,12 @@ function parseIbResponse(raw: string): {
   // Strategy 3/4: bracket matching + stitching recovery
   const start = trimmed.indexOf('{');
   if (start === -1) {
-    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+    return { metadata: null, reportMarkdown: sanitizeFallbackMarkdown(trimmed), parseFailed: true };
   }
 
   const firstClose = findBalancedClose(trimmed, start, 0);
   if (firstClose === -1) {
-    return { metadata: null, reportMarkdown: trimmed, parseFailed: true };
+    return { metadata: null, reportMarkdown: sanitizeFallbackMarkdown(trimmed), parseFailed: true };
   }
 
   const jsonCandidate = trimmed.slice(start, firstClose + 1);
@@ -74,7 +98,6 @@ function parseIbResponse(raw: string): {
   // (4) 너무 일찍 닫혔을 가능성: rest가 JSON 연속 토큰으로 시작
   if (rest.startsWith(',') || rest.startsWith('}') || rest.startsWith('"')) {
     // 외부 `}` 제거 후 rest의 다음 균형 close까지 stitch
-    // jsonCandidate 마지막 `}`를 제외하고, rest에서 depth=1로 시작해 0이 되는 지점까지 사용
     const stitchClose = findBalancedClose(rest, 0, 1);
     if (stitchClose !== -1) {
       const stitched = jsonCandidate.slice(0, -1) + rest.slice(0, stitchClose + 1);
@@ -97,7 +120,7 @@ function parseIbResponse(raw: string): {
       parseFailed: false,
     };
   } catch {
-    return { metadata: null, reportMarkdown: rest, parseFailed: true };
+    return { metadata: null, reportMarkdown: sanitizeFallbackMarkdown(rest), parseFailed: true };
   }
 }
 
@@ -123,6 +146,20 @@ function findBalancedClose(text: string, from: number, startDepth: number): numb
     }
   }
   return -1;
+}
+
+/**
+ * 파싱에 완전히 실패하여 Fallback으로 텍스트를 반환해야 할 때,
+ * 텍스트 자체가 JSON 원시 찌꺼기이거나 `{ "schema_version": ... }` 일 경우
+ * UI에 그대로 노출되는 것을 막기 위해 안전한 경고 메시지로 치환합니다.
+ */
+function sanitizeFallbackMarkdown(text: string): string {
+  const trimmed = text.trim();
+  // JSON 포맷을 암시하는 문자열이면 노출 차단
+  if (trimmed.startsWith('{') || trimmed.includes('"schema_version"')) {
+    return '🚨 **AI 엔진 응답 포맷 오류 발생**\n\n현재 활성화된 AI 모델이 마크다운 리포트 생성 지시를 위반하고 데이터 형식(JSON)만 반환하여 리포트 본문을 렌더링할 수 없습니다. \n\nVercel 환경 변수에 로컬 보안 터널(ngrok) URL이 정상적으로 세팅되어 맥미니 로컬 모델이 1순위로 호출될 수 있도록 확인해 주시기 바랍니다. (Gemini Fallback 작동 시 발생할 수 있는 이슈입니다.)';
+  }
+  return sanitizeReportMarkdown(trimmed);
 }
 
 /**
