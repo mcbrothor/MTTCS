@@ -33,11 +33,12 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function runContestAnalysis(prompt: string): Promise<ContestAnalysisResult> {
+export async function runContestAnalysis(prompt: string, options?: { skipLocal?: boolean }): Promise<ContestAnalysisResult> {
   const fallbackChain: AiFallbackAttempt[] = [];
+  const skipLocal = !!options?.skipLocal;
 
   // 0. 로컬 LLM (Ollama 최우선)
-  if (LOCAL_LLM_ENABLED) {
+  if (LOCAL_LLM_ENABLED && !skipLocal) {
     try {
       const response = await callLocalLlmModel(prompt, 'You are a Senior Investment Bank Committee Member.', IB_MAX_OUTPUT_TOKENS);
       const analysis = extractStructuredJson(response);

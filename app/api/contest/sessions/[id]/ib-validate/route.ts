@@ -328,7 +328,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
       fallbackChain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
     } else {
-      const result = await runContestAnalysis(prompt);
+      const result = await runContestAnalysis(prompt, { skipLocal: true });
       rawResponse = result.rawResponse;
       providerUsed = result.providerUsed;
       modelUsed = result.modelUsed;
