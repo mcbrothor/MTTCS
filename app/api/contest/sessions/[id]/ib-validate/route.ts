@@ -256,16 +256,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       marketContext,
     );
 
-    // 로컬 LLM + 텔레그램 전송일 경우 Vercel 10초 타임아웃 방지를 위해 백그라운드 스케줄링(after) 처리
+    // 로컬 LLM + 텔레그램 전송일 경우 브라우저 5분 타임아웃 방지를 위해 백그라운드 처리 (Fire-and-Forget)
+    // Local 환경(npm run dev)의 Node.js 런타임에서는 unawaited Promise가 정상적으로 끝까지 실행됩니다.
     if (forceLocal && sendTelegram) {
-      after(async () => {
+      const bgTask = async () => {
         try {
           console.log('[Background Task] Starting Local LLM generation...');
           const bgRawResponse = await callLocalLlmModel(
             prompt,
             'You are a Senior Investment Bank Committee Member.',
             8192,
-            true // forceLargeTimeout = true
+            true // forceLargeTimeout = true (600초 타임아웃)
           );
           console.log('[Background Task] Local LLM completed. Parsing...');
           const { metadata: bgMetadata, reportMarkdown: bgReportMarkdown, parseFailed: bgParseFailed } = parseIbResponse(bgRawResponse);
@@ -302,13 +303,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           }
         } catch (bgError) {
           console.error('[Background Task] Error in background execution:', bgError);
+          try {
+            await supabaseServer
+              .from('beauty_contest_sessions')
+              .update({
+                ib_analysis: {
+                  parse_failed: true,
+                  error_message: errorMessage(bgError),
+                  failed_at: new Date().toISOString()
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', sessionId);
+          } catch (e) {}
         }
-      });
+      };
+
+      // Await 없이 바로 던져서 백그라운드 실행
+      bgTask().catch(console.error);
 
       return NextResponse.json({
         success: true,
         background: true,
-        message: '로컬 LLM 분석 및 텔레그램 발송을 백그라운드에서 시작했습니다. 약 30~60초 후 텔레그램에서 리포트를 받아보실 수 있습니다.',
+        message: '로컬 LLM 분석 및 텔레그램 발송을 백그라운드에서 시작했습니다. 생성에 최대 5~10분이 소요될 수 있습니다. 완료 시 텔레그램으로 자동 전송됩니다.',
       });
     }
 
@@ -381,6 +398,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   } catch (error: unknown) {
     console.error('IB Validation Error:', error);
+    
+    // 에러 발생 시 Supabase에 원인을 기록하여 진단 가능하게 처리
+    try {
+      await supabaseServer
+        .from('beauty_contest_sessions')
+        .update({
+          ib_analysis: {
+            parse_failed: true,
+            error_message: errorMessage(error),
+            failed_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+    } catch (e) {
+      // Ignore DB write errors during error handling
+    }
+
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
 }

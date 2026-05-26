@@ -477,8 +477,8 @@ export async function callLocalLlmModel(
   forceLargeTimeout = false
 ): Promise<string> {
   const isVercel = process.env.VERCEL === '1';
-  // Vercel 환경이고 forceLargeTimeout이 아닐 때만 5.5초 타임아웃 적용 (로컬 전용 강제 호출 시에는 120초 적용)
-  const timeoutMs = (isVercel && !forceLargeTimeout) ? 5500 : 120000;
+  // Vercel 환경이고 forceLargeTimeout이 아닐 때만 5.5초 타임아웃 적용 (로컬 전용 강제 호출 시에는 10분/600초 적용)
+  const timeoutMs = (isVercel && !forceLargeTimeout) ? 5500 : 600000;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
