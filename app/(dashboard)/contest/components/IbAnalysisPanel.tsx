@@ -229,27 +229,28 @@ const IbAnalysisPanel: React.FC<IbAnalysisPanelProps> = ({
               <div className="rounded-2xl border border-slate-800 bg-slate-950 shadow-inner">
                 <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10">
-                      <Clipboard className="h-4 w-4 text-indigo-300" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 shadow-lg shadow-sky-500/20">
+                      <Clipboard className="h-4 w-4 text-sky-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-black text-white">Investment Committee Memorandum</p>
-                      <p className="mt-0.5 text-[11px] text-slate-500">전문 리서치 메모 형식 · 전체 본문 스크롤 가능</p>
+                      <p className="text-sm font-black text-white">AI-CIO Daily Execution Briefing</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">프리미엄 AI 비서 실전 브리핑 · 전체 본문 스크롤 가능</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     {activeSession?.ib_provider && (
-                      <span className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                      <span className="rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
                         {activeSession.ib_provider}
                       </span>
                     )}
-                    <span className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                      IB Final Judgment
+                    <span className="rounded-lg bg-sky-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-sky-300 shadow-sm">
+                      AI-CIO Execution Guide
                     </span>
                   </div>
                 </div>
-                <div className="max-h-[72vh] overflow-y-auto px-5 py-5 sm:px-8 sm:py-7">
-                  <div className="prose prose-invert prose-sm max-w-none prose-headings:scroll-mt-24 prose-headings:font-black prose-headings:text-white prose-h1:border-b prose-h1:border-slate-800 prose-h1:pb-3 prose-h2:mt-8 prose-h2:text-indigo-200 prose-h3:text-emerald-200 prose-strong:text-white prose-li:marker:text-indigo-400 prose-blockquote:border-l-indigo-500 prose-blockquote:bg-indigo-500/5 prose-blockquote:px-4 prose-blockquote:py-2 prose-table:text-xs prose-th:border-slate-700 prose-td:border-slate-800">
+                <div className="relative max-h-[72vh] overflow-y-auto bg-slate-900/80 px-6 py-8 sm:px-10 sm:py-12">
+                  <div className="absolute left-0 top-0 h-1 w-full bg-gradient-to-r from-indigo-500 via-sky-500 to-emerald-500"></div>
+                  <div className="prose prose-invert max-w-none prose-headings:scroll-mt-24 prose-headings:font-black prose-headings:tracking-tight prose-h1:border-b prose-h1:border-slate-800 prose-h1:pb-4 prose-h1:text-3xl prose-h1:text-transparent prose-h1:bg-clip-text prose-h1:bg-gradient-to-r prose-h1:from-sky-400 prose-h1:to-indigo-300 prose-h2:mb-4 prose-h2:mt-10 prose-h2:border-b prose-h2:border-slate-800/60 prose-h2:pb-2 prose-h2:text-xl prose-h2:text-white prose-h3:text-lg prose-h3:text-sky-300 prose-p:text-slate-300 prose-p:leading-relaxed prose-strong:font-bold prose-strong:text-white prose-li:marker:text-sky-500 prose-blockquote:rounded-r-xl prose-blockquote:border-l-4 prose-blockquote:border-l-sky-500 prose-blockquote:bg-sky-500/10 prose-blockquote:px-6 prose-blockquote:py-3 prose-blockquote:font-medium prose-blockquote:text-sky-100 prose-blockquote:shadow-sm prose-table:text-sm prose-th:bg-slate-800/50 prose-th:border-slate-700 prose-th:py-3 prose-th:text-slate-200 prose-td:border-slate-800/50 prose-td:py-3">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {reportText(ibAnalysis)}
                     </ReactMarkdown>

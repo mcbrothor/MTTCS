@@ -501,6 +501,7 @@ export async function callLocalLlmModel(
         max_tokens: maxOutputTokens,
         options: {
           num_ctx: 16384, // 6인 대가의 긴 복기 리포트 생성을 위해 컨텍스트 윈도우 16k 확장
+          num_predict: 8192 // Ollama 엔진 출력 토큰 강제 제한 해제 (글 끊김 방지)
         }
       }),
     });
