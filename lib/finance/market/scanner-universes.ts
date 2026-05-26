@@ -212,29 +212,49 @@ async function fetchStockAnalysisRussell1000(): Promise<ScannerUniverseResponse>
 }
 
 async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
-  const response = await fetch('https://api.nasdaq.com/api/quote/list-type/nasdaq100?assetclass=stocks&limit=100', {
+  const response = await fetch('https://stockanalysis.com/list/nasdaq-100-stocks/', {
     headers: {
-      accept: 'application/json',
+      accept: 'text/html',
       'user-agent': 'Mozilla/5.0',
     },
     next: { revalidate: 60 * 30 },
   });
 
   if (!response.ok) {
-    throw new Error(`Nasdaq response error (${response.status})`);
+    throw new Error(`StockAnalysis Nasdaq 100 response error (${response.status})`);
   }
 
-  const payload = await response.json() as {
-    data?: {
-      date?: string;
-      data?: {
-        rows?: NasdaqRow[];
+  const html = await response.text();
+  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+  const items = rows
+    .map((match) => {
+      const row = match[1] || '';
+      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!symbolMatch) return null;
+
+      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
+      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase();
+      const ticker = rawTicker.replace('.', '-');
+      const name = cells[2] || ticker;
+      const marketCap = parseAbbreviatedUsd(cells[3] || '');
+      const currentPrice = parseNumberText(cells[4] || '');
+
+      return {
+        rank: 0,
+        ticker,
+        exchange: 'NAS',
+        name,
+        marketCap,
+        currency: 'USD' as const,
+        currentPrice,
+        priceAsOf: new Date().toISOString(),
+        priceSource: 'StockAnalysis Nasdaq 100 table',
       };
-    };
-  };
-  const rows = payload.data?.data?.rows || [];
-  const priceAsOf = payload.data?.date || new Date().toISOString();
-  const items = normalizeNasdaqRows(rows, priceAsOf);
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, 100)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
 
   if (items.length === 0) {
     throw new Error('Nasdaq 100 constituents could not be parsed.');
@@ -244,8 +264,8 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
     universe: 'NASDAQ100',
     label: 'NASDAQ 100',
     asOf: new Date().toISOString(),
-    source: 'Nasdaq official Nasdaq-100 list API',
-    delayNote: 'Nasdaq quote data can be delayed.',
+    source: 'StockAnalysis Nasdaq-100 table',
+    delayNote: 'Nasdaq market-cap and price data can be delayed.',
     items,
     warnings: items.length < 100 ? [`Only ${items.length} Nasdaq rows were parsed.`] : [],
   };
