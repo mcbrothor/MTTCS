@@ -256,76 +256,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       marketContext,
     );
 
-    // 로컬 LLM + 텔레그램 전송일 경우 브라우저 5분 타임아웃 방지를 위해 백그라운드 처리 (Fire-and-Forget)
-    // Local 환경(npm run dev)의 Node.js 런타임에서는 unawaited Promise가 정상적으로 끝까지 실행됩니다.
+    // 로컬 LLM + 텔레그램 전송일 경우 비동기 큐(Queue) 패턴 적용
+    // Vercel Serverless 타임아웃(10~60초)을 회피하기 위해 DB에 대기열만 등록하고 즉시 반환합니다.
+    // 이후 Mac Mini에 띄워둔 워커 스크립트(scripts/local-llm-worker.mjs)가 이를 감지하고 백그라운드에서 처리합니다.
     if (forceLocal && sendTelegram) {
-      const bgTask = async () => {
-        try {
-          console.log('[Background Task] Starting Local LLM generation...');
-          const bgRawResponse = await callLocalLlmModel(
-            prompt,
-            'You are a Senior Investment Bank Committee Member.',
-            8192,
-            true // forceLargeTimeout = true (600초 타임아웃)
-          );
-          console.log('[Background Task] Local LLM completed. Parsing...');
-          const { metadata: bgMetadata, reportMarkdown: bgReportMarkdown, parseFailed: bgParseFailed } = parseIbResponse(bgRawResponse);
+      console.log('[API] Enqueueing Local LLM task to Supabase...');
+      const { error: enqueueError } = await supabaseServer
+        .from('beauty_contest_sessions')
+        .update({
+          ib_provider: 'pending-local-llm',
+          ib_raw_response: prompt, // 임시로 프롬프트를 저장해 워커가 읽을 수 있도록 함
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
 
-          const bgIbAnalysis: Record<string, unknown> = {
-            ...(bgMetadata ?? {}),
-            report_markdown: bgReportMarkdown,
-            schema_version: IB_RESPONSE_SCHEMA_VERSION,
-            prompt_version: IB_PROMPT_VERSION,
-            generated_at: new Date().toISOString(),
-            parse_failed: bgParseFailed,
-            ...(bgParseFailed ? { raw_text: bgRawResponse } : {}),
-          };
-
-          console.log('[Background Task] Saving to Supabase...');
-          await supabaseServer
-            .from('beauty_contest_sessions')
-            .update({
-              ib_raw_response: bgRawResponse,
-              ib_analysis: bgIbAnalysis,
-              ib_provider: `local-llm (${LOCAL_LLM_MODEL})`,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', sessionId);
-
-          if (bgReportMarkdown) {
-            console.log('[Background Task] Sending Telegram message...');
-            const telegramHeader = `📊 *[MTN 6대 거장 투자위원회 분석 리포트]*\n`;
-            const telegramFooter = `\n---------------------------------------\n*세션 ID*: \`${sessionId}\`\n*엔진*: \`local-llm (${LOCAL_LLM_MODEL})\`\n[대시보드 바로가기](https://mttcs.vercel.app)`;
-            const fullTelegramText = `${telegramHeader}\n${bgReportMarkdown}${telegramFooter}`;
-            
-            await sendTelegramMessage(fullTelegramText);
-            console.log('[Background Task] Telegram sent.');
-          }
-        } catch (bgError) {
-          console.error('[Background Task] Error in background execution:', bgError);
-          try {
-            await supabaseServer
-              .from('beauty_contest_sessions')
-              .update({
-                ib_analysis: {
-                  parse_failed: true,
-                  error_message: errorMessage(bgError),
-                  failed_at: new Date().toISOString()
-                },
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', sessionId);
-          } catch (e) {}
-        }
-      };
-
-      // Await 없이 바로 던져서 백그라운드 실행
-      bgTask().catch(console.error);
+      if (enqueueError) {
+        console.error('[API] Failed to enqueue task:', enqueueError);
+        return NextResponse.json({ error: '로컬 LLM 대기열 등록에 실패했습니다.' }, { status: 500 });
+      }
 
       return NextResponse.json({
         success: true,
         background: true,
-        message: '로컬 LLM 분석 및 텔레그램 발송을 백그라운드에서 시작했습니다. 생성에 최대 5~10분이 소요될 수 있습니다. 완료 시 텔레그램으로 자동 전송됩니다.',
+        message: '로컬 LLM 분석이 대기열에 등록되었습니다. Mac Mini의 워커 스크립트가 5~10분 내로 처리하여 텔레그램으로 전송합니다.',
       });
     }
 
