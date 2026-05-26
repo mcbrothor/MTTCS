@@ -212,60 +212,61 @@ async function fetchStockAnalysisRussell1000(): Promise<ScannerUniverseResponse>
 }
 
 async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
-  const response = await fetch('https://stockanalysis.com/list/nasdaq-100-stocks/', {
-    headers: {
-      accept: 'text/html',
-      'user-agent': 'Mozilla/5.0',
-    },
-    next: { revalidate: 60 * 30 },
+  // 캐시 오염 방지 및 WAF 차단(Cloudflare) 회피를 위해 가장 안정적인 Wikipedia를 소스로 사용합니다.
+  const response = await fetch('https://en.wikipedia.org/wiki/Nasdaq-100', {
+    headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' },
+    next: { revalidate: 60 * 60 * 24 }, // 24시간 안정적 캐시
   });
 
   if (!response.ok) {
-    throw new Error(`StockAnalysis Nasdaq 100 response error (${response.status})`);
+    throw new Error(`Wikipedia Nasdaq 100 response error (${response.status})`);
   }
 
   const html = await response.text();
-  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+  const tableMatch = html.match(/<table[^>]*id="constituents"[^>]*>([\s\S]*?)<\/table>/i);
+  if (!tableMatch) {
+    throw new Error('Wikipedia Nasdaq 100 table not found.');
+  }
+
+  const rows = Array.from(tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
   const items = rows
     .map((match) => {
-      const row = match[1] || '';
-      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
-      if (!symbolMatch) return null;
+      const row = match[1];
+      const cells = Array.from(row.matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)).map((cell) => stripHtml(cell[1]));
+      
+      // Wikipedia table columns: Ticker, Company, ICB Industry, ICB Subsector
+      if (cells.length < 2) return null;
+      if (cells[0] === 'Ticker' || cells[0] === 'Company') return null;
 
-      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
-      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase();
-      const ticker = rawTicker.replace('.', '-');
-      const name = cells[2] || ticker;
-      const marketCap = parseAbbreviatedUsd(cells[3] || '');
-      const currentPrice = parseNumberText(cells[4] || '');
+      const ticker = cells[0].toUpperCase().replace('.', '-');
+      const name = cells[1];
 
       return {
         rank: 0,
         ticker,
         exchange: 'NAS',
         name,
-        marketCap,
+        marketCap: null, // Market cap not provided by Wikipedia, will fetch price later
         currency: 'USD' as const,
-        currentPrice,
+        currentPrice: null,
         priceAsOf: new Date().toISOString(),
-        priceSource: 'StockAnalysis Nasdaq 100 table',
+        priceSource: 'Wikipedia Nasdaq-100 list',
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
-    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-    .slice(0, 100)
+    .slice(0, 150)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
   if (items.length === 0) {
-    throw new Error('Nasdaq 100 constituents could not be parsed.');
+    throw new Error('Nasdaq 100 constituents could not be parsed from Wikipedia.');
   }
 
   return {
     universe: 'NASDAQ100',
     label: 'NASDAQ 100',
     asOf: new Date().toISOString(),
-    source: 'StockAnalysis Nasdaq-100 table',
-    delayNote: 'Nasdaq market-cap and price data can be delayed.',
+    source: 'Wikipedia Nasdaq-100 table',
+    delayNote: 'Prices and market caps will be fetched dynamically.',
     items,
     warnings: items.length < 100 ? [`Only ${items.length} Nasdaq rows were parsed.`] : [],
   };
