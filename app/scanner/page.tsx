@@ -388,7 +388,7 @@ export default function ScannerPage() {
                 Macro Action
               </p>
               <p className="mt-1 text-sm text-[var(--text-primary)]">
-                <span className="font-semibold">{macroTrend.action_level}</span> 쨌 {macroTrend.index_code} 기준 50일선 {macroTrend.is_uptrend_50 ? '상회' : '하회'} / 200일선 {macroTrend.is_uptrend_200 ? '상회' : '하회'}
+                <span className="font-semibold">{macroTrend.action_level}</span> · {macroTrend.index_code} 기준 50일선 {macroTrend.is_uptrend_50 ? '상회' : '하회'} / 200일선 {macroTrend.is_uptrend_200 ? '상회' : '하회'}
               </p>
             </div>
             {(macroTrend.action_level === 'REDUCED' || macroTrend.action_level === 'HALT') && (
