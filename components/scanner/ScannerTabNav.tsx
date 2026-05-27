@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, ScanSearch } from 'lucide-react';
+import { Activity, Trophy, ScanSearch } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
 
 const STATE_TONE = {
@@ -35,12 +35,21 @@ export default function ScannerTabNav() {
       activeColor: 'border-rose-400/35 bg-rose-500/10 text-rose-100',
       idleColor: 'text-rose-200',
     },
+    {
+      id: 'leader',
+      label: '주도주 스캐너',
+      description: 'RS leadership · accumulation · sector rotation',
+      href: '/leader',
+      icon: <Trophy className="h-4 w-4" />,
+      activeColor: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
+      idleColor: 'text-amber-200',
+    },
   ];
 
   const stateDot = data?.state ? STATE_TONE[data.state] : 'bg-slate-500';
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {tabs.map((tab) => {
         const isActive = pathname === tab.href;
 

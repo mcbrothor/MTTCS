@@ -878,3 +878,64 @@ export interface CanslimScannerResult {
   errorMessage: string | null;
   dataWarnings: string[];
 }
+
+// ── Leader Scanner (주도주 판별 스크리너) ──────────────────────────────────────
+
+export type LeaderGrade = 'ALPHA' | 'EMERGING' | 'STEADY' | 'LAGGARD';
+
+export interface LeaderScoreBreakdown {
+  rsLeadership: number;          // 0~100 (가중 30%)
+  tennisBallResilience: number;  // 0~100 (가중 20%)
+  institutionalAccum: number;    // 0~100 (가중 20%)
+  trendHealth: number;           // 0~100 (가중 15%)
+  sectorLeadership: number;     // 0~100 (가중 15%)
+}
+
+export interface LeaderScannerResult {
+  ticker: string;
+  exchange: string;
+  name: string;
+  market: MarketCode;
+  currentPrice: number | null;
+  changePercent: number | null;
+  marketCap: number | null;
+  currency: 'USD' | 'KRW';
+
+  // Leader Score
+  leaderScore: number;
+  leaderGrade: LeaderGrade;
+  breakdown: LeaderScoreBreakdown;
+
+  // RS 지표
+  rsRating: number | null;
+  rsSource?: 'DB_BATCH' | 'UNIVERSE' | 'BENCHMARK_PROXY' | null;
+  rsRank?: number | null;
+  rsUniverseSize?: number | null;
+  mansfieldRsScore: number | null;
+  mansfieldRsFlag: boolean | null;
+  mansfieldRsScore6m?: number | null;
+
+  // 테니스볼
+  tennisBallCount: number;
+  tennisBallScore: number;
+
+  // 기관 매집
+  pocketPivotScore: number | null;
+  volumeDryUpScore: number | null;
+
+  // 추세
+  sepaCorePassed: number | null;
+  sepaCoreTotal: number | null;
+  distanceFromHigh52WeekPct: number | null;
+
+  // 섹터
+  sector: string | null;
+  sectorReturn20d: number | null;
+  sectorRank: number | null;
+
+  // 상태
+  status: ScannerStatus;
+  analyzedAt: string | null;
+  errorMessage: string | null;
+  dataWarnings: string[];
+}

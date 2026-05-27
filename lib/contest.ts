@@ -13,7 +13,7 @@ import type {
   ScannerUniverse,
 } from '../types/index.ts';
 import { extractStructuredJson } from './ai/gemini.ts';
-import { MAX_CONTEST_CANDIDATES } from './contest-sources.ts';
+import { MAX_CONTEST_CANDIDATES, type ContestScreenerSource } from './contest-sources.ts';
 
 const MAX_CANDIDATES = MAX_CONTEST_CANDIDATES;
 const VALID_LLM_OVERALL: ContestLlmOverall[] = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
@@ -29,7 +29,7 @@ export interface ContestSessionInput {
   sessionId?: string | null;
   marketContext?: Partial<MasterFilterResponse> | Record<string, unknown> | null;
   llmProvider?: string | null;
-  source?: 'minervini' | 'canslim' | null;
+  source?: ContestScreenerSource | null;
 }
 
 export type ParsedLlmRanking = ContestLlmRanking;
@@ -178,7 +178,9 @@ export function buildContestPrompt(input: ContestSessionInput) {
   const payload = {
     task: screenerSource === 'canslim'
       ? "MTN O'Neil CANSLIM candidates hedge-fund style comparison"
-      : 'MTN Minervini SEPA/VCP candidates hedge-fund style comparison',
+      : screenerSource === 'leader'
+        ? 'MTN Leader Scanner candidates hedge-fund style comparison'
+        : 'MTN Minervini SEPA/VCP candidates hedge-fund style comparison',
     prompt_version: CONTEST_PROMPT_VERSION,
     response_schema_version: CONTEST_RESPONSE_SCHEMA_VERSION,
     session_id: input.sessionId || null,
@@ -228,10 +230,14 @@ export function buildContestPrompt(input: ContestSessionInput) {
   const llmPrompt = [
     screenerSource === 'canslim'
       ? "You are MTN beauty contest analyst reviewing O'Neil CANSLIM first-pass candidates."
-      : 'You are MTN beauty contest analyst reviewing Minervini SEPA/VCP first-pass candidates.',
+      : screenerSource === 'leader'
+        ? 'You are MTN beauty contest analyst reviewing Leader Scanner (주도주 판별) first-pass candidates.'
+        : 'You are MTN beauty contest analyst reviewing Minervini SEPA/VCP first-pass candidates.',
     screenerSource === 'canslim'
       ? 'Treat CANSLIM pillar evidence as the primary screen; use VCP/base data only as execution confirmation.'
-      : 'Treat SEPA, VCP, RS leadership, and valid pivot/base quality as the primary screen.',
+      : screenerSource === 'leader'
+        ? 'Treat RS leadership, institutional accumulation signals, tennis-ball resilience, trend health, and sector leadership as the primary screen.'
+        : 'Treat SEPA, VCP, RS leadership, and valid pivot/base quality as the primary screen.',
     'Write the reasoning in Korean, but return only valid JSON.',
     `response_schema_version must be "${CONTEST_RESPONSE_SCHEMA_VERSION}".`,
     'Do not return markdown, prose, or code fences.',
