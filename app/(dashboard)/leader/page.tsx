@@ -12,6 +12,9 @@ import {
   TrendingUp,
   Shield,
   BarChart3,
+  DollarSign,
+  Activity,
+  Flame,
 } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import Button from '@/components/ui/Button';
@@ -33,20 +36,18 @@ import type {
 } from '@/types';
 
 // ── 상수 ──────────────────────────────────────────────────────────────────
-const SCAN_CONCURRENCY = 3;
-const KR_SCAN_CONCURRENCY = 2;
-const STORAGE_PREFIX = 'mtn:leader-snapshot:v1:';
+const STORAGE_PREFIX = 'mtn:modern-leader-snapshot:v1:';
 const BATCH_SIZE = 20;
 
 type ViewMode = 'web' | 'app';
-type FilterKey = 'all' | 'alpha' | 'emerging' | 'steady' | 'rs90' | 'tennisBall3';
-type SortKey = 'leaderScore' | 'rs' | 'tennisBall' | 'trendHealth' | 'marketCap';
+type FilterKey = 'all' | 'alpha' | 'emerging' | 'steady' | 'rs90' | 'r2_80' | 'heavy_vol';
+type SortKey = 'leaderScore' | 'rs' | 'r2' | 'dollarVolume' | 'tii' | 'marketCap';
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
-  NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100에서 시장을 이끄는 진짜 리더를 판별합니다.' },
-  SP500: { label: 'S&P 500', desc: 'S&P 500에서 주도주를 가려냅니다.' },
-  KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 시총 상위 200개 주도주 스캔.' },
-  KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 시총 상위 150개 주도주 스캔.' },
+  NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100에서 자금 쏠림과 강력한 추세를 장악한 현대적 주도주를 판별합니다.' },
+  SP500: { label: 'S&P 500', desc: 'S&P 500 대형주 유니버스의 기관 쏠림 주도주를 가려냅니다.' },
+  KOSPI200: { label: 'KOSPI 상위 200', desc: 'KOSPI 핵심 대형주(SK하이닉스 등) 및 자금 유입 대장주 스캔.' },
+  KOSDAQ150: { label: 'KOSDAQ 상위 150', desc: 'KOSDAQ 기술/성장주 테마별 유동성 쏠림 대장주 스캔.' },
 };
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -55,14 +56,16 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'emerging', label: '🥈 Emerging' },
   { key: 'steady', label: '🔵 Steady' },
   { key: 'rs90', label: 'RS 90+' },
-  { key: 'tennisBall3', label: '🎾 3+' },
+  { key: 'r2_80', label: '🎯 선형성 R² 80%+' },
+  { key: 'heavy_vol', label: '💰 거래대금 상위 20%' },
 ];
 
 const SORTS: { key: SortKey; label: string }[] = [
   { key: 'leaderScore', label: 'Leader Score순' },
-  { key: 'rs', label: 'RS순' },
-  { key: 'tennisBall', label: '복원력순' },
-  { key: 'trendHealth', label: '추세 건전성순' },
+  { key: 'rs', label: '상대강도(RS)순' },
+  { key: 'r2', label: '추세 선형성(R²)순' },
+  { key: 'dollarVolume', label: '거래대금순' },
+  { key: 'tii', label: '추세강도(TII)순' },
   { key: 'marketCap', label: '시가총액순' },
 ];
 
@@ -94,9 +97,9 @@ async function writeSnapshot(snapshot: StoredSnapshot) {
 }
 
 function gradeLabel(grade: LeaderGrade) {
-  if (grade === 'ALPHA') return { emoji: '🥇', label: 'Alpha Leader', color: 'emerald' };
-  if (grade === 'EMERGING') return { emoji: '🥈', label: 'Emerging', color: 'amber' };
-  if (grade === 'STEADY') return { emoji: '🔵', label: 'Steady', color: 'blue' };
+  if (grade === 'ALPHA') return { emoji: '🌟', label: 'Alpha Leader', color: 'emerald' };
+  if (grade === 'EMERGING') return { emoji: '🔥', label: 'Emerging', color: 'amber' };
+  if (grade === 'STEADY') return { emoji: '📈', label: 'Steady', color: 'blue' };
   return { emoji: '⚪', label: 'Laggard', color: 'slate' };
 }
 
@@ -125,7 +128,7 @@ function formatMarketCap(value: number | null, currency?: string, ticker?: strin
   const isKorean = currency === 'KRW' || (ticker && /^\d{6}$/.test(ticker));
   if (isKorean) {
     const jo = value / 1e12;
-    if (jo >= 1) return `₩${jo.toFixed(2)}조`;
+    if (jo >= 1) return `₩${jo.toFixed(1)}조`;
     return `₩${Math.round(value / 1e8).toLocaleString('ko-KR')}억`;
   }
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
@@ -144,20 +147,20 @@ function benchmarkTickerForUniverse(universe: ScannerUniverse) {
   return 'SPY';
 }
 
-// ── 5축 미니 바 차트 ──────────────────────────────────────────────────────
+// ── 현대적 5축 계량 미니 차트 ───────────────────────────────────────────────
 function BreakdownBars({ breakdown }: { breakdown: LeaderScoreBreakdown }) {
   const axes = [
-    { key: 'RS', value: breakdown.rsLeadership, color: 'bg-indigo-400' },
-    { key: '🎾', value: breakdown.tennisBallResilience, color: 'bg-emerald-400' },
-    { key: '📊', value: breakdown.institutionalAccum, color: 'bg-rose-400' },
-    { key: '📈', value: breakdown.trendHealth, color: 'bg-sky-400' },
-    { key: '🏭', value: breakdown.sectorLeadership, color: 'bg-amber-400' },
+    { key: 'RS', value: breakdown.rsLeadership, color: 'bg-indigo-400', label: 'RS 상대 모멘텀' },
+    { key: '🎯', value: breakdown.momentumConsistency, color: 'bg-emerald-400', label: '주가 선형 일관성' },
+    { key: '💰', value: breakdown.liquidityCrowding, color: 'bg-rose-400', label: '자금 쏠림 점유율' },
+    { key: '⚡', value: breakdown.trendIntensity, color: 'bg-sky-400', label: '이평선 추세 강도' },
+    { key: '🏭', value: breakdown.sectorAlpha, color: 'bg-amber-400', label: '섹터 알파' },
   ];
   return (
     <div className="flex items-end gap-0.5 h-5">
       {axes.map((axis) => (
-        <div key={axis.key} className="flex flex-col items-center gap-0.5 w-3" title={`${axis.key}: ${axis.value}`}>
-          <div className={`w-full rounded-t-sm ${axis.color}`} style={{ height: `${Math.max(2, axis.value / 100 * 16)}px` }} />
+        <div key={axis.key} className="flex flex-col items-center gap-0.5 w-3" title={`${axis.label}: ${axis.value}점`}>
+          <div className={`w-full rounded-t-sm ${axis.color}`} style={{ height: `${Math.max(2, (axis.value / 100) * 16)}px` }} />
         </div>
       ))}
     </div>
@@ -249,9 +252,9 @@ export default function LeaderScannerPage() {
       const items = meta.items;
 
       setProgress({ current: 0, total: items.length });
-      setScanStage('RS · 복원력 · 매집 · 추세 · 섹터 분석 중');
+      setScanStage('상대모멘텀 · 선형성(R²) · 자금쏠림 · 추세강도(TII) 분석 중');
 
-      let current: LeaderScannerResult[] = items.map((item, idx) => ({
+      let current: LeaderScannerResult[] = items.map((item) => ({
         ticker: item.ticker,
         exchange: item.exchange,
         name: item.name,
@@ -262,7 +265,14 @@ export default function LeaderScannerPage() {
         currency: item.currency,
         leaderScore: 0,
         leaderGrade: 'LAGGARD' as const,
-        breakdown: { rsLeadership: 0, tennisBallResilience: 0, institutionalAccum: 0, trendHealth: 0, sectorLeadership: 0 },
+        breakdown: { rsLeadership: 0, momentumConsistency: 0, liquidityCrowding: 0, trendIntensity: 0, sectorAlpha: 0 },
+        // 신형 현대 계량 데이터
+        momentum12m1Pct: null,
+        regressionR2: null,
+        dollarVolume20d: null,
+        dollarVolumeShare: null,
+        trendIntensityIndex: null,
+        // 구형 호환 데이터
         rsRating: null,
         mansfieldRsScore: null,
         mansfieldRsFlag: null,
@@ -285,13 +295,12 @@ export default function LeaderScannerPage() {
 
       const benchmarkTicker = benchmarkTickerForUniverse(universe);
 
-      // 배치 처리
+      // 배치 수집 루프
       let completed = 0;
       for (let i = 0; i < items.length; i += BATCH_SIZE) {
         if (abort.signal.aborted) break;
         const chunk = items.slice(i, i + BATCH_SIZE);
 
-        // Running 상태 표시
         current = current.map(r =>
           chunk.some(c => c.ticker === r.ticker) ? { ...r, status: 'running' as const } : r
         );
@@ -320,7 +329,6 @@ export default function LeaderScannerPage() {
           for (const res of batchResp.results) {
             if (res.success && res.data) {
               const d = res.data;
-              const item = chunk.find(c => c.ticker === res.ticker)!;
               current = current.map(r => r.ticker === res.ticker ? {
                 ...r,
                 currentPrice: (d.currentPrice as number) ?? r.currentPrice,
@@ -328,6 +336,14 @@ export default function LeaderScannerPage() {
                 leaderScore: (d.leaderScore as number) ?? 0,
                 leaderGrade: (d.leaderGrade as LeaderGrade) ?? 'LAGGARD',
                 breakdown: (d.breakdown as LeaderScoreBreakdown) ?? r.breakdown,
+                // 신형
+                momentum12m1Pct: (d.momentum12m1Pct as number) ?? null,
+                regressionR2: (d.regressionR2 as number) ?? null,
+                dollarVolume20d: (d.dollarVolume20d as number) ?? null,
+                dollarVolumeShare: (d.dollarVolumeShare as number) ?? null,
+                trendIntensityIndex: (d.trendIntensityIndex as number) ?? null,
+                // 구형 호환
+                rsRating: (d.rsRating as number) ?? null,
                 mansfieldRsScore: (d.mansfieldRsScore as number) ?? null,
                 mansfieldRsFlag: (d.mansfieldRsFlag as boolean) ?? null,
                 mansfieldRsScore6m: (d.mansfieldRsScore6m as number) ?? null,
@@ -367,19 +383,6 @@ export default function LeaderScannerPage() {
       }
 
       if (!abort.signal.aborted) {
-        // RS 유니버스 랭킹 부여
-        const done = current.filter(r => r.status === 'done');
-        const sorted = [...done].sort((a, b) => (b.leaderScore) - (a.leaderScore));
-        const ranked = sorted.map((r, i) => ({
-          ...r,
-          rsRating: done.length <= 1 ? 50 : Math.round(99 - (i / (done.length - 1)) * 98),
-          rsRank: i + 1,
-          rsUniverseSize: done.length,
-          rsSource: 'UNIVERSE' as const,
-        }));
-        const rankByTicker = new Map(ranked.map(r => [r.ticker, r]));
-        current = current.map(r => rankByTicker.get(r.ticker) ?? r);
-
         // 섹터 데이터 보강
         try {
           const tickers = current.map(r => r.ticker).join(',');
@@ -422,13 +425,15 @@ export default function LeaderScannerPage() {
     else if (filterKey === 'emerging') list = list.filter(r => r.leaderGrade === 'EMERGING');
     else if (filterKey === 'steady') list = list.filter(r => r.leaderGrade === 'STEADY');
     else if (filterKey === 'rs90') list = list.filter(r => (r.rsRating ?? 0) >= 90);
-    else if (filterKey === 'tennisBall3') list = list.filter(r => r.tennisBallCount >= 3);
+    else if (filterKey === 'r2_80') list = list.filter(r => (r.regressionR2 ?? 0) >= 0.8);
+    else if (filterKey === 'heavy_vol') list = list.filter(r => (r.dollarVolumeShare ?? 0) >= 80);
 
     list.sort((a, b) => {
       if (sortKey === 'leaderScore') return b.leaderScore - a.leaderScore;
       if (sortKey === 'rs') return (b.rsRating ?? 0) - (a.rsRating ?? 0);
-      if (sortKey === 'tennisBall') return b.tennisBallCount - a.tennisBallCount || b.tennisBallScore - a.tennisBallScore;
-      if (sortKey === 'trendHealth') return (b.breakdown.trendHealth) - (a.breakdown.trendHealth);
+      if (sortKey === 'r2') return (b.regressionR2 ?? 0) - (a.regressionR2 ?? 0);
+      if (sortKey === 'dollarVolume') return (b.dollarVolume20d ?? 0) - (a.dollarVolume20d ?? 0);
+      if (sortKey === 'tii') return (b.trendIntensityIndex ?? 0) - (a.trendIntensityIndex ?? 0);
       return (b.marketCap ?? 0) - (a.marketCap ?? 0);
     });
 
@@ -441,6 +446,8 @@ export default function LeaderScannerPage() {
     emerging: results.filter(r => r.leaderGrade === 'EMERGING').length,
     steady: results.filter(r => r.leaderGrade === 'STEADY').length,
     errors: results.filter(r => r.status === 'error').length,
+    meanR2: results.filter(r => r.status === 'done' && r.regressionR2 !== null)
+      .reduce((sum, r, _, arr) => sum + r.regressionR2! / arr.length, 0),
   }), [results]);
 
   const sendTelegramSummary = async () => {
@@ -466,7 +473,7 @@ export default function LeaderScannerPage() {
             leaderScore: item.leaderScore,
             leaderGrade: item.leaderGrade,
             rsRating: item.rsRating,
-            tennisBallCount: item.tennisBallCount,
+            tennisBallCount: item.regressionR2 ? Math.round(item.regressionR2 * 100) : 0, // 호환용 전달
             mansfieldRsScore: item.mansfieldRsScore,
             sector: item.sector,
             currentPrice: item.currentPrice,
@@ -475,7 +482,7 @@ export default function LeaderScannerPage() {
       });
       const result = await response.json();
       if (!response.ok || !result.success) throw new Error(result.message || 'Telegram send failed.');
-      setTelegramMessage(`${candidates.length}개 주도주 후보를 텔레그램으로 전송했습니다.`);
+      setTelegramMessage(`${candidates.length}개 현대적 주도주 후보를 텔레그램으로 전송했습니다.`);
     } catch (error) {
       setTelegramMessage(getErrorMessage(error));
     } finally {
@@ -499,7 +506,7 @@ export default function LeaderScannerPage() {
             disabled={isScanning}
             className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
               universe === key
-                ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 shadow-md shadow-amber-500/5'
                 : 'border-slate-800 text-slate-400 hover:border-amber-500/30 hover:text-amber-300'
             } disabled:opacity-40`}
           >
@@ -513,9 +520,9 @@ export default function LeaderScannerPage() {
         {!isScanning ? (
           <Button
             onClick={startScan}
-            className="h-12 gap-2 rounded-xl border-none bg-amber-600 px-8 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-500"
+            className="h-12 gap-2 rounded-xl border-none bg-gradient-to-r from-amber-600 to-amber-500 px-8 font-bold text-white shadow-lg shadow-amber-500/20 hover:brightness-110"
           >
-            <Play className="h-5 w-5" /> 주도주 스캔 시작
+            <Play className="h-5 w-5" /> 현대적 주도주 스캔 개시
           </Button>
         ) : (
           <Button
@@ -537,8 +544,8 @@ export default function LeaderScannerPage() {
         )}
 
         {lastScannedAt && !isScanning && (
-          <span className="text-xs text-slate-500">
-            마지막 스캔: {new Date(lastScannedAt).toLocaleString('ko-KR')}
+          <span className="text-xs text-slate-500 font-mono">
+            최근 분석: {new Date(lastScannedAt).toLocaleString('ko-KR')}
           </span>
         )}
 
@@ -551,9 +558,9 @@ export default function LeaderScannerPage() {
               className="h-10 gap-2 rounded-xl border-amber-500/30 px-4 text-amber-300 hover:bg-amber-500/10"
             >
               {telegramBusy ? <LoadingSpinner /> : <Send className="h-4 w-4" />}
-              텔레그램
+              텔레그램 리포트 발송
             </Button>
-            {telegramMessage && <span className="text-xs text-amber-300">{telegramMessage}</span>}
+            {telegramMessage && <span className="text-xs text-amber-300 font-medium">{telegramMessage}</span>}
           </>
         )}
 
@@ -566,7 +573,7 @@ export default function LeaderScannerPage() {
       {isScanning && progress.total > 0 && (
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400"
+            className="h-full rounded-full bg-gradient-to-r from-amber-500 to-rose-500"
             initial={{ width: 0 }}
             animate={{ width: `${(progress.current / progress.total) * 100}%` }}
             transition={{ ease: 'easeOut' }}
@@ -578,32 +585,32 @@ export default function LeaderScannerPage() {
       {stats.total > 0 && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard
-            label="Alpha Leader"
+            label="Alpha Leaders"
             value={stats.alpha}
-            subtitle="시장 리더"
+            subtitle="초강력 주도 대장주"
             icon={Trophy as React.FC<React.SVGProps<SVGSVGElement>>}
-            tone="border-emerald-400/24 bg-emerald-500/10"
+            tone="border-emerald-400/20 bg-emerald-500/5 text-emerald-300"
           />
           <StatCard
-            label="Emerging"
+            label="Emerging Leaders"
             value={stats.emerging}
-            subtitle="신흥 리더"
-            icon={TrendingUp as React.FC<React.SVGProps<SVGSVGElement>>}
-            tone="border-amber-400/24 bg-amber-500/10"
+            subtitle="급부상 수급 유망주"
+            icon={Flame as React.FC<React.SVGProps<SVGSVGElement>>}
+            tone="border-amber-400/20 bg-amber-500/5 text-amber-300"
           />
           <StatCard
-            label="Steady"
-            value={stats.steady}
-            subtitle="안정적 수행"
-            icon={Shield as React.FC<React.SVGProps<SVGSVGElement>>}
-            tone="border-blue-400/24 bg-blue-500/10"
+            label="Mean R² Consistency"
+            value={`${(stats.meanR2 * 100).toFixed(1)}%`}
+            subtitle="평균 추세 선형 안정성"
+            icon={Activity as React.FC<React.SVGProps<SVGSVGElement>>}
+            tone="border-indigo-400/20 bg-indigo-500/5 text-indigo-300"
           />
           <StatCard
-            label="분석 완료"
+            label="Total Scanned"
             value={stats.total}
-            subtitle={`오류 ${stats.errors}개`}
-            icon={BarChart3 as React.FC<React.SVGProps<SVGSVGElement>>}
-            tone="border-slate-700 bg-slate-900/40"
+            subtitle={`분석 오류 ${stats.errors}건`}
+            icon={DollarSign as React.FC<React.SVGProps<SVGSVGElement>>}
+            tone="border-slate-800 bg-slate-900/40 text-slate-300"
           />
         </div>
       )}
@@ -629,7 +636,7 @@ export default function LeaderScannerPage() {
           <select
             value={sortKey}
             onChange={e => setSortKey(e.target.value as SortKey)}
-            className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-slate-300"
+            className="rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-slate-300 font-semibold"
           >
             {SORTS.map(s => (
               <option key={s.key} value={s.key}>{s.label}</option>
@@ -640,63 +647,63 @@ export default function LeaderScannerPage() {
 
       {/* 테이블 */}
       {filteredResults.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50 backdrop-blur-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm shadow-xl">
           <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
             <colgroup>
               <col className="w-[4%]" />
-              <col className="w-[13%]" />
+              <col className="w-[14%]" />
               <col className="w-[8%]" />
               <col className="w-[8%]" />
               <col className="w-[6%]" />
               <col className="w-[10%]" />
-              <col className="w-[7%]" />
-              <col className="w-[8%]" />
               <col className="w-[6%]" />
-              <col className="w-[8%]" />
               <col className="w-[7%]" />
               <col className="w-[8%]" />
+              <col className="w-[11%]" />
+              <col className="w-[6%]" />
               <col className="w-[7%]" />
+              <col className="w-[5%]" />
             </colgroup>
-            <thead className="bg-slate-900/80 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+            <thead className="bg-slate-900/60 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
               <tr>
                 <th className="px-3 py-4 text-left">#</th>
                 <th className="px-3 py-4 text-left">종목</th>
                 <th className="px-3 py-4 text-right">시총</th>
                 <th className="px-3 py-4 text-right">현재가</th>
                 <th className="px-3 py-4 text-right">등락</th>
-                <th className="px-3 py-4 text-center">Leader</th>
-                <th className="px-3 py-4 text-right">RS</th>
-                <th className="px-3 py-4 text-right">Mansfield</th>
-                <th className="px-3 py-4 text-center">🎾</th>
-                <th className="px-3 py-4 text-center">매집</th>
-                <th className="px-3 py-4 text-center">SEPA</th>
+                <th className="px-3 py-4 text-center">Modern Score</th>
+                <th className="px-3 py-4 text-right">RS 백분위</th>
+                <th className="px-3 py-4 text-right">추세선형성(R²)</th>
+                <th className="px-3 py-4 text-right">12-M-1</th>
+                <th className="px-3 py-4 text-center">거래대금 (점유율)</th>
+                <th className="px-3 py-4 text-center">TII</th>
                 <th className="px-3 py-4 text-left">Grade</th>
-                <th className="px-3 py-4 text-center">선정</th>
+                <th className="px-3 py-4 className=text-center">선정</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/50">
+            <tbody className="divide-y divide-slate-800/40 font-mono text-[11px]">
               {filteredResults.map((r, idx) => (
                 <tr
                   key={r.ticker}
-                  className={`transition-colors hover:bg-slate-800/40 ${selectedTickers.has(r.ticker) ? 'bg-amber-500/5' : ''}`}
+                  className={`transition-colors hover:bg-slate-800/20 ${selectedTickers.has(r.ticker) ? 'bg-amber-500/5' : ''}`}
                 >
-                  <td className="px-3 py-4 text-slate-500 font-mono text-[10px]">{idx + 1}</td>
-                  <td className="px-3 py-4">
-                    <div className="font-bold text-white">{r.ticker}</div>
+                  <td className="px-3 py-4 text-slate-500 text-[10px]">{idx + 1}</td>
+                  <td className="px-3 py-4 font-sans">
+                    <div className="font-bold text-white text-xs">{r.ticker}</div>
                     <div className="flex items-center gap-1 mt-0.5">
                       {r.sector && (
-                        <span className="shrink-0 rounded border border-slate-700 bg-slate-800/50 px-1 py-0.5 text-[9px] font-semibold text-slate-400">{r.sector}</span>
+                        <span className="shrink-0 rounded border border-slate-800 bg-slate-900 px-1 py-0.5 text-[9px] font-semibold text-slate-400">{r.sector}</span>
                       )}
-                      <span className="text-[10px] text-slate-500 truncate">{r.name}</span>
+                      <span className="text-[10px] text-slate-500 truncate max-w-[100px]">{r.name}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-4 text-right font-mono text-slate-400">{formatMarketCap(r.marketCap, r.currency, r.ticker)}</td>
-                  <td className="px-3 py-4 text-right font-mono text-slate-300">
+                  <td className="px-3 py-4 text-right text-slate-400">{formatMarketCap(r.marketCap, r.currency, r.ticker)}</td>
+                  <td className="px-3 py-4 text-right text-slate-300">
                     {r.status === 'running' ? <LoadingSpinner size="sm" /> : formatPrice(r.currentPrice, r.currency)}
                   </td>
-                  <td className="px-3 py-4 text-right font-mono">
+                  <td className="px-3 py-4 text-right">
                     {typeof r.changePercent === 'number' ? (
-                      <span className={r.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      <span className={r.changePercent >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400'}>
                         {r.changePercent >= 0 ? '+' : ''}{r.changePercent.toFixed(2)}%
                       </span>
                     ) : <span className="text-slate-600">—</span>}
@@ -704,7 +711,7 @@ export default function LeaderScannerPage() {
                   <td className="px-3 py-4 text-center">
                     {r.status === 'done' && (
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`font-mono text-base font-black ${
+                        <span className={`text-base font-black ${
                           r.leaderScore >= 85 ? 'text-emerald-300' :
                           r.leaderScore >= 65 ? 'text-amber-300' :
                           r.leaderScore >= 45 ? 'text-sky-300' : 'text-slate-500'
@@ -713,43 +720,52 @@ export default function LeaderScannerPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-4 text-right font-mono">
+                  <td className="px-3 py-4 text-right">
                     {r.rsRating !== null ? (
                       <span className={r.rsRating >= 90 ? 'text-emerald-400 font-bold' : r.rsRating >= 80 ? 'text-slate-200' : 'text-slate-500'}>
                         {r.rsRating}
                       </span>
                     ) : '-'}
                   </td>
-                  <td className="px-3 py-4 text-right font-mono">
-                    {r.mansfieldRsScore !== null ? (
-                      <span className={r.mansfieldRsScore > 0 ? 'text-emerald-300' : 'text-rose-300'}>
-                        {r.mansfieldRsScore > 0 ? '+' : ''}{r.mansfieldRsScore.toFixed(1)}%
+                  <td className="px-3 py-4 text-right">
+                    {typeof r.regressionR2 === 'number' ? (
+                      <div className="flex flex-col items-end">
+                        <span className={r.regressionR2 >= 0.8 ? 'text-emerald-300 font-bold' : 'text-slate-300'}>
+                          {(r.regressionR2 * 100).toFixed(0)}%
+                        </span>
+                        <span className="text-[9px] text-slate-500">R² Fit</span>
+                      </div>
+                    ) : '-'}
+                  </td>
+                  <td className="px-3 py-4 text-right">
+                    {typeof r.momentum12m1Pct === 'number' ? (
+                      <span className={r.momentum12m1Pct >= 30 ? 'text-emerald-300 font-bold' : r.momentum12m1Pct >= 0 ? 'text-slate-300' : 'text-rose-400'}>
+                        {r.momentum12m1Pct >= 0 ? '+' : ''}{r.momentum12m1Pct.toFixed(0)}%
                       </span>
                     ) : '-'}
                   </td>
-                  <td className="px-3 py-4 text-center font-mono">
-                    {r.tennisBallCount > 0 ? (
-                      <span className={r.tennisBallCount >= 3 ? 'text-emerald-300 font-bold' : 'text-slate-300'}>
-                        {r.tennisBallCount}
-                      </span>
-                    ) : <span className="text-slate-600">0</span>}
-                  </td>
-                  <td className="px-3 py-4 text-center text-[10px] text-slate-400">
-                    {r.status === 'done' && (
-                      <div className="flex flex-col">
-                        <span>PP {r.pocketPivotScore ?? '-'}</span>
-                        <span>DU {r.volumeDryUpScore ?? '-'}</span>
+                  <td className="px-3 py-4 text-center">
+                    {r.status === 'done' && typeof r.dollarVolume20d === 'number' && (
+                      <div className="flex flex-col items-center">
+                        <span className="text-slate-300 font-bold">{formatMarketCap(r.dollarVolume20d ?? null, r.currency, r.ticker)}</span>
+                        {r.dollarVolumeShare !== undefined && r.dollarVolumeShare !== null ? (
+                          <span className={`text-[9px] px-1 rounded ${
+                            r.dollarVolumeShare >= 90 ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20' : 'text-slate-500'
+                          }`}>
+                            상위 {100 - r.dollarVolumeShare}%
+                          </span>
+                        ) : null}
                       </div>
                     )}
                   </td>
                   <td className="px-3 py-4 text-center">
-                    {r.sepaCorePassed !== null && r.sepaCoreTotal !== null ? (
-                      <span className={r.sepaCorePassed >= r.sepaCoreTotal ? 'text-emerald-300 font-bold' : r.sepaCorePassed >= r.sepaCoreTotal - 1 ? 'text-amber-300' : 'text-slate-500'}>
-                        {r.sepaCorePassed}/{r.sepaCoreTotal}
+                    {r.trendIntensityIndex !== null && r.trendIntensityIndex !== undefined ? (
+                      <span className={r.trendIntensityIndex >= 80 ? 'text-sky-300 font-bold' : 'text-slate-400'}>
+                        {r.trendIntensityIndex}
                       </span>
                     ) : '-'}
                   </td>
-                  <td className="px-3 py-4">
+                  <td className="px-3 py-4 font-sans">
                     {r.status === 'done' && (
                       <span className={`inline-flex rounded-lg border px-2 py-0.5 text-[10px] font-bold ${gradeBadgeClass(r.leaderGrade)}`}>
                         {gradeLabel(r.leaderGrade).emoji} {gradeLabel(r.leaderGrade).label}
@@ -788,17 +804,17 @@ export default function LeaderScannerPage() {
             <Trophy className="h-10 w-10 text-amber-500/60" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-xl font-bold text-white">주도주 판별 스캐너</h3>
-            <p className="max-w-md text-sm leading-6 text-slate-500">
-              RS 리더십, 테니스볼 복원력, 기관 매집 시그널, 추세 건전성, 섹터 리더십을 종합하여
-              현재 시장을 이끄는 진짜 리더를 식별합니다.
+            <h3 className="text-xl font-bold text-white">현대적 주도주 판별 스캐너</h3>
+            <p className="max-w-md text-sm leading-6 text-slate-500 font-medium">
+              12-Minus-1 모멘텀, 주가 선형 일관성(R²), 시장 거래대금 쏠림 점유율, 이평선 추세 강도(TII), 섹터 알파를 종합하여
+              현재 글로벌 시장 자금이 쏠리는 최고 성능의 진짜 대장주를 정확히 판별합니다.
             </p>
           </div>
           <Button
             onClick={startScan}
-            className="h-12 gap-2 rounded-xl border-none bg-amber-600 px-8 font-bold text-white shadow-lg shadow-amber-600/20 hover:bg-amber-500"
+            className="h-12 gap-2 rounded-xl border-none bg-gradient-to-r from-amber-600 to-amber-500 px-8 font-bold text-white shadow-lg shadow-amber-500/20 hover:brightness-110"
           >
-            <Play className="h-5 w-5" /> 스캔 시작
+            <Play className="h-5 w-5" /> 현대적 주도주 스캔 개시
           </Button>
         </div>
       )}

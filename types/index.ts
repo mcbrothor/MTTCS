@@ -884,11 +884,11 @@ export interface CanslimScannerResult {
 export type LeaderGrade = 'ALPHA' | 'EMERGING' | 'STEADY' | 'LAGGARD';
 
 export interface LeaderScoreBreakdown {
-  rsLeadership: number;          // 0~100 (가중 30%)
-  tennisBallResilience: number;  // 0~100 (가중 20%)
-  institutionalAccum: number;    // 0~100 (가중 20%)
-  trendHealth: number;           // 0~100 (가중 15%)
-  sectorLeadership: number;     // 0~100 (가중 15%)
+  rsLeadership: number;          // 0~100 (가중 25% - 12-Minus-1 & Mansfield RS 가속도)
+  momentumConsistency: number;   // 0~100 (가중 20% - 선형 회귀 R^2 및 정보비율)
+  liquidityCrowding: number;     // 0~100 (가중 20% - 거래대금 백분위 및 가속도)
+  trendIntensity: number;        // 0~100 (가중 20% - TII 및 52주 신고가 근접성)
+  sectorAlpha: number;           // 0~100 (가중 15% - 섹터 모멘텀 순위)
 }
 
 export interface LeaderScannerResult {
@@ -905,6 +905,14 @@ export interface LeaderScannerResult {
   leaderScore: number;
   leaderGrade: LeaderGrade;
   breakdown: LeaderScoreBreakdown;
+
+  // 신형 현대적 퀀트 계량 지표
+  momentum12m1Pct?: number | null;   // 12-Minus-1 모멘텀 수익률 (%)
+  regressionR2?: number | null;      // 주가 선형성 R^2 결정계수 (0~1)
+  dollarVolume20d?: number | null;   // 20일 평균 거래대금 (원화/달러 단위)
+  dollarVolumeShare?: number | null; // 전체 시장 내 거래대금 백분위 순위 (0~100)
+  trendIntensityIndex?: number | null; // 이평선 추세 강도 지수 (TII)
+
 
   // RS 지표
   rsRating: number | null;
