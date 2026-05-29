@@ -269,8 +269,10 @@ export default function LeaderScannerPage() {
         // 신형 현대 계량 데이터
         momentum12m1Pct: null,
         regressionR2: null,
+        regressionSlope: null,
         dollarVolume20d: null,
         dollarVolumeShare: null,
+        liquidityVelocity: null,
         trendIntensityIndex: null,
         // 구형 호환 데이터
         rsRating: null,
@@ -339,8 +341,10 @@ export default function LeaderScannerPage() {
                 // 신형
                 momentum12m1Pct: (d.momentum12m1Pct as number) ?? null,
                 regressionR2: (d.regressionR2 as number) ?? null,
+                regressionSlope: (d.regressionSlope as number) ?? null,
                 dollarVolume20d: (d.dollarVolume20d as number) ?? null,
                 dollarVolumeShare: (d.dollarVolumeShare as number) ?? null,
+                liquidityVelocity: (d.liquidityVelocity as number) ?? null,
                 trendIntensityIndex: (d.trendIntensityIndex as number) ?? null,
                 // 구형 호환
                 rsRating: (d.rsRating as number) ?? null,
@@ -647,7 +651,7 @@ export default function LeaderScannerPage() {
 
       {/* 테이블 */}
       {filteredResults.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm shadow-xl">
+        <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm shadow-xl">
           <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
             <colgroup>
               <col className="w-[4%]" />
@@ -708,16 +712,117 @@ export default function LeaderScannerPage() {
                       </span>
                     ) : <span className="text-slate-600">—</span>}
                   </td>
-                  <td className="px-3 py-4 text-center">
+                  <td className="px-3 py-4 text-center relative group">
                     {r.status === 'done' && (
-                      <div className="flex flex-col items-center gap-1">
-                        <span className={`text-base font-black ${
-                          r.leaderScore >= 85 ? 'text-emerald-300' :
-                          r.leaderScore >= 65 ? 'text-amber-300' :
-                          r.leaderScore >= 45 ? 'text-sky-300' : 'text-slate-500'
-                        }`}>{r.leaderScore}</span>
-                        <BreakdownBars breakdown={r.breakdown} />
-                      </div>
+                      <>
+                        <div className="flex flex-col items-center gap-1 cursor-help">
+                          <span className={`text-base font-black ${
+                            r.leaderScore >= 85 ? 'text-emerald-300' :
+                            r.leaderScore >= 65 ? 'text-amber-300' :
+                            r.leaderScore >= 45 ? 'text-sky-300' : 'text-slate-500'
+                          }`}>{r.leaderScore}</span>
+                          <BreakdownBars breakdown={r.breakdown} />
+                        </div>
+
+                        {/* 주도주 판별 근거 실시간 계량 툴팁 팝오버 */}
+                        <div className="hidden group-hover:block absolute bottom-full left-1/2 z-50 mb-3 w-80 -translate-x-1/2 rounded-2xl border border-slate-800 bg-slate-950/95 p-4 text-left shadow-2xl backdrop-blur-xl transition-all duration-200">
+                          <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
+                            <div className="flex flex-col">
+                              <span className="font-sans text-xs font-bold text-white leading-tight truncate max-w-[170px]">{r.name}</span>
+                              <span className="font-mono text-[10px] text-slate-500">{r.ticker}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="font-mono text-xs font-black text-amber-400">Score {r.leaderScore}</span>
+                              <span className={`text-[9px] font-bold px-1.5 rounded mt-0.5 ${
+                                r.leaderGrade === 'ALPHA' ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' :
+                                r.leaderGrade === 'EMERGING' ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20' :
+                                r.leaderGrade === 'STEADY' ? 'bg-blue-500/10 text-blue-300 border border-blue-500/20' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {r.leaderGrade}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3 font-sans text-[10px]">
+                            {/* 1. 상대 모멘텀 */}
+                            <div>
+                              <div className="flex justify-between font-semibold text-slate-300">
+                                <span>1. 상대 모멘텀 강도 (25%)</span>
+                                <span className="text-indigo-300 font-bold">{r.breakdown.rsLeadership}점</span>
+                              </div>
+                              <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-indigo-400 rounded-full animate-pulse" style={{ width: `${r.breakdown.rsLeadership}%` }} />
+                              </div>
+                              <p className="mt-1 text-[9px] text-slate-500 leading-normal font-mono">
+                                • 유니버스 모멘텀 백분위: {r.rsRating !== null ? `${r.rsRating}위` : '산출 안 됨'}
+                                <br />• 12-Minus-1 모멘텀: {typeof r.momentum12m1Pct === 'number' ? `${r.momentum12m1Pct.toFixed(0)}%` : '데이터 부족'}
+                                <br />• Mansfield RS 성과: {r.mansfieldRsScore !== null ? `${r.mansfieldRsScore > 0 ? '+' : ''}${r.mansfieldRsScore.toFixed(1)}%` : '기본'}
+                              </p>
+                            </div>
+
+                            {/* 2. 주가 선형 일관성 */}
+                            <div>
+                              <div className="flex justify-between font-semibold text-slate-300">
+                                <span>2. 주가 선형 일관성 (20%)</span>
+                                <span className="text-emerald-300 font-bold">{r.breakdown.momentumConsistency}점</span>
+                              </div>
+                              <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-emerald-400 rounded-full animate-pulse" style={{ width: `${r.breakdown.momentumConsistency}%` }} />
+                              </div>
+                              <p className="mt-1 text-[9px] text-slate-500 leading-normal font-mono">
+                                • 90일 로그 회귀 선형성 R²: {typeof r.regressionR2 === 'number' ? `${(r.regressionR2 * 100).toFixed(0)}%` : '0%'}
+                                <br />• 추세 방향성: {typeof r.regressionSlope === 'number' && r.regressionSlope > 0 ? '📈 우상향 견고' : '📉 하향 조정세'}
+                                <br />• 지수 폭락일 복원력: {r.tennisBallCount >= 3 ? `🎾 ${r.tennisBallCount}회 우수` : `🎾 ${r.tennisBallCount}회`}
+                              </p>
+                            </div>
+
+                            {/* 3. 자금 쏠림 점유율 */}
+                            <div>
+                              <div className="flex justify-between font-semibold text-slate-300">
+                                <span>3. 자금 쏠림 점유율 (20%)</span>
+                                <span className="text-rose-300 font-bold">{r.breakdown.liquidityCrowding}점</span>
+                              </div>
+                              <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-rose-400 rounded-full animate-pulse" style={{ width: `${r.breakdown.liquidityCrowding}%` }} />
+                              </div>
+                              <p className="mt-1 text-[9px] text-slate-500 leading-normal font-mono">
+                                • 20일 평균 거래대금: {typeof r.dollarVolume20d === 'number' ? formatMarketCap(r.dollarVolume20d ?? null, r.currency, r.ticker) : '-'}
+                                <br />• 시장 거래대금 백분위: {r.dollarVolumeShare !== undefined && r.dollarVolumeShare !== null ? `상위 ${100 - r.dollarVolumeShare}%` : '계산 중'}
+                                <br />• 유동성 유입 가속도: {r.liquidityVelocity !== undefined ? `${r.liquidityVelocity}x` : '1.0x'}
+                              </p>
+                            </div>
+
+                            {/* 4. 이평선 추세 강도 */}
+                            <div>
+                              <div className="flex justify-between font-semibold text-slate-300">
+                                <span>4. 이평선 추세 강도 (20%)</span>
+                                <span className="text-sky-300 font-bold">{r.breakdown.trendIntensity}점</span>
+                              </div>
+                              <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-sky-400 rounded-full animate-pulse" style={{ width: `${r.breakdown.trendIntensity}%` }} />
+                              </div>
+                              <p className="mt-1 text-[9px] text-slate-500 leading-normal font-mono">
+                                • 이평선 지지력 TII 지수: {r.trendIntensityIndex ?? 0}점
+                                <br />• 52주 신고가 근접도: {r.distanceFromHigh52WeekPct !== null ? `${r.distanceFromHigh52WeekPct.toFixed(1)}% 이격` : '데이터 부족'}
+                              </p>
+                            </div>
+
+                            {/* 5. 섹터 알파 */}
+                            <div>
+                              <div className="flex justify-between font-semibold text-slate-300">
+                                <span>5. 섹터 알파 (15%)</span>
+                                <span className="text-amber-300 font-bold">{r.breakdown.sectorAlpha}점</span>
+                              </div>
+                              <div className="mt-1 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+                                <div className="h-full bg-amber-400 rounded-full animate-pulse" style={{ width: `${r.breakdown.sectorAlpha}%` }} />
+                              </div>
+                              <p className="mt-1 text-[9px] text-slate-500 leading-normal font-mono">
+                                • 섹터 강세도 기반 가중 알파
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </td>
                   <td className="px-3 py-4 text-right">

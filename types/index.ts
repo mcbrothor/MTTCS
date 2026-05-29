@@ -909,8 +909,10 @@ export interface LeaderScannerResult {
   // 신형 현대적 퀀트 계량 지표
   momentum12m1Pct?: number | null;   // 12-Minus-1 모멘텀 수익률 (%)
   regressionR2?: number | null;      // 주가 선형성 R^2 결정계수 (0~1)
+  regressionSlope?: number | null;   // 주가 선형 회귀 기울기
   dollarVolume20d?: number | null;   // 20일 평균 거래대금 (원화/달러 단위)
   dollarVolumeShare?: number | null; // 전체 시장 내 거래대금 백분위 순위 (0~100)
+  liquidityVelocity?: number | null; // 유동성 유입 가속도 (최근 5일 / 60일 대금)
   trendIntensityIndex?: number | null; // 이평선 추세 강도 지수 (TII)
 
 
