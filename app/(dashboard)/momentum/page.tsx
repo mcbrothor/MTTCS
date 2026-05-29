@@ -76,21 +76,21 @@ export default function MomentumScannerPage() {
     try {
       const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abort.signal });
       if (!resp.ok) throw new Error(`유니버스 로딩 실패 (${resp.status})`);
-      const { symbols } = await resp.json();
+      const { items } = await resp.json();
 
       setScanStage('모멘텀 엔진 가동 중');
-      setProgress({ current: 0, total: symbols.length });
+      setProgress({ current: 0, total: items.length });
 
       const batchSize = 20;
       let allResults: SurgeResult[] = [];
 
-      for (let i = 0; i < symbols.length; i += batchSize) {
+      for (let i = 0; i < items.length; i += batchSize) {
         if (abort.signal.aborted) break;
-        const batch = symbols.slice(i, i + batchSize);
+        const batch = items.slice(i, i + batchSize);
         
-        const payload = batch.map((sym: string) => ({
-          ticker: sym.split('.')[0],
-          exchange: universe.includes('KOS') ? (universe.includes('KOSPI') ? 'KOSPI' : 'KOSDAQ') : 'US',
+        const payload = batch.map((item: any) => ({
+          ticker: item.ticker,
+          exchange: item.exchange || (universe.includes('KOS') ? (universe.includes('KOSPI') ? 'KOSPI' : 'KOSDAQ') : 'US'),
         }));
 
         const scanResp = await fetch('/api/scanner/momentum', {
@@ -120,7 +120,7 @@ export default function MomentumScannerPage() {
              allResults = [...allResults, ...successBatch];
           }
         }
-        setProgress((prev) => ({ ...prev, current: Math.min(i + batchSize, symbols.length) }));
+        setProgress((prev) => ({ ...prev, current: Math.min(i + batchSize, items.length) }));
       }
 
       setResults(allResults);
