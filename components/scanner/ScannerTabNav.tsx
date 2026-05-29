@@ -44,12 +44,21 @@ export default function ScannerTabNav() {
       activeColor: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
       idleColor: 'text-amber-200',
     },
+    {
+      id: 'momentum',
+      label: '모멘텀 스캐너',
+      description: 'RVOL & ROC 기반 폭발적 유동성 포착',
+      href: '/momentum',
+      icon: <Activity className="h-4 w-4" />,
+      activeColor: 'border-rose-400/35 bg-rose-500/10 text-rose-100',
+      idleColor: 'text-rose-200',
+    },
   ];
 
   const stateDot = data?.state ? STATE_TONE[data.state] : 'bg-slate-500';
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
       {tabs.map((tab) => {
         const isActive = pathname === tab.href;
 
