@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const key = cacheKey('scanner-universe', universe);
+    const key = cacheKey('scanner-universe', 'market-cap-v2', universe);
     const cached = cacheGet<ScannerUniverseResponse>(key);
     
     const market = marketForUniverse(universe);

@@ -133,12 +133,17 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
 
 export async function getYahooFundamentals(ticker: string): Promise<FundamentalSnapshot | null> {
   try {
+    const { crumb, cookie } = await getYahooCrumb();
     const response = await axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
       params: {
-        modules: 'financialData,defaultKeyStatistics,earningsTrend',
+        modules: 'financialData,defaultKeyStatistics,earningsTrend,price,assetProfile',
+        ...(crumb ? { crumb } : {}),
       },
       headers: {
-        'user-agent': 'MTN/4.0',
+        'User-Agent': BROWSER_UA,
+        ...(cookie ? { 'Cookie': cookie } : {}),
+        'Accept': 'application/json',
+        'Referer': 'https://finance.yahoo.com/',
       },
     });
 
@@ -147,18 +152,22 @@ export async function getYahooFundamentals(ticker: string): Promise<FundamentalS
 
     const financialData = result.financialData || {};
     const defaultKeyStatistics = result.defaultKeyStatistics || {};
+    const price = result.price || {};
+    const assetProfile = result.assetProfile || {};
     const trend =
       result.earningsTrend?.trend?.find((item: { period?: string }) => item.period === '+1q') ||
       result.earningsTrend?.trend?.[0] ||
       {};
 
     return {
+      marketCap: rawNumber(price.marketCap),
       epsGrowthPct: toPct(rawNumber(defaultKeyStatistics.earningsQuarterlyGrowth) ?? rawNumber(trend.growth)),
       revenueGrowthPct: toPct(rawNumber(financialData.revenueGrowth)),
       roePct: toPct(rawNumber(financialData.returnOnEquity)),
       debtToEquityPct: rawNumber(financialData.debtToEquity),
       floatShares: rawNumber(defaultKeyStatistics.floatShares),
       sharesOutstanding: rawNumber(defaultKeyStatistics.sharesOutstanding),
+      sector: typeof assetProfile.sector === 'string' ? assetProfile.sector : null,
       source: 'Yahoo Finance quoteSummary',
     };
   } catch {

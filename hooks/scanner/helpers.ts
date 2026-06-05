@@ -128,6 +128,7 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
   const prevBar = analysis.priceData.at(-2);
   const latestClose = latestBar?.close ?? null;
   const currentPrice = item.currentPrice ?? latestClose;
+  const marketCap = analysis.marketCap ?? analysis.fundamentals?.marketCap ?? item.marketCap;
   const priceAsOf = item.currentPrice !== null ? item.priceAsOf : latestBar?.date ?? item.priceAsOf;
   const hasActionablePivot = analysis.vcpAnalysis.entrySource !== 'RECENT_HIGH_FALLBACK';
   const recommendedEntry = hasActionablePivot ? analysis.vcpAnalysis.recommendedEntry || null : null;
@@ -161,6 +162,7 @@ export function mapMarketAnalysisToScannerResult(item: ScannerConstituent, analy
     sepaMissingCount: null,
     exceptionSignals: [],
     currentPrice,
+    marketCap,
     priceAsOf,
     priceSource: analysis.providerUsed || item.priceSource,
     status: 'done',

@@ -166,6 +166,21 @@ function withPriceMetrics(response: MarketAnalysisResponse): MarketAnalysisRespo
   };
 }
 
+function estimateMarketCap(fundamentals: FundamentalSnapshot | null, latestPrice: number | null) {
+  if (typeof fundamentals?.marketCap === 'number' && Number.isFinite(fundamentals.marketCap)) {
+    return fundamentals.marketCap;
+  }
+  if (
+    typeof latestPrice === 'number' &&
+    Number.isFinite(latestPrice) &&
+    typeof fundamentals?.sharesOutstanding === 'number' &&
+    Number.isFinite(fundamentals.sharesOutstanding)
+  ) {
+    return latestPrice * fundamentals.sharesOutstanding;
+  }
+  return null;
+}
+
 function getBenchmarkCandidates(exchange: string) {
   if (exchange === 'KOSPI') return ['^KS200', '^KS11'];
   if (exchange === 'KOSDAQ') return ['^KQ150', '^KQ11'];
@@ -306,13 +321,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const cacheId = cacheKey('market-data', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
+    const cacheId = cacheKey('market-data', 'market-cap-v2', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = await tieredCacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
+      const cachedWithPriceMetrics = withPriceMetrics(cached);
+      const latestPrice = cachedWithPriceMetrics.priceData.at(-1)?.close ?? null;
+      const marketCap = estimateMarketCap(cachedWithPriceMetrics.fundamentals, latestPrice);
       const { metric, macroTrend } = skipStandardMetrics
         ? { metric: null as StockMetric | null, macroTrend: null as MacroTrend | null }
         : await loadStandardMetrics(ticker, exchange);
-      const mergedCached = mergeStandardMetrics(withPriceMetrics(cached), metric, macroTrend);
+      const mergedCached = mergeStandardMetrics({ ...cachedWithPriceMetrics, marketCap }, metric, macroTrend);
       return NextResponse.json({
         ...mergedCached,
         data: mergedCached,
@@ -400,6 +418,8 @@ export async function GET(request: Request) {
 
     providerAttempts.push(attempt('MTN Engine', 'SEPA/VCP calculation', 'success', 'SEPA, VCP and risk plan were calculated.'));
     const priceMetrics = calculatePriceMetrics(data);
+    const latestClose = data.at(-1)?.close ?? null;
+    const marketCap = estimateMarketCap(fundamentals, latestClose);
 
     const response: MarketAnalysisResponse = {
       ticker,
@@ -407,6 +427,7 @@ export async function GET(request: Request) {
       providerUsed,
       providerAttempts,
       priceData: data,
+      marketCap,
       sepaEvidence,
       riskPlan,
       vcpAnalysis,

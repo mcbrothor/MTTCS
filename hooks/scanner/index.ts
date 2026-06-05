@@ -350,6 +350,7 @@ export function useScanner() {
         return missingA - missingB || (b.vcpScore || 0) - (a.vcpScore || 0);
       }
       if (sortKey === 'rs') return (b.rsRating || 0) - (a.rsRating || 0) || (b.weightedMomentumScore || 0) - (a.weightedMomentumScore || 0);
+      if (sortKey === 'marketCap') return (b.marketCap ?? 0) - (a.marketCap ?? 0) || a.rank - b.rank;
       return a.rank - b.rank;
     });
 

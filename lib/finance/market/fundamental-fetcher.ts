@@ -6,6 +6,12 @@ import { supabaseServer } from '@/lib/supabase/server';
 
 const CACHE_VALID_DAYS = 1; // 24시간 TTL 적용
 
+function numberOrNull(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 
 /**
  * 전역 펀더멘털 데이터 수집기
@@ -36,14 +42,28 @@ export async function fetchAggregatedFundamentals(
         const daysSinceUpdate = (now - lastUpdated) / (1000 * 60 * 60 * 24);
 
         if (daysSinceUpdate < CACHE_VALID_DAYS) {
-          return {
-            epsGrowthPct: cacheData.eps_growth_pct !== null ? Number(cacheData.eps_growth_pct) : null,
-            revenueGrowthPct: cacheData.revenue_growth_pct !== null ? Number(cacheData.revenue_growth_pct) : null,
-            roePct: cacheData.roe_pct !== null ? Number(cacheData.roe_pct) : null,
-            debtToEquityPct: cacheData.debt_to_equity_pct !== null ? Number(cacheData.debt_to_equity_pct) : null,
-            floatShares: cacheData.float_shares !== null ? Number(cacheData.float_shares) : null,
-            sharesOutstanding: cacheData.shares_outstanding !== null ? Number(cacheData.shares_outstanding) : null,
+          const cachedSnapshot: FundamentalSnapshot = {
+            marketCap: null,
+            epsGrowthPct: numberOrNull(cacheData.eps_growth_pct),
+            revenueGrowthPct: numberOrNull(cacheData.revenue_growth_pct),
+            roePct: numberOrNull(cacheData.roe_pct),
+            debtToEquityPct: numberOrNull(cacheData.debt_to_equity_pct),
+            floatShares: numberOrNull(cacheData.float_shares),
+            sharesOutstanding: numberOrNull(cacheData.shares_outstanding),
             source: cacheData.source || 'Cache',
+          };
+          if (cachedSnapshot.sharesOutstanding !== null) return cachedSnapshot;
+
+          const yahooQuote = await getYahooFundamentals(yahooTicker);
+          if (!yahooQuote) return cachedSnapshot;
+
+          return {
+            ...cachedSnapshot,
+            marketCap: yahooQuote.marketCap ?? null,
+            floatShares: cachedSnapshot.floatShares ?? yahooQuote.floatShares ?? null,
+            sharesOutstanding: yahooQuote.sharesOutstanding ?? null,
+            sector: yahooQuote.sector ?? null,
+            source: `${cachedSnapshot.source} + Yahoo Finance quoteSummary`,
           };
         }
       }
@@ -206,6 +226,7 @@ async function augmentWithEdgar(
     }
 
     return {
+      ...yahoo,
       epsGrowthPct: yahoo.epsGrowthPct ?? edgar.epsGrowthPct,
       revenueGrowthPct: yahoo.revenueGrowthPct ?? edgar.revenueGrowthPct,
       roePct: yahoo.roePct ?? edgar.roePct,

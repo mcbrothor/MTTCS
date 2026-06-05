@@ -154,18 +154,45 @@ function mergeStandardMetrics(
   });
 }
 
+async function refreshMissingUniverseMarketCaps(universe: ScannerUniverse, rows: ScannerResult[]) {
+  if (!rows.some((item) => typeof item.marketCap !== 'number' || !Number.isFinite(item.marketCap))) {
+    return rows;
+  }
+
+  try {
+    const response = await fetch(`/api/scanner/universe?universe=${universe}`);
+    if (!response.ok) return rows;
+    const payload = await response.json() as ScannerUniverseResponse;
+    const byTicker = new Map(payload.items.map((item) => [item.ticker, item]));
+    return rows.map((item) => {
+      const meta = byTicker.get(item.ticker);
+      if (!meta) return item;
+      return {
+        ...item,
+        marketCap: typeof meta.marketCap === 'number' && Number.isFinite(meta.marketCap) ? meta.marketCap : item.marketCap,
+        currentPrice: item.currentPrice ?? meta.currentPrice,
+        priceAsOf: item.priceAsOf ?? meta.priceAsOf,
+        priceSource: item.priceSource === 'Wikipedia Nasdaq-100 list' ? meta.priceSource : item.priceSource,
+      };
+    });
+  } catch {
+    return rows;
+  }
+}
+
 export async function loadScannerMetrics(universe: ScannerUniverse, rows: ScannerResult[]) {
-  const tickers = rows.map((item) => item.ticker).filter(Boolean);
-  if (tickers.length === 0) return { results: rows.map(withRecommendation), macroTrend: null as MacroTrend | null };
+  const rowsWithMarketCaps = await refreshMissingUniverseMarketCaps(universe, rows);
+  const tickers = rowsWithMarketCaps.map((item) => item.ticker).filter(Boolean);
+  if (tickers.length === 0) return { results: rowsWithMarketCaps.map(withRecommendation), macroTrend: null as MacroTrend | null };
   try {
     const query = new URLSearchParams({ universe, tickers: tickers.join(',') });
     const response = await fetch('/api/scanner/metrics?' + query.toString());
     if (!response.ok) throw new Error('metrics ' + response.status);
     const payload = await response.json() as ScannerMetricsResponse;
-    return { results: mergeStandardMetrics(rows, payload.metrics, payload.macroTrend), macroTrend: payload.macroTrend };
+    return { results: mergeStandardMetrics(rowsWithMarketCaps, payload.metrics, payload.macroTrend), macroTrend: payload.macroTrend };
   } catch {
     return {
-      results: applyScannerReviewPoolRankings(rows.map((item) => withRecommendation({
+      results: applyScannerReviewPoolRankings(rowsWithMarketCaps.map((item) => withRecommendation({
         ...item,
         rsRating: null,
         internalRsRating: null,

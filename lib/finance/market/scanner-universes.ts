@@ -211,8 +211,67 @@ async function fetchStockAnalysisRussell1000(): Promise<ScannerUniverseResponse>
   };
 }
 
-async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
-  // 캐시 오염 방지 및 WAF 차단(Cloudflare) 회피를 위해 가장 안정적인 Wikipedia를 소스로 사용합니다.
+async function fetchStockAnalysisNasdaq100(): Promise<ScannerUniverseResponse> {
+  const response = await fetch('https://stockanalysis.com/list/nasdaq-100-stocks/', {
+    headers: {
+      accept: 'text/html',
+      'user-agent': 'Mozilla/5.0',
+    },
+    next: { revalidate: 60 * 30 },
+  });
+
+  if (!response.ok) {
+    throw new Error(`StockAnalysis Nasdaq 100 response error (${response.status})`);
+  }
+
+  const html = await response.text();
+  const rows = Array.from(html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
+  const items = rows
+    .map((match) => {
+      const row = match[1] || '';
+      const symbolMatch = row.match(/<a[^>]+href="\/stocks\/([^/]+)\/"[^>]*>([\s\S]*?)<\/a>/i);
+      if (!symbolMatch) return null;
+
+      const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((cell) => stripHtml(cell[1] || ''));
+      const rawTicker = stripHtml(symbolMatch[2]).toUpperCase();
+      const ticker = rawTicker.replace('.', '-');
+      const name = cells[2] || ticker;
+      const marketCap = parseAbbreviatedUsd(cells[3] || '');
+      const currentPrice = parseNumberText(cells[4] || '');
+
+      return {
+        rank: 0,
+        ticker,
+        exchange: 'NAS',
+        name,
+        marketCap,
+        currency: 'USD' as const,
+        currentPrice,
+        priceAsOf: new Date().toISOString(),
+        priceSource: 'StockAnalysis Nasdaq 100 table',
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
+    .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
+    .slice(0, 100)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+
+  if (items.length === 0) {
+    throw new Error('Nasdaq 100 constituents could not be parsed from StockAnalysis.');
+  }
+
+  return {
+    universe: 'NASDAQ100',
+    label: 'NASDAQ 100',
+    asOf: new Date().toISOString(),
+    source: 'StockAnalysis Nasdaq 100 table',
+    delayNote: 'Nasdaq 100 market-cap and price data can be delayed.',
+    items,
+    warnings: items.length < 100 ? [`Only ${items.length} Nasdaq rows were parsed.`] : [],
+  };
+}
+
+async function fetchWikipediaNasdaq100(): Promise<ScannerUniverseResponse> {
   const response = await fetch('https://en.wikipedia.org/wiki/Nasdaq-100', {
     headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' },
     next: { revalidate: 60 * 60 * 24 }, // 24시간 안정적 캐시
@@ -270,6 +329,19 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
     items,
     warnings: items.length < 100 ? [`Only ${items.length} Nasdaq rows were parsed.`] : [],
   };
+}
+
+async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
+  try {
+    return await fetchStockAnalysisNasdaq100();
+  } catch (error) {
+    const fallback = await fetchWikipediaNasdaq100();
+    const message = error instanceof Error ? error.message : 'StockAnalysis Nasdaq 100 fetch failed.';
+    return {
+      ...fallback,
+      warnings: [`${message} Wikipedia fallback was used; market caps may be unavailable.`, ...fallback.warnings],
+    };
+  }
 }
 
 function toKoreaConstituents(ranking: ReturnType<typeof rankKoreaMarketCapItems>, exchange: 'KOSPI' | 'KOSDAQ'): ScannerConstituent[] {

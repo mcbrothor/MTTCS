@@ -289,6 +289,7 @@ export interface SepaEvidence {
 }
 
 export interface FundamentalSnapshot {
+  marketCap?: number | null;
   epsGrowthPct: number | null;
   revenueGrowthPct: number | null;
   roePct: number | null;
@@ -411,6 +412,7 @@ export interface MarketAnalysisResponse {
   providerUsed: string;
   providerAttempts?: ProviderAttempt[];
   priceData: OHLCData[];
+  marketCap?: number | null;
   sepaEvidence: SepaEvidence;
   riskPlan: RiskPlan;
   vcpAnalysis: VcpAnalysis;
