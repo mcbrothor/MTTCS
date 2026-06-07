@@ -75,6 +75,13 @@ interface UsCacheStatus {
   lastUpdated: string | null;
 }
 
+interface KrCacheStatus {
+  dartCount: number;
+  dartLastUpdated: string | null;
+  fundamentalCount: number;
+  fundamentalLastUpdated: string | null;
+}
+
 // ── 공통 타입 ─────────────────────────────────────────────────────────────
 interface CacheResult {
   success: boolean;
@@ -144,6 +151,8 @@ export default function AdminPage() {
   const [dartFallbackDone, setDartFallbackDone] = useState<{ filled: number; failed: number; total: number } | null>(null);
   const [dartError, setDartError] = useState<string | null>(null);
   const [showUnmatched, setShowUnmatched] = useState(false);
+  const [krCacheStatus, setKrCacheStatus] = useState<KrCacheStatus | null>(null);
+  const [krCacheLoading, setKrCacheLoading] = useState(false);
 
   // ── US 상태 ─────────────────────────────────────────────────────────────
   const [usSyncing, setUsSyncing] = useState(false);
@@ -158,8 +167,24 @@ export default function AdminPage() {
   const [cacheResult, setCacheResult] = useState<CacheResult | null>(null);
 
   useEffect(() => {
+    fetchKrCacheStatus();
     fetchUsCacheStatus();
   }, []);
+
+  async function fetchKrCacheStatus() {
+    setKrCacheLoading(true);
+    try {
+      const res = await fetch('/api/admin/dart/cache-status');
+      if (res.ok) {
+        const data = await res.json() as KrCacheStatus;
+        setKrCacheStatus(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setKrCacheLoading(false);
+    }
+  }
 
   async function fetchUsCacheStatus() {
     setUsCacheLoading(true);
@@ -207,6 +232,7 @@ export default function AdminPage() {
 
     if (unmatchedCount === 0) {
       setDartPhase('done');
+      await fetchKrCacheStatus();
       return;
     }
 
@@ -252,6 +278,7 @@ export default function AdminPage() {
       if (!errorMsg) {
         setDartFallbackDone({ filled: totalFilled, failed: totalFailed, total: unmatchedCount });
         setDartPhase('done');
+        await fetchKrCacheStatus();
       }
     } catch {
       setDartError('네트워크 오류가 발생했습니다.');
@@ -324,6 +351,9 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/cache/clear', { method: 'POST' });
       const data = await res.json() as CacheResult;
       setCacheResult(data);
+      if (data.success) {
+        await Promise.all([fetchKrCacheStatus(), fetchUsCacheStatus()]);
+      }
     } catch {
       setCacheResult({ success: false, error: '네트워크 오류가 발생했습니다.' });
     } finally {
@@ -397,6 +427,43 @@ export default function AdminPage() {
               KOSPI200 + KOSDAQ150 전체 종목(약 350개)의 DART 고유번호를 DB에 저장합니다.
               미매칭 종목은 Yahoo Finance → Naver Finance 순으로 펀더멘탈을 보강합니다.
             </p>
+          </div>
+
+          {/* 캐시 상태 */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg bg-slate-800/60 px-4 py-3 text-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <p className="text-slate-400 text-xs">DART 매핑 보유 수</p>
+                  <p className="font-bold text-white">
+                    {krCacheLoading ? '—' : `${krCacheStatus?.dartCount ?? 0}개`}
+                  </p>
+                </div>
+                <div className="space-y-0.5 text-right">
+                  <p className="text-slate-400 text-xs">마지막 업데이트</p>
+                  <p className="text-slate-300 text-xs">
+                    {krCacheLoading ? '—' : formatDate(krCacheStatus?.dartLastUpdated ?? null)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-slate-800/60 px-4 py-3 text-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <p className="text-slate-400 text-xs">KR 펀더멘털 캐시</p>
+                  <p className="font-bold text-white">
+                    {krCacheLoading ? '—' : `${krCacheStatus?.fundamentalCount ?? 0}개`}
+                  </p>
+                </div>
+                <div className="space-y-0.5 text-right">
+                  <p className="text-slate-400 text-xs">마지막 업데이트</p>
+                  <p className="text-slate-300 text-xs">
+                    {krCacheLoading ? '—' : formatDate(krCacheStatus?.fundamentalLastUpdated ?? null)}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <button
