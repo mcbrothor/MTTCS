@@ -131,6 +131,14 @@ export function buildCodexIbPrompt(mtnPrompt) {
   ].join('\n');
 }
 
+export function getTelegramChatIds(env = process.env) {
+  const configured = env.TELEGRAM_ALLOWED_CHAT_IDS || env.TELEGRAM_CHAT_ID || '';
+  return configured
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
 export function parseCodexCliOutput(raw) {
   const parsed = parseJsonCandidate(String(raw || '').trim());
   if (!parsed || typeof parsed !== 'object') {

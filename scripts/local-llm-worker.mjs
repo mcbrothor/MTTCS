@@ -4,13 +4,13 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildCodexIbPrompt, parseCodexCliOutput, parseIbResponse } from './lib/codex-cli-worker-utils.mjs';
+import { buildCodexIbPrompt, getTelegramChatIds, parseCodexCliOutput, parseIbResponse } from './lib/codex-cli-worker-utils.mjs';
 
 // .env.local 변수들 (node --env-file=.env.local 로 주입됨)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const telegramBotToken = process.env.TELEGRAM_BOT_TOKEN;
-const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+const telegramChatIds = getTelegramChatIds();
 const LOCAL_LLM_API_URL = process.env.LOCAL_LLM_API_URL || 'http://127.0.0.1:11434/v1';
 const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen3.6:14b';
 const CODEX_CLI_ENABLED = process.env.CODEX_CLI_ENABLED?.toLowerCase() !== 'false';
@@ -30,7 +30,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function sendTelegramMessage(text) {
-  if (!telegramBotToken || !telegramChatId) {
+  if (!telegramBotToken || telegramChatIds.length === 0) {
     console.log('[Worker] Telegram credentials missing, skipping telegram notification.');
     return;
   }
@@ -44,16 +44,18 @@ async function sendTelegramMessage(text) {
   }
 
   for (let i = 0; i < chunks.length; i++) {
-    try {
-      await axios.post(url, {
-        chat_id: telegramChatId,
-        text: chunks[i],
-        parse_mode: 'Markdown'
-      });
-      // Add a small delay between chunks to avoid rate limiting
-      if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
-    } catch (e) {
-      console.error(`[Worker] Telegram sending failed on chunk ${i+1}/${chunks.length}:`, e.response?.data || e.message);
+    for (const chatId of telegramChatIds) {
+      try {
+        await axios.post(url, {
+          chat_id: chatId,
+          text: chunks[i],
+          parse_mode: 'Markdown'
+        });
+        // Add a small delay between chunks/recipients to avoid rate limiting.
+        await new Promise(r => setTimeout(r, 500));
+      } catch (e) {
+        console.error(`[Worker] Telegram sending failed for chat ${chatId} on chunk ${i+1}/${chunks.length}:`, e.response?.data || e.message);
+      }
     }
   }
 }

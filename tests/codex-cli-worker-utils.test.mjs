@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildCodexIbPrompt,
+  getTelegramChatIds,
   parseCodexCliOutput,
   parseIbResponse,
 } from '../scripts/lib/codex-cli-worker-utils.mjs';
@@ -36,5 +37,16 @@ assert.throws(
   () => parseCodexCliOutput('not json'),
   /not valid JSON/
 );
+
+{
+  assert.deepEqual(
+    getTelegramChatIds({ TELEGRAM_ALLOWED_CHAT_IDS: ' 123,456 ,, 789 ' }),
+    ['123', '456', '789']
+  );
+  assert.deepEqual(
+    getTelegramChatIds({ TELEGRAM_CHAT_ID: 'legacy-chat' }),
+    ['legacy-chat']
+  );
+}
 
 console.log('codex cli worker utils tests passed');
