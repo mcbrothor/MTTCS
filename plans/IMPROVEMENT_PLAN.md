@@ -1,6 +1,6 @@
 # MTN 개선 작업 현황 및 후속 계획
 
-> 최종 업데이트: 2026-04-23
+> 최종 업데이트: 2026-06-07
 > 기준 문서: `MTN_전체검토보고서_2026-04-22.docx`, `Scanner.html`, `MTN App.html`
 > 기준 상태: 현재 저장소 반영 내용 + `npm run lint`, `npm run test` 통과
 
@@ -180,14 +180,14 @@
 
 ### 4-1. 운영 반영 체크
 
-- [남음] `018_trade_snapshots.sql`를 staging / production에 실제 적용 확인
-- [남음] `rs:metrics` cron의 운영 환경 변수(`CRON_SECRET`, 텔레그램 알림) 최종 확인
-- [남음] 실제 배포 환경에서 live price source가 미국/한국 모두 안정적으로 응답하는지 점검
+- [완료] `018_trade_snapshots.sql` production 실제 적용 및 migration history 정합화
+- [완료] `rs:metrics` cron의 운영 환경 변수(`CRON_SECRET`, 텔레그램 알림) 존재 확인
+- [완료] 실제 배포 환경에서 live price source가 미국/한국 모두 KIS 기준으로 정상 응답 확인
 
 ### 4-2. 문서 및 기록 정리
 
-- [남음] `CHANGELOG.md`를 이번 개선 범위 기준으로 정리
-- [남음] 최종 운영자용 점검표 문서화
+- [완료] `CHANGELOG.md`를 이번 개선 범위 기준으로 정리
+- [완료] 최종 운영자용 점검표 문서화
 - [남음] 실제 사용 가이드에 3-layer review와 lifecycle interpretation 추가
 
 ### 4-3. UI 마감 품질 보강
@@ -208,10 +208,10 @@
 
 지금부터의 우선순위는 아래 순서가 적절하다.
 
-1. `018_trade_snapshots.sql` 운영 반영 확인
-2. cron / 알림 / live data 운영 체크
-3. `CHANGELOG.md` 및 사용자 문서 정리
-4. 브라우저 수준 E2E 또는 UI polish 추가
+1. 실제 사용 가이드에 3-layer review와 lifecycle interpretation 추가
+2. 브라우저 수준 E2E 또는 UI polish 추가
+3. history에서 mistake tag별 교정 액션 추천 자동 생성
+4. portfolio에서 sector / open risk 초과 시 액션형 경고 강화
 
 ---
 
@@ -223,7 +223,7 @@
 - 구조적 데이터 저장: 완료
 - 투자자 복기 흐름: 완료
 - 전문 투자자 관점 E2E: 완료
-- 남은 일: 운영 적용 확인, 문서화, 선택적 polish
+- 남은 일: 사용 가이드 보강, 선택적 브라우저 E2E, UI polish
 
 ---
 
@@ -231,5 +231,9 @@
 
 - `npm run lint` 통과
 - `npm run test` 통과
+- `npm run build` 통과
+- Supabase production migration 확인: `risk_policy_and_gate`, `trade_snapshots`
+- Production live data 확인: `AAPL/NAS`, `005930/KOSPI` 모두 `KIS (260 daily bars)`
+- Production macro 확인: KIS KOSPI source 포함 정상 응답
 
-검증 기준일: 2026-04-23
+검증 기준일: 2026-06-07

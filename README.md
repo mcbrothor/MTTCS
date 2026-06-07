@@ -66,6 +66,11 @@ The external LLM/IB committee review is the decision-influencing second layer. I
 
 MTN is a setup screener, not an order execution management system. Execution timing, order routing, and final risk acceptance remain the user's responsibility.
 
+## Operations
+
+- Production operator checklist: [`docs/OPERATOR_CHECKLIST.md`](docs/OPERATOR_CHECKLIST.md)
+- Change history: [`CHANGELOG.md`](CHANGELOG.md)
+
 ## 보안 가이드: 환경 변수 키 로테이션 (Key Rotation)
 
 `.env.local` 파일에는 민감한 API 키와 데이터베이스 접속 정보가 포함되어 있습니다. 주기적으로 키 로테이션을 수행해야 합니다.

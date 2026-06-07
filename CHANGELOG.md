@@ -4,6 +4,26 @@ MTN(Mantori's Trading Navigator) 프로젝트의 변경 이력을 기록합니�
 
 ---
 
+## [2026-06-07] - 운영 동기화 및 Codex CLI 워커 반영
+
+### 주요 변경 사항
+- **Codex CLI 우선 IB 검증**: 외부 API 호출 없이 ChatGPT 로그인 기반 Codex CLI를 우선 사용하고, 실패 시 로컬 LLM 큐로 fallback하도록 워커를 확장.
+- **Supabase production 스키마 동기화**: `risk_policy_and_gate`, `trade_snapshots` migration 기록과 실제 DB 스키마를 맞춤.
+- **Telegram 설정 정합화**: 로컬 워커가 `TELEGRAM_ALLOWED_CHAT_IDS`를 읽도록 수정하고, 기존 `TELEGRAM_CHAT_ID`는 fallback으로 유지.
+- **운영 배포 검증**: Vercel production 배포 후 인증, KIS 가격 데이터, macro endpoint를 실제 운영 URL에서 확인.
+
+### 검증
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- Supabase production migration 확인
+- Production `/api/market-data`:
+  - `AAPL / NAS`: `KIS (260 daily bars)`
+  - `005930 / KOSPI`: `KIS (260 daily bars)`
+- Production `/api/macro`: KIS KOSPI source 포함 정상 응답
+
+---
+
 ## [2026-04-23] - Improvement Plan Week 1 반영
 
 ### 주요 변경 사항
