@@ -14,6 +14,9 @@
 import type { LeaderGrade, LeaderScoreBreakdown, OHLCData } from '@/types';
 import { calculateRsMetrics } from '../market/rs-proxy';
 import { analyzeSepa } from '../core/sepa';
+import { gradeFromScore } from './leader-ranking';
+export { applyLeaderUniverseMetrics, gradeFromScore } from './leader-ranking';
+export type { LeaderRankableItem } from './leader-ranking';
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const round = (value: number, digits = 0) => {
@@ -27,14 +30,6 @@ const W_CONSISTENCY = 0.20;
 const W_LIQUIDITY = 0.20;
 const W_TREND = 0.20;
 const W_SECTOR = 0.15;
-
-// ── Grade 임계 ────────────────────────────────────────────────────────────
-export function gradeFromScore(score: number): LeaderGrade {
-  if (score >= 85) return 'ALPHA';
-  if (score >= 65) return 'EMERGING';
-  if (score >= 45) return 'STEADY';
-  return 'LAGGARD';
-}
 
 // ── 수학적 헬퍼 함수 ───────────────────────────────────────────────────────
 
@@ -441,100 +436,6 @@ export function analyzeLeaderScore(input: LeaderAnalysisInput): LeaderAnalysisRe
     benchmarkRelativeScore: rsMetrics.benchmarkRelativeScore,
     weightedMomentumScore: rsMetrics.weightedMomentumScore,
   };
-}
-
-// ── 유니버스 단위 상대 평가 오케스트레이션 ─────────────────────────────────────
-
-export interface LeaderRankableItem {
-  ticker: string;
-  leaderScore: number;
-  leaderGrade: LeaderGrade;
-  breakdown: LeaderScoreBreakdown;
-  dollarVolume20d: number;
-  liquidityVelocity: number;
-  regressionR2: number;
-  regressionSlope: number;
-  trendIntensityIndex: number;
-  weightedMomentumScore?: number | null;
-  benchmarkRelativeScore?: number | null;
-  distanceFromHigh52WeekPct?: number | null;
-  sectorRank?: number | null;
-}
-
-/**
- * 유니버스 전체 분석 결과를 기반으로:
- * 1. 상대 강도 모멘텀 랭킹 (rsRating) 산출 및 주입
- * 2. 거래대금 쏠림 백분위 (dollarVolumeShare) 산출 및 주입
- * 3. dollarVolumeShare를 축 3에 반영하여 최종 `leaderScore` 및 `leaderGrade` 동적 재산출
- */
-export function applyLeaderUniverseMetrics<T extends LeaderRankableItem>(
-  results: T[],
-  totalSectors = 11,
-): (T & { rsRating: number; rsRank: number; dollarVolumeShare: number })[] {
-  void totalSectors;
-  const size = results.length;
-  if (size === 0) return [];
-
-  // ── A. RS Rating 백분위 계산 ──────────────────────────────────
-  const getRsScore = (item: T) => (item.weightedMomentumScore ?? item.benchmarkRelativeScore ?? -9999);
-  const sortedByRs = [...results].sort((a, b) => getRsScore(b) - getRsScore(a));
-  const rsMap = new Map<string, { rank: number; rating: number }>();
-
-  sortedByRs.forEach((item, index) => {
-    const rank = index + 1;
-    const rating = size <= 1 ? 50 : Math.round(99 - ((rank - 1) / (size - 1)) * 98);
-    rsMap.set(item.ticker, { rank, rating });
-  });
-
-  // ── B. 거래대금 점유율 백분위 계산 ──────────────────────────────────
-  const sortedByVolume = [...results].sort((a, b) => b.dollarVolume20d - a.dollarVolume20d);
-  const volMap = new Map<string, { rank: number; share: number }>();
-
-  sortedByVolume.forEach((item, index) => {
-    const rank = index + 1;
-    const share = size <= 1 ? 50 : Math.round(99 - ((rank - 1) / (size - 1)) * 98);
-    volMap.set(item.ticker, { rank, share });
-  });
-
-  // ── C. 종합 및 등급 동적 재계산 주입 ─────────────────────────────────
-  return results.map((item) => {
-    const rs = rsMap.get(item.ticker) || { rank: size, rating: 50 };
-    const vol = volMap.get(item.ticker) || { rank: size, share: 50 };
-
-    // 신형 5대 축 점수 최종 반영
-    // 축 1: RS Leadership (RS 랭킹 백분위가 직접 스코어링의 베이스가 됨)
-    const rsPercentile = rs.rating;
-    const rsLeadership = scoreRsLeadership(rsPercentile, null, null); // Mansfield 보너스는 이미 선연산에 결합
-
-    // 축 3: Liquidity Crowding (전체 유니버스 거래대금 점유율 실시간 반영)
-    const liquidityCrowding = scoreLiquidityCrowding(vol.share, item.liquidityVelocity);
-
-    // 축 2, 4, 5는 개별 연산된 점수 그대로 재활용
-    const breakdown: LeaderScoreBreakdown = {
-      ...item.breakdown,
-      rsLeadership,
-      liquidityCrowding,
-    };
-
-    // 가중치 합산 최종 점수
-    const finalScore = clamp(round(
-      breakdown.rsLeadership * W_ALPHA +
-      breakdown.momentumConsistency * W_CONSISTENCY +
-      breakdown.liquidityCrowding * W_LIQUIDITY +
-      breakdown.trendIntensity * W_TREND +
-      breakdown.sectorAlpha * W_SECTOR,
-    ), 0, 100);
-
-    return {
-      ...item,
-      rsRating: rs.rating,
-      rsRank: rs.rank,
-      dollarVolumeShare: vol.share,
-      leaderScore: finalScore,
-      leaderGrade: gradeFromScore(finalScore),
-      breakdown,
-    };
-  });
 }
 
 /**

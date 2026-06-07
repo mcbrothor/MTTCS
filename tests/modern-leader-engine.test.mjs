@@ -7,6 +7,7 @@ import {
   analyzeLeaderScore,
   applyLeaderUniverseMetrics,
 } from '../lib/finance/engines/leader-score.ts';
+import { applyLeaderUniverseMetrics as applyPureLeaderUniverseMetrics } from '../lib/finance/engines/leader-ranking.ts';
 
 // ── 테스트용 유틸 ────────────────────────────────────────────────────────
 function createTrendData(startPrice, trendPctPerBar, length, noiseRange = 0) {
@@ -168,4 +169,46 @@ test('가상 SK하이닉스(메가캡 쏠림) vs 가상 잡주 랭킹 분석 및
   // 3. 최종적으로 하이닉스는 고득점으로 ALPHA/EMERGING에 주도주로 잡히며, 잡주는 등급이 크게 밀려 소외되어야 함
   assert.ok(hnyRanked.leaderScore > junkRanked.leaderScore);
   assert.ok(hnyRanked.leaderGrade === 'ALPHA' || hnyRanked.leaderGrade === 'EMERGING');
+});
+
+test('Leader 랭킹은 배치 단위가 아니라 전체 유니버스 기준으로 재계산된다', () => {
+  const makeItem = (ticker, weightedMomentumScore, dollarVolume20d) => ({
+    ticker,
+    leaderScore: 50,
+    leaderGrade: 'STEADY',
+    breakdown: {
+      rsLeadership: 50,
+      momentumConsistency: 60,
+      liquidityCrowding: 50,
+      trendIntensity: 60,
+      sectorAlpha: 50,
+    },
+    dollarVolume20d,
+    liquidityVelocity: 1,
+    regressionR2: 0.7,
+    regressionSlope: 0.001,
+    trendIntensityIndex: 70,
+    weightedMomentumScore,
+    benchmarkRelativeScore: weightedMomentumScore,
+    distanceFromHigh52WeekPct: 8,
+    sectorRank: null,
+  });
+
+  const batchA = [
+    makeItem('A1', 100, 100),
+    makeItem('A2', 90, 90),
+  ];
+  const batchB = [
+    makeItem('B1', 80, 80),
+    makeItem('B2', 70, 70),
+  ];
+
+  const localA = applyPureLeaderUniverseMetrics(batchA);
+  const localB = applyPureLeaderUniverseMetrics(batchB);
+  const global = applyPureLeaderUniverseMetrics([...batchA, ...batchB]);
+
+  assert.equal(localA.find((item) => item.ticker === 'A1').rsRating, 99);
+  assert.equal(localB.find((item) => item.ticker === 'B1').rsRating, 99);
+  assert.equal(global.find((item) => item.ticker === 'B1').rsRating, 34);
+  assert.ok(global.find((item) => item.ticker === 'A2').leaderScore > global.find((item) => item.ticker === 'B1').leaderScore);
 });

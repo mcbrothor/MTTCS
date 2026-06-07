@@ -987,6 +987,8 @@ export interface LeaderScannerResult {
   dollarVolumeShare?: number | null; // 전체 시장 내 거래대금 백분위 순위 (0~100)
   liquidityVelocity?: number | null; // 유동성 유입 가속도 (최근 5일 / 60일 대금)
   trendIntensityIndex?: number | null; // 이평선 추세 강도 지수 (TII)
+  weightedMomentumScore?: number | null;
+  benchmarkRelativeScore?: number | null;
 
 
   // RS 지표

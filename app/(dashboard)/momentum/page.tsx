@@ -6,7 +6,8 @@ import {
   Play,
   Square,
   Activity,
-  Flame
+  Flame,
+  AlertTriangle,
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -34,6 +35,13 @@ interface MomentumApiResult {
   ticker: string;
   success: boolean;
   data?: SurgeMetrics & { currentPrice?: number | null };
+  error?: string;
+}
+
+interface MomentumScanError {
+  ticker: string;
+  exchange: string;
+  error: string;
 }
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
@@ -69,6 +77,7 @@ export default function MomentumScannerPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   
   const [results, setResults] = useState<SurgeResult[]>([]);
+  const [scanErrors, setScanErrors] = useState<MomentumScanError[]>([]);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('rvol');
   const [viewType, setViewType] = useState<ViewType>('card');
@@ -80,6 +89,7 @@ export default function MomentumScannerPage() {
     setIsScanning(true);
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
+    setScanErrors([]);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -94,6 +104,7 @@ export default function MomentumScannerPage() {
 
       const batchSize = 20;
       let allResults: SurgeResult[] = [];
+      let allErrors: MomentumScanError[] = [];
 
       for (let i = 0; i < items.length; i += batchSize) {
         if (abort.signal.aborted) break;
@@ -129,13 +140,33 @@ export default function MomentumScannerPage() {
                     currentPrice: r.data.currentPrice ?? null,
                 }));
              allResults = [...allResults, ...successBatch];
+
+             const failedBatch = json.results
+                .filter((r) => !r.success)
+                .map((r) => ({
+                  ticker: r.ticker,
+                  exchange: payload.find((p) => p.ticker === r.ticker)?.exchange || 'US',
+                  error: r.error || '분석 실패',
+                }));
+             allErrors = [...allErrors, ...failedBatch];
+             setScanErrors(allErrors);
           }
+        } else {
+          const body = await scanResp.json().catch(() => ({})) as { message?: string };
+          const error = body.message || `배치 요청 실패 (${scanResp.status})`;
+          const failedBatch = payload.map((item) => ({
+            ticker: item.ticker,
+            exchange: item.exchange,
+            error,
+          }));
+          allErrors = [...allErrors, ...failedBatch];
+          setScanErrors(allErrors);
         }
         setProgress((prev) => ({ ...prev, current: Math.min(i + batchSize, items.length) }));
       }
 
       setResults(allResults);
-      setScanStage('완료');
+      setScanStage(allErrors.length > 0 ? `완료 · 실패 ${allErrors.length}건` : '완료');
     } catch (err: unknown) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
         alert(`스캔 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
@@ -239,6 +270,40 @@ export default function MomentumScannerPage() {
           )}
         </div>
       </section>
+
+      {scanErrors.length > 0 && (
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-300" />
+              <div>
+                <h2 className="text-sm font-semibold text-amber-100">데이터 로딩 실패 {scanErrors.length}건</h2>
+                <p className="mt-1 text-sm text-amber-100/70">
+                  성공한 종목은 계속 표시하고, 실패 종목은 아래 원인만 별도로 남깁니다.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setScanErrors([])}
+              className="self-start rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-medium text-amber-100 hover:bg-amber-400/10"
+            >
+              닫기
+            </button>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {scanErrors.slice(0, 9).map((item) => (
+              <div key={`${item.exchange}:${item.ticker}`} className="rounded-lg border border-amber-400/20 bg-slate-950/50 px-3 py-2">
+                <div className="text-xs font-semibold text-amber-100">{item.ticker} · {item.exchange}</div>
+                <div className="mt-1 truncate text-xs text-amber-100/65" title={item.error}>{item.error}</div>
+              </div>
+            ))}
+          </div>
+          {scanErrors.length > 9 && (
+            <p className="mt-2 text-xs text-amber-100/60">외 {scanErrors.length - 9}건은 로그에 누적되어 있습니다.</p>
+          )}
+        </section>
+      )}
 
       {/* Filters & Sorts */}
       {results.length > 0 && (

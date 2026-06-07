@@ -23,6 +23,7 @@ import { useContestSelection } from '@/hooks/useContestSelection';
 import {
   LEADER_LATEST_UNIVERSE_STORAGE_KEY,
 } from '@/lib/contest-sources';
+import { applyLeaderUniverseMetrics } from '@/lib/finance/engines/leader-ranking';
 import type {
   LeaderGrade,
   LeaderScoreBreakdown,
@@ -133,6 +134,43 @@ function formatMarketCap(value: number | null, currency?: string, ticker?: strin
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '알 수 없는 오류';
+}
+
+function applyGlobalLeaderRanking(results: LeaderScannerResult[]): LeaderScannerResult[] {
+  const rankable = results
+    .filter((r) => r.status === 'done' && typeof r.dollarVolume20d === 'number')
+    .map((r) => ({
+      ticker: r.ticker,
+      leaderScore: r.leaderScore,
+      leaderGrade: r.leaderGrade,
+      breakdown: r.breakdown,
+      dollarVolume20d: r.dollarVolume20d ?? 0,
+      liquidityVelocity: r.liquidityVelocity ?? 1,
+      regressionR2: r.regressionR2 ?? 0,
+      regressionSlope: r.regressionSlope ?? 0,
+      trendIntensityIndex: r.trendIntensityIndex ?? 0,
+      weightedMomentumScore: r.weightedMomentumScore ?? null,
+      benchmarkRelativeScore: r.benchmarkRelativeScore ?? null,
+      distanceFromHigh52WeekPct: r.distanceFromHigh52WeekPct ?? null,
+      sectorRank: r.sectorRank ?? null,
+    }));
+
+  const ranked = applyLeaderUniverseMetrics(rankable, 11);
+  const rankedByTicker = new Map(ranked.map((item) => [item.ticker, item]));
+
+  return results.map((r) => {
+    const rankedItem = rankedByTicker.get(r.ticker);
+    if (!rankedItem) return r;
+    return {
+      ...r,
+      leaderScore: rankedItem.leaderScore,
+      leaderGrade: rankedItem.leaderGrade,
+      breakdown: rankedItem.breakdown,
+      rsRating: rankedItem.rsRating,
+      rsRank: rankedItem.rsRank,
+      dollarVolumeShare: rankedItem.dollarVolumeShare,
+    };
+  });
 }
 
 function benchmarkTickerForUniverse(universe: ScannerUniverse) {
@@ -265,6 +303,8 @@ export default function LeaderScannerPage() {
         dollarVolumeShare: null,
         liquidityVelocity: null,
         trendIntensityIndex: null,
+        weightedMomentumScore: null,
+        benchmarkRelativeScore: null,
         // 구형 호환 데이터
         rsRating: null,
         mansfieldRsScore: null,
@@ -301,7 +341,11 @@ export default function LeaderScannerPage() {
 
         try {
           const payload = {
-            items: chunk.map(c => ({ ticker: c.ticker, exchange: c.exchange })),
+            items: chunk.map((c) => ({
+              ticker: c.ticker,
+              exchange: c.exchange,
+              sectorRank: ('sectorRank' in c ? c.sectorRank : null) ?? null,
+            })),
             benchmarkTicker,
           };
 
@@ -337,6 +381,8 @@ export default function LeaderScannerPage() {
                 dollarVolumeShare: (d.dollarVolumeShare as number) ?? null,
                 liquidityVelocity: (d.liquidityVelocity as number) ?? null,
                 trendIntensityIndex: (d.trendIntensityIndex as number) ?? null,
+                weightedMomentumScore: (d.weightedMomentumScore as number) ?? null,
+                benchmarkRelativeScore: (d.benchmarkRelativeScore as number) ?? null,
                 // 구형 호환
                 rsRating: (d.rsRating as number) ?? null,
                 mansfieldRsScore: (d.mansfieldRsScore as number) ?? null,
@@ -378,6 +424,8 @@ export default function LeaderScannerPage() {
       }
 
       if (!abort.signal.aborted) {
+        setScanStage('전체 유니버스 기준 랭킹 재계산 중');
+
         // 섹터 데이터 보강
         try {
           const tickers = current.map(r => r.ticker).join(',');
@@ -391,6 +439,7 @@ export default function LeaderScannerPage() {
           // 섹터 보강 실패 무시
         }
 
+        current = applyGlobalLeaderRanking(current);
         setResults([...current]);
         const now = new Date().toISOString();
         setLastScannedAt(now);

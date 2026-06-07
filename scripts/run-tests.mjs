@@ -21,6 +21,8 @@ const tests = [
   'tests/canslim-analysis.test.mjs',
   'tests/canslim-engine.test.mjs',
   'tests/canslim-pillars.test.mjs',
+  'tests/modern-leader-engine.test.mjs',
+  'tests/surge-score.test.mjs',
   'tests/contest.test.mjs',
   'tests/contest-rule-engine-sir.test.mjs',
   'tests/contest-ib-prompt-sir.test.mjs',
