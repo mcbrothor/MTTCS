@@ -23,6 +23,7 @@ const tests = [
   'tests/canslim-pillars.test.mjs',
   'tests/modern-leader-engine.test.mjs',
   'tests/surge-score.test.mjs',
+  'tests/qullamaggie-score.test.mjs',
   'tests/contest.test.mjs',
   'tests/contest-rule-engine-sir.test.mjs',
   'tests/contest-ib-prompt-sir.test.mjs',

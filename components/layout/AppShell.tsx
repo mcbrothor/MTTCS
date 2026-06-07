@@ -9,7 +9,7 @@ import AppStepper from '@/components/layout/AppStepper';
 import NavigatorWarningSystem from '@/components/master-filter/NavigatorWarningSystem';
 
 function needsMarketContext(pathname: string) {
-  return ['/master-filter', '/macro', '/scanner', '/canslim', '/plan'].some(
+  return ['/master-filter', '/macro', '/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/plan'].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
 }

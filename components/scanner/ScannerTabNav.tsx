@@ -53,12 +53,21 @@ export default function ScannerTabNav() {
       activeColor: 'border-rose-400/35 bg-rose-500/10 text-rose-100',
       idleColor: 'text-rose-200',
     },
+    {
+      id: 'qullamaggie',
+      label: '쿨라매기 스캐너',
+      description: 'Breakout · EP · Super Breakout',
+      href: '/qullamaggie',
+      icon: <Activity className="h-4 w-4" />,
+      activeColor: 'border-emerald-400/35 bg-emerald-500/10 text-emerald-100',
+      idleColor: 'text-emerald-200',
+    },
   ];
 
   const stateDot = data?.state ? STATE_TONE[data.state] : 'bg-slate-500';
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
       {tabs.map((tab) => {
         const isActive = pathname === tab.href;
 
