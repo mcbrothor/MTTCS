@@ -110,6 +110,25 @@ export default function PortfolioPage() {
             </div>
           )}
 
+          {summary.actions && summary.actions.length > 0 && (
+            <section className="grid gap-3 lg:grid-cols-2">
+              {summary.actions.map((item) => {
+                const tone = item.severity === 'BLOCK'
+                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+                  : item.severity === 'REDUCE'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                    : 'border-sky-500/30 bg-sky-500/10 text-sky-100';
+                return (
+                  <div key={`${item.severity}-${item.title}`} className={`rounded-lg border p-4 ${tone}`}>
+                    <p className="text-xs font-bold uppercase tracking-wide opacity-80">{item.severity}</p>
+                    <p className="mt-2 text-sm font-bold text-white">{item.title}</p>
+                    <p className="mt-1 text-sm leading-6">{item.detail}</p>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
             <Metric label="총 자산" value={money(summary.totalEquity, market)} />
             <Metric label="투입 금액" value={money(summary.investedCapital, market)} />

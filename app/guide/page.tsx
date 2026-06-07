@@ -125,6 +125,20 @@ const reviewRows = [
   ['실패 판정', '선택군 평균 < 미선택군 평균이면 해당 사이클은 "반성 필요"로 표시. 어떤 필터 기준이 부실했는지 역추적합니다.'],
 ];
 
+const threeLayerReviewRows = [
+  ['Layer 1 — Entry Snapshot', '진입 당시 체크리스트, SEPA/VCP 상태, 진입가·손절가·포지션 크기를 고정합니다. 결과가 나온 뒤 기준을 바꾸지 않기 위한 원본 기록입니다.'],
+  ['Layer 2 — Contest & LLM Verdict', '콘테스트 순위와 LLM 판단을 저장합니다. PROCEED/WATCH/SKIP 판단이 실제 결과와 맞았는지 비교해 후보 선정 품질을 검증합니다.'],
+  ['Layer 3 — Actual Outcome', '실현손익, R multiple, discipline, mistake tag를 결합해 진입 판단 문제인지 실행 문제인지 분리합니다.'],
+  ['교정 액션', 'late_entry, early_exit, plan_violation 같은 mistake tag를 다음 거래에서 차단할 구체적 행동으로 바꿉니다.'],
+];
+
+const lifecycleRows = [
+  ['초기 진입', '계획 수량과 실제 진입 수량이 맞는지 확인합니다. 최초 stop 기준으로 open risk가 계산됩니다.'],
+  ['피라미딩', '추가 매수는 평균단가, 잔량, open risk를 다시 계산합니다. 수익 중 추가인지, 리스크 초과 추가인지 분리해 봅니다.'],
+  ['부분 매도', '실현손익은 확정하고 남은 수량의 평균단가와 open risk를 재계산합니다. 좋은 부분매도는 리스크를 낮추며 추세 참여를 유지합니다.'],
+  ['전량 청산', '최종 R multiple과 exit reason이 기록됩니다. 수익 거래라도 계획 위반이면 discipline에서 불이익을 줍니다.'],
+];
+
 // ─── 공통 컴포넌트 ───────────────────────────────────────────────
 
 function InfoTable({ rows, cols = ['항목', '설명'] }: { rows: string[][]; cols?: string[] }) {
@@ -383,6 +397,14 @@ export default function GuidePage() {
           subtitle="선정 기준의 장기 유효성을 검증합니다. 선택이 옳았는지 데이터로 증명하세요."
         />
         <InfoTable rows={reviewRows} />
+        <div className="mt-6">
+          <h3 className="font-semibold text-white">3-Layer Review 해석</h3>
+          <InfoTable rows={threeLayerReviewRows} />
+        </div>
+        <div className="mt-6">
+          <h3 className="font-semibold text-white">Position Lifecycle 해석</h3>
+          <InfoTable rows={lifecycleRows} />
+        </div>
         <div className="mt-4 rounded-lg border border-cyan-800/40 bg-cyan-900/20 p-4 text-sm text-cyan-300">
           <strong>복기의 목적은 자책이 아니라 개선입니다.</strong> 어떤 필터가 실제로 수익률 예측력이 있는지,
           어떤 기준이 노이즈인지를 데이터로 확인해 다음 사이클의 스크리닝 기준을 정교하게 만들어 갑니다.

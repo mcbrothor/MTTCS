@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   formatHistoryConfidence,
+  getHistoryCorrectionActions,
   getHistoryChecklistSummary,
   getHistoryComparisonSummary,
 } from '../lib/history-presentation.ts';
@@ -99,5 +100,27 @@ import {
 
 assert.equal(formatHistoryConfidence(0.834), '83%');
 assert.equal(formatHistoryConfidence(null), '-');
+
+{
+  const actions = getHistoryCorrectionActions({
+    mistake_tags: ['late_entry', 'plan_violation'],
+    final_discipline: 72,
+    review_action: null,
+  });
+
+  assert.equal(actions[0].tag, 'late_entry');
+  assert.ok(actions.some((item) => item.tag === 'plan_violation'));
+  assert.ok(actions.some((item) => item.tag === 'discipline_below_80'));
+}
+
+{
+  const actions = getHistoryCorrectionActions({
+    mistake_tags: [],
+    final_discipline: 92,
+    review_action: null,
+  });
+
+  assert.equal(actions[0].tag, 'review_action_missing');
+}
 
 console.log('history presentation tests passed');

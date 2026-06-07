@@ -11,11 +11,17 @@ MTN(Mantori's Trading Navigator) 프로젝트의 변경 이력을 기록합니�
 - **Supabase production 스키마 동기화**: `risk_policy_and_gate`, `trade_snapshots` migration 기록과 실제 DB 스키마를 맞춤.
 - **Telegram 설정 정합화**: 로컬 워커가 `TELEGRAM_ALLOWED_CHAT_IDS`를 읽도록 수정하고, 기존 `TELEGRAM_CHAT_ID`는 fallback으로 유지.
 - **운영 배포 검증**: Vercel production 배포 후 인증, KIS 가격 데이터, macro endpoint를 실제 운영 URL에서 확인.
+- **사용 가이드 보강**: 3-layer review와 position lifecycle 해석 기준을 가이드에 추가.
+- **복기 액션화**: mistake tag와 discipline 점수를 다음 거래의 correction action으로 변환해 history 상세에 표시.
+- **포트폴리오 조치 강화**: sector/open risk 초과 시 단순 경고와 별개로 BLOCK/REDUCE/WARN 액션 카드를 생성.
 
 ### 검증
 - `npm test`
 - `npm run lint`
 - `npm run build`
+- 로컬 브라우저 확인:
+  - `/guide`: 3-layer review, position lifecycle 섹션 표시
+  - `/history/[tradeId]`: Correction Actions 패널 표시
 - Supabase production migration 확인
 - Production `/api/market-data`:
   - `AAPL / NAS`: `KIS (260 daily bars)`

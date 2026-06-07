@@ -8,6 +8,10 @@ function finite(value: unknown) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function action(severity: 'BLOCK' | 'REDUCE' | 'WARN', title: string, detail: string) {
+  return { severity, title, detail };
+}
+
 export function getMaxPositionsForEquity(totalEquity: number, market: 'US' | 'KR' = 'KR') {
   if (market === 'KR') {
     if (totalEquity <= 2_000_000) return 2;
@@ -61,14 +65,18 @@ export function calculatePortfolioRiskSummary(
   const portfolioHeatPct = equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0;
   const riskBudgetRemaining = Number(Math.max(equity * policy.maxPortfolioHeatPct - totalOpenRisk, 0).toFixed(2));
   const warnings: string[] = [];
+  const actions: PortfolioRiskSummary['actions'] = [];
   if (active.length > maxPositions) {
     warnings.push(`Active positions exceed the seed-size limit: ${active.length}/${maxPositions}.`);
+    actions.push(action('REDUCE', 'Reduce position count', `활성 포지션을 ${maxPositions}개 이하로 줄이기 전까지 신규 진입을 보류합니다.`));
   }
   if (equity > 0 && totalOpenRisk / equity > 0.08) {
     warnings.push('Total open risk is above 8% of account equity.');
+    actions.push(action('BLOCK', 'Stop new entries', '총 오픈 리스크가 8%를 넘었습니다. 손절선 상향, 부분 청산, 저신뢰 포지션 축소를 먼저 실행합니다.'));
   }
   if (equity > 0 && totalOpenRisk / equity >= policy.maxPortfolioHeatPct) {
     warnings.push(`Portfolio heat is above the standard risk policy limit: ${portfolioHeatPct}%.`);
+    actions.push(action('BLOCK', 'Restore risk budget', `Portfolio heat가 정책 한도 ${policy.maxPortfolioHeatPct * 100}% 이상입니다. risk budget이 회복될 때까지 신규 계획 저장을 보류합니다.`));
   }
 
   const sectorExposure = Array.from(sectorMap.values())
@@ -82,6 +90,7 @@ export function calculatePortfolioRiskSummary(
   for (const row of sectorExposure) {
     if (row.exposurePct >= 35 && row.count >= 2) {
       warnings.push(`${row.sector} concentration is high: ${row.exposurePct}%.`);
+      actions.push(action('WARN', `Trim ${row.sector} concentration`, `${row.sector} 노출이 ${row.exposurePct}%입니다. 같은 섹터 신규 진입은 중단하고, 가장 약한 포지션부터 축소 후보로 표시합니다.`));
     }
   }
 
@@ -124,6 +133,11 @@ export function calculatePortfolioRiskSummary(
     currentOpenRisk: totalOpenRisk,
     sectorRiskPct: largestSectorRiskPct,
   });
+  if (riskGate.status === 'REDUCE') {
+    actions.push(action('REDUCE', 'Use reduced sizing', '포트폴리오 risk gate가 REDUCE입니다. 신규 후보는 기본 리스크보다 낮은 수량으로만 검토합니다.'));
+  } else if (riskGate.status === 'BLOCK') {
+    actions.push(action('BLOCK', 'Portfolio risk gate blocked', '포트폴리오 risk gate가 BLOCK입니다. 기존 리스크를 줄이기 전까지 신규 진입을 중단합니다.'));
+  }
 
   return {
     totalEquity: Number(equity.toFixed(2)),
@@ -140,6 +154,7 @@ export function calculatePortfolioRiskSummary(
     sectorRisk,
     riskGate,
     warnings,
+    actions,
     positions,
   };
 }

@@ -192,6 +192,9 @@
 
 ### 4-3. UI 마감 품질 보강
 
+- [완료] guide에 3-layer review와 lifecycle interpretation 추가
+- [완료] history에서 mistake tag별 교정 액션 추천 자동 생성
+- [완료] portfolio에서 sector / open risk 초과 시 액션형 경고 강화
 - [진행 가능] 아직 손대지 않은 페이지의 빈 상태 / 에러 상태 / 문구 톤 통일
 - [진행 가능] scanner / portfolio / history의 모바일 간격과 density를 실사용 기준으로 추가 점검
 - [진행 가능] chart tooltip / badge wording을 더 투자자 언어로 미세 조정
@@ -208,10 +211,10 @@
 
 지금부터의 우선순위는 아래 순서가 적절하다.
 
-1. 실제 사용 가이드에 3-layer review와 lifecycle interpretation 추가
-2. 브라우저 수준 E2E 또는 UI polish 추가
-3. history에서 mistake tag별 교정 액션 추천 자동 생성
-4. portfolio에서 sector / open risk 초과 시 액션형 경고 강화
+1. 브라우저 수준 E2E 또는 UI polish 추가
+2. 아직 손대지 않은 페이지의 빈 상태 / 에러 상태 / 문구 톤 통일
+3. scanner / portfolio / history의 모바일 간격과 density 점검
+4. chart tooltip / badge wording 미세 조정
 
 ---
 
@@ -223,7 +226,7 @@
 - 구조적 데이터 저장: 완료
 - 투자자 복기 흐름: 완료
 - 전문 투자자 관점 E2E: 완료
-- 남은 일: 사용 가이드 보강, 선택적 브라우저 E2E, UI polish
+- 남은 일: 선택적 브라우저 E2E, UI polish
 
 ---
 
@@ -235,5 +238,6 @@
 - Supabase production migration 확인: `risk_policy_and_gate`, `trade_snapshots`
 - Production live data 확인: `AAPL/NAS`, `005930/KOSPI` 모두 `KIS (260 daily bars)`
 - Production macro 확인: KIS KOSPI source 포함 정상 응답
+- 로컬 브라우저 확인: `/guide`, `/history/[tradeId]`
 
 검증 기준일: 2026-06-07

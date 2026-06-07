@@ -8,6 +8,7 @@ import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import {
   formatHistoryConfidence,
+  getHistoryCorrectionActions,
   getHistoryChecklistSummary,
   getHistoryComparisonSummary,
 } from '@/lib/history-presentation';
@@ -230,6 +231,7 @@ export default function HistoryTradeDetailPage() {
   const verdict = trade.llm_verdict;
   const checklist = getHistoryChecklistSummary(entrySnapshot);
   const comparison = getHistoryComparisonSummary(trade);
+  const correctionActions = getHistoryCorrectionActions(trade);
   const realizedPnL = trade.metrics?.realizedPnL ?? trade.result_amount;
   const realizedR = trade.metrics?.rMultiple ?? null;
   const planRisk = entrySnapshot?.plan.planned_risk ?? trade.planned_risk;
@@ -534,6 +536,21 @@ export default function HistoryTradeDetailPage() {
               <div className="mt-2">
                 <TagList tags={trade.setup_tags} emptyLabel="No setup tags recorded." />
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <SectionGlyph label="A" tone="bg-amber-500/10 text-amber-300" />
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">Correction Actions</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              {correctionActions.map((item) => (
+                <div key={item.tag} className="rounded-xl border border-amber-400/20 bg-slate-950/50 p-3">
+                  <p className="text-sm font-semibold text-white">{item.title}</p>
+                  <p className="mt-1 text-sm leading-6 text-amber-100">{item.action}</p>
+                </div>
+              ))}
             </div>
           </div>
 

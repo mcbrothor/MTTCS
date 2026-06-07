@@ -48,5 +48,7 @@ assert.equal(summary.positions?.[0].pyramidCount, 0);
 assert.equal(summary.sectorExposure[0].sector, 'Technology');
 assert.equal(summary.sectorExposure[0].exposurePct, 100);
 assert.ok(summary.warnings.some((warning) => warning.includes('Technology concentration')));
+assert.ok(summary.actions?.some((item) => item.title.includes('Technology')));
+assert.ok(summary.actions?.some((item) => item.severity === 'BLOCK'));
 
 console.log('portfolio risk tests passed');

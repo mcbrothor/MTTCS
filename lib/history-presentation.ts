@@ -21,6 +21,35 @@ export interface HistoryComparisonSummary {
   detail: string;
 }
 
+export interface HistoryCorrectionAction {
+  tag: string;
+  title: string;
+  action: string;
+}
+
+const CORRECTION_ACTIONS: Record<string, Omit<HistoryCorrectionAction, 'tag'>> = {
+  late_entry: {
+    title: 'Late entry',
+    action: '다음 진입은 피벗 +5% 안에서만 허용하고, 확장 구간이면 워치리스트 알림으로 되돌립니다.',
+  },
+  early_exit: {
+    title: 'Early exit',
+    action: '손절가 또는 사전 정의한 trailing rule이 깨지기 전에는 부분매도만 허용하고 전량 청산을 금지합니다.',
+  },
+  plan_violation: {
+    title: 'Plan violation',
+    action: '다음 매매 전 entry, stop, size, exit rule을 저장하고 실제 주문이 계획과 다르면 진입을 보류합니다.',
+  },
+  oversized: {
+    title: 'Oversized position',
+    action: '포지션 크기를 리스크 금액 기준으로 다시 계산하고, 초과 수량은 다음 장 시작 전에 줄입니다.',
+  },
+  no_stop: {
+    title: 'No stop',
+    action: '진입 전 stoploss와 invalidation note가 비어 있으면 계획 저장을 완료하지 않습니다.',
+  },
+};
+
 function hasPlanViolation(trade: Pick<Trade, 'mistake_tags'>) {
   return (trade.mistake_tags || []).includes('plan_violation');
 }
@@ -201,4 +230,36 @@ export function getHistoryComparisonSummary(
     headline: 'Plan, verdict, and outcome are all recorded.',
     detail: `${recommendationText} ${disciplineText}`,
   };
+}
+
+export function getHistoryCorrectionActions(
+  trade: Pick<Trade, 'mistake_tags' | 'final_discipline' | 'review_action'>
+): HistoryCorrectionAction[] {
+  const actions = new Map<string, HistoryCorrectionAction>();
+
+  for (const tag of trade.mistake_tags || []) {
+    const mapped = CORRECTION_ACTIONS[tag] || {
+      title: tag.replaceAll('_', ' '),
+      action: '다음 복기에서 이 태그의 원인, 재발 조건, 차단 규칙을 한 문장으로 기록합니다.',
+    };
+    actions.set(tag, { tag, ...mapped });
+  }
+
+  if (typeof trade.final_discipline === 'number' && trade.final_discipline < 80 && !actions.has('discipline_below_80')) {
+    actions.set('discipline_below_80', {
+      tag: 'discipline_below_80',
+      title: 'Discipline below 80',
+      action: '다음 거래 전 체크리스트 미통과 항목을 1개 이하로 줄이고, 진입 후 임의 판단은 review note에만 기록합니다.',
+    });
+  }
+
+  if (!trade.review_action && actions.size === 0) {
+    actions.set('review_action_missing', {
+      tag: 'review_action_missing',
+      title: 'No follow-up action',
+      action: '이번 거래에서 유지할 규칙 1개와 버릴 행동 1개를 Next Action에 기록합니다.',
+    });
+  }
+
+  return Array.from(actions.values());
 }
