@@ -12,7 +12,7 @@ test.describe('TC-E2E: 전체 워크플로우 통합 시나리오', () => {
     test('E2E-A01: 로그인 → 대시보드 시장 상태 표시', async ({ page }) => {
       await login(page);
 
-      const dashboard = new DashboardPage(page);
+      new DashboardPage(page);
       // Command Center header
       await expect(page.locator('text=Command Center')).toBeVisible();
       await expect(page.locator('text=오늘의 의사결정')).toBeVisible();

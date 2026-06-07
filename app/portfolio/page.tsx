@@ -110,11 +110,13 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
             <Metric label="총 자산" value={money(summary.totalEquity, market)} />
             <Metric label="투입 금액" value={money(summary.investedCapital, market)} />
             <Metric label="현금" value={`${money(summary.cash, market)} (${summary.cashPct}%)`} />
             <Metric label="오픈 리스크" value={`${money(summary.totalOpenRisk, market)} (${summary.openRiskPct}%)`} />
+            <Metric label="Portfolio Heat" value={`${summary.portfolioHeatPct ?? summary.openRiskPct}%`} />
+            <Metric label="Risk Budget" value={money(summary.riskBudgetRemaining ?? 0, market)} />
             <Metric
               label="보유 포지션"
               value={`${summary.activePositions}/${summary.maxPositions}`}
@@ -188,7 +190,7 @@ export default function PortfolioPage() {
                       부분 매도 {position.partialExitCount}회
                     </span>
                     <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-100">
-                      오픈 리스크 {money(position.openRisk, market)}
+                      오픈 리스크 {money(position.openRisk, market)}{typeof position.openRiskPct === 'number' ? ` (${position.openRiskPct}%)` : ''}
                     </span>
                     <Link
                       href={`/history?market=${market}`}

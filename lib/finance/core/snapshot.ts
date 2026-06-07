@@ -3,6 +3,10 @@ import type {
   ContestCandidate,
   Direction,
   SepaEvidence,
+  AppliedRiskStrategy,
+  RiskGateResult,
+  RiskPolicy,
+  RiskStrategy,
   TradeContestSnapshot,
   TradeEntrySnapshot,
   TradeLlmVerdict,
@@ -32,6 +36,10 @@ interface BuildEntrySnapshotInput {
   totalShares?: number | null;
   entryTargets?: TradeEntrySnapshot['plan']['entry_targets'];
   trailingStops?: TradeEntrySnapshot['plan']['trailing_stops'];
+  appliedRiskStrategy?: AppliedRiskStrategy | null;
+  requestedRiskStrategy?: RiskStrategy | null;
+  riskGate?: RiskGateResult | null;
+  riskPolicy?: RiskPolicy | null;
   planNote?: string | null;
   invalidationNote?: string | null;
   capturedAt?: string;
@@ -93,6 +101,12 @@ export function buildEntrySnapshot(input: BuildEntrySnapshotInput): TradeEntrySn
     notes: {
       plan_note: input.planNote ?? null,
       invalidation_note: input.invalidationNote ?? null,
+    },
+    risk: {
+      strategy: input.appliedRiskStrategy ?? null,
+      requested_strategy: input.requestedRiskStrategy ?? null,
+      policy: input.riskPolicy ?? null,
+      gate: input.riskGate ?? null,
     },
   };
 }

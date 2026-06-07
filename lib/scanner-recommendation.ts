@@ -9,7 +9,11 @@ export type TierSBlocker =
   | 'pivot_distance'
   | 'vcp_strength'
   | 'ma50_extension'
-  | 'volume_confirmation';
+  | 'volume_confirmation'
+  | 'risk_gate'
+  | 'stop_invalid'
+  | 'daily_drop'
+  | 'adr_overheat';
 
 export interface ScannerRecommendation {
   recommendationTier: RecommendationTier;
@@ -84,6 +88,40 @@ function hasValidPivot(result: Partial<ScannerResult>) {
     || result.entrySource === 'HIGH_TIGHT_FLAG'
     || result.pivotKind === 'VCP_PIVOT'
     || result.pivotKind === 'HIGH_TIGHT_FLAG';
+}
+
+const DAILY_DROP_BLOCK_PCT = -8;
+const ADR_OVERHEAT_BLOCK_PCT = 7;
+
+function executionRiskBlockers(result: Partial<ScannerResult>): TierSBlocker[] {
+  const blockers: TierSBlocker[] = [];
+  if (result.riskGate?.status === 'BLOCK') blockers.push('risk_gate');
+  if (result.stopQuality === 'INVALID') blockers.push('stop_invalid');
+  if (typeof result.changePercent === 'number' && Number.isFinite(result.changePercent) && result.changePercent <= DAILY_DROP_BLOCK_PCT) {
+    blockers.push('daily_drop');
+  }
+  if (typeof result.adrPct === 'number' && Number.isFinite(result.adrPct) && result.adrPct >= ADR_OVERHEAT_BLOCK_PCT) {
+    blockers.push('adr_overheat');
+  }
+  return blockers;
+}
+
+function executionBlockerNote(blockers: TierSBlocker[]) {
+  if (blockers.length === 0) return '';
+  const labels: Record<TierSBlocker, string> = {
+    sepa_core: 'SEPA core',
+    rs_rating: 'RS rating',
+    valid_pivot: '유효 피벗',
+    pivot_distance: '피벗 이격',
+    vcp_strength: 'VCP 강도',
+    ma50_extension: 'MA50 이격',
+    volume_confirmation: '거래량 확인',
+    risk_gate: '리스크 게이트',
+    stop_invalid: '무효 손절선',
+    daily_drop: '당일 급락',
+    adr_overheat: 'ADR 과열',
+  };
+  return ` 실행 차단: ${blockers.map((blocker) => labels[blocker]).join(', ')}.`;
 }
 
 export function getVolumeSignalTier(result: Partial<ScannerResult>): VolumeSignalTier {
@@ -314,20 +352,8 @@ export function evaluateScannerRecommendation(
   ));
 
   const tightPivotStrict = validPivot && actionablePivot(result.distanceToPivotPct, 0);
-  const effectiveTightPivotStrict = tightPivotStrict || (hasAdaptivePivot && (
-    result.distanceToPivotPct === null ||
-    typeof result.distanceToPivotPct === 'undefined' ||
-    actionablePivot(result.distanceToPivotPct, 2) ||
-    (typeof result.distanceFromMa50Pct === 'number' && result.distanceFromMa50Pct <= 8)
-  ));
 
   const tierAPivot = validPivot && actionTierPivot(result.distanceToPivotPct, pivotBonus);
-  const effectiveTierAPivot = tierAPivot || (hasAdaptivePivot && (
-    result.distanceToPivotPct === null ||
-    typeof result.distanceToPivotPct === 'undefined' ||
-    actionTierPivot(result.distanceToPivotPct, pivotBonus + 3) ||
-    (typeof result.distanceFromMa50Pct === 'number' && result.distanceFromMa50Pct <= 15)
-  ));
 
   const nearActionablePivot = validPivot && nearPivot(result.distanceToPivotPct, 5);
   const reviewReadyPivot = validPivot && reviewPivot(result.distanceToPivotPct);
@@ -357,16 +383,20 @@ export function evaluateScannerRecommendation(
   const ma50Tight = typeof result.distanceFromMa50Pct !== 'number' || result.distanceFromMa50Pct <= 15;
   
   const leadershipSetupWithoutPivot = !effectiveValidPivot && rs85 && ma50Controlled && (rsLineHigh || accumulationSignal || tennisBall);
+  const executionBlockers = executionRiskBlockers(result);
+  const executionBlocked = executionBlockers.length > 0;
+  const executionNote = executionBlockerNote(executionBlockers);
 
   // Tier S 게이트별 통과 여부를 계산해 차단 사유를 누적한다.
   const tierSBlockers: TierSBlocker[] = [];
   if (!sepaPassRegime) tierSBlockers.push('sepa_core');
   if (!rsTierS) tierSBlockers.push('rs_rating');
-  if (!effectiveValidPivot) tierSBlockers.push('valid_pivot');
-  else if (!effectiveTightPivot) tierSBlockers.push('pivot_distance');
+  if (!validPivot) tierSBlockers.push('valid_pivot');
+  else if (!tightPivot) tierSBlockers.push('pivot_distance');
   if (!tierSVcpFlex) tierSBlockers.push('vcp_strength');
   if (!ma50Tight) tierSBlockers.push('ma50_extension');
   if (!(volumeWatch || breakoutVolume)) tierSBlockers.push('volume_confirmation');
+  tierSBlockers.push(...executionBlockers);
 
   const exceptionSignals = [
     strongVcp ? 'Strong VCP' : null,
@@ -380,31 +410,31 @@ export function evaluateScannerRecommendation(
     tennisBall ? `Tennis Ball ${result.tennisBallCount}` : null,
   ].filter((item): item is string => Boolean(item));
 
-  // Tier S — 즉시 진입(Recommended).
-  if (sepaPassRegime && effectiveValidPivot && tierSVcpFlex && effectiveTightPivot && rsTierS && ma50Tight && (volumeWatch || breakoutVolume)) {
+  // Tier S — 실행 전 검토 우선 후보(Recommended).
+  if (!executionBlocked && sepaPassRegime && validPivot && tierSVcpFlex && tightPivot && rsTierS && ma50Tight && (volumeWatch || breakoutVolume)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: `SEPA core ${corePassed}/${coreTotal}, RS ${result.rsRating} 리더십, 어댑티브 기술적 돌파(Pocket Pivot/RS신고가 등)가 정렬되어 즉시 실행을 권장합니다. (${effectiveRegime} 환경 임계 적용)`,
+      recommendationReason: `SEPA core ${corePassed}/${coreTotal}, RS ${result.rsRating} 리더십, 유효 피벗과 거래량 근거가 정렬된 우선 검토 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers: [],
     };
   }
 
-  if (sepaPassStrict && effectiveValidPivot && rs95 && effectiveTightPivotStrict && (tierAVcp || tennisBall)) {
+  if (!executionBlocked && sepaPassStrict && validPivot && rs95 && tightPivotStrict && (tierAVcp || tennisBall)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'RS 95+ 최상위 리더가 어댑티브 피벗 및 기술적 근거를 바탕으로 강력한 리더십을 보이고 있어 우선 실행 후보입니다.',
+      recommendationReason: 'RS 95+ 최상위 리더가 유효 피벗과 기술적 근거를 바탕으로 강력한 리더십을 보이는 우선 검토 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers: [],
     };
   }
 
-  if (htfPassed && effectiveValidPivot && rs90 && effectiveTightPivotStrict && (volumeStrong || rsLineHigh)) {
+  if (!executionBlocked && htfPassed && validPivot && rs90 && tightPivotStrict && (volumeStrong || rsLineHigh)) {
     return {
       recommendationTier: 'Recommended',
-      recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 실행 후보입니다.',
+      recommendationReason: 'High Tight Flag 패턴과 강력한 RS/거래량 리더십이 확인된 우선 검토 후보입니다.',
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers: [],
@@ -412,7 +442,7 @@ export function evaluateScannerRecommendation(
   }
 
   // Tier A — 관찰 진입(Action).
-  if (rsTierA && tierASepa && tierAVcp && accumulationSignal && effectiveTierAPivot && ma50Controlled) {
+  if (!executionBlocked && rsTierA && tierASepa && tierAVcp && accumulationSignal && tierAPivot && ma50Controlled) {
     return {
       recommendationTier: 'Action',
       recommendationReason: `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 기술적 매집 거래량, 완화된 기술적 타점 윈도 내에 있어 관찰 진입 후보입니다. (${effectiveRegime} 환경 임계 적용)`,
@@ -426,8 +456,8 @@ export function evaluateScannerRecommendation(
     return {
       recommendationTier: 'IB Review',
       recommendationReason: reviewReadyPivot
-        ? 'RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.'
-        : 'RS 90+ 주도주가 SEPA core 6/7 이상과 건설적 VCP/매집 단서를 보입니다. 유효 피벗은 아직 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.',
+        ? `RS 85+, SEPA core 6/7 이상, 유효 피벗, 건설적 VCP, 거래량 단서가 확인된 투자위원회 검토 후보입니다.${executionNote}`
+        : `RS 90+ 주도주가 SEPA core 6/7 이상과 건설적 VCP/매집 단서를 보입니다. 유효 피벗은 아직 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.${executionNote}`,
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers,
@@ -445,8 +475,8 @@ export function evaluateScannerRecommendation(
     return {
       recommendationTier: 'IB Review',
       recommendationReason: validPivot && reviewPivot(result.distanceToPivotPct)
-        ? `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 유효 피벗, MA50 통제 상태에서 기술적 단서를 보유합니다. 엄격 6/7 기준은 미달이나 검토 가치 있는 후보입니다.`
-        : `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, MA50 통제하 리더십 셋업을 보유합니다. 유효 피벗 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.`,
+        ? `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, 유효 피벗, MA50 통제 상태에서 기술적 단서를 보유합니다. 엄격 6/7 기준은 미달이나 검토 가치 있는 후보입니다.${executionNote}`
+        : `RS ${result.rsRating} 리더가 SEPA core ${corePassed}/${coreTotal}, MA50 통제하 리더십 셋업을 보유합니다. 유효 피벗 미확정으로 매수 타점이 아닌 IB 검토 후보입니다.${executionNote}`,
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers,
@@ -464,8 +494,8 @@ export function evaluateScannerRecommendation(
     return {
       recommendationTier: 'Watch',
       recommendationReason: validPivot
-        ? `RS 80+와 일부 기술적 단서가 있으나 IB Review 조건에 아직 미달합니다.${gapNote}`
-        : `RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보입니다.${gapNote}`,
+        ? `RS 80+와 일부 기술적 단서가 있으나 IB Review 조건에 아직 미달합니다.${gapNote}${executionNote}`
+        : `RS 80+와 형성 단서는 있으나 유효 VCP/HTF 피벗이 확정되지 않아 형성 관찰 후보입니다.${gapNote}${executionNote}`,
       sepaMissingCount,
       exceptionSignals,
       tierSBlockers,
@@ -478,7 +508,7 @@ export function evaluateScannerRecommendation(
   if (!constructiveVcp && !tennisBall && !rsLineHigh && !pocketPivot && !volumeDryUp) lpGaps.push('기술적 단서 없음 (VCP/테니스볼/RS라인/PP/볼륨)');
   return {
     recommendationTier: 'Low Priority',
-    recommendationReason: `SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기 부족합니다. [${lpGaps.join(' / ')}]`,
+    recommendationReason: `SEPA/VCP/RS/거래량 증거가 스크리너 우선순위에 들기 부족합니다. [${lpGaps.join(' / ')}]${executionNote}`,
     sepaMissingCount,
     exceptionSignals,
     tierSBlockers,
@@ -607,4 +637,3 @@ export function recommendationSortValue(tier: RecommendationTier | null | undefi
   if (tier === 'Low Priority') return 4;
   return 5;
 }
-

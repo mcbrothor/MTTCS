@@ -33,6 +33,7 @@ export async function setupAllMocks(page: Page): Promise<void> {
 // ─── Auth ───
 
 export async function setupAuthMock(page: Page): Promise<void> {
+  void page;
   // Do NOT intercept auth API routes by default, so cookies can be set/cleared by the real server
   // and page navigation correctly detects active session cookie.
   // We let the real Next.js server handle it since .env.test is injected with valid credentials.

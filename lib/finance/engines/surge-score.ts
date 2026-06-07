@@ -20,7 +20,6 @@ export interface SurgeMetrics {
   grade: SurgeGrade;
 }
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 const round = (value: number, digits = 2) => {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;

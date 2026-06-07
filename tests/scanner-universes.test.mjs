@@ -123,6 +123,57 @@ console.log('=== Scanner Universe Tests ===\n');
 }
 
 {
+  const executionReady = {
+    status: 'done',
+    sepaStatus: 'pass',
+    sepaFailed: 0,
+    sepaEvidence: { summary: { corePassed: 7, coreFailed: 0, coreTotal: 7 } },
+    vcpGrade: 'strong',
+    vcpScore: 92,
+    pivotKind: 'VCP_PIVOT',
+    entrySource: 'VCP_PIVOT',
+    distanceToPivotPct: 1.2,
+    distanceFromMa50Pct: 6,
+    pocketPivotScore: 72,
+    volumeDryUpScore: 74,
+    breakoutVolumeStatus: 'confirmed',
+    rsRating: 96,
+    changePercent: 1.8,
+    adrPct: 4.2,
+    stopQuality: 'VALID',
+  };
+
+  const clean = evaluateScannerRecommendation(executionReady);
+  assert.equal(clean.recommendationTier, 'Recommended');
+
+  const blockedByRisk = evaluateScannerRecommendation({
+    ...executionReady,
+    riskGate: {
+      status: 'BLOCK',
+      effectiveRiskPct: 0,
+      allowedRiskAmount: 0,
+      riskBudgetRemaining: 0,
+      reasons: [{ code: 'PORTFOLIO_HEAT', severity: 'BLOCK', message: 'Portfolio heat exceeded' }],
+    },
+  });
+  assert.notEqual(blockedByRisk.recommendationTier, 'Recommended');
+  assert.notEqual(blockedByRisk.recommendationTier, 'Action');
+  assert.ok(blockedByRisk.tierSBlockers.includes('risk_gate'));
+  assert.match(blockedByRisk.recommendationReason, /실행 차단|리스크 게이트/);
+
+  const blockedByPriceAction = evaluateScannerRecommendation({
+    ...executionReady,
+    changePercent: -12.4,
+    adrPct: 8.6,
+  });
+  assert.notEqual(blockedByPriceAction.recommendationTier, 'Recommended');
+  assert.notEqual(blockedByPriceAction.recommendationTier, 'Action');
+  assert.ok(blockedByPriceAction.tierSBlockers.includes('daily_drop'));
+  assert.ok(blockedByPriceAction.tierSBlockers.includes('adr_overheat'));
+  console.log('OK execution tiers are blocked by risk gate, stop/price shock, and ADR overheat gates');
+}
+
+{
   // Tier A(Action) 진입 임계(rs85+) 미달이지만 IB Review Path B(rs82+) 통과하는 후보군.
   // applyScannerReviewPoolRankings는 IB Review 풀만 maxReviewPool(15)로 cap한다는 동작을 검증.
   const rows = Array.from({ length: 18 }, (_, index) => ({

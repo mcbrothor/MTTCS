@@ -100,6 +100,7 @@ export function useContestSelection(targetUniverse?: string, options: UseContest
     window.localStorage.setItem(CONTEST_SOURCE_STORAGE_KEY, source);
 
     if (source === DEFAULT_CONTEST_SOURCE) {
+      window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, activeUniverse);
       const legacyMap = readJsonMap(CONTEST_SELECTIONS_MAP_KEY);
       legacyMap[activeUniverse] = { universe: activeUniverse, tickers, savedAt };
       window.localStorage.setItem(CONTEST_SELECTIONS_MAP_KEY, JSON.stringify(legacyMap));

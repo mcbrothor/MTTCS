@@ -28,6 +28,10 @@ const SNAPSHOT_RELEVANT_FIELDS = new Set([
   'total_shares',
   'entry_targets',
   'trailing_stops',
+  'risk_strategy',
+  'requested_risk_strategy',
+  'risk_gate',
+  'risk_policy_snapshot',
   'sepa_evidence',
   'vcp_analysis',
   'plan_note',
@@ -55,6 +59,10 @@ type TradeRecordForSnapshot = Pick<
   | 'total_shares'
   | 'entry_targets'
   | 'trailing_stops'
+  | 'risk_strategy'
+  | 'requested_risk_strategy'
+  | 'risk_gate'
+  | 'risk_policy_snapshot'
   | 'plan_note'
   | 'invalidation_note'
 > & {
@@ -148,6 +156,10 @@ function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
     totalShares,
     entryTargets: trade.entry_targets,
     trailingStops: trade.trailing_stops,
+    appliedRiskStrategy: trade.risk_strategy ?? null,
+    requestedRiskStrategy: trade.requested_risk_strategy ?? null,
+    riskGate: trade.risk_gate ?? null,
+    riskPolicy: trade.risk_policy_snapshot ?? null,
     planNote: trade.plan_note,
     invalidationNote: trade.invalidation_note,
   });
@@ -215,6 +227,10 @@ export async function POST(request: Request) {
       total_shares: totalShares,
       entry_targets: body.entry_targets,
       trailing_stops: body.trailing_stops,
+      risk_strategy: body.risk_strategy ?? null,
+      requested_risk_strategy: body.requested_risk_strategy ?? null,
+      risk_gate: body.risk_gate ?? null,
+      risk_policy_snapshot: body.risk_policy_snapshot ?? null,
       setup_tags: normalizeStringArray(body.setup_tags) ?? [],
       mistake_tags: normalizeStringArray(body.mistake_tags) ?? [],
       plan_note: nullableText(body.plan_note),
@@ -427,6 +443,10 @@ export async function PATCH(request: Request) {
     if (reviewAction !== undefined) update.review_action = reviewAction;
     if (body.entry_targets !== undefined) update.entry_targets = body.entry_targets;
     if (body.trailing_stops !== undefined) update.trailing_stops = body.trailing_stops;
+    if (body.risk_strategy !== undefined) update.risk_strategy = body.risk_strategy;
+    if (body.requested_risk_strategy !== undefined) update.requested_risk_strategy = body.requested_risk_strategy;
+    if (body.risk_gate !== undefined) update.risk_gate = body.risk_gate;
+    if (body.risk_policy_snapshot !== undefined) update.risk_policy_snapshot = body.risk_policy_snapshot;
     if (body.sepa_evidence !== undefined) update.sepa_evidence = body.sepa_evidence;
     if (body.vcp_analysis !== undefined) update.vcp_analysis = body.vcp_analysis;
 

@@ -102,7 +102,7 @@ export class PlanPage {
     this.analyzeButton = page.locator('button:has-text("분석"), button:has-text("Analyze")').first();
     this.sepaSection = page.locator('text=SEPA').first().locator('..').locator('..');
     this.vcpSection = page.locator('text=VCP').first().locator('..').locator('..');
-    this.riskSection = page.locator('text=리스크'), 
+    this.riskSection = page.locator('text=리스크');
     this.saveButton = page.locator('button:has-text("계획 저장")');
     this.successBanner = page.locator('text=계획 저장 완료');
     this.errorBanner = page.locator('[class*="red"]').filter({ hasText: /오류|실패|error/i });

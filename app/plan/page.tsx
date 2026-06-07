@@ -16,6 +16,9 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
+import type { ApiSuccess, PortfolioRiskSummary, RiskStrategy } from '@/types';
+
+const DEFAULT_PLAN_TOTAL_EQUITY = 50000;
 
 // useSearchParams는 Suspense 바운더리 내에서만 사용 가능 (Next.js 14+)
 export default function PlanPage() {
@@ -37,6 +40,8 @@ function PlanPageContent() {
   );
   const autoAnalyzeStarted = useRef(false);
   const [contestQueue, setContestQueue] = useState<ContestPlanQueueItem[]>([]);
+  const [defaultTotalEquity, setDefaultTotalEquity] = useState(DEFAULT_PLAN_TOTAL_EQUITY);
+  const [equityLoadError, setEquityLoadError] = useState<string | null>(null);
 
   // 스캐너에서 전달받은 컨텍스트 데이터 — 계획서 수립 시 참고용
   const scannerContext = {
@@ -64,10 +69,10 @@ function PlanPageContent() {
   // C-6: alert() 대신 인라인 에러 상태
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number) => {
+  const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy = 'AUTO') => {
     setChecklist(null);
     setSaveError(null);
-    fetchMarketData(ticker, exchange, totalEquity, riskPercent);
+    fetchMarketData(ticker, exchange, totalEquity, riskPercent, riskStrategy);
   }, [fetchMarketData]);
 
   useEffect(() => {
@@ -84,10 +89,35 @@ function PlanPageContent() {
   }, []);
 
   useEffect(() => {
-    if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker) return;
+    const controller = new AbortController();
+    setDefaultTotalEquity(DEFAULT_PLAN_TOTAL_EQUITY);
+    setEquityLoadError(null);
+
+    const loadPortfolioEquity = async () => {
+      try {
+        const response = await fetch(`/api/portfolio/risk?market=${planMarket}&totalEquity=${DEFAULT_PLAN_TOTAL_EQUITY}`, {
+          signal: controller.signal,
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
+        const result = body as ApiSuccess<PortfolioRiskSummary>;
+        const totalEquity = Number(result.data.totalEquity);
+        if (Number.isFinite(totalEquity) && totalEquity > 0) setDefaultTotalEquity(totalEquity);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setEquityLoadError(err instanceof Error ? err.message : '포트폴리오 총자본을 불러오지 못했습니다.');
+      }
+    };
+
+    loadPortfolioEquity();
+    return () => controller.abort();
+  }, [planMarket]);
+
+  useEffect(() => {
+    if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker || defaultTotalEquity <= 0) return;
     autoAnalyzeStarted.current = true;
-    handleAnalyze(initialTicker, initialExchange, 0, 1);
-  }, [handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange]);
+    handleAnalyze(initialTicker, initialExchange, defaultTotalEquity, 1);
+  }, [handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, defaultTotalEquity]);
 
   const handleSavePlan = async () => {
     if (!analysis || !checklist) return;
@@ -112,6 +142,10 @@ function PlanPageContent() {
         total_shares: analysis.riskPlan.totalShares,
         entry_targets: analysis.riskPlan.entryTargets,
         trailing_stops: analysis.riskPlan.trailingStops,
+        risk_strategy: analysis.riskPlan.strategy,
+        requested_risk_strategy: analysis.riskPlan.requestedStrategy,
+        risk_gate: analysis.riskPlan.riskGate,
+        risk_policy_snapshot: analysis.riskPlan.riskPolicy,
       });
       setSaveSuccess(true);
     } catch (err: unknown) {
@@ -132,6 +166,7 @@ function PlanPageContent() {
     !checklist ||
     analysis.sepaEvidence.status === 'fail' ||
     analysis.riskPlan.totalShares <= 0 ||
+    analysis.riskPlan.riskGate?.status === 'BLOCK' ||
     saving;
 
   return (
@@ -166,6 +201,12 @@ function PlanPageContent() {
         {planMarket === 'US' ? '🇺🇸 미국 계좌 — 통화: USD ($)' : '🇰🇷 한국 계좌 — 통화: KRW (₩)'}
       </div>
 
+      {equityLoadError && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-100">
+          포트폴리오 총자본 조회 실패로 기본값 {DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}을 사용합니다. {equityLoadError}
+        </div>
+      )}
+
       {contestQueue.length > 0 && (
         <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -191,7 +232,14 @@ function PlanPageContent() {
         </div>
       )}
 
-      <TickerInput key={planMarket} onAnalyze={handleAnalyze} loading={loading} initialTicker={initialTicker} initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange} />
+      <TickerInput
+        key={planMarket}
+        onAnalyze={handleAnalyze}
+        loading={loading}
+        initialTicker={initialTicker}
+        initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
+        initialTotalEquity={defaultTotalEquity}
+      />
 
       {/* 스캐너에서 넘어온 경우 컨텍스트 데이터 배너 표시 */}
       {(scannerContext.pivot || scannerContext.rs) && (

@@ -5,6 +5,11 @@ export type TradeExecutionSide = 'ENTRY' | 'EXIT';
 export type TradeLegLabel = 'E1' | 'E2' | 'E3' | 'MANUAL';
 export type SetupTag = 'VCP' | 'SEPA' | '돌파' | '실적' | '추세' | '관심종목';
 export type MistakeTag = '추격매수' | '손절지연' | '비중초과' | '조기매도' | '계획미준수' | '진입지연';
+export type RiskStrategy = 'AUTO' | 'MINERVINI_VCP' | 'HIGH_TIGHT_FLAG' | 'ATR_VOLATILITY' | 'CONSERVATIVE';
+export type AppliedRiskStrategy = Exclude<RiskStrategy, 'AUTO'>;
+export type RiskPolicyProfile = 'CONSERVATIVE' | 'STANDARD' | 'AGGRESSIVE';
+export type StopQuality = 'VALID' | 'TOO_TIGHT' | 'TOO_WIDE' | 'INVALID' | 'UNKNOWN';
+export type RiskGateStatus = 'PASS' | 'REDUCE' | 'BLOCK';
 
 /**
  * 청산 사유 태그 — 복기 통계에서 유형별 집계에 사용
@@ -45,6 +50,10 @@ export interface Trade {
   total_shares: number | null;
   entry_targets: EntryTargets | null;
   trailing_stops: TrailingStops | null;
+  risk_strategy?: AppliedRiskStrategy | null;
+  requested_risk_strategy?: RiskStrategy | null;
+  risk_gate?: RiskGateResult | null;
+  risk_policy_snapshot?: RiskPolicy | null;
 
   exit_price: number | null;
   exit_reason: ExitReason | null; // 청산 사유 태그 — 복기 집계용
@@ -117,6 +126,12 @@ export interface TradeEntrySnapshot {
   notes: {
     plan_note: string | null;
     invalidation_note: string | null;
+  };
+  risk?: {
+    strategy: AppliedRiskStrategy | null;
+    requested_strategy: RiskStrategy | null;
+    policy: RiskPolicy | null;
+    gate: RiskGateResult | null;
   };
 }
 
@@ -327,22 +342,73 @@ export interface TrailingStops {
   afterEntry3: number;
 }
 
+export interface RiskPolicy {
+  market: 'US' | 'KR';
+  profile: RiskPolicyProfile;
+  baseRiskPct: number;
+  maxSingleTradeRiskPct: number;
+  maxPortfolioHeatPct: number;
+  maxSectorExposurePct: number;
+  maxSectorRiskPct: number;
+  maxPositions: number | null;
+  atrLookback: number;
+  atrStopMultiple: number;
+  pyramidSpacingAtr: number;
+  drawdownSoftLimitPct: number;
+  drawdownHardLimitPct: number;
+  dailyLossLimitPct: number;
+  weeklyLossLimitPct: number;
+}
+
+export interface RiskGateReason {
+  code:
+    | 'MARKET_REGIME'
+    | 'PORTFOLIO_HEAT'
+    | 'SECTOR_CONCENTRATION'
+    | 'CORRELATED_EXPOSURE'
+    | 'DRAWDOWN_THROTTLE'
+    | 'STOP_QUALITY'
+    | 'INSUFFICIENT_RISK_BUDGET';
+  severity: 'INFO' | 'WARN' | 'BLOCK';
+  message: string;
+}
+
+export interface RiskGateResult {
+  status: RiskGateStatus;
+  effectiveRiskPct: number;
+  allowedRiskAmount: number;
+  riskBudgetRemaining: number;
+  reasons: RiskGateReason[];
+}
+
 export interface RiskPlan {
   totalEquity: number;
   maxRisk: number;
   riskPercent: number;
+  requestedStrategy?: RiskStrategy;
   atr: number;
   entryPrice: number;
   stopLossPrice: number;
   riskPerShare: number;
+  initialRiskAmount?: number;
+  initialRiskPct?: number;
+  effectiveRiskPct?: number;
+  targetPrice?: number | null;
+  rewardRiskRatio?: number | null;
+  atrStopPrice?: number | null;
+  patternStopPrice?: number | null;
+  selectedStopPrice?: number | null;
+  stopQuality?: StopQuality;
   totalShares: number;
   entryTargets: EntryTargets;
   trailingStops: TrailingStops;
-  strategy?: 'MINERVINI_VCP' | 'HIGH_TIGHT_FLAG';
-  riskModel?: 'PATTERN_INVALIDATION' | 'HIGH_TIGHT_FLAG_TIGHT_STOP';
-  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK' | 'HTF_BASE_LOW' | 'HTF_MAX_LOSS_CAP';
+  strategy?: AppliedRiskStrategy;
+  riskModel?: 'PATTERN_INVALIDATION' | 'HIGH_TIGHT_FLAG_TIGHT_STOP' | 'ATR_VOLATILITY_STOP' | 'CONSERVATIVE_TIGHT_STOP';
+  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK' | 'HTF_BASE_LOW' | 'HTF_MAX_LOSS_CAP' | 'ATR_STOP';
   maxLossPct?: number;
   invalidationPrice?: number | null;
+  riskPolicy?: RiskPolicy;
+  riskGate?: RiskGateResult;
   riskNotes?: string[];
 }
 
@@ -580,6 +646,11 @@ export interface ScannerResult extends ScannerConstituent {
   mdd52wPct?: number | null;
   changePercent?: number | null;
   adrPct?: number | null;
+  riskGate?: RiskGateResult | null;
+  stopQuality?: StopQuality | null;
+  riskTotalShares?: number | null;
+  riskEntryPrice?: number | null;
+  riskStopLossPrice?: number | null;
   analyzedAt: string | null;
   errorMessage: string | null;
   dataWarnings: string[];
@@ -599,7 +670,7 @@ export interface WatchlistItem {
 }
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY';
-export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules' | 'local-llm';
+export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules' | 'local-llm' | 'codex-cli';
 
 
 export interface AiFallbackAttempt {
@@ -757,7 +828,7 @@ export interface SecurityProfile {
 }
 
 export interface PortfolioRiskSummary {
-  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; warnings: string[]; positions?: { ticker: string; status: TradeStatus; sector: string; exposure: number; netShares: number; avgEntryPrice: number | null; currentPrice: number | null; unrealizedPnL: number | null; unrealizedR: number | null; openRisk: number; pyramidCount: number; partialExitCount: number; latestAction: string | null; }[];
+  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; portfolioHeatPct?: number; riskBudgetRemaining?: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; sectorRisk?: { sector: string; openRisk: number; riskPct: number; count: number }[]; riskGate?: RiskGateResult; warnings: string[]; positions?: { ticker: string; status: TradeStatus; sector: string; exposure: number; netShares: number; avgEntryPrice: number | null; currentPrice: number | null; unrealizedPnL: number | null; unrealizedR: number | null; openRisk: number; openRiskPct?: number; pyramidCount: number; partialExitCount: number; latestAction: string | null; }[];
 }
 
 // --- CAN SLIM 스캐너 모듈 ---

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
-import type { MarketAnalysisResponse } from '@/types';
+import type { MarketAnalysisResponse, RiskStrategy } from '@/types';
 
 interface MarketDataState {
   loading: boolean;
@@ -21,7 +21,8 @@ export function useMarketData() {
     ticker: string,
     exchange: string,
     totalEquity: number,
-    riskPercent: number
+    riskPercent: number,
+    riskStrategy: RiskStrategy = 'AUTO'
   ) => {
     if (!ticker) return;
 
@@ -31,7 +32,7 @@ export function useMarketData() {
 
     try {
       const response = await axios.get('/api/market-data', {
-        params: { ticker, exchange, totalEquity, riskPercent },
+        params: { ticker, exchange, totalEquity, riskPercent, riskStrategy },
         signal: controller.signal,
       });
 

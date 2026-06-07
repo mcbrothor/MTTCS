@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play,
@@ -12,7 +12,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import type { ScannerUniverse } from '@/types';
-import { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
+import type { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
 
 type FilterKey = 'all' | 'explosive' | 'breakout' | 'warm';
 type SortKey = 'rvol' | 'roc';
@@ -23,6 +23,17 @@ interface SurgeResult {
   exchange: string;
   metrics: SurgeMetrics;
   currentPrice: number | null;
+}
+
+interface UniverseItem {
+  ticker: string;
+  exchange?: string;
+}
+
+interface MomentumApiResult {
+  ticker: string;
+  success: boolean;
+  data?: SurgeMetrics & { currentPrice?: number | null };
 }
 
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
@@ -76,7 +87,7 @@ export default function MomentumScannerPage() {
     try {
       const resp = await fetch(`/api/scanner/universe?universe=${universe}`, { signal: abort.signal });
       if (!resp.ok) throw new Error(`유니버스 로딩 실패 (${resp.status})`);
-      const { items } = await resp.json();
+      const { items } = await resp.json() as { items: UniverseItem[] };
 
       setScanStage('모멘텀 엔진 가동 중');
       setProgress({ current: 0, total: items.length });
@@ -88,7 +99,7 @@ export default function MomentumScannerPage() {
         if (abort.signal.aborted) break;
         const batch = items.slice(i, i + batchSize);
         
-        const payload = batch.map((item: any) => ({
+        const payload = batch.map((item) => ({
           ticker: item.ticker,
           exchange: item.exchange || (universe.includes('KOS') ? (universe.includes('KOSPI') ? 'KOSPI' : 'KOSDAQ') : 'US'),
         }));
@@ -101,13 +112,13 @@ export default function MomentumScannerPage() {
         });
 
         if (scanResp.ok) {
-          const json = await scanResp.json();
+          const json = await scanResp.json() as { results?: MomentumApiResult[] };
           if (json.results) {
              const successBatch = json.results
-                .filter((r: any) => r.success && r.data)
-                .map((r: any) => ({
+                .filter((r): r is MomentumApiResult & { data: SurgeMetrics & { currentPrice?: number | null } } => r.success && Boolean(r.data))
+                .map((r) => ({
                     ticker: r.ticker,
-                    exchange: payload.find((p: any) => p.ticker === r.ticker)?.exchange || 'US',
+                    exchange: payload.find((p) => p.ticker === r.ticker)?.exchange || 'US',
                     metrics: {
                        rvol: r.data.rvol,
                        roc: r.data.roc,
@@ -115,7 +126,7 @@ export default function MomentumScannerPage() {
                        currentVolume: r.data.currentVolume,
                        grade: r.data.grade,
                     },
-                    currentPrice: r.data.currentPrice,
+                    currentPrice: r.data.currentPrice ?? null,
                 }));
              allResults = [...allResults, ...successBatch];
           }
@@ -125,9 +136,9 @@ export default function MomentumScannerPage() {
 
       setResults(allResults);
       setScanStage('완료');
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        alert(`스캔 실패: ${err.message}`);
+    } catch (err: unknown) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        alert(`스캔 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
       }
     } finally {
       setIsScanning(false);

@@ -9,9 +9,6 @@ import {
   Send,
   Plus,
   Check,
-  TrendingUp,
-  Shield,
-  BarChart3,
   DollarSign,
   Activity,
   Flame,
@@ -26,7 +23,6 @@ import { useContestSelection } from '@/hooks/useContestSelection';
 import {
   LEADER_LATEST_UNIVERSE_STORAGE_KEY,
 } from '@/lib/contest-sources';
-import { useIsMobile } from '@/lib/hooks/useViewport';
 import type {
   LeaderGrade,
   LeaderScoreBreakdown,
@@ -39,7 +35,6 @@ import type {
 const STORAGE_PREFIX = 'mtn:modern-leader-snapshot:v1:';
 const BATCH_SIZE = 20;
 
-type ViewMode = 'web' | 'app';
 type FilterKey = 'all' | 'alpha' | 'emerging' | 'steady' | 'rs90' | 'r2_80' | 'heavy_vol';
 type SortKey = 'leaderScore' | 'rs' | 'r2' | 'dollarVolume' | 'tii' | 'marketCap';
 
@@ -197,20 +192,16 @@ export default function LeaderScannerPage() {
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('leaderScore');
-  const [viewMode, setViewMode] = useState<ViewMode>('web');
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
   const {
     selectedTickers,
     toggleSelection: baseToggleSelection,
-    clearSelection: baseClearSelection,
     limitMessage,
   } = useContestSelection(universe, { source: 'leader' });
 
   const toggleSelection = (t: string) => baseToggleSelection(t, universe);
-  const clearSelection = () => baseClearSelection(universe);
   const abortRef = useRef<AbortController | null>(null);
-  const isMobile = useIsMobile();
 
   useEffect(() => {
     (async () => {

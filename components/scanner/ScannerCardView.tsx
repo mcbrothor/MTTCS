@@ -58,6 +58,30 @@ function MetricStat({ label, value, accent, termKey }: { label: string; value: s
   return content;
 }
 
+function CompactMetric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-slate-800/80 bg-slate-950/70 px-2.5 py-2">
+      <p className="truncate text-[9px] uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className={`mt-1 truncate font-mono text-xs font-semibold ${accent || 'text-slate-200'}`}>{value}</p>
+    </div>
+  );
+}
+
+function formatPrice(value: number | null, currency: ScannerResult['currency'], ticker: string) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  const isKorean = currency === 'KRW' || /^\d{6}$/.test(ticker);
+  return new Intl.NumberFormat(isKorean ? 'ko-KR' : 'en-US', {
+    style: 'currency',
+    currency: isKorean ? 'KRW' : 'USD',
+    maximumFractionDigits: isKorean ? 0 : 2,
+  }).format(value);
+}
+
+function formatSignedPercent(value: number | null | undefined, digits = 2) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`;
+}
+
 function pivotLabel(result: ScannerResult) {
   if (result.distanceToPivotPct !== null && result.pivotPrice !== null) {
     const age = typeof result.pivotAgeDays === 'number' ? ` · ${result.pivotAgeDays}일 전` : '';
@@ -75,6 +99,21 @@ function pivotLabel(result: ScannerResult) {
     };
   }
   return { value: '-', detail: 'VCP 피벗 미확정', actionable: false };
+}
+
+function riskLabel(result: ScannerResult) {
+  if (result.riskGate?.status === 'BLOCK') return { value: 'BLOCK', accent: 'text-rose-200' };
+  if (result.stopQuality === 'INVALID') return { value: 'Stop Invalid', accent: 'text-rose-200' };
+  if (result.riskGate?.status === 'REDUCE') return { value: 'Reduce', accent: 'text-amber-100' };
+  if (typeof result.riskTotalShares === 'number' && result.riskTotalShares > 0) {
+    return { value: `${result.riskTotalShares.toLocaleString()}주`, accent: 'text-emerald-100' };
+  }
+  return { value: '-', accent: 'text-slate-100' };
+}
+
+function priceSnapshotLabel(result: ScannerResult) {
+  const source = result.priceSource || 'source unknown';
+  return result.priceAsOf ? `${source} · ${result.priceAsOf}` : source;
 }
 
 function TrendDots({ result }: { result: ScannerResult }) {
@@ -229,6 +268,9 @@ export default function ScannerCardView({
   const selectionButton = (result: ScannerResult) => (
     <button
       type="button"
+      aria-pressed={selectedTickers.has(result.ticker)}
+      aria-label={selectedTickers.has(result.ticker) ? `${result.ticker} 후보 선택 해제` : `${result.ticker} 후보 선택`}
+      title={selectedTickers.has(result.ticker) ? `${result.ticker} 후보 선택 해제` : `${result.ticker} 후보 선택`}
       disabled={result.status !== 'done'}
       onClick={(event) => {
         event.stopPropagation();
@@ -268,6 +310,7 @@ export default function ScannerCardView({
         const sepa = getScannerSepaSummary(result);
         const isExpanded = expandedTickers.has(result.ticker);
         const pivot = pivotLabel(result);
+        const risk = riskLabel(result);
 
         return (
           <MotionDiv
@@ -287,6 +330,10 @@ export default function ScannerCardView({
             {result.status === 'done' && (
               <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
                 <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? `${result.ticker} 상세 접기` : `${result.ticker} 상세 펼치기`}
+                  title={isExpanded ? `${result.ticker} 상세 접기` : `${result.ticker} 상세 펼치기`}
                   onClick={(e) => toggleExpand(result.ticker, e)}
                   className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white transition-colors"
                 >
@@ -332,6 +379,22 @@ export default function ScannerCardView({
                     </div>
                   </div>
 
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <CompactMetric label="현재가" value={formatPrice(result.currentPrice, result.currency, result.ticker)} />
+                    <CompactMetric
+                      label="등락률"
+                      value={formatSignedPercent(result.changePercent)}
+                      accent={typeof result.changePercent === 'number' && result.changePercent < 0 ? 'text-rose-300' : 'text-emerald-300'}
+                    />
+                    <CompactMetric
+                      label="ADR"
+                      value={typeof result.adrPct === 'number' ? `${result.adrPct.toFixed(1)}%` : '-'}
+                      accent={typeof result.adrPct === 'number' && result.adrPct >= 7 ? 'text-amber-200' : 'text-slate-200'}
+                    />
+                    <CompactMetric label="피벗" value={pivot.value} accent={pivot.actionable ? 'text-emerald-300' : 'text-slate-300'} />
+                  </div>
+                  <p className="mt-2 truncate text-[10px] text-slate-600">{priceSnapshotLabel(result)}</p>
+
                   {isExpanded && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
@@ -365,6 +428,11 @@ export default function ScannerCardView({
                             value={`${pivot.value} · ${pivot.detail}`}
                             accent={pivot.actionable ? 'text-emerald-100' : 'text-slate-100'}
                             termKey="PIVOT"
+                          />
+                          <MetricStat
+                            label="리스크 게이트"
+                            value={risk.value}
+                            accent={risk.accent}
                           />
                         </div>
 

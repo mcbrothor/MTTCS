@@ -77,6 +77,29 @@ run('caps Minervini stop at 8 percent max loss', () => {
   assert.equal(plan.totalShares, 62);
 });
 
+run('supports ATR volatility risk strategy selection', () => {
+  const plan = calculateMinerviniRiskPlan(50_000, 100, 2, 0.01, 90, undefined, {
+    requestedRiskStrategy: 'ATR_VOLATILITY',
+  });
+  assert.equal(plan.strategy, 'ATR_VOLATILITY');
+  assert.equal(plan.stopSource, 'ATR_STOP');
+  assert.equal(plan.stopLossPrice, 96);
+  assert.equal(plan.totalShares, 125);
+  assert.equal(plan.stopQuality, 'VALID');
+  assert.equal(plan.riskGate?.status, 'PASS');
+});
+
+run('supports conservative half-risk strategy selection', () => {
+  const plan = calculateMinerviniRiskPlan(50_000, 100, 2, 0.02, 90, undefined, {
+    requestedRiskStrategy: 'CONSERVATIVE',
+  });
+  assert.equal(plan.strategy, 'CONSERVATIVE');
+  assert.equal(plan.riskPercent, 0.01);
+  assert.equal(plan.stopLossPrice, 97);
+  assert.equal(plan.totalShares, 166);
+  assert.equal(plan.riskPolicy?.profile, 'CONSERVATIVE');
+});
+
 run('uses benchmark RS proxy and marks missing fundamentals as info', () => {
   const evidence = analyzeSepa(makeUptrendBars(260, 0.6), {
     benchmarkData: makeUptrendBars(260, 0.2),

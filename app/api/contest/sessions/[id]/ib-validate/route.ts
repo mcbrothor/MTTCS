@@ -1,4 +1,4 @@
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { buildIbValidationPrompt, IB_PROMPT_VERSION, IB_RESPONSE_SCHEMA_VERSION } from '@/lib/ai/contest-ib-prompt';
 import { runContestAnalysis } from '@/lib/ai/contest-analysis';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -219,11 +219,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id: sessionId } = await params;
 
   let forceLocal = false;
+  let forceCodex = false;
   let sendTelegram = false;
+  let preferredProvider: string | null = null;
   try {
     const body = await req.json();
     forceLocal = !!body.forceLocal;
+    forceCodex = !!body.forceCodex;
     sendTelegram = !!body.sendTelegram;
+    preferredProvider = typeof body.provider === 'string' ? body.provider : null;
   } catch {
     // Body is empty or not JSON
   }
@@ -256,29 +260,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       marketContext,
     );
 
-    // 로컬 LLM + 텔레그램 전송일 경우 비동기 큐(Queue) 패턴 적용
+    // Codex CLI/로컬 LLM + 텔레그램 전송일 경우 비동기 큐(Queue) 패턴 적용
     // Vercel Serverless 타임아웃(10~60초)을 회피하기 위해 DB에 대기열만 등록하고 즉시 반환합니다.
-    // 이후 Mac Mini에 띄워둔 워커 스크립트(scripts/local-llm-worker.mjs)가 이를 감지하고 백그라운드에서 처리합니다.
-    if (forceLocal && sendTelegram) {
-      console.log('[API] Enqueueing Local LLM task to Supabase...');
+    // 이후 Mac Mini에 띄워둔 워커 스크립트가 Codex CLI 우선으로 백그라운드 처리합니다.
+    if ((forceCodex || forceLocal) && sendTelegram) {
+      const queuedProvider = preferredProvider === 'local-llm' ? 'pending-local-llm' : 'pending-codex-cli';
+      console.log(`[API] Enqueueing ${queuedProvider} task to Supabase...`);
       const { error: enqueueError } = await supabaseServer
         .from('beauty_contest_sessions')
         .update({
-          ib_provider: 'pending-local-llm',
-          ib_raw_response: prompt, // 임시로 프롬프트를 저장해 워커가 읽을 수 있도록 함
+          ib_provider: queuedProvider,
+          ib_raw_response: prompt, // 워커가 읽을 프롬프트. 완료 시 raw response로 교체됨.
+          ib_analysis: {
+            queued_provider: queuedProvider === 'pending-codex-cli' ? 'codex-cli' : 'local-llm',
+            queued_at: new Date().toISOString(),
+            parse_failed: false,
+          },
           updated_at: new Date().toISOString(),
         })
         .eq('id', sessionId);
 
       if (enqueueError) {
         console.error('[API] Failed to enqueue task:', enqueueError);
-        return NextResponse.json({ error: '로컬 LLM 대기열 등록에 실패했습니다.' }, { status: 500 });
+        return NextResponse.json({ error: 'IB 분석 대기열 등록에 실패했습니다.' }, { status: 500 });
       }
 
       return NextResponse.json({
         success: true,
         background: true,
-        message: '로컬 LLM 분석이 대기열에 등록되었습니다. Mac Mini의 워커 스크립트가 5~10분 내로 처리하여 텔레그램으로 전송합니다.',
+        provider: queuedProvider === 'pending-codex-cli' ? 'codex-cli' : 'local-llm',
+        message: queuedProvider === 'pending-codex-cli'
+          ? 'Codex CLI 우선 IB 분석이 대기열에 등록되었습니다. 로컬 워커가 처리 후 텔레그램으로 전송합니다.'
+          : '로컬 LLM 분석이 대기열에 등록되었습니다. 로컬 워커가 처리 후 텔레그램으로 전송합니다.',
       });
     }
 
@@ -365,7 +378,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           updated_at: new Date().toISOString(),
         })
         .eq('id', sessionId);
-    } catch (e) {
+    } catch {
       // Ignore DB write errors during error handling
     }
 

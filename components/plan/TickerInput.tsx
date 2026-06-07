@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Search } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import type { RiskStrategy } from '@/types';
 
 interface TickerInputProps {
-  onAnalyze: (ticker: string, exchange: string, totalEquity: number, riskPercent: number) => void;
+  onAnalyze: (ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy) => void;
   loading: boolean;
   initialTicker?: string;
   initialExchange?: string;
+  initialTotalEquity?: number;
 }
 
 interface TickerLookupState {
@@ -23,11 +25,13 @@ interface SecurityLookupResponse {
   symbol: string | null;
 }
 
-export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS' }: TickerInputProps) {
+export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS', initialTotalEquity = 50000 }: TickerInputProps) {
+  const previousInitialTotalEquity = useRef(initialTotalEquity);
   const [ticker, setTicker] = useState(initialTicker.toUpperCase());
   const [exchange, setExchange] = useState(initialExchange);
-  const [totalEquity, setTotalEquity] = useState(0);
+  const [totalEquity, setTotalEquity] = useState(initialTotalEquity);
   const [riskPercent, setRiskPercent] = useState(1);
+  const [riskStrategy, setRiskStrategy] = useState<RiskStrategy>('AUTO');
   const [lookup, setLookup] = useState<TickerLookupState>({
     status: 'idle',
     name: null,
@@ -36,6 +40,16 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
   });
 
   const normalizedTicker = ticker.trim().toUpperCase();
+
+  useEffect(() => {
+    if (initialTotalEquity <= 0) return;
+    setTotalEquity((current) => (
+      current <= 0 || current === previousInitialTotalEquity.current
+        ? initialTotalEquity
+        : current
+    ));
+    previousInitialTotalEquity.current = initialTotalEquity;
+  }, [initialTotalEquity]);
 
   useEffect(() => {
     if (!normalizedTicker) {
@@ -78,7 +92,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!ticker.trim() || totalEquity <= 0 || riskPercent <= 0) return;
-    onAnalyze(ticker.trim().toUpperCase(), exchange, totalEquity, riskPercent);
+    onAnalyze(ticker.trim().toUpperCase(), exchange, totalEquity, riskPercent, riskStrategy);
   };
 
   const handleTickerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,7 +125,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_120px_160px_150px_auto]">
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_120px_150px_130px_170px_auto]">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-300">티커</span>
           <div className="relative">
@@ -184,6 +198,22 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
             disabled={loading}
             className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
           />
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium text-slate-300">리스크 전략</span>
+          <select
+            value={riskStrategy}
+            onChange={(event) => setRiskStrategy(event.target.value as RiskStrategy)}
+            disabled={loading}
+            className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
+          >
+            <option value="AUTO">자동 선택</option>
+            <option value="MINERVINI_VCP">VCP 표준</option>
+            <option value="HIGH_TIGHT_FLAG">HTF 공격형</option>
+            <option value="ATR_VOLATILITY">ATR 변동성</option>
+            <option value="CONSERVATIVE">보수적 절반 리스크</option>
+          </select>
         </label>
 
         <div className="flex items-end">

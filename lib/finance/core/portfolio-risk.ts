@@ -1,5 +1,7 @@
 import type { PortfolioRiskSummary, SecurityProfile, Trade } from '../../../types/index.ts';
 import { buildTradePositionLifecycle } from './position-lifecycle.ts';
+import { evaluateRiskGate } from './risk-gate.ts';
+import { getDefaultRiskPolicy } from './risk-policy.ts';
 
 function finite(value: unknown) {
   const numeric = Number(value);
@@ -35,6 +37,7 @@ export function calculatePortfolioRiskSummary(
   const totalOpenRisk = active.reduce((sum, trade) => sum + finite(trade.metrics?.openRisk), 0);
   const equity = totalEquity > 0 ? totalEquity : investedCapital;
   const sectorMap = new Map<string, { sector: string; exposure: number; count: number }>();
+  const sectorRiskMap = new Map<string, { sector: string; openRisk: number; count: number }>();
 
   for (const trade of active) {
     const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
@@ -46,15 +49,26 @@ export function calculatePortfolioRiskSummary(
     row.exposure += exposure;
     row.count += 1;
     sectorMap.set(sector, row);
+
+    const riskRow = sectorRiskMap.get(sector) || { sector, openRisk: 0, count: 0 };
+    riskRow.openRisk += finite(trade.metrics?.openRisk);
+    riskRow.count += 1;
+    sectorRiskMap.set(sector, riskRow);
   }
 
   const maxPositions = getMaxPositionsForEquity(equity, market);
+  const policy = getDefaultRiskPolicy(market);
+  const portfolioHeatPct = equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0;
+  const riskBudgetRemaining = Number(Math.max(equity * policy.maxPortfolioHeatPct - totalOpenRisk, 0).toFixed(2));
   const warnings: string[] = [];
   if (active.length > maxPositions) {
     warnings.push(`Active positions exceed the seed-size limit: ${active.length}/${maxPositions}.`);
   }
   if (equity > 0 && totalOpenRisk / equity > 0.08) {
     warnings.push('Total open risk is above 8% of account equity.');
+  }
+  if (equity > 0 && totalOpenRisk / equity >= policy.maxPortfolioHeatPct) {
+    warnings.push(`Portfolio heat is above the standard risk policy limit: ${portfolioHeatPct}%.`);
   }
 
   const sectorExposure = Array.from(sectorMap.values())
@@ -70,6 +84,14 @@ export function calculatePortfolioRiskSummary(
       warnings.push(`${row.sector} concentration is high: ${row.exposurePct}%.`);
     }
   }
+
+  const sectorRisk = Array.from(sectorRiskMap.values())
+    .map((row) => ({
+      ...row,
+      openRisk: Number(row.openRisk.toFixed(2)),
+      riskPct: equity > 0 ? Number(((row.openRisk / equity) * 100).toFixed(2)) : 0,
+    }))
+    .sort((a, b) => b.openRisk - a.openRisk);
 
   const positions = active.map((trade) => {
     const lifecycle = buildTradePositionLifecycle(trade);
@@ -88,10 +110,19 @@ export function calculatePortfolioRiskSummary(
       unrealizedPnL: trade.metrics?.unrealizedPnL ?? null,
       unrealizedR: trade.metrics?.unrealizedR ?? null,
       openRisk: Number(finite(trade.metrics?.openRisk).toFixed(2)),
+      openRiskPct: equity > 0 ? Number(((finite(trade.metrics?.openRisk) / equity) * 100).toFixed(2)) : 0,
       pyramidCount: lifecycle.pyramidCount,
       partialExitCount: lifecycle.partialExitCount,
       latestAction: lifecycle.events.at(-1)?.action ?? null,
     };
+  });
+  const largestSectorRiskPct = sectorRisk[0]?.riskPct ?? 0;
+  const riskGate = evaluateRiskGate({
+    policy,
+    totalEquity: equity,
+    candidateRisk: 0,
+    currentOpenRisk: totalOpenRisk,
+    sectorRiskPct: largestSectorRiskPct,
   });
 
   return {
@@ -103,7 +134,11 @@ export function calculatePortfolioRiskSummary(
     maxPositions,
     totalOpenRisk: Number(totalOpenRisk.toFixed(2)),
     openRiskPct: equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0,
+    portfolioHeatPct,
+    riskBudgetRemaining,
     sectorExposure,
+    sectorRisk,
+    riskGate,
     warnings,
     positions,
   };

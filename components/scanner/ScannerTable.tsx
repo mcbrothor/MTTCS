@@ -139,6 +139,9 @@ export default function ScannerTable({
   const selectionColumn = (result: ScannerResult) => (
     <button
       type="button"
+      aria-pressed={selectedTickers.has(result.ticker)}
+      aria-label={selectedTickers.has(result.ticker) ? `${result.ticker} 후보 선택 해제` : `${result.ticker} 후보 선택`}
+      title={selectedTickers.has(result.ticker) ? `${result.ticker} 후보 선택 해제` : `${result.ticker} 후보 선택`}
       disabled={result.status !== 'done'}
       onClick={(event) => {
         event.stopPropagation();

@@ -23,6 +23,8 @@ const SYSTEM_LIMITATION_DISCLOSURE = `
 [SYSTEM-LIMITATION DISCLOSURE - 기관 투자 의견 수렴 시 필수 반영]
 
 MTN 정량 점수(VCP, RS, SEPA, Momentum, Technical Quality)는 1차 후보 선별을 위한 기초 계량 필터(Quantitative Screen)입니다.
+MTN Rule Engine의 순위, 점수, 추천, confidence는 최종 투자 결정이 아닙니다.
+실질적인 투자 판단은 IB Investment Committee의 독립적 최종 판단입니다.
 실질적인 자금 집행을 위한 최종 의사결정은 IB Investment Committee의 거시적·미시적 심층 독립 분석을 거쳐야 합니다.
 
 MTN 알고리즘의 한계와 위원회 보완점:
@@ -136,6 +138,7 @@ function screenerCommitteeMandate(source: 'minervini' | 'canslim') {
     return [
       "[O'NEIL CANSLIM COMMITTEE MANDATE]",
       "The O'Neil scanner serves as an initial CANSLIM quant screen. The IB committee must perform the fundamental due diligence and overlay qualitative context.",
+      "CANSLIM pillar changes the committee view only when the pillar evidence improves or weakens the final investment judgment after independent validation.",
       "Evaluate key evidence across all seven CANSLIM pillars, verifying that current EPS growth acceleration, relative strength line quality, structural supply-demand dynamics, and institutional sponsorship support a long-term position.",
       "Bypass mechanical filters to identify where the quant scores understate institutional sponsorship or overstate cyclical earnings quality. Demand specific, verifiable DART/SEC fundamental backlogs.",
     ].join('\n');
@@ -194,7 +197,7 @@ export function buildIbValidationPrompt(
     decision_context: {
       screener_source: screenerSource,
       mtn_role: 'PRELIMINARY_SCREEN',
-      committee_role: 'AI_CIO_FINAL_JUDGMENT',
+      committee_role: 'FINAL_INVESTMENT_JUDGMENT',
     },
     universe: session.universe,
     market: session.market,
@@ -202,10 +205,6 @@ export function buildIbValidationPrompt(
     market_context: marketBlock,
     mtn_ranked_candidates: ranked,
   }, null, 2);
-
-  const tickerList = ranked
-    .map((candidate) => `${candidate.ticker}${candidate.name ? ` (${candidate.name})` : ''}`)
-    .join(', ');
 
   return [
     SYSTEM_LIMITATION_DISCLOSURE,
@@ -240,7 +239,7 @@ export function buildIbValidationPrompt(
       `  "session_id": "${session.id}",`,
       `  "analysis_date": "<YYYY-MM-DD>",`,
       `  "mtn_role": "PRELIMINARY_SCREEN",`,
-      `  "committee_role": "AI_CIO_FINAL_JUDGMENT",`,
+      `  "committee_role": "FINAL_INVESTMENT_JUDGMENT",`,
       `  "final_decision_impact": "LOW | MEDIUM | HIGH",`,
       `  "committee_consensus": {`,
       `    "top3_tickers": ["...", "...", "..."],`,
@@ -277,6 +276,8 @@ export function buildIbValidationPrompt(
     '',
     '## 2. 🎯 AI-CIO 실전 편입 후보 (Top 3 Picks)',
     '매니저님이 즉각 매매 계획(Trading Plan)을 세울 수 있도록 Top 3 종목을 선정하고 아래 양식에 맞추어 단호하게 브리핑하십시오.',
+    'Committee Ranking Rationale: MTN 정량 결과는 1차 후보 선별 기준일 뿐이며, 위원회가 독립적으로 최종 순위와 포지션 사이징을 재판정하십시오.',
+    'Top Pick 표기에는 ticker와 company name을 함께 넣고, MTN 순위와 달라진 경우 override_reason을 명확히 쓰십시오.',
     '',
     '### 🥇 Pick #1: <TICKER> (<Company Name>)',
     '> **투자의견**: [STRONG_BUY | BUY] · **12M 목표가**: Est. <$XX> · **Moat**: [WIDE | NARROW]',
@@ -302,7 +303,7 @@ export function buildIbValidationPrompt(
     '',
     '# Writing Rules',
     '- **현업 비서 어조 유지**: "매니저님"이라는 호칭을 사용하며, 실제 펀드매니저에게 아침 보고를 하듯 빠르고, 명확하고, 실용적(Actionable)으로 작성하십시오.',
-    '- **분량 조절**: 바쁜 현업 상황을 고려하여 너무 장황하지 않게, 전체 1,000~1,500 단어 내외로 핵심만 짚어서 출력하십시오.',
+    '- **분량 조절**: 전체 markdown report는 1,200~1,800단어 안에서 끝내십시오. 바쁜 현업 상황을 고려하여 핵심만 짚어서 출력하십시오.',
     '- **단호함**: 애매모호한 양비론(좋을 수도 있고 나쁠 수도 있다)을 버리고, 투자 여부에 대한 확고한 주장을 펼치십시오.',
   ].join('\n');
 }

@@ -11,6 +11,20 @@ const currency = (value: number) =>
 export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
   const legs = [riskPlan.entryTargets.e1, riskPlan.entryTargets.e2, riskPlan.entryTargets.e3];
   const riskPct = (riskPlan.riskPercent * 100).toFixed(1).replace('.0', '');
+  const gateClass =
+    riskPlan.riskGate?.status === 'BLOCK'
+      ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+      : riskPlan.riskGate?.status === 'REDUCE'
+        ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+  const strategyLabel =
+    riskPlan.strategy === 'HIGH_TIGHT_FLAG'
+      ? 'HTF 공격형'
+      : riskPlan.strategy === 'ATR_VOLATILITY'
+        ? 'ATR 변동성'
+        : riskPlan.strategy === 'CONSERVATIVE'
+          ? '보수적 절반 리스크'
+          : 'VCP 표준';
 
   return (
     <Card>
@@ -34,6 +48,35 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
         <Metric label="피벗 진입가" value={currency(riskPlan.entryPrice)} />
         <Metric label="초기 손절가" value={currency(riskPlan.stopLossPrice)} danger />
         <Metric label="총 수량" value={`${riskPlan.totalShares.toLocaleString()}주`} />
+      </div>
+
+      <div className={`mt-4 rounded-lg border px-4 py-3 ${gateClass}`}>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide">Risk Gate: {riskPlan.riskGate?.status || 'PASS'}</p>
+            <p className="mt-1 text-sm">
+              {strategyLabel} · Stop {riskPlan.stopQuality || 'UNKNOWN'} ·
+              {typeof riskPlan.rewardRiskRatio === 'number' ? ` ${riskPlan.rewardRiskRatio.toFixed(1)}R target` : ' target 미정'}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-right text-xs md:min-w-64">
+            <div>
+              <p className="text-slate-400">Risk Budget</p>
+              <p className="font-mono font-bold text-white">{currency(riskPlan.riskGate?.riskBudgetRemaining ?? riskPlan.maxRisk)}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">Allowed</p>
+              <p className="font-mono font-bold text-white">{currency(riskPlan.riskGate?.allowedRiskAmount ?? riskPlan.maxRisk)}</p>
+            </div>
+          </div>
+        </div>
+        {riskPlan.riskGate?.reasons && riskPlan.riskGate.reasons.length > 0 && (
+          <div className="mt-3 space-y-1 text-xs">
+            {riskPlan.riskGate.reasons.map((item) => (
+              <p key={`${item.code}:${item.message}`}>{item.message}</p>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-6 overflow-x-auto">
@@ -71,9 +114,9 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
         <summary className="cursor-pointer text-sm font-semibold text-slate-200">계산식 보기</summary>
         <div className="mt-3 space-y-2 text-sm leading-6 text-slate-400">
           <p>최대 허용 손실 = 총 자본 x 허용 손실 비율</p>
-          <p>초기 손절가 = 패턴 무효화선과 진입가 대비 8% 손실 캡 중 더 가까운 가격</p>
+          <p>초기 손절가 = 선택한 리스크 전략의 패턴 무효화선, 최대 손실 캡, ATR 스탑 중 정책상 허용되는 가격</p>
           <p>총 수량 = 최대 허용 손실 / 주당 위험금액</p>
-          <p>추가매수 후보가는 고정 ATR 간격이 아니라, 피벗 돌파 후 수익 방향 확인용 참고가입니다.</p>
+          <p>추가매수 후보가는 전략에 따라 고정 퍼센트 또는 ATR 간격으로 계산됩니다.</p>
         </div>
       </details>
     </Card>

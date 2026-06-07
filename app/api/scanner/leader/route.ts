@@ -3,6 +3,7 @@ import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { analyzeLeaderScore, applyLeaderUniverseMetrics } from '@/lib/finance/engines/leader-score';
 import type { OHLCData } from '@/types';
+import type { LeaderAnalysisResult } from '@/lib/finance/engines/leader-score';
 
 // ... (fetchDailyBars, parallelWithLimit 등은 동일하므로 하단 교체 대상만 타겟팅합니다)
 
@@ -27,6 +28,12 @@ interface LeaderBatchRequest {
   benchmarkTicker?: string;
   totalSectors?: number;
 }
+
+type RankedLeaderData = LeaderAnalysisResult & {
+  rsRating: number;
+  rsRank: number;
+  dollarVolumeShare: number;
+};
 
 const MAX_BATCH_SIZE = 20;
 const CONCURRENCY_LIMIT = 5;
@@ -169,7 +176,7 @@ export async function POST(request: Request) {
     const rankedItems = applyLeaderUniverseMetrics(successfulItems, totalSectors);
 
     // 맵 구조를 통해 원본 결과 리스트에 랭킹 및 보정된 지표를 다시 바인딩
-    const rankedMap = new Map<string, any>();
+    const rankedMap = new Map<string, RankedLeaderData>();
     rankedItems.forEach((item) => {
       rankedMap.set(item.ticker, {
         ...item.raw,
@@ -211,4 +218,3 @@ function itemSectorRank(items: LeaderBatchItem[], ticker: string): number | null
   const match = items.find((i) => i.ticker === ticker);
   return match?.sectorRank ?? null;
 }
-

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "report_markdown"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "Structured IB committee metadata. Keep candidate/ranking/risk fields here.",
+      "additionalProperties": true
+    },
+    "report_markdown": {
+      "type": "string",
+      "description": "Korean markdown report body for MTN UI and Telegram delivery."
+    }
+  }
+}

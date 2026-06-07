@@ -9,6 +9,7 @@ import { analyzeVcp } from '@/lib/finance/engines/vcp';
 import { cacheKey, tieredCacheGet, tieredCacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
 import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
+import { normalizeRiskStrategy } from '@/lib/finance/core/risk-policy';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
 
 const REQUIRED_SEPA_BARS = 252;
@@ -297,6 +298,7 @@ export async function GET(request: Request) {
   const exchange = searchParams.get('exchange')?.trim().toUpperCase() || 'NAS';
   const totalEquity = Number(searchParams.get('totalEquity') || DEFAULT_TOTAL_EQUITY);
   const riskPercentInput = Number(searchParams.get('riskPercent') || DEFAULT_RISK_PERCENT_INPUT);
+  const requestedRiskStrategy = normalizeRiskStrategy(searchParams.get('riskStrategy'));
   const includeFundamentals = searchParams.get('includeFundamentals') !== 'false';
   // Scanner batch passes skipStandardMetrics=true to avoid N+1 single-ticker
   // stock_metrics/macro_trend fetches — those are re-applied in a single .in()
@@ -321,7 +323,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const cacheId = cacheKey('market-data', 'market-cap-v2', ticker, exchange, totalEquity, riskPercentInput, includeFundamentals ? 'fundamentals' : 'price-only');
+    const cacheId = cacheKey('market-data', 'market-cap-v3', ticker, exchange, totalEquity, riskPercentInput, requestedRiskStrategy, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = await tieredCacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
       const cachedWithPriceMetrics = withPriceMetrics(cached);
@@ -399,6 +401,8 @@ export async function GET(request: Request) {
       data,
       {
         strategy: vcpAnalysis.baseType === 'High_Tight_Flag' ? 'HIGH_TIGHT_FLAG' : 'MINERVINI_VCP',
+        requestedRiskStrategy,
+        market: marketForExchange(exchange),
         highTightFlag: vcpAnalysis.highTightFlag,
       }
     );

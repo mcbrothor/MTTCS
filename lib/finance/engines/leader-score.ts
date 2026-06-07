@@ -46,7 +46,6 @@ export function calculate12Minus1Momentum(data: OHLCData[]): number | null {
   const len = data.length;
   if (len < 30) return null; // 최소 데이터 부족
 
-  const currentPrice = data[len - 1].close;
   const oneMonthAgoIndex = Math.max(0, len - 22); // 약 21~22거래일 전
   const oneMonthAgoPrice = data[oneMonthAgoIndex].close;
 
@@ -472,6 +471,7 @@ export function applyLeaderUniverseMetrics<T extends LeaderRankableItem>(
   results: T[],
   totalSectors = 11,
 ): (T & { rsRating: number; rsRank: number; dollarVolumeShare: number })[] {
+  void totalSectors;
   const size = results.length;
   if (size === 0) return [];
 
