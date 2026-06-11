@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { analyzeSurge } from '@/lib/finance/engines/surge-score';
 import type { OHLCData } from '@/types';
+import axios from 'axios';
 
 /**
- * 급등 종목 스캐너 배치 분석 API
+ * 모멘텀 스캐너 배치 분석 API
  *
- * POST /api/scanner/surge
+ * POST /api/scanner/momentum
  * Body: { items: [{ ticker, exchange }] }
  */
 
@@ -23,20 +23,84 @@ interface SurgeBatchRequest {
 const MAX_BATCH_SIZE = 20;
 const CONCURRENCY_LIMIT = 5;
 
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
 function yahooTicker(ticker: string, exchange: string) {
   if (exchange === 'KOSPI') return `${ticker}.KS`;
   if (exchange === 'KOSDAQ') return `${ticker}.KQ`;
   return ticker;
 }
 
-async function fetchDailyBars(ticker: string, exchange: string, bars = 30): Promise<OHLCData[]> {
-  try {
-    const data = await getMarketDailyPrice(ticker, exchange, bars);
-    if (data.length > 0) return data;
-  } catch {
-    // KIS 실패 시 Yahoo fallback
+function isKoreanExchange(exchange: string) {
+  return exchange === 'KOSPI' || exchange === 'KOSDAQ';
+}
+
+/**
+ * 모멘텀 분석에 최적화된 Yahoo 일봉 조회 (최근 60일만 요청)
+ * getYahooDailyPrice는 2년치를 가져오므로 대역폭 낭비 — 여기선 3개월로 제한
+ */
+async function fetchYahooShortRange(ticker: string, days = 60): Promise<OHLCData[]> {
+  const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
+    params: {
+      range: `${days}d`,
+      interval: '1d',
+      includePrePost: false,
+      events: 'history',
+    },
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Accept': 'application/json',
+      'Referer': 'https://finance.yahoo.com/',
+    },
+    timeout: 8000,
+  });
+
+  const result = response.data?.chart?.result?.[0];
+  const timestamps: number[] = result?.timestamp || [];
+  const quote = result?.indicators?.quote?.[0];
+  if (!result || !quote || timestamps.length === 0) return [];
+
+  return timestamps
+    .map((timestamp, index) => {
+      const o = quote.open?.[index];
+      const h = quote.high?.[index];
+      const l = quote.low?.[index];
+      const c = quote.close?.[index];
+      const v = quote.volume?.[index];
+      if (o === null || h === null || l === null || c === null) return null;
+      return {
+        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+        open: Number(o),
+        high: Number(h),
+        low: Number(l),
+        close: Number(c),
+        volume: Number(v),
+      };
+    })
+    .filter((row): row is OHLCData =>
+      row !== null &&
+      Number.isFinite(row.open) &&
+      Number.isFinite(row.close) &&
+      Number.isFinite(row.volume) &&
+      row.close > 0
+    );
+}
+
+/**
+ * 종목별 데이터 소싱 전략:
+ * - 한국 주식: KIS API 우선 → Yahoo fallback
+ * - 미국 주식: Yahoo 직접 호출 (KIS 해외주식 API의 exchange 코드 불일치 방지)
+ */
+async function fetchDailyBars(ticker: string, exchange: string): Promise<OHLCData[]> {
+  if (isKoreanExchange(exchange)) {
+    try {
+      const data = await getMarketDailyPrice(ticker, exchange, 30);
+      if (data.length > 0) return data;
+    } catch {
+      // KIS 실패 시 Yahoo fallback
+    }
   }
-  return getYahooDailyPrice(yahooTicker(ticker, exchange));
+  return fetchYahooShortRange(yahooTicker(ticker, exchange), 60);
 }
 
 async function parallelWithLimit<T, R>(
@@ -81,8 +145,7 @@ export async function POST(request: Request) {
       items,
       async (item) => {
         try {
-          // Surge 분석에는 30일 정도 데이터면 충분함
-          const data = await fetchDailyBars(item.ticker, item.exchange, 30);
+          const data = await fetchDailyBars(item.ticker, item.exchange);
 
           if (data.length < 20) {
             return {
@@ -92,7 +155,8 @@ export async function POST(request: Request) {
             };
           }
 
-          const analysis = analyzeSurge(data);
+          const isKr = isKoreanExchange(item.exchange);
+          const analysis = analyzeSurge(data, isKr);
 
           if (!analysis) {
              return {
@@ -102,7 +166,6 @@ export async function POST(request: Request) {
             };
           }
 
-          // 현재가 추출
           const lastBar = data.at(-1);
           const currentPrice = lastBar?.close ?? null;
 
@@ -134,3 +197,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

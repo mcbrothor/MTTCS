@@ -6,6 +6,8 @@
  *    - 2.0배 이상 시 비정상적 자금 유입(Unusual Volume)으로 간주
  * 2. ROC (Rate of Change): 전일 종가 대비 현재가 등락률.
  *    - 가격이 함께 오르지 않는 거래량 폭발(음수 ROC)은 패닉셀일 수 있으므로 최소 +3% 이상 필터링.
+ *
+ * 장 중(intraday) 호출 시 Yahoo Finance 일봉이 부분 거래량만 반환하는 문제를 보정합니다.
  */
 
 import type { OHLCData } from '@/types';
@@ -13,17 +15,87 @@ import type { OHLCData } from '@/types';
 export type SurgeGrade = 'EXPLOSIVE' | 'BREAKOUT' | 'WARM' | 'NONE';
 
 export interface SurgeMetrics {
-  rvol: number; // 상대 거래량 비율 (배수)
-  roc: number;  // 등락률 (%)
-  avgVolume20d: number; // 20일 평균 거래량
-  currentVolume: number;
+  rvol: number;            // 상대 거래량 비율 (배수) — 장 중이면 보정된 값
+  rawRvol: number;         // 보정 전 원본 RVOL
+  roc: number;             // 등락률 (%)
+  avgVolume20d: number;    // 20일 평균 거래량
+  currentVolume: number;   // 당일 실 거래량 (보정 전)
+  estimatedVolume: number; // 보정된 추정 거래량 (장 마감 시 = currentVolume과 동일)
   grade: SurgeGrade;
+  isIntraday: boolean;     // 장 중 추정치 여부
 }
 
 const round = (value: number, digits = 2) => {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
 };
+
+// ── 미국 시장 장 운영 시간 판별 ──────────────────────────────────
+
+const US_MARKET_OPEN_HOUR = 9;   // EST 9:30 AM
+const US_MARKET_OPEN_MIN = 30;
+const US_MARKET_CLOSE_HOUR = 16; // EST 4:00 PM
+const US_TOTAL_MINUTES = (US_MARKET_CLOSE_HOUR * 60) - (US_MARKET_OPEN_HOUR * 60 + US_MARKET_OPEN_MIN); // 390분
+
+/**
+ * 현재 시각이 미국 장 운영 시간 내인지 판별하고, 경과 비율(0~1)을 반환합니다.
+ * 장 외 시간이면 null을 반환합니다.
+ */
+export function getUsMarketProgress(): { isOpen: boolean; elapsedRatio: number } {
+  const now = new Date();
+  // EST(UTC-5) / EDT(UTC-4) 대응 — 간단히 현재 시각을 ET로 변환
+  const etString = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+  const et = new Date(etString);
+  const hour = et.getHours();
+  const min = et.getMinutes();
+  const dayOfWeek = et.getDay(); // 0=Sun, 6=Sat
+
+  // 주말
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return { isOpen: false, elapsedRatio: 1 };
+  }
+
+  const currentMinutes = hour * 60 + min;
+  const openMinutes = US_MARKET_OPEN_HOUR * 60 + US_MARKET_OPEN_MIN;
+  const closeMinutes = US_MARKET_CLOSE_HOUR * 60;
+
+  if (currentMinutes < openMinutes || currentMinutes >= closeMinutes) {
+    return { isOpen: false, elapsedRatio: 1 };
+  }
+
+  const elapsed = currentMinutes - openMinutes;
+  return { isOpen: true, elapsedRatio: Math.max(0.05, elapsed / US_TOTAL_MINUTES) };
+}
+
+/**
+ * 한국 시장 장 운영 시간 판별 (09:00 ~ 15:30 KST)
+ */
+export function getKrMarketProgress(): { isOpen: boolean; elapsedRatio: number } {
+  const now = new Date();
+  const kstString = now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' });
+  const kst = new Date(kstString);
+  const hour = kst.getHours();
+  const min = kst.getMinutes();
+  const dayOfWeek = kst.getDay();
+
+  if (dayOfWeek === 0 || dayOfWeek === 6) {
+    return { isOpen: false, elapsedRatio: 1 };
+  }
+
+  const currentMinutes = hour * 60 + min;
+  const openMinutes = 9 * 60;      // 09:00
+  const closeMinutes = 15 * 60 + 30; // 15:30
+  const totalMinutes = closeMinutes - openMinutes; // 390분
+
+  if (currentMinutes < openMinutes || currentMinutes >= closeMinutes) {
+    return { isOpen: false, elapsedRatio: 1 };
+  }
+
+  const elapsed = currentMinutes - openMinutes;
+  return { isOpen: true, elapsedRatio: Math.max(0.05, elapsed / totalMinutes) };
+}
+
+// ── 핵심 분석 함수 ──────────────────────────────────
 
 /**
  * 전일 대비 등락률(ROC) 계산 (%)
@@ -50,22 +122,17 @@ export function calculateRVOL(data: OHLCData[], period: number = 20): { rvol: nu
   
   const currentVol = data[len - 1].volume;
   
-  // N일 평균을 구할 때 당일(len-1)은 포함하지 않거나, 포함해서 구할 수 있음.
-  // 보통 RVOL 계산 시 비교 대상인 평균에는 당일을 제외하는 것이 엄밀하나, 
-  // 심플하게 당일 포함 최근 20일을 써도 무방. 여기선 당일 제외 최근 N일로 계산 (len > 1일 때).
   const lookback = Math.min(period, len - 1 > 0 ? len - 1 : 1);
   const startIdx = Math.max(0, len - 1 - lookback);
   
   let sum = 0;
   let count = 0;
   
-  // 당일 제외 평균 (최근 N일)
   for (let i = startIdx; i < len - 1; i++) {
     sum += data[i].volume;
     count++;
   }
   
-  // 데이터가 1일치밖에 없으면 자기 자신을 평균으로
   if (count === 0) {
     return { rvol: 1.0, avgVol: currentVol, currentVol };
   }
@@ -83,7 +150,7 @@ export function calculateRVOL(data: OHLCData[], period: number = 20): { rvol: nu
 }
 
 /**
- * 주어신 RVOL과 ROC를 바탕으로 급등 등급 산출
+ * 주어진 RVOL과 ROC를 바탕으로 급등 등급 산출
  */
 export function determineSurgeGrade(rvol: number, roc: number): SurgeGrade {
   if (rvol >= 3.0 && roc >= 5.0) {
@@ -99,20 +166,43 @@ export function determineSurgeGrade(rvol: number, roc: number): SurgeGrade {
 }
 
 /**
- * 주어진 종목 데이터에 대해 Surge Metric 전체 객체를 반환
+ * 주어진 종목 데이터에 대해 Surge Metric 전체 객체를 반환합니다.
+ *
+ * @param isKr - 한국 시장 종목 여부 (true면 KST 장 시간 기준 판별)
  */
-export function analyzeSurge(data: OHLCData[]): SurgeMetrics | null {
-  if (data.length < 5) return null; // 최소 5일의 데이터는 있어야 유의미
+export function analyzeSurge(data: OHLCData[], isKr = false): SurgeMetrics | null {
+  if (data.length < 5) return null;
 
   const roc = calculateROC(data);
-  const { rvol, avgVol, currentVol } = calculateRVOL(data, 20);
-  const grade = determineSurgeGrade(rvol, roc);
+  const { rvol: rawRvol, avgVol, currentVol } = calculateRVOL(data, 20);
+
+  // 장 중 부분 거래량 보정
+  const marketProgress = isKr ? getKrMarketProgress() : getUsMarketProgress();
+  const isIntraday = marketProgress.isOpen;
+
+  let estimatedVolume = currentVol;
+  let adjustedRvol = rawRvol;
+
+  if (isIntraday && avgVol > 0) {
+    // 당일 volume이 20일 평균의 80% 미만이면 장 중 부분 데이터로 간주
+    const volumeRatio = currentVol / avgVol;
+    if (volumeRatio < 0.8) {
+      // 시간 비율로 역산하여 full-day 추정
+      estimatedVolume = Math.round(currentVol / marketProgress.elapsedRatio);
+      adjustedRvol = round(estimatedVolume / avgVol, 2);
+    }
+  }
+
+  const grade = determineSurgeGrade(adjustedRvol, roc);
 
   return {
-    rvol,
+    rvol: adjustedRvol,
+    rawRvol: round(rawRvol, 2),
     roc,
     avgVolume20d: avgVol,
     currentVolume: currentVol,
+    estimatedVolume,
     grade,
+    isIntraday,
   };
 }

@@ -64,10 +64,10 @@ const SORTS: { key: SortKey; label: string }[] = [
 ];
 
 function gradeLabel(grade: SurgeGrade) {
-  if (grade === 'EXPLOSIVE') return { emoji: '🌋', label: 'Explosive', color: 'rose' };
-  if (grade === 'BREAKOUT') return { emoji: '🔥', label: 'Breakout', color: 'orange' };
-  if (grade === 'WARM') return { emoji: '♨️', label: 'Warm', color: 'amber' };
-  return { emoji: '📉', label: 'None', color: 'slate' };
+  if (grade === 'EXPLOSIVE') return { emoji: '🌋', label: 'Explosive', styles: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', fill: 'bg-rose-500', groupHover: 'hover:border-rose-500/50' } };
+  if (grade === 'BREAKOUT') return { emoji: '🔥', label: 'Breakout', styles: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20', fill: 'bg-orange-500', groupHover: 'hover:border-orange-500/50' } };
+  if (grade === 'WARM') return { emoji: '♨️', label: 'Warm', styles: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', fill: 'bg-amber-500', groupHover: 'hover:border-amber-500/50' } };
+  return { emoji: '📉', label: 'None', styles: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', fill: 'bg-slate-500', groupHover: 'hover:border-slate-500/50' } };
 }
 
 export default function MomentumScannerPage() {
@@ -132,10 +132,13 @@ export default function MomentumScannerPage() {
                     exchange: payload.find((p) => p.ticker === r.ticker)?.exchange || 'US',
                     metrics: {
                        rvol: r.data.rvol,
+                       rawRvol: r.data.rawRvol,
                        roc: r.data.roc,
                        avgVolume20d: r.data.avgVolume20d,
                        currentVolume: r.data.currentVolume,
+                       estimatedVolume: r.data.estimatedVolume,
                        grade: r.data.grade,
+                       isIntraday: r.data.isIntraday,
                     },
                     currentPrice: r.data.currentPrice ?? null,
                 }));
@@ -199,8 +202,19 @@ export default function MomentumScannerPage() {
     });
   }, [results, filter, sort]);
 
+  const hasIntraday = results.some(r => r.metrics.isIntraday);
+
   return (
     <div className="space-y-6">
+      {hasIntraday && (
+        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 flex items-center gap-3 text-sm text-indigo-300">
+          <Activity className="w-5 h-5 flex-shrink-0" />
+          <p>
+            <strong className="text-indigo-200">장 운영 중입니다.</strong>{' '}
+            거래량 폭발 지표(RVOL)는 현재 시각까지의 거래량을 기반으로 추정된 하루 예상 거래량을 기준으로 산출되었습니다.
+          </p>
+        </div>
+      )}
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -373,14 +387,14 @@ export default function MomentumScannerPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
-                      className={`relative p-5 rounded-2xl border bg-slate-900 overflow-hidden group hover:border-${gl.color}-500/50 transition-colors border-slate-800`}
+                      className={`relative p-5 rounded-2xl border bg-slate-900 overflow-hidden group transition-colors border-slate-800 ${gl.styles.groupHover}`}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
                           <h3 className="text-xl font-bold text-white flex items-center gap-2">
                             {item.ticker}
                           </h3>
-                          <span className={`inline-flex mt-1 items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-${gl.color}-500/10 text-${gl.color}-400 border border-${gl.color}-500/20`}>
+                          <span className={`inline-flex mt-1 items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${gl.styles.bg} ${gl.styles.text} border ${gl.styles.border}`}>
                             {gl.emoji} {gl.label}
                           </span>
                         </div>
@@ -397,15 +411,17 @@ export default function MomentumScannerPage() {
                       <div className="mt-4 grid grid-cols-2 gap-3 p-3 bg-slate-950/50 rounded-xl border border-slate-800/50">
                          <div>
                              <div className="text-xs font-medium text-slate-500 mb-1">RVOL (상대거래량)</div>
-                             <div className="text-lg font-bold text-slate-200">{item.metrics.rvol.toFixed(1)}x</div>
+                             <div className="text-lg font-bold text-slate-200">
+                               {item.metrics.isIntraday ? '~' : ''}{item.metrics.rvol.toFixed(1)}x
+                             </div>
                          </div>
                          <div>
-                             <div className="text-xs font-medium text-slate-500 mb-1">오늘 거래량</div>
-                             <div className="text-lg font-bold text-slate-200">{(item.metrics.currentVolume / 1000000).toFixed(1)}M</div>
+                             <div className="text-xs font-medium text-slate-500 mb-1">{item.metrics.isIntraday ? '추정 거래량' : '오늘 거래량'}</div>
+                             <div className="text-lg font-bold text-slate-200">{((item.metrics.isIntraday ? item.metrics.estimatedVolume : item.metrics.currentVolume) / 1000000).toFixed(1)}M</div>
                          </div>
                          <div className="col-span-2 relative h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
                              <div 
-                               className={`absolute top-0 left-0 h-full rounded-full bg-${gl.color}-500 transition-all`}
+                               className={`absolute top-0 left-0 h-full rounded-full ${gl.styles.fill} transition-all`}
                                style={{ width: `${Math.min(item.metrics.rvol / 5 * 100, 100)}%` }} 
                              />
                          </div>
@@ -434,7 +450,7 @@ export default function MomentumScannerPage() {
                         <tr key={item.ticker} className="hover:bg-slate-800/50 transition-colors">
                           <td className="px-6 py-4 font-bold text-white">{item.ticker}</td>
                           <td className="px-6 py-4">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-${gl.color}-500/10 text-${gl.color}-400 border border-${gl.color}-500/20`}>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${gl.styles.bg} ${gl.styles.text} border ${gl.styles.border}`}>
                               {gl.emoji} {gl.label}
                             </span>
                           </td>
@@ -445,10 +461,10 @@ export default function MomentumScannerPage() {
                             {item.metrics.roc > 0 ? '+' : ''}{item.metrics.roc}%
                           </td>
                           <td className="px-6 py-4 text-right font-bold text-slate-100">
-                            {item.metrics.rvol.toFixed(2)}x
+                            {item.metrics.isIntraday ? '~' : ''}{item.metrics.rvol.toFixed(2)}x
                           </td>
                           <td className="px-6 py-4 text-right text-slate-400">
-                            {(item.metrics.currentVolume / 1000000).toFixed(1)}M
+                            {((item.metrics.isIntraday ? item.metrics.estimatedVolume : item.metrics.currentVolume) / 1000000).toFixed(1)}M
                           </td>
                         </tr>
                       );

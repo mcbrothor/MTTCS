@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { formatScannerTelegramMessage } from '../lib/scanner-telegram.ts';
-import { chunkTelegramMessage } from '../lib/telegram.ts';
+import { chunkTelegramMessage, normalizeTelegramPhotos } from '../lib/telegram.ts';
 
 {
   const message = formatScannerTelegramMessage({
@@ -42,6 +42,20 @@ import { chunkTelegramMessage } from '../lib/telegram.ts';
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every((chunk) => chunk.length <= 1000));
   assert.equal(chunks.join('\n'), longMessage);
+}
+
+{
+  const photos = normalizeTelegramPhotos([
+    ' https://example.com/chart-a.png ',
+    { imageUrl: 'https://example.com/chart-b.png', caption: 'ETF 구성 Top 15' },
+    { photoUrl: '   ' },
+    { src: 123 },
+    null,
+  ]);
+  assert.deepEqual(photos, [
+    { url: 'https://example.com/chart-a.png', caption: null },
+    { url: 'https://example.com/chart-b.png', caption: 'ETF 구성 Top 15' },
+  ]);
 }
 
 console.log('scanner telegram tests passed');

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendTelegramMessage } from '@/lib/telegram';
+import { normalizeTelegramPhotos, sendTelegramMessage, sendTelegramPhotos } from '@/lib/telegram';
 import { parseContestSource } from '@/lib/contest-sources';
 import { formatScannerTelegramMessage, type ScannerTelegramCandidate } from '@/lib/scanner-telegram';
 
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
     const source = parseContestSource(body.source) || 'minervini';
     const universe = String(body.universe || 'UNKNOWN');
     const candidates = cleanCandidates(body.candidates).slice(0, 30);
+    const photos = normalizeTelegramPhotos(body.photos ?? body.imageUrls ?? body.photoUrls).slice(0, 10);
     const message = formatScannerTelegramMessage({ source, universe, candidates });
     const result = await sendTelegramMessage(message);
 
@@ -46,10 +47,14 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    const photoResult = photos.length > 0 ? await sendTelegramPhotos(photos) : { photos: 0, sent: 0 };
+
     return NextResponse.json({
       success: true,
       message: `Sent screening summary to ${result.sent} Telegram chat(s).`,
       sent: result.sent,
+      photos: photoResult.photos,
+      photo_sent: photoResult.sent,
       candidate_count: candidates.length,
     });
   } catch (error) {
