@@ -33,7 +33,15 @@ function labelFor(insight: AiModelInsight) {
   if (insight.label === 'gemini-fallback') return 'Gemini Fallback';
   if (insight.provider === 'groq') return 'Groq';
   if (insight.provider === 'cerebras') return 'Cerebras';
+  if (insight.provider === 'codex-cli') return 'Codex CLI';
+  if (insight.provider === 'local-llm') return 'Local LLM';
   return 'Rules';
+}
+
+function routerSummary(aiProviderUsed: string) {
+  if (aiProviderUsed === 'codex-cli') return 'Codex CLI가 대표 브리핑을 생성했습니다.';
+  if (aiProviderUsed === 'rules') return 'LLM 응답 지연으로 규칙 기반 브리핑을 표시합니다.';
+  return 'Codex CLI 우선 확인 후 가능한 모델의 첫 성공 답변을 표시합니다.';
 }
 
 function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
@@ -57,28 +65,24 @@ function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
 function StructuredContent({ insight, fallbackText }: { insight: AiModelInsight; fallbackText: string }) {
   if (insight.headline) {
     return (
-      <div className="space-y-3">
-        <p className="text-base font-bold leading-snug text-white">{insight.headline}</p>
+      <div className="space-y-4">
+        <p className="text-lg md:text-xl font-extrabold leading-snug text-white tracking-tight">{insight.headline}</p>
         {insight.bullets && insight.bullets.length > 0 && (
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {insight.bullets.map((b, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
-                <span>{b}</span>
+              <li key={i} className="flex items-start gap-2.5 text-[13px] md:text-sm text-slate-200">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
+                <span className="leading-relaxed">{b}</span>
               </li>
             ))}
           </ul>
         )}
         {insight.detail && (
-          <details className="group">
-            <summary className="cursor-pointer select-none text-xs text-slate-500 hover:text-slate-300 transition-colors list-none flex items-center gap-1">
-              <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-              상세 분석
-            </summary>
-            <div className="mt-2 prose prose-invert prose-sm max-w-none leading-relaxed text-slate-400 border-l-2 border-slate-700 pl-3">
-              {insight.detail}
+          <div className="mt-3 rounded-lg bg-slate-900/50 p-3.5 border border-slate-700/50">
+            <div className="prose prose-invert prose-sm max-w-none leading-relaxed text-slate-300">
+              <ReactMarkdown>{insight.detail}</ReactMarkdown>
             </div>
-          </details>
+          </div>
         )}
       </div>
     );
@@ -159,7 +163,7 @@ export default function InsightLog() {
                   {isAiGenerated ? 'LLM 시장 브리핑 (AI Router)' : '시장 규칙 브리핑'}
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500">
-                  {showingRouterPick ? 'Router 우선순위 모델의 대표 답변입니다.' : '선택한 모델의 수집 답변을 보고 있습니다.'}
+                  {showingRouterPick ? routerSummary(providerLabel) : '선택한 모델의 수집 답변을 보고 있습니다.'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -283,7 +287,7 @@ export default function InsightLog() {
 
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-800/50 pt-4">
               <span className="text-[10px] italic text-slate-500">
-                Gemini → Groq → Cerebras 순서로 답변을 수집하고, router 우선순위의 첫 성공 답변을 대표로 표시합니다.
+                Codex CLI → Local LLM → Gemini → Groq → Cerebras 순서로 수집하고, 첫 성공 답변을 대표로 표시합니다.
               </span>
               <span className="text-[10px] uppercase tracking-tight text-slate-500">Navigation Protocol 4.1</span>
             </div>

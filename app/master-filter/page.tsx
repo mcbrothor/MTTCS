@@ -57,14 +57,14 @@ export default function MasterFilterPage() {
 
       <DecisionBox />
 
-      <LLMBriefing />
+      <InsightLog />
 
       <MetricsGrid />
 
-      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <LLMBriefing />
         <MacroCompactWidget />
-        <InsightLog />
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)]">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)] lg:col-span-2">
           <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
           <div className="space-y-2 text-xs leading-5 text-[var(--text-secondary)]">
             <p><span className="font-semibold text-emerald-300">GREEN:</span> 신규 진입 가능. 매크로 레짐에 따라 50-100% 범위에서 비중을 조절합니다.</p>

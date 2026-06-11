@@ -22,7 +22,9 @@ interface CachedInsight {
 }
 const insightCache = new Map<string, CachedInsight>();
 const INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000;
-const INSIGHT_RESPONSE_TIMEOUT_MS = 3500;
+const INSIGHT_RESPONSE_TIMEOUT_MS = process.env.VERCEL === '1'
+  ? 3500
+  : Number(process.env.MARKET_INSIGHT_TIMEOUT_MS || 30000);
 
 const US_MACRO_SYMBOLS = [
   '^VIX', 'UUP', 'DX-Y.NYB', 'KRW=X', '^TNX', '^IRX', 'SHY', 'TLT', 'HYG', 'IEF',

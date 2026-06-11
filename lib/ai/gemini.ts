@@ -387,6 +387,7 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
 async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!LOCAL_LLM_ENABLED) {
     const message = 'Local LLM is not enabled.';
+    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message });
     return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message, priority });
   }
 
@@ -402,28 +403,53 @@ async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], prior
   }
 }
 
+async function collectCodexCli(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+  const isVercel = process.env.VERCEL === '1';
+  if (isVercel) {
+    const message = 'Codex CLI is not available on Vercel environment.';
+    chain.push({ provider: 'codex-cli', model: 'codex', status: 'skipped', message });
+    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'skipped', message, priority });
+  }
+
+  try {
+    const raw = await withTimeout(callCodexCli(prompt), `codex-cli/codex`, 25000);
+    const { structured, text } = parseStructuredInsight(raw);
+    chain.push({ provider: 'codex-cli', model: 'codex', status: 'success' });
+    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'success', text, ...structured, priority });
+  } catch (error: unknown) {
+    const message = compactMessage(error);
+    chain.push({ provider: 'codex-cli', model: 'codex', status: 'failed', message });
+    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'failed', message, priority });
+  }
+}
+
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
   const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
-    collectLocalLlm(prompt, chain, 0), // 로컬 LLM을 우선순위 0번으로 최우선 탐색!
-    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 1),
-    collectGroq(prompt, chain, 3),
-    collectCerebras(prompt, chain, 4),
+    collectCodexCli(prompt, chain, 0), // codex-cli를 최우선 순위로 탐색!
+    collectLocalLlm(prompt, chain, 1),
+    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 2),
+    collectGroq(prompt, chain, 4),
+    collectCerebras(prompt, chain, 5),
   ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 2));
+    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 3));
   } else {
     const model = GEMINI_FALLBACK_MODEL || '(not configured)';
     const message = 'GEMINI_FALLBACK_MODEL is not configured.';
     chain.push({ provider: 'gemini-fallback', model, status: 'skipped', message });
-    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 2 })));
+    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 3 })));
   }
 
   const modelInsights = (await Promise.all(tasks)).sort((a, b) => a.priority - b.priority);
-  const priorityByProvider = new Map(modelInsights.map((item) => [item.label, item.priority]));
-  chain.sort((a, b) => (priorityByProvider.get(a.provider) || 99) - (priorityByProvider.get(b.provider) || 99));
+  const priorityByChainKey = new Map<string, number>();
+  for (const item of modelInsights) {
+    priorityByChainKey.set(item.label, item.priority);
+    priorityByChainKey.set(item.provider, Math.min(item.priority, priorityByChainKey.get(item.provider) ?? 99));
+  }
+  chain.sort((a, b) => (priorityByChainKey.get(a.provider) ?? 99) - (priorityByChainKey.get(b.provider) ?? 99));
 
   const selected = modelInsights
     .filter((item) => item.status === 'success' && item.text)
@@ -523,4 +549,82 @@ export async function callLocalLlmModel(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Codex CLI를 로컬 프로세스로 직접 호출합니다.
+ */
+export async function callCodexCli(prompt: string, timeoutMs = 25000): Promise<string> {
+  const { spawn } = await import('node:child_process');
+  const { mkdir, readFile, rm } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const os = await import('node:os');
+
+  const cwd = path.join(os.tmpdir(), 'mtn-codex-market');
+  await mkdir(cwd, { recursive: true }).catch(() => {});
+  const outputPath = path.join(cwd, `market-${Date.now()}-${process.pid}.json`);
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      'exec',
+      '--ephemeral',
+      '--sandbox', 'read-only',
+      '--ask-for-approval', 'never',
+      '--skip-git-repo-check',
+      '--cd', cwd,
+      '--output-last-message', outputPath,
+    ];
+
+    if (process.env.CODEX_CLI_MODEL) {
+      args.push('--model', process.env.CODEX_CLI_MODEL);
+    }
+    args.push('-');
+
+    const child = spawn('codex', args, {
+      env: { ...process.env, TERM: 'dumb' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error(`Codex CLI timed out after ${timeoutMs}ms.`));
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on('close', async (code) => {
+      clearTimeout(timer);
+      try {
+        let finalMessage = stdout.trim();
+        try {
+          const fileMessage = await readFile(outputPath, 'utf8');
+          if (fileMessage.trim()) finalMessage = fileMessage.trim();
+        } catch {
+          // ignore
+        }
+        await rm(outputPath, { force: true }).catch(() => {});
+
+        if (code === 0 || finalMessage.includes('{')) {
+          resolve(finalMessage);
+        } else {
+          reject(new Error(`Codex CLI exited with code ${code}: ${(stderr || stdout).slice(0, 500)}`));
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+
+    // Write prompt
+    child.stdin.write(prompt);
+    child.stdin.end();
+  });
 }
