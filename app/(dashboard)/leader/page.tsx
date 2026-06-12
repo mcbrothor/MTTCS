@@ -227,6 +227,7 @@ export default function LeaderScannerPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [scanStage, setScanStage] = useState('대기 중');
+  const [scanFatalError, setScanFatalError] = useState<string | null>(null);
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('leaderScore');
@@ -270,6 +271,7 @@ export default function LeaderScannerPage() {
     setIsScanning(true);
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
+    setScanFatalError(null);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -448,7 +450,7 @@ export default function LeaderScannerPage() {
       }
     } catch (err) {
       if (!abort.signal.aborted) {
-        alert(`스캔 실패: ${getErrorMessage(err)}`);
+        setScanFatalError(getErrorMessage(err));
       }
     } finally {
       setIsScanning(false);
@@ -540,6 +542,13 @@ export default function LeaderScannerPage() {
       {/* 탭 네비게이션 */}
       <ScannerTabNav />
       <MarketBanner />
+
+      {scanFatalError && (
+        <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <p className="text-sm text-red-100">스캔 실패: {scanFatalError}</p>
+          <button type="button" onClick={() => setScanFatalError(null)} className="ml-3 rounded-md px-3 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20">닫기</button>
+        </div>
+      )}
 
       {/* 유니버스 선택 */}
       <div className="flex flex-wrap items-center gap-3">

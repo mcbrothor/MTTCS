@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Globe, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
+import { friendlyMacroComponentLabel, friendlyMacroRegimeLabel } from '@/lib/market-display';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 
 interface HistoryPoint {
@@ -26,8 +27,8 @@ const REGIME_CONFIG = {
     border: 'border-emerald-500/20',
     accent: 'bg-emerald-500/30',
     icon: <TrendingUp className="h-5 w-5 text-emerald-400" />,
-    label: 'RISK-ON',
-    description: '추세 추종과 공격적 종목 탐색에 우호적인 매크로 환경입니다. 마스터 필터 상태를 함께 확인하세요.',
+    label: friendlyMacroRegimeLabel('RISK_ON'),
+    description: '주식 같은 위험자산에 우호적인 큰 흐름입니다. 그래도 진입 가능 신호를 함께 확인하세요.',
   },
   NEUTRAL: {
     color: 'text-amber-400',
@@ -35,8 +36,8 @@ const REGIME_CONFIG = {
     border: 'border-amber-500/20',
     accent: 'bg-amber-500/30',
     icon: <Minus className="h-5 w-5 text-amber-400" />,
-    label: 'NEUTRAL',
-    description: '매크로 신호가 혼재합니다. 신규 진입 비중을 줄이고 리스크 관리를 우선하세요.',
+    label: friendlyMacroRegimeLabel('NEUTRAL'),
+    description: '큰 흐름 신호가 섞여 있습니다. 새 매수 비중을 줄이고 리스크 관리를 우선하세요.',
   },
   RISK_OFF: {
     color: 'text-rose-400',
@@ -44,8 +45,8 @@ const REGIME_CONFIG = {
     border: 'border-rose-500/20',
     accent: 'bg-rose-500/30',
     icon: <TrendingDown className="h-5 w-5 text-rose-400" />,
-    label: 'RISK-OFF',
-    description: '글로벌 리스크 회피 국면입니다. 현금 비중 확대와 기존 포지션 축소를 우선하세요.',
+    label: friendlyMacroRegimeLabel('RISK_OFF'),
+    description: '세계 자금 흐름이 조심스러운 구간입니다. 현금 비중 확대와 기존 포지션 축소를 우선하세요.',
   },
 } as const;
 
@@ -59,7 +60,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
   return (
     <div className="w-full mt-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Macro Score 7일 추세</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">큰 흐름 점수 7일 변화</span>
         <span className={`flex items-center gap-1 text-xs font-bold ${isImproving ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
           {isImproving ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : null}
           {isImproving ? '+' : ''}{delta}pt ({first} → {currentScore})
@@ -87,15 +88,15 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
-              formatter={(value) => [`Macro: ${value ?? '-'}`, ''] as [string, string]}
+              formatter={(value) => [`큰 흐름: ${value ?? '-'}`, ''] as [string, string]}
               labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
         </ResponsiveContainer>
       </div>
       <div className="flex gap-4 text-[9px] text-slate-600 mt-0.5 justify-center">
-        <span className="text-emerald-600">── RISK-ON ≥70</span>
-        <span className="text-amber-600">── NEUTRAL ≥45</span>
+        <span className="text-emerald-600">좋음 70 이상</span>
+        <span className="text-amber-600">애매함 45 이상</span>
       </div>
     </div>
   );
@@ -103,7 +104,11 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
 
 function ComponentRow({ item }: { item: MacroScoreBreakdown }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const ratio = item.score / item.weight;
+  const label = item.label ?? (item as unknown as { component?: string }).component ?? '';
+  const weight = item.weight ?? (item as unknown as { maxScore?: number }).maxScore ?? 0;
+  const rawValue = item.rawValue ?? '세부 원천값 없음';
+  const threshold = item.threshold ?? '기준값 없음';
+  const ratio = weight > 0 ? item.score / weight : 0;
   const barColor = ratio > 0.7 ? 'bg-emerald-500' : ratio > 0.4 ? 'bg-amber-500' : 'bg-rose-500';
   const textColor = ratio > 0.7 ? 'text-emerald-400' : ratio > 0.4 ? 'text-amber-400' : 'text-rose-400';
 
@@ -111,7 +116,7 @@ function ComponentRow({ item }: { item: MacroScoreBreakdown }) {
     <div className="mb-3 last:mb-0">
       <div className="flex items-center justify-between text-[10px] text-[var(--text-secondary)] mb-1">
         <div className="flex items-center gap-1 min-w-0">
-          <span className="truncate">{item.label}</span>
+          <span className="truncate">{friendlyMacroComponentLabel(label)}</span>
           <div className="relative shrink-0">
             <button
               type="button"
@@ -120,24 +125,25 @@ function ComponentRow({ item }: { item: MacroScoreBreakdown }) {
               onFocus={() => setShowTooltip(true)}
               onBlur={() => setShowTooltip(false)}
               className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-sky-900/60 text-sky-300 hover:bg-sky-800 transition-colors"
-              aria-label={`${item.label} 산출 근거`}
+              aria-label={`${friendlyMacroComponentLabel(label)} 산출 근거`}
             >
               <HelpCircle className="h-2.5 w-2.5" />
             </button>
             {showTooltip && (
               <div className="absolute bottom-full left-0 z-50 mb-2 w-64 rounded-lg border border-sky-700/50 bg-slate-950 p-3 text-xs text-slate-300 shadow-2xl">
                 <div className="absolute -bottom-1.5 left-2 h-3 w-3 rotate-45 border-b border-r border-sky-700/50 bg-slate-950" />
-                <p className="font-bold text-slate-200 mb-1">{item.label}</p>
-                <p className="text-slate-400 mb-1.5">{item.rawValue}</p>
+                <p className="font-bold text-slate-200 mb-1">{friendlyMacroComponentLabel(label)}</p>
+                {label && <p className="text-[10px] text-slate-500 mb-1">기존 용어: {label}</p>}
+                <p className="text-slate-400 mb-1.5">{rawValue}</p>
                 <p className="rounded border border-sky-900 bg-sky-950/50 p-1.5 font-mono text-[10px] text-yellow-300 leading-relaxed">
-                  {item.threshold}
+                  {threshold}
                 </p>
               </div>
             )}
           </div>
         </div>
         <span className={`font-mono shrink-0 ml-2 ${textColor}`}>
-          {item.score}/{item.weight}
+          {item.score}/{weight}
         </span>
       </div>
       <div className="h-[3px] bg-[var(--surface-soft)] rounded-full overflow-hidden">
@@ -157,7 +163,7 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
       <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${config.accent}`} />
 
       <div className="relative z-10 flex flex-col items-center text-center gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">MACRO REGIME</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">큰 흐름 점수</p>
 
         {/* Score + Regime Label */}
         <div className="flex flex-col items-center gap-1">
@@ -175,7 +181,7 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
 
         {/* Role Badge */}
         <span className="rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[10px] font-bold text-slate-300">
-          공격성 조절 · 매일 장마감 갱신
+          권장 비중 조절 · 매일 장마감 갱신
         </span>
 
         {/* Gauge with threshold markers */}
@@ -186,7 +192,7 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
             aria-valuenow={score}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`매크로 레짐 점수 ${score}/100, 상태 ${config.label}`}
+            aria-label={`큰 흐름 점수 ${score}/100, 상태 ${config.label}`}
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 transition-all duration-1000"
@@ -197,9 +203,9 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
             <div className="absolute inset-y-[-3px] w-[1.5px] bg-white/30 rounded-full" style={{ left: '70%' }} />
           </div>
           <div className="flex justify-between mt-1.5 text-[9px] text-[var(--text-tertiary)]">
-            <span>Risk-OFF</span>
-            <span>Neutral ≥45</span>
-            <span>Risk-ON ≥70</span>
+            <span>조심</span>
+            <span>애매함 45 이상</span>
+            <span>좋음 70 이상</span>
           </div>
         </div>
 
@@ -220,14 +226,15 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
           onClick={() => setShowBreakdown((v) => !v)}
           className="flex w-full items-center justify-between rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-left text-[11px] font-semibold text-slate-400 hover:bg-slate-900/60 transition-colors"
         >
-          <span>컴포넌트 근거 보기</span>
+          <span>세부 근거 보기</span>
           {showBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
         {showBreakdown && (
           <div className="mt-3 space-y-0">
-            {breakdown.map((item) => (
-              <ComponentRow key={item.label} item={item} />
-            ))}
+            {breakdown.map((item) => {
+              const label = item.label ?? (item as unknown as { component?: string }).component ?? 'component';
+              return <ComponentRow key={label} item={item} />;
+            })}
           </div>
         )}
       </div>

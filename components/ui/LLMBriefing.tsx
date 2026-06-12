@@ -2,6 +2,7 @@
 
 import { Bot, Database } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
+import { friendlyMacroRegimeLabel } from '@/lib/market-display';
 import type { MacroRegime } from '@/types';
 
 interface LLMBriefingProps {
@@ -12,10 +13,10 @@ interface LLMBriefingProps {
 }
 
 const REGIME_LABEL: Record<MacroRegime | 'DATA_CHECK', string> = {
-  RISK_ON: 'RISK-ON',
-  NEUTRAL: 'NEUTRAL',
-  RISK_OFF: 'RISK-OFF',
-  DATA_CHECK: 'DATA CHECK',
+  RISK_ON: friendlyMacroRegimeLabel('RISK_ON'),
+  NEUTRAL: friendlyMacroRegimeLabel('NEUTRAL'),
+  RISK_OFF: friendlyMacroRegimeLabel('RISK_OFF'),
+  DATA_CHECK: friendlyMacroRegimeLabel('DATA_CHECK'),
 };
 
 const REGIME_COLOR: Record<MacroRegime | 'DATA_CHECK', string> = {
@@ -40,9 +41,9 @@ function buildDefaultNarrative({
     return {
       label: 'DATA_CHECK' as const,
       us:
-        '현재 마스터 필터 또는 매크로 데이터가 완전하지 않습니다. 이 상태는 RISK-OFF 판정이 아니라 채점 보류 상태이며, 신규 진입 판단에는 사용하지 않아야 합니다.',
+        '현재 진입 가능 신호 또는 큰 흐름 데이터가 완전하지 않습니다. 시장이 나쁘다는 뜻이 아니라 판단을 잠시 보류해야 하는 상태입니다.',
       kr:
-        '한국 시장도 동일하게 데이터 신뢰도 확인이 우선입니다. 지수·환율·수급 데이터가 정상화된 뒤 추세, 시장폭, 섹터 리더십을 재평가해야 합니다.',
+        '한국 시장도 데이터 신뢰도 확인이 우선입니다. 지수·환율·수급 데이터가 정상화된 뒤 추세, 함께 오르는 종목 비율, 강한 업종을 다시 확인합니다.',
     };
   }
 
@@ -50,7 +51,7 @@ function buildDefaultNarrative({
     return {
       label: macroRegime ?? 'RISK_OFF',
       us:
-        '마스터 필터가 RED입니다. 매크로 신호가 일부 우호적이어도 신규 진입보다 현금 방어, 손절선 준수, 기존 포지션 축소 여부가 우선입니다.',
+        '진입 가능 신호가 위험 구간입니다. 큰 흐름이 일부 우호적이어도 새 매수보다 현금 방어, 손절선 준수, 기존 포지션 축소 여부가 우선입니다.',
       kr:
         '한국 시장은 지수 추세와 환율·수급 민감도가 함께 악화될 수 있으므로 반도체 대형주 강세만으로 시장 전체 진입 허용을 판단하면 안 됩니다.',
     };
@@ -60,16 +61,16 @@ function buildDefaultNarrative({
     return {
       label: macroRegime ?? 'NEUTRAL',
       us:
-        `마스터 필터가 YELLOW${typeof score === 'number' ? `, P3 ${score}/100` : ''}입니다. 추세가 완전히 복구되기 전까지 신규 진입은 보류하고 기존 포지션 관리에 집중합니다.`,
+        `진입 가능 신호가 아직 애매합니다${typeof score === 'number' ? ` · 시장 건강 점수 ${score}/100` : ''}. 추세가 완전히 회복되기 전까지 새 매수는 보류하고 기존 포지션 관리에 집중합니다.`,
       kr:
-        '한국 시장은 개별 주도주가 살아 있더라도 시장폭과 외국인 수급 확인이 필요합니다. 종목 발굴은 가능하지만 매수 실행은 GREEN 회복 이후로 미룹니다.',
+        '한국 시장은 개별 주도주가 살아 있더라도 함께 오르는 종목 비율과 외국인 수급 확인이 필요합니다. 종목 발굴은 가능하지만 매수 실행은 진입 가능 신호 회복 이후로 미룹니다.',
     };
   }
 
   return {
     label: macroRegime ?? 'NEUTRAL',
     us:
-      '마스터 필터가 GREEN이면 종목 발굴을 진행할 수 있습니다. 다만 매크로 레짐이 RISK-OFF 또는 NEUTRAL이면 포지션 사이즈와 피라미딩 속도를 낮춰야 합니다.',
+      '진입 가능 신호가 좋으면 종목 발굴을 진행할 수 있습니다. 다만 큰 흐름이 조심 구간이거나 애매하면 투자 비중과 추가 매수 속도를 낮춰야 합니다.',
     kr:
       '한국 시장은 지수 추세, 원/달러, 외국인 수급, 반도체·2차전지 등 리더십의 폭을 함께 확인해 공격성을 조절합니다.',
   };
@@ -105,7 +106,7 @@ export default function LLMBriefing({
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-bold tracking-widest text-sky-300">
-              IB MARKET DESK BRIEFING
+              오늘 시장 브리핑
             </span>
             {displayAsOf && (
               <span className="font-mono text-[10px] text-[var(--text-tertiary)]">

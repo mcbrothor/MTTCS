@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { analyzeSepa } from '@/lib/finance/core/sepa';
 import { calculateATR, calculateEntryPrice } from '@/lib/finance/core/moving-average';
@@ -96,9 +97,10 @@ function apiError(message: string, code: string, status = 500, details?: unknown
   );
 }
 
-function chooseLongerData(kisData: OHLCData[], yahooData: OHLCData[]) {
-  if (yahooData.length > kisData.length) return yahooData;
-  return kisData;
+function chooseBestPriceCandidate(candidates: Array<{ data: OHLCData[]; providerUsed: string }>) {
+  return candidates
+    .filter((candidate) => candidate.data.length > 0)
+    .sort((a, b) => b.data.length - a.data.length)[0] || null;
 }
 
 function getYahooFormattedTicker(ticker: string, exchange: string) {
@@ -109,6 +111,10 @@ function getYahooFormattedTicker(ticker: string, exchange: string) {
 
 function marketForExchange(exchange: string) {
   return exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KR' as const : 'US' as const;
+}
+
+function isKoreanExchange(exchange: string) {
+  return exchange === 'KOSPI' || exchange === 'KOSDAQ';
 }
 
 function primaryMacroIndexForExchange(exchange: string) {
@@ -238,26 +244,42 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
 }> {
   const warnings: string[] = [];
   const providerAttempts: ProviderAttempt[] = [];
-  let kisData: OHLCData[] = [];
+  const candidates: Array<{ data: OHLCData[]; providerUsed: string }> = [];
+  const providerOrder = isKoreanExchange(exchange) ? ['KIS', 'Toss Securities'] : ['Toss Securities', 'KIS'];
 
-  try {
-    kisData = await withRetry('KIS', 'daily price', providerAttempts, () => getMarketDailyPrice(ticker, exchange, TARGET_KIS_BARS), 2);
-    const last = providerAttempts.at(-1);
-    if (last && last.provider === 'KIS') last.bars = kisData.length;
+  for (const provider of providerOrder) {
+    if (provider === 'Toss Securities' && !isTossInvestConfigured()) continue;
 
-    if (kisData.length >= REQUIRED_SEPA_BARS) {
-      return {
-        data: kisData,
-        providerUsed: `KIS (${kisData.length} daily bars)`,
-        warnings,
+    try {
+      const data = await withRetry(
+        provider,
+        'daily price',
         providerAttempts,
-      };
-    }
+        () => provider === 'KIS'
+          ? getMarketDailyPrice(ticker, exchange, TARGET_KIS_BARS)
+          : getTossDailyPrice(ticker, TARGET_KIS_BARS),
+        2,
+      );
+      const last = providerAttempts.at(-1);
+      if (last && last.provider === provider) last.bars = data.length;
 
-    warnings.push(`KIS returned only ${kisData.length} daily bars; Yahoo fallback will be tried for long moving-average and 52-week checks.`);
-    providerAttempts.push(attempt('KIS', 'daily price coverage', 'warning', `Only ${kisData.length} bars were available from KIS.`, { bars: kisData.length }));
-  } catch (error: unknown) {
-    warnings.push(`KIS fetch failed: ${getErrorMessage(error)}. Yahoo fallback will be tried.`);
+      if (data.length >= REQUIRED_SEPA_BARS) {
+        return {
+          data,
+          providerUsed: `${provider} (${data.length} daily bars)`,
+          warnings,
+          providerAttempts,
+        };
+      }
+
+      if (data.length > 0) {
+        candidates.push({ data, providerUsed: `${provider} partial (${data.length} daily bars)` });
+      }
+      warnings.push(`${provider} returned only ${data.length} daily bars; next fallback will be tried for long moving-average and 52-week checks.`);
+      providerAttempts.push(attempt(provider, 'daily price coverage', 'warning', `Only ${data.length} bars were available from ${provider}.`, { bars: data.length }));
+    } catch (error: unknown) {
+      warnings.push(`${provider} fetch failed: ${getErrorMessage(error)}. Next fallback will be tried.`);
+    }
   }
 
   try {
@@ -266,11 +288,12 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
     const last = providerAttempts.at(-1);
     if (last && last.provider === 'Yahoo Finance') last.bars = yahooData.length;
 
-    const data = chooseLongerData(kisData, yahooData);
-    const providerUsed =
-      data === yahooData
-        ? `Yahoo Finance (${yahooData.length} daily bars)`
-        : `KIS partial (${kisData.length} daily bars)`;
+    const best = chooseBestPriceCandidate([
+      ...candidates,
+      { data: yahooData, providerUsed: `Yahoo Finance (${yahooData.length} daily bars)` },
+    ]);
+    const data = best?.data || [];
+    const providerUsed = best?.providerUsed || `Yahoo Finance (${yahooData.length} daily bars)`;
 
     if (data.length < REQUIRED_SEPA_BARS) {
       warnings.push(`Only ${data.length} daily bars were available after fallback; long-window SEPA checks can be less reliable.`);
@@ -278,11 +301,12 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
 
     return { data, providerUsed, warnings, providerAttempts };
   } catch (error: unknown) {
-    if (kisData.length > 0) {
-      warnings.push(`Yahoo fallback failed: ${getErrorMessage(error)}. Analysis will use partial KIS data.`);
+    const best = chooseBestPriceCandidate(candidates);
+    if (best) {
+      warnings.push(`Yahoo fallback failed: ${getErrorMessage(error)}. Analysis will use ${best.providerUsed}.`);
       return {
-        data: kisData,
-        providerUsed: `KIS partial (${kisData.length} daily bars)`,
+        data: best.data,
+        providerUsed: best.providerUsed,
         warnings,
         providerAttempts,
       };
@@ -341,7 +365,7 @@ export async function GET(request: Request) {
           source: mergedCached.providerUsed,
           provider: mergedCached.providerUsed,
           delay: 'EOD',
-          fallbackUsed: mergedCached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
+          fallbackUsed: mergedCached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS') || warning.includes('Toss')),
           warnings: mergedCached.warnings,
           providerAttempts: mergedCached.providerAttempts || [],
         },
@@ -457,7 +481,7 @@ export async function GET(request: Request) {
         source: providerUsed,
         provider: providerUsed,
         delay: 'EOD',
-        fallbackUsed: warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS')),
+        fallbackUsed: warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS') || warning.includes('Toss')),
         warnings,
         providerAttempts,
       },

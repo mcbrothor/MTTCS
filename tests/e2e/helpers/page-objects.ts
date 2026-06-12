@@ -28,8 +28,8 @@ export class DashboardPage {
     this.marketToggleKR = page.locator('button:has-text("한국")');
     this.nextActionLabel = page.locator('h2').filter({ hasText: /.+/ }).first();
     this.nextActionCta = page.locator('a:has-text("이동")');
-    this.marketStateCard = page.locator('div').filter({ hasText: /^시장 상태$/ }).locator('..').first();
-    this.macroCard = page.locator('div').filter({ hasText: /^매크로$/ }).locator('..').first();
+    this.marketStateCard = page.locator('div').filter({ hasText: /^진입 가능 신호$/ }).locator('..').first();
+    this.macroCard = page.locator('div').filter({ hasText: /^큰 흐름$/ }).locator('..').first();
     this.riskCard = page.locator('div').filter({ hasText: /^오픈 리스크$/ }).locator('..').first();
     this.watchlistPanel = page.locator('text=관심 후보').locator('..');
     this.recentTradesPanel = page.locator('text=최근 매매 흐름').locator('..');

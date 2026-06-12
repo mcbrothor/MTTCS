@@ -16,13 +16,13 @@ export default function MasterFilterPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-            STEP 01 · 시장 분석 / 마스터 필터
+            STEP 01 · 시장 분석 / 오늘 시장 신호판
           </p>
           <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
-            마스터 필터
+            오늘 시장 신호판
           </h1>
           <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
-            FTD, 분산일, 내부 강도, 200일선 참여율 등 여러 지표를 조합하여 시장 기류를 점수화합니다. GREEN 구간이 아니면 신규 진입을 자제하거나 비중을 줄이는 것이 원칙입니다.
+            지금 새로 사도 되는 시장인지, 산다면 어느 정도 비중이 적절한지 한 화면에서 확인합니다.
           </p>
         </div>
 
@@ -34,7 +34,7 @@ export default function MasterFilterPage() {
                 market === 'US' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              🇺🇸 미국
+              US 미국
             </button>
             <button
               onClick={() => setMarket('KR')}
@@ -42,12 +42,12 @@ export default function MasterFilterPage() {
                 market === 'KR' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              🇰🇷 한국
+              KR 한국
             </button>
           </div>
           
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Updated</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">업데이트</p>
             <p className="mt-1 font-mono text-xs font-semibold text-[var(--text-primary)]">
               {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '--'}
             </p>
@@ -57,22 +57,40 @@ export default function MasterFilterPage() {
 
       <DecisionBox />
 
-      <InsightLog />
-
-      <MetricsGrid />
-
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <LLMBriefing />
-        <MacroCompactWidget />
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)] lg:col-span-2">
-          <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
-          <div className="space-y-2 text-xs leading-5 text-[var(--text-secondary)]">
-            <p><span className="font-semibold text-emerald-300">GREEN:</span> 신규 진입 가능. 매크로 레짐에 따라 50-100% 범위에서 비중을 조절합니다.</p>
-            <p><span className="font-semibold text-amber-300">YELLOW:</span> 신규 진입 보류. 기존 포지션 손절선과 시장폭 회복 여부를 확인합니다.</p>
-            <p><span className="font-semibold text-rose-300">RED:</span> 신규 매수 금지. 현금 비중 확대와 기존 포지션 방어가 우선입니다.</p>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <section className="space-y-3">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">진입 가능 신호</p>
+            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">사도 되는 시장인가</h2>
           </div>
-        </div>
+          <MetricsGrid />
+        </section>
+
+        <aside className="space-y-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">큰 흐름 점검</p>
+            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">산다면 얼마나 조심할까</h2>
+          </div>
+          <MacroCompactWidget />
+          <LLMBriefing />
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)]">
+            <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
+            <div className="space-y-2 text-xs leading-5 text-[var(--text-secondary)]">
+              <p><span className="font-semibold text-emerald-300">진입 가능:</span> 후보 종목을 검토하되 큰 흐름에 따라 권장 비중을 조절합니다.</p>
+              <p><span className="font-semibold text-amber-300">신규 매수 보류:</span> 기존 포지션 손절선과 함께 오르는 종목 비율 회복 여부를 확인합니다.</p>
+              <p><span className="font-semibold text-rose-300">신규 매수 금지:</span> 현금 비중 확대와 기존 포지션 방어가 우선입니다.</p>
+            </div>
+          </div>
+        </aside>
       </div>
+
+      <section className="space-y-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">왜 이런 결론인가</p>
+          <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">브리핑과 데이터 신뢰도</h2>
+        </div>
+        <InsightLog />
+      </section>
     </div>
   );
 }

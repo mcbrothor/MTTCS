@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Activity, ArrowUpRight, BarChart3, CheckCircle2, Clipboard, ShieldAlert, Star } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useCommandCenterSummary } from '@/hooks/useCommandCenterSummary';
+import { friendlyMacroRegimeLabel, friendlyMarketStateLabel } from '@/lib/market-display';
 import type { MarketState, Trade } from '@/types';
 
 const STATE_TONE: Record<MarketState | 'UNKNOWN', string> = {
@@ -91,8 +92,8 @@ export default function CommandCenterPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <StatusCard icon={<Activity className="h-4 w-4" />} label="시장 상태" value={summary.marketState ?? '--'} tone={STATE_TONE[marketState]} loading={summary.loading} />
-            <StatusCard icon={<BarChart3 className="h-4 w-4" />} label="매크로" value={summary.macroRegime ?? '--'} loading={summary.loading} />
+            <StatusCard icon={<Activity className="h-4 w-4" />} label="진입 가능 신호" value={summary.marketState ? friendlyMarketStateLabel(summary.marketState) : '--'} tone={STATE_TONE[marketState]} loading={summary.loading} />
+            <StatusCard icon={<BarChart3 className="h-4 w-4" />} label="큰 흐름" value={summary.macroRegime ? friendlyMacroRegimeLabel(summary.macroRegime) : '--'} loading={summary.loading} />
             <StatusCard icon={<ShieldAlert className="h-4 w-4" />} label="오픈 리스크" value={money(summary.activeRisk, market)} loading={summary.loading} />
           </div>
         </div>
@@ -154,10 +155,11 @@ export default function CommandCenterPage() {
         </Panel>
       </section>
 
-      <section className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:grid-cols-4">
+      <section className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:grid-cols-5">
         <FlowLink href="/master-filter" step="01" label="시장 확인" />
         <FlowLink href="/scanner" step="02" label="종목 발굴" />
-        <FlowLink href="/contest" step="03" label="컨테스트" />
+        <FlowLink href="/contest" step="03" label="콘테스트" />
+        <FlowLink href="/watchlist" step="04" label="관심종목" />
         <FlowLink href="/plan" step="05" label="매매 계획" />
       </section>
     </div>

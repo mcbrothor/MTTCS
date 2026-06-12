@@ -50,6 +50,7 @@ export default function WatchlistPage() {
   const [selectedItem, setSelectedItem] = useState<WatchlistItem | null>(null);
   const [detailAnalysis, setDetailAnalysis] = useState<MarketAnalysisResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ id: string; ticker: string } | null>(null);
 
   const fetchItems = useCallback(async () => {
     try {
@@ -106,14 +107,21 @@ export default function WatchlistPage() {
     };
   }, [selectedItem]);
 
-  const handleDelete = async (id: string, ticker: string) => {
-    if (!confirm(`${ticker}를 관심종목에서 삭제할까요?`)) return;
+  const handleDeleteRequest = (id: string, ticker: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setItemToDelete({ id, ticker });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete) return;
     try {
-      await axios.delete(`/api/watchlist?id=${id}`);
-      setItems((prev) => prev.filter((item) => item.id !== id));
-      setSelectedItem((current) => (current?.id === id ? null : current));
+      await axios.delete(`/api/watchlist?id=${itemToDelete.id}`);
+      setItems((prev) => prev.filter((item) => item.id !== itemToDelete.id));
+      setSelectedItem((current) => (current?.id === itemToDelete.id ? null : current));
     } catch (err) {
       setError(apiMessage(err, '삭제에 실패했습니다.'));
+    } finally {
+      setItemToDelete(null);
     }
   };
 
@@ -252,10 +260,7 @@ export default function WatchlistPage() {
                           </Link>
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleDelete(item.id, item.ticker);
-                            }}
+                            onClick={(event) => handleDeleteRequest(item.id, item.ticker, event)}
                             className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-500/20 hover:text-red-400"
                             title="삭제"
                           >
@@ -279,8 +284,33 @@ export default function WatchlistPage() {
           loading={detailLoading}
           onClose={() => setSelectedItem(null)}
           onSave={(patch) => handleUpdateItem(selectedItem.id, patch)}
-          onDelete={() => handleDelete(selectedItem.id, selectedItem.ticker)}
+          onDelete={() => handleDeleteRequest(selectedItem.id, selectedItem.ticker)}
         />
+      )}
+
+      {itemToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <h3 className="mb-2 text-lg font-bold text-white">종목 삭제</h3>
+            <p className="mb-6 text-sm text-slate-400">
+              정말로 <span className="font-mono font-bold text-amber-400">{itemToDelete.ticker}</span> 종목을 관심 목록에서 삭제하시겠습니까?
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setItemToDelete(null)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="rounded-lg bg-rose-500/10 px-4 py-2 text-sm font-bold text-rose-400 transition-colors hover:bg-rose-500/20"
+              >
+                삭제하기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

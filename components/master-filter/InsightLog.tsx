@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
 import { formatTimestamp } from '@/lib/format';
+import { friendlyMetricStatus } from '@/lib/market-display';
 import type { AiFallbackAttempt, AiModelInsight } from '@/types';
 
 function chainTone(status: AiFallbackAttempt['status']) {
@@ -160,7 +161,7 @@ export default function InsightLog() {
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-sm font-bold uppercase tracking-widest text-slate-200">
-                  {isAiGenerated ? 'LLM 시장 브리핑 (AI Router)' : '시장 규칙 브리핑'}
+                  {isAiGenerated ? '오늘 시장 브리핑' : '시장 규칙 브리핑'}
                 </h3>
                 <p className="mt-1 text-[11px] text-slate-500">
                   {showingRouterPick ? routerSummary(providerLabel) : '선택한 모델의 수집 답변을 보고 있습니다.'}
@@ -194,21 +195,21 @@ export default function InsightLog() {
                 </p>
                 <div className="flex flex-wrap gap-2 text-[10px]">
                   <span className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300">
-                    P3 {data.metrics.p3Score ?? 0}/100
+                    시장 건강 {data.metrics.p3Score ?? 0}/100
                   </span>
                   <span
                     className={`rounded border px-2 py-1 ${
                       data.metrics.trend.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
                     }`}
                   >
-                    추세 {data.metrics.trend.status}
+                    추세 {friendlyMetricStatus(data.metrics.trend.status)}
                   </span>
                   <span
                     className={`rounded border px-2 py-1 ${
                       data.metrics.breadth.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
                     }`}
                   >
-                    시장폭 {data.metrics.breadth.status}
+                    함께 오르는 종목 {friendlyMetricStatus(data.metrics.breadth.status)}
                   </span>
                 </div>
               </div>
@@ -218,7 +219,7 @@ export default function InsightLog() {
               <div className="mt-5 border-t border-slate-800/70 pt-4">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Collected Model Responses</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">수집된 브리핑 답변</p>
                     <p className="text-[11px] text-slate-500">성공한 다른 모델 답변은 클릭해서 비교할 수 있습니다.</p>
                   </div>
                   <span className="text-[10px] text-slate-500">
@@ -240,7 +241,7 @@ export default function InsightLog() {
                         <span className="flex items-center gap-1.5 text-[11px] font-bold">
                           {chainIcon(insight.status)}
                           {labelFor(insight)}
-                          {insight.selected && <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100">router pick</span>}
+                          {insight.selected && <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100">대표</span>}
                         </span>
                         <span className="mt-1 block truncate font-mono text-[10px] opacity-80">{insight.model}</span>
                         <span className="mt-1.5 block">

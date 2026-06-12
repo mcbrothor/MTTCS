@@ -131,6 +131,29 @@ export function buildCodexIbPrompt(mtnPrompt) {
   ].join('\n');
 }
 
+export const DAILY_TOP5_PROVIDER_ORDER = [
+  'codex-cli',
+  'local-llm',
+  'gemini',
+  'groq',
+  'cerebras',
+  'rule-based',
+];
+
+export function buildCodexDailyTop5Prompt(mtnPrompt) {
+  return [
+    'You are the Codex CLI provider for MTN Daily Screener market Top10.',
+    'Do not edit files. Use the supplied MTN candidates plus any available public market context to judge relative Top10 quality.',
+    'Use only the MTN daily screener prompt inside <mtn_daily_top5_prompt>.',
+    'Return only an object matching the provided JSON schema.',
+    'The JSON must include markets.US and markets.KR, each with exactly ten valid tickers from the supplied candidate list.',
+    '',
+    '<mtn_daily_top5_prompt>',
+    mtnPrompt,
+    '</mtn_daily_top5_prompt>',
+  ].join('\n');
+}
+
 export function getTelegramChatIds(env = process.env) {
   const configured = env.TELEGRAM_ALLOWED_CHAT_IDS || env.TELEGRAM_CHAT_ID || '';
   return configured
@@ -159,4 +182,12 @@ export function parseCodexCliOutput(raw) {
     reportMarkdown,
     rawResponse: JSON.stringify({ ...metadata, report_markdown: reportMarkdown }, null, 2),
   };
+}
+
+export function parseCodexCliJsonOutput(raw) {
+  const parsed = parseJsonCandidate(String(raw || '').trim());
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Codex CLI output was not valid JSON.');
+  }
+  return parsed;
 }

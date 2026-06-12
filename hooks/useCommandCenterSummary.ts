@@ -29,7 +29,7 @@ const initialSummary: CommandCenterSummary = {
   recentTrades: [],
   nextAction: {
     href: '/master-filter',
-    label: '시장 상태 확인',
+    label: '오늘 시장 신호판 확인',
     reason: '오늘 신규 진입이 가능한지 먼저 확인합니다.',
   },
   loading: true,
@@ -81,8 +81,8 @@ function chooseNextAction(params: {
   }
   return {
     href: '/master-filter',
-    label: '시장 상태 확인',
-    reason: '시장 조건과 매크로 신호를 먼저 확정합니다.',
+    label: '오늘 시장 신호판 확인',
+    reason: '진입 가능 신호와 큰 흐름을 먼저 확정합니다.',
   };
 }
 

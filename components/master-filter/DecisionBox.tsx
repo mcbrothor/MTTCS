@@ -3,6 +3,13 @@
 import { Activity, AlertTriangle, CheckCircle2, Database, ShieldAlert, Target } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
 import { computeDecision } from '@/lib/decision/rule';
+import {
+  friendlyDecisionHeadline,
+  friendlyDecisionReason,
+  friendlyMarketStateLabel,
+  friendlyMetricLabel,
+  friendlyMetricStatus,
+} from '@/lib/market-display';
 import type { MasterFilterMetricDetail } from '@/types';
 
 const DECISION_CONFIG = {
@@ -57,11 +64,11 @@ function strongestDrivers(items: MasterFilterMetricDetail[]) {
 }
 
 function formatScore(score: number, isUnscored: boolean) {
-  return isUnscored ? 'UNSCORED' : `${score}/100`;
+  return isUnscored ? '확인 필요' : `${score}/100`;
 }
 
 function exposureLabel(multiplier: number, isUnscored: boolean) {
-  if (isUnscored) return '0% · 데이터 확인 전';
+  if (isUnscored) return '확인 전 보류';
   return `${Math.round(multiplier * 100)}% 권장 상한`;
 }
 
@@ -85,7 +92,7 @@ export default function DecisionBox() {
       <section className="rounded-xl border border-sky-500/25 bg-slate-950/55 p-4 shadow-[var(--panel-shadow)] sm:p-5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1 text-[10px] font-bold text-sky-200">
-            DECISION COCKPIT
+            오늘의 결론
           </span>
           <span className="rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-[10px] font-semibold text-slate-300">
             동기화 중
@@ -97,17 +104,17 @@ export default function DecisionBox() {
               시장 데이터 확인 중
             </p>
             <p className="mt-1.5 text-sm leading-6 text-slate-400">
-              마스터 필터와 매크로 레짐을 동시에 확인하고 있습니다. 응답이 지연되면 데이터 미채점 상태로 전환합니다.
+              진입 가능 신호와 큰 흐름 점검 데이터를 함께 확인하고 있습니다.
             </p>
           </div>
           <div className="grid min-w-[220px] grid-cols-2 gap-2">
             <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase text-slate-500">P3 Score</p>
-              <p className="mt-1 font-mono text-lg font-black text-white">PENDING</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-500">시장 건강 점수</p>
+              <p className="mt-1 font-mono text-lg font-black text-white">확인 중</p>
             </div>
             <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase text-slate-500">Exposure</p>
-              <p className="mt-1 text-sm font-black text-white">Hold</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-500">권장 투자 비중</p>
+              <p className="mt-1 text-sm font-black text-white">보류</p>
             </div>
           </div>
         </div>
@@ -129,8 +136,10 @@ export default function DecisionBox() {
   const isUnscored = data.state === 'GREY' || isStale;
   const { pass, weak } = strongestDrivers(metrics);
   const updatedAt = data.metrics.updatedAt || data.metrics.meta.asOf;
+  const headline = friendlyDecisionHeadline(result.decision, isUnscored);
+  const reasonText = friendlyDecisionReason(data.state, macroRegime, isUnscored);
   const dataLabel = isUnscored
-    ? '데이터 미채점'
+    ? '데이터 확인 필요'
     : data.metrics.meta.delay === 'REALTIME'
       ? '실시간'
       : data.metrics.meta.delay === 'UNKNOWN'
@@ -141,17 +150,17 @@ export default function DecisionBox() {
     <section
       className={`rounded-xl border p-4 shadow-[var(--panel-shadow)] sm:p-5 ${cfg.shell}`}
       role="status"
-      aria-label={`오늘 진입 결정: ${result.headline}`}
+      aria-label={`오늘 진입 결정: ${headline}`}
     >
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold ${cfg.badge}`}>
               <Icon className="h-3.5 w-3.5" />
-              DECISION COCKPIT
+              오늘의 결론
             </span>
             <span className="rounded-md border border-slate-700 bg-slate-950/50 px-2 py-1 text-[10px] font-semibold text-slate-300">
-              {data.market} Market
+              {data.market} 시장 · {friendlyMarketStateLabel(data.state)}
             </span>
             <span className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${isUnscored ? 'border-sky-500/35 bg-sky-500/10 text-sky-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-200'}`}>
               {dataLabel}
@@ -161,24 +170,22 @@ export default function DecisionBox() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p className={`text-2xl font-black leading-tight sm:text-3xl ${cfg.text}`}>
-                {isUnscored ? 'NO-GO · 데이터 확인' : result.headline}
+                {headline}
               </p>
               <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                {isUnscored
-                  ? '시장 약세 판정이 아니라 필수 데이터가 미수신된 상태입니다. 점수가 정상 수집될 때까지 신규 진입과 피라미딩을 보류합니다.'
-                  : result.reason}
+                {reasonText}
               </p>
             </div>
 
             <div className="grid min-w-[220px] grid-cols-2 gap-2">
               <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">P3 Score</p>
+                <p className="text-[10px] font-semibold uppercase text-slate-500">시장 건강 점수</p>
                 <p className="mt-1 font-mono text-lg font-black text-white">
                   {formatScore(data.metrics.p3Score ?? data.metrics.score ?? 0, isUnscored)}
                 </p>
               </div>
               <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">Exposure</p>
+                <p className="text-[10px] font-semibold uppercase text-slate-500">권장 투자 비중</p>
                 <p className="mt-1 text-sm font-black text-white">
                   {exposureLabel(result.sizeMultiplier, isUnscored)}
                 </p>
@@ -202,7 +209,7 @@ export default function DecisionBox() {
             <div className="space-y-1.5">
               {(pass.length ? pass : metrics.slice(0, 2)).map((item) => (
                 <p key={item.label} className="flex items-center justify-between gap-2 text-[11px] xl:text-xs">
-                  <span className="truncate text-slate-300">{item.label}</span>
+                  <span className="truncate text-slate-300">{friendlyMetricLabel(item.label)}</span>
                   <span className={item.status === 'PASS' ? 'text-emerald-300' : item.status === 'WARNING' ? 'text-amber-300' : 'text-rose-300'}>
                     {item.value ?? 'N/A'}
                   </span>
@@ -218,15 +225,15 @@ export default function DecisionBox() {
             </div>
             <div className="space-y-1 text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
               {isUnscored ? (
-                <p>API 응답 정상화와 기준 시각 확인 후 재채점</p>
+                <p>데이터 응답과 기준 시각 확인 후 다시 판단</p>
               ) : data.state === 'GREEN' ? (
-                <p>분산일 증가, VIX 급등, 시장폭 훼손 시 비중 축소</p>
+                <p>큰손 매도 흔적 증가, 시장 불안도 급등, 함께 오르는 종목 감소 시 비중 축소</p>
               ) : (
-                <p>GREEN 회복, 시장폭 개선, 주도 섹터 확산 확인</p>
+                <p>진입 가능 신호 회복, 함께 오르는 종목 증가, 강한 업종 확산 확인</p>
               )}
               {weak.slice(0, 2).map((item) => (
                 <p key={item.label} className="text-slate-400">
-                  {item.label}: {item.status}
+                  {friendlyMetricLabel(item.label)}: {friendlyMetricStatus(item.status)}
                 </p>
               ))}
             </div>
@@ -241,7 +248,7 @@ export default function DecisionBox() {
               {data.metrics.meta.provider} · {data.metrics.meta.source}
             </p>
             <p className="mt-1 font-mono text-[10px] text-slate-500">
-              {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : 'as-of 확인 불가'}
+              {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '기준 시각 확인 불가'}
             </p>
           </div>
         </div>

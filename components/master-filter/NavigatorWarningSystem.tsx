@@ -43,7 +43,7 @@ export default function NavigatorWarningSystem() {
           <div className="flex items-center gap-2 text-slate-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="text-xs font-bold leading-tight uppercase tracking-tight">
-              Navigator Warning: 신규 진입 금지 구간 — 기존 포지션만 유지하고 손절선을 점검하세요.
+              시장 경고: 신규 매수 보류 구간 — 기존 포지션만 유지하고 손절선을 점검하세요.
             </span>
           </div>
           <button 
@@ -82,7 +82,7 @@ export default function NavigatorWarningSystem() {
                     항해 불가능 구간 (BEAR)
                   </h2>
                   <p className="text-sm text-slate-300 leading-relaxed font-medium">
-                    마스터 필터가 강력한 하락 신호를 가리키고 있습니다.<br />
+                    진입 가능 신호가 강한 위험 구간을 가리키고 있습니다.<br />
                     이 구간에서의 돌파 시도는 <strong className="text-rose-400">대부분 실패로 끝납니다.</strong> 모든 신규 매수를 중단하고 현금을 확보하십시오.
                   </p>
                 </div>

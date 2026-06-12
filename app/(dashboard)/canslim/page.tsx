@@ -258,6 +258,7 @@ export default function CanslimScannerPage() {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [scanStage, setScanStage] = useState('대기 중');
+  const [scanFatalError, setScanFatalError] = useState<string | null>(null);
   const [lastScannedAt, setLastScannedAt] = useState<string | null>(null);
   const [filterKey, setFilterKey] = useState<FilterKey>('all');
   const [sortKey, setSortKey] = useState<SortKey>('marketCap');
@@ -362,6 +363,7 @@ export default function CanslimScannerPage() {
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
     setMacro(null);
+    setScanFatalError(null);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -493,7 +495,7 @@ export default function CanslimScannerPage() {
       }
     } catch (err) {
       if (!abort.signal.aborted) {
-        alert(`스캔 실패: ${getErrorMessage(err)}`);
+        setScanFatalError(getErrorMessage(err));
       }
     } finally {
       setIsScanning(false);
@@ -916,6 +918,13 @@ export default function CanslimScannerPage() {
       {/* 글로벌 스캐너 탭 네비게이션 */}
       <ScannerTabNav />
       <MarketBanner compact={true} />
+
+      {scanFatalError && (
+        <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <p className="text-sm text-red-100">스캔 실패: {scanFatalError}</p>
+          <button type="button" onClick={() => setScanFatalError(null)} className="ml-3 rounded-md px-3 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20">닫기</button>
+        </div>
+      )}
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
           <div className="space-y-4">

@@ -18,15 +18,15 @@ export default function RiskModal() {
               <ShieldAlert className="h-12 w-12 text-rose-500" />
             </div>
             
-            <h2 className="text-2xl font-bold text-white">RED 국면 시스템 차단</h2>
+            <h2 className="text-2xl font-bold text-white">신규 매수 금지 구간</h2>
             
             <p className="text-slate-300">
-              현재 마스터 필터가 치명적인 시장 위험 상태(RED)를 감지했습니다.<br/>
+              현재 진입 가능 신호가 강한 시장 위험 상태를 감지했습니다.<br/>
               무분별한 강제 매수 및 뇌동매매를 방지하기 위해 스캐너와 종목 상세 정보 접근을 일시적으로 제한합니다.
             </p>
 
             <div className="mt-4 w-full rounded-lg bg-rose-950/50 p-4 text-sm text-rose-200 border border-rose-900/50">
-              <strong>Centaur 경고문:</strong>
+              <strong>시장 경고문:</strong>
               <p className="mt-1">{data.insightLog}</p>
             </div>
 

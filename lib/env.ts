@@ -18,6 +18,14 @@ function optional(name: string, fallback: string): string {
   return process.env[name] || fallback;
 }
 
+function optionalAny(names: string[]): string | null {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
+  }
+  return null;
+}
+
 // --- Supabase ---
 
 export function supabaseUrl(): string {
@@ -44,6 +52,20 @@ export function kisAppSecret(): string {
 
 export function kisBaseUrl(): string {
   return optional('KIS_BASE_URL', 'https://openapi.koreainvestment.com:9443');
+}
+
+// --- Toss Securities Open API ---
+
+export function tossInvestClientId(): string | null {
+  return optionalAny(['TOSS_INVEST_CLIENT_ID', 'TOSS_CLIENT_ID']);
+}
+
+export function tossInvestClientSecret(): string | null {
+  return optionalAny(['TOSS_INVEST_CLIENT_SECRET', 'TOSS_CLIENT_SECRET']);
+}
+
+export function tossInvestBaseUrl(): string {
+  return optional('TOSS_INVEST_BASE_URL', 'https://openapi.tossinvest.com');
 }
 
 // --- Telegram ---

@@ -21,6 +21,10 @@
       "schedule": "0 08 * * *"
     },
     {
+      "path": "/api/cron/daily-screeners",
+      "schedule": "0 12 * * *"
+    },
+    {
       "path": "/api/cron/rs-metrics?market=US",
       "schedule": "15 21 * * 1-5"
     },

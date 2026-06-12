@@ -202,8 +202,11 @@ function PlanPageContent() {
       </div>
 
       {equityLoadError && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-100">
-          포트폴리오 총자본 조회 실패로 기본값 {DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}을 사용합니다. {equityLoadError}
+        <div className="rounded-lg border-2 border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
+          <span className="mr-2">⚠️</span>
+          포트폴리오 총자본 조회 실패 — 기본값 <span className="font-mono font-bold text-rose-200">${DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}</span>로 포지션 사이징이 계산됩니다.
+          실제 투자금과 다르면 수량 산출이 부정확해질 수 있습니다.
+          <p className="mt-1 text-xs text-rose-300/80">원인: {equityLoadError}</p>
         </div>
       )}
 

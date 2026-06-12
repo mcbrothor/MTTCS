@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { analyzeSurge } from '@/lib/finance/engines/surge-score';
 import type { OHLCData } from '@/types';
 import axios from 'axios';
@@ -88,18 +89,25 @@ async function fetchYahooShortRange(ticker: string, days = 60): Promise<OHLCData
 
 /**
  * 종목별 데이터 소싱 전략:
- * - 한국 주식: KIS API 우선 → Yahoo fallback
- * - 미국 주식: Yahoo 직접 호출 (KIS 해외주식 API의 exchange 코드 불일치 방지)
+ * - 한국 주식: KIS API 우선 → Toss → Yahoo fallback
+ * - 미국 주식: Toss 우선 → KIS → Yahoo fallback
  */
 async function fetchDailyBars(ticker: string, exchange: string): Promise<OHLCData[]> {
-  if (isKoreanExchange(exchange)) {
+  const providerOrder = isKoreanExchange(exchange) ? ['KIS', 'Toss Securities'] : ['Toss Securities', 'KIS'];
+
+  for (const provider of providerOrder) {
+    if (provider === 'Toss Securities' && !isTossInvestConfigured()) continue;
+
     try {
-      const data = await getMarketDailyPrice(ticker, exchange, 30);
+      const data = provider === 'KIS'
+        ? await getMarketDailyPrice(ticker, exchange, 30)
+        : await getTossDailyPrice(ticker, 60);
       if (data.length > 0) return data;
     } catch {
-      // KIS 실패 시 Yahoo fallback
+      // 다음 provider로 fallback
     }
   }
+
   return fetchYahooShortRange(yahooTicker(ticker, exchange), 60);
 }
 
@@ -197,4 +205,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

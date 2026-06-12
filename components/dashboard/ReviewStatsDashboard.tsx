@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { Trade } from '@/types';
 import Card from '@/components/ui/Card';
 import { AlertCircle } from 'lucide-react';
@@ -14,7 +14,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { buildReviewStatsSummary } from '@/lib/review-stats';
+import { buildReviewStatsSummary, filterTradesByPeriod, buildEquityCurveData, type EquityCurvePeriod } from '@/lib/review-stats';
+import EquityCurve from './EquityCurve';
 
 interface ReviewStatsDashboardProps {
   trades: Trade[];
@@ -31,17 +32,51 @@ export default function ReviewStatsDashboard({
   selectedMistakeTag = null,
   onSelectMistakeTag,
 }: ReviewStatsDashboardProps) {
-  const stats = useMemo(() => buildReviewStatsSummary(trades), [trades]);
+  const [period, setPeriod] = useState<EquityCurvePeriod>('3M');
 
-  if (stats.completedCount === 0) return null;
+  const filteredTrades = useMemo(() => filterTradesByPeriod(trades, period), [trades, period]);
+  const stats = useMemo(() => buildReviewStatsSummary(filteredTrades), [filteredTrades]);
+  const equityData = useMemo(() => buildEquityCurveData(filteredTrades), [filteredTrades]);
+
+  if (trades.filter(t => t.status === 'COMPLETED').length === 0) return null;
 
   const chartData = stats.mistakeTags.slice(0, 8).map((item) => ({
     ...item,
     shortTag: item.tag.length > 12 ? `${item.tag.slice(0, 12)}...` : item.tag,
   }));
 
+  const periods: { key: EquityCurvePeriod; label: string }[] = [
+    { key: '1M', label: '1M' },
+    { key: '3M', label: '3M' },
+    { key: '6M', label: '6M' },
+    { key: 'YTD', label: 'YTD' },
+    { key: '1Y', label: '1Y' },
+    { key: 'ALL', label: '전체' },
+  ];
+
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1.35fr]">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-extrabold text-white">포트폴리오 성과 추이</h2>
+        <div className="flex rounded-lg border border-slate-800 bg-slate-900 p-1">
+          {periods.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPeriod(p.key)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                period === p.key ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <EquityCurve data={equityData} />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_1.35fr]">
       <Card className="flex flex-col">
         <div className="mb-4 flex items-center gap-2">
           <h3 className="text-lg font-bold text-white">청산 사유별 성과</h3>
@@ -165,6 +200,7 @@ export default function ReviewStatsDashboard({
           </div>
         )}
       </Card>
+    </div>
     </div>
   );
 }

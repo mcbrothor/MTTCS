@@ -22,26 +22,22 @@ interface MarketContextValue {
 }
 
 /**
- * 마스터필터와 매크로 사이 신호 불일치 감지
+ * 진입 가능 신호와 큰 흐름 사이 신호 불일치 감지
  *
- * 위계 원칙: 마스터필터 RED/YELLOW면 매크로 무관 NO-GO.
- * 진입 권유 어조는 사용하지 않는다.
+ * 위계 원칙: 진입 가능 신호가 좋지 않으면 큰 흐름과 무관하게 새 매수 보류.
  */
 function detectConflict(mfState: 'GREEN' | 'YELLOW' | 'RED' | 'GREY', regime: MacroRegime): string | null {
   if (mfState === 'GREY') {
-    return '마스터필터 데이터 부족 — 데이터 수집 지연으로 매크로 신호 적용을 보류합니다.';
+    return '데이터 확인 필요 — 수집이 늦어져 큰 흐름 신호 적용을 잠시 보류합니다.';
   }
-  // GREEN + RISK_OFF: 게이트는 통과했으나 글로벌 자금흐름이 위험회피 — 비중 50%로 제한
   if (mfState === 'GREEN' && regime === 'RISK_OFF') {
-    return '마스터필터 GREEN이지만 매크로 RISK-OFF — 신규 진입 시 비중 50%로 제한하고 손절선을 강화하세요.';
+    return '진입 가능 신호는 좋지만 큰 흐름이 불안합니다 — 새 매수 시 권장 비중을 50%로 줄이고 손절선을 더 엄격히 보세요.';
   }
-  // RED + RISK_ON: 매크로 환경이 좋아도 시장 게이트 미통과 → 신규 진입 금지
   if (mfState === 'RED' && regime === 'RISK_ON') {
-    return '마스터필터 RED 상태 — 매크로 RISK-ON이라도 신규 진입 보류. 시장 게이트 미통과.';
+    return '큰 흐름은 좋아 보여도 진입 가능 신호가 위험합니다 — 새 매수는 보류하세요.';
   }
-  // YELLOW + RISK_OFF: 이중 부정 신호
   if (mfState === 'YELLOW' && regime === 'RISK_OFF') {
-    return '마스터필터 YELLOW + 매크로 RISK-OFF — 신규 진입 금지. 기존 포지션 방어에 집중하세요.';
+    return '진입 가능 신호도 애매하고 큰 흐름도 불안합니다 — 새 매수보다 기존 포지션 방어에 집중하세요.';
   }
   return null;
 }
@@ -88,13 +84,13 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
     state: 'GREY',
     market,
     metrics: {
-      trend: createEmptyMetric('Trend Alignment', 'PASS', ''),
-      breadth: createEmptyMetric('Market Breadth', 'PASS', ''),
-      volatility: createEmptyMetric('Volatility Regime', 'PASS', ''),
-      ftd: createEmptyMetric('Follow-Through Day', 'PASS', ''),
-      distribution: createEmptyMetric('Distribution Days', 'PASS', ''),
-      newHighLow: createEmptyMetric('New High/Low', 'PASS', ''),
-      sectorRotation: createEmptyMetric('Sector Leadership', 'PASS', ''),
+      trend: createEmptyMetric('추세', '좋음', ''),
+      breadth: createEmptyMetric('함께 오르는 종목 비율', '좋음', ''),
+      volatility: createEmptyMetric('시장 불안도', '낮음', ''),
+      ftd: createEmptyMetric('반등 확인일', '확인됨', ''),
+      distribution: createEmptyMetric('큰손 매도 흔적', '적음', ''),
+      newHighLow: createEmptyMetric('새 고점/새 저점 균형', '좋음', ''),
+      sectorRotation: createEmptyMetric('강한 업종', '확산', ''),
       score: 0,
       p3Score: 0,
       meta,
@@ -106,10 +102,10 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
       vixHistory: [],
       movingAverageHistory: [],
       sectorRows: [],
-      ftdReason: '마스터 필터 API 응답이 없어 Follow-Through Day를 확인하지 못했습니다.',
+      ftdReason: '진입 가능 신호 API 응답이 없어 반등 확인일을 확인하지 못했습니다.',
       updatedAt,
     },
-    insightLog: '마스터 필터 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 미채점 상태입니다.',
+    insightLog: '진입 가능 신호 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 확인 필요 상태입니다.',
     isAiGenerated: false,
     aiProviderUsed: 'rules',
     aiModelUsed: 'system-fallback',
@@ -120,12 +116,12 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
       label: 'rules',
       model: 'system-fallback',
       status: 'success',
-      text: '마스터 필터 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 미채점 상태입니다.',
+      text: '진입 가능 신호 데이터를 불러오지 못했습니다. 현재 화면은 시장 약세 판정이 아니라 데이터 확인 필요 상태입니다.',
       selected: true,
       priority: 99,
       generatedAt: updatedAt,
     }],
-    aiErrorSummary: '브라우저가 마스터 필터 API 응답을 받지 못해 로컬 fallback 데이터를 표시합니다. 점수와 상태는 투자 판단에 사용하지 마세요.',
+    aiErrorSummary: '브라우저가 진입 가능 신호 API 응답을 받지 못해 임시 데이터를 표시합니다. 점수와 상태는 투자 판단에 사용하지 마세요.',
   };
 }
 
@@ -156,6 +152,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
 
     async function fetchMarketData() {
       setIsLoading(true);
+      setData(null); // market 전환 시 이전 데이터 초기화
       try {
         const [mfResponse, macroResponse] = await Promise.allSettled([
           fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
@@ -164,7 +161,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
 
         if (mfResponse.status === 'rejected' || (mfResponse.status === 'fulfilled' && !mfResponse.value.ok)) {
           const payload = mfResponse.status === 'fulfilled' ? await mfResponse.value.json().catch(() => null) : null;
-          throw new Error(payload?.message || '마스터 필터 데이터를 불러오지 못했습니다.');
+          throw new Error(payload?.message || '진입 가능 신호 데이터를 불러오지 못했습니다.');
         }
 
         const result = (await (mfResponse as PromiseFulfilledResult<Response>).value.json()) as MasterFilterResponse;
@@ -190,7 +187,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         if (mounted) {
-          const message = err instanceof DOMException && err.name === 'AbortError' ? '마스터 필터 요청 시간이 초과되었습니다.' : '알 수 없는 오류';
+          const message = err instanceof DOMException && err.name === 'AbortError' ? '진입 가능 신호 요청 시간이 초과되었습니다.' : '알 수 없는 오류';
           setError(err instanceof Error ? err : new Error(message));
           setIsStale(true);
           setData(fallbackMarketData(market));

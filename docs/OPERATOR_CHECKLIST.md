@@ -1,6 +1,6 @@
 # MTN Operator Checklist
 
-Last verified: 2026-06-07
+Last verified: 2026-06-11
 
 ## 1. Production URLs
 
@@ -28,6 +28,12 @@ Confirm these exist in Vercel Production:
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `CEREBRAS_API_KEY`
+
+Optional market data fallback variables:
+
+- `TOSS_INVEST_CLIENT_ID` or `TOSS_CLIENT_ID`
+- `TOSS_INVEST_CLIENT_SECRET` or `TOSS_CLIENT_SECRET`
+- `TOSS_INVEST_BASE_URL` (defaults to `https://openapi.tossinvest.com`)
 
 Local Codex worker optional variables:
 
@@ -70,7 +76,7 @@ Required indexes:
 Run after deployment with an authenticated session:
 
 - `GET /api/market-data?ticker=AAPL&exchange=NAS&includeFundamentals=false&skipStandardMetrics=true`
-  - Expected provider: `KIS (260 daily bars)`
+  - Expected provider: `Toss Securities (260 daily bars)` when Toss credentials are configured; otherwise `KIS (260 daily bars)` or Yahoo fallback
 - `GET /api/market-data?ticker=005930&exchange=KOSPI&includeFundamentals=false&skipStandardMetrics=true`
   - Expected provider: `KIS (260 daily bars)`
 - `GET /api/macro`

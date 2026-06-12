@@ -1,9 +1,8 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
+import { getMtnKrLivePrice, getMtnUsLiveQuotes } from '@/lib/finance/core/live-price-providers';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { calculatePortfolioRiskSummary } from '@/lib/finance/core/portfolio-risk';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
-import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
-import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { SecurityProfile, Trade } from '@/types';
 
@@ -25,8 +24,8 @@ export async function GET(request: Request) {
     const scopedTrades = ((tradeRows || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[])
       .filter((trade) => market === 'KR' ? isKorean(trade.ticker) : !isKorean(trade.ticker));
     const priceMap = await buildLivePriceMap(scopedTrades, {
-      getUsQuotes: getYahooQuotes,
-      getKrPrice: getKisDomesticPrice,
+      getUsQuotes: getMtnUsLiveQuotes,
+      getKrPrice: getMtnKrLivePrice,
     });
     const trades = scopedTrades.map((trade) => {
         const { trade_executions: tradeExecutions, ...rest } = trade;

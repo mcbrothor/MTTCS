@@ -2,40 +2,37 @@ import { test, expect } from '@playwright/test';
 import { login } from './helpers/auth';
 import { setupAllMocks, setupHaltMocks } from './mocks/handlers';
 
-test.describe('TC-MF: 마스터 필터', () => {
-  test.describe('정상 (GREEN) 상태', () => {
+test.describe('TC-MF: 오늘 시장 신호판', () => {
+  test.describe('정상 진입 가능 상태', () => {
     test.beforeEach(async ({ page }) => {
       await setupAllMocks(page); // GREEN by default
       await login(page);
     });
 
-    test('MF-01: GREEN 판정 시 녹색 UI 표시', async ({ page }) => {
+    test('MF-01: 투자 가능 결론과 쉬운 용어 표시', async ({ page }) => {
       await page.goto('/master-filter');
 
-      await expect(page.locator('text=마스터 필터')).toBeVisible();
-      await expect(page.locator('text=GREEN')).toBeVisible();
-      
-      // Should indicate full action level
-      await expect(page.locator('text=진입 가능').or(page.locator('text=FULL'))).toBeVisible();
+      await expect(page.getByRole('heading', { name: '오늘 시장 신호판' })).toBeVisible();
+      await expect(page.getByRole('status', { name: '오늘 진입 결정: 투자 가능 · 권장 비중 100%' })).toBeVisible();
+      await expect(page.getByText('시장 건강 점수').first()).toBeVisible();
+      await expect(page.locator('text=함께 오르는 종목 비율').first()).toBeVisible();
     });
   });
 
-  test.describe('방어 (RED) 상태', () => {
+  test.describe('방어 상태', () => {
     test.beforeEach(async ({ page }) => {
       await setupHaltMocks(page); // Sets to RED / HALT
       await login(page);
     });
 
-    test('MF-03: RED 판정 시 레드 표시 및 차단 메시지', async ({ page }) => {
+    test('MF-03: 위험 판정 시 신규 매수 보류 표시', async ({ page }) => {
       await page.goto('/master-filter');
 
-      await expect(page.locator('text=RED')).toBeVisible();
-      
-      // Should indicate halt action level
-      await expect(page.locator('text=진입 금지').or(page.locator('text=HALT'))).toBeVisible();
+      await expect(page.getByRole('status', { name: '오늘 진입 결정: 신규 매수 보류' })).toBeVisible();
+      await expect(page.locator('text=현금 확보').or(page.locator('text=보유 종목 방어'))).toBeVisible();
     });
 
-    test('MF-04: DecisionBox 가이드라인 표시', async ({ page }) => {
+    test('MF-04: 쉬운 운용 가이드라인 표시', async ({ page }) => {
       await page.goto('/master-filter');
       
       const decisionBox = page.locator('text=현금 비중').or(page.locator('text=신규 매수 금지')).first();

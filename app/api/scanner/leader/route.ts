@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { analyzeLeaderScore, applyLeaderUniverseMetrics } from '@/lib/finance/engines/leader-score';
 import type { OHLCData } from '@/types';
 import type { LeaderAnalysisResult } from '@/lib/finance/engines/leader-score';
@@ -44,12 +45,24 @@ function yahooTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
+function isKoreanExchange(exchange: string) {
+  return exchange === 'KOSPI' || exchange === 'KOSDAQ';
+}
+
 async function fetchDailyBars(ticker: string, exchange: string, bars = 300): Promise<OHLCData[]> {
-  try {
-    const data = await getMarketDailyPrice(ticker, exchange, bars);
-    if (data.length > 0) return data;
-  } catch {
-    // KIS 실패 시 Yahoo fallback
+  const providerOrder = isKoreanExchange(exchange) ? ['KIS', 'Toss Securities'] : ['Toss Securities', 'KIS'];
+
+  for (const provider of providerOrder) {
+    if (provider === 'Toss Securities' && !isTossInvestConfigured()) continue;
+
+    try {
+      const data = provider === 'KIS'
+        ? await getMarketDailyPrice(ticker, exchange, bars)
+        : await getTossDailyPrice(ticker, bars);
+      if (data.length > 0) return data;
+    } catch {
+      // 다음 provider로 fallback
+    }
   }
   return getYahooDailyPrice(yahooTicker(ticker, exchange));
 }

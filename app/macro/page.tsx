@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lu
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import RegimeHeroCard from '@/components/macro/RegimeHeroCard';
 import DecisionBox from '@/components/master-filter/DecisionBox';
+import { friendlyMacroRegimeLabel } from '@/lib/market-display';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 
 interface HistoryPoint {
@@ -33,7 +34,7 @@ interface MacroApiResponse {
 const ASSET_CONFIG = [
   { sym: 'SPY',     label: 'S&P 500',   role: '대형주 추세 지표' },
   { sym: 'QQQ',     label: 'Nasdaq 100', role: '기술주 강도 지표' },
-  { sym: 'HYG',     label: 'HY Bond',    role: '하이일드 채권 · Risk-ON 신호' },
+  { sym: 'HYG',     label: 'HY Bond',    role: '하이일드 채권 · 위험자산 선호 신호' },
   { sym: 'IEF',     label: '7-10Y UST',  role: '중기 국채 · 안전자산 흐름' },
   { sym: 'TLT',     label: '20Y+ UST',   role: '장기 국채 · 금리 방향' },
   { sym: 'GLD',     label: 'Gold',       role: '안전자산 수요 지표' },
@@ -55,8 +56,8 @@ const RATIO_CONFIG = [
     sub: '크레딧 스프레드',
     symA: 'HYG',
     symB: 'IEF',
-    positiveDesc: 'Risk-ON · 하이일드 강세',
-    negativeDesc: 'Risk-OFF · 안전채권 선호',
+    positiveDesc: '위험자산 선호 · 하이일드 강세',
+    negativeDesc: '안전자산 선호 · 국채 우위',
   },
   {
     label: 'IWM / SPY',
@@ -71,10 +72,10 @@ const RATIO_CONFIG = [
 function getRegimeCommentary(score: number, regime: MacroRegime, spyAbove50ma: boolean, hygIefDiff: number, vixLevel: number) {
   const headline =
     regime === 'RISK_ON'
-      ? '글로벌 자금 흐름이 위험자산으로 향하는 국면입니다'
+      ? '세계 자금 흐름이 주식 같은 위험자산에 우호적입니다'
       : regime === 'NEUTRAL'
-        ? '매크로 신호가 혼재하는 경계 구간입니다'
-        : '리스크 회피 심리가 우세한 방어적 국면입니다';
+        ? '큰 흐름 신호가 뚜렷하지 않은 애매한 구간입니다'
+        : '세계 자금 흐름이 조심스러운 방어 구간입니다';
 
   const points: string[] = [];
 
@@ -85,9 +86,9 @@ function getRegimeCommentary(score: number, regime: MacroRegime, spyAbove50ma: b
   }
 
   if (hygIefDiff > 0.2) {
-    points.push(`하이일드 채권(HYG)이 국채(IEF) 대비 ${Math.abs(hygIefDiff).toFixed(2)}%p 강세로 신용 시장이 Risk-ON을 지지합니다`);
+    points.push(`하이일드 채권(HYG)이 국채(IEF)보다 ${Math.abs(hygIefDiff).toFixed(2)}%p 강해 위험자산 선호를 지지합니다`);
   } else if (hygIefDiff < -0.2) {
-    points.push(`하이일드 채권(HYG)이 국채(IEF) 대비 ${Math.abs(hygIefDiff).toFixed(2)}%p 약세로 크레딧 스프레드 확대 우려가 있습니다`);
+    points.push(`하이일드 채권(HYG)이 국채(IEF)보다 ${Math.abs(hygIefDiff).toFixed(2)}%p 약해 신용 시장 부담이 있습니다`);
   } else {
     points.push(`하이일드 채권과 국채 간 상대강도 차이(${hygIefDiff > 0 ? '+' : ''}${hygIefDiff.toFixed(2)}%p)가 중립 수준입니다`);
   }
@@ -104,7 +105,7 @@ function getRegimeCommentary(score: number, regime: MacroRegime, spyAbove50ma: b
 }
 
 function userFacingMacroError(message: string | null) {
-  if (!message) return '매크로 데이터를 불러오지 못했습니다.';
+  if (!message) return '큰 흐름 데이터를 불러오지 못했습니다.';
   const lower = message.toLowerCase();
   if (lower.includes('authentication') || lower.includes('unauthorized')) {
     return 'API 인증 필요 · 세션 또는 서버 인증 상태를 확인하세요.';
@@ -133,14 +134,14 @@ export default function MacroPage() {
         } else {
           setMacroData(null);
           setHasError(true);
-          setMacroError(macro.body?.message || '매크로 데이터를 채점하지 못했습니다.');
+          setMacroError(macro.body?.message || '큰 흐름 데이터를 채점하지 못했습니다.');
         }
         if (hist.ok && Array.isArray(hist.body?.data)) setHistory(hist.body.data);
       })
       .catch((err) => {
         setMacroData(null);
         setHasError(true);
-        setMacroError(err instanceof Error ? err.message : '매크로 데이터를 채점하지 못했습니다.');
+        setMacroError(err instanceof Error ? err.message : '큰 흐름 데이터를 채점하지 못했습니다.');
       })
       .finally(() => setIsLoading(false));
   }, []);
@@ -157,24 +158,24 @@ export default function MacroPage() {
   const isMacroScored = Boolean(macroData && !hasError);
   const nextStepText =
     !isMacroScored
-      ? '매크로 미채점 — 이 상태는 RISK-OFF가 아닙니다. 데이터/API 상태를 먼저 정상화한 뒤 포지션 사이즈를 판단하세요.'
+      ? '큰 흐름 미확인 — 시장이 나쁘다는 뜻이 아닙니다. 데이터/API 상태를 먼저 정상화한 뒤 권장 비중을 판단하세요.'
       : score >= 70
-      ? `레짐 ${score}점 — RISK-ON 환경. 마스터 필터가 GREEN이면 공격적 후보를 탐색하세요.`
+      ? `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 진입 가능 신호가 좋으면 후보를 적극 검토하세요.`
       : score >= 45
-        ? `레짐 ${score}점 — 중립 국면. 신중하게 후보를 검토하고 비중을 줄이세요.`
-        : `레짐 ${score}점 — RISK-OFF 환경. 신규 진입을 중단하고 현금을 확보하세요.`;
+        ? `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 후보를 신중하게 검토하고 비중을 줄이세요.`
+        : `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 새 매수보다 현금 확보와 방어가 우선입니다.`;
 
   return (
     <div className="space-y-4 pb-12">
       <header className="border-b border-[var(--border)] pb-4">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-          STEP 01 · 시장 분석 / 매크로
+          STEP 01 · 시장 분석 / 큰 흐름 점검
         </p>
         <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
-          매크로 분석
+          큰 흐름 점검
         </h1>
         <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
-          글로벌 자금 흐름과 리스크 선호도를 6개 컴포넌트로 점수화합니다. 마스터 필터와 함께 확인해 진입 공격성을 조절하세요.
+          금리, 달러, 신용 시장, 시장 불안도처럼 큰 자금 흐름을 보고 권장 투자 비중을 조절합니다.
         </p>
       </header>
 
@@ -182,16 +183,16 @@ export default function MacroPage() {
 
       <LLMBriefing regime={macroData?.regime ?? null} />
 
-      {/* 위계 안내 배너 — 매크로는 사이즈 조절용, 진입 게이트는 마스터 필터 */}
+      {/* 위계 안내 배너 — 큰 흐름은 비중 조절용, 진입 가능 신호가 우선 */}
       <div className="flex items-start gap-3 rounded-xl border border-sky-700/40 bg-sky-900/15 px-4 py-3">
         <AlertTriangle className="h-4 w-4 shrink-0 text-sky-400 mt-0.5" aria-hidden="true" />
         <p className="text-xs text-sky-300 leading-relaxed">
-          <strong className="text-sky-200">이 화면은 포지션 사이즈 조절용입니다.</strong>{' '}
+          <strong className="text-sky-200">이 화면은 권장 투자 비중 조절용입니다.</strong>{' '}
           신규 진입 가능 여부는 반드시{' '}
           <Link href="/master-filter" className="underline underline-offset-2 hover:text-sky-100">
-            마스터 필터
+            오늘 시장 신호판
           </Link>
-          에서 먼저 확인하세요. 마스터 필터가 RED/YELLOW이면 매크로 점수와 관계없이 신규 진입은 금지입니다.
+          에서 먼저 확인하세요. 진입 가능 신호가 좋지 않으면 큰 흐름 점수와 관계없이 새 매수는 보류합니다.
         </p>
       </div>
 
@@ -199,7 +200,7 @@ export default function MacroPage() {
         <div className="flex h-40 items-center justify-center rounded-lg border border-slate-800/50 bg-slate-900/50 backdrop-blur-md">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-            <p className="text-xs font-medium uppercase tracking-widest text-slate-500">매크로 데이터 동기화 중</p>
+            <p className="text-xs font-medium uppercase tracking-widest text-slate-500">큰 흐름 데이터 확인 중</p>
           </div>
         </div>
       )}
@@ -209,22 +210,22 @@ export default function MacroPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
             <div>
-              <p className="text-sm font-bold text-sky-200">매크로 데이터 미채점</p>
+              <p className="text-sm font-bold text-sky-200">큰 흐름 데이터 확인 필요</p>
               <p className="mt-1 text-sm leading-6 text-sky-100/85">
-                {userFacingMacroError(macroError)} 현재 0점/RISK-OFF로 해석하지 말고,
+                {userFacingMacroError(macroError)} 현재 0점 또는 나쁜 시장으로 해석하지 말고,
                 API 인증과 데이터 소스가 정상화된 뒤 다시 판단하세요.
               </p>
               <div className="mt-3 grid gap-2 text-xs text-slate-300 md:grid-cols-3">
                 <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
-                  <p className="font-semibold text-sky-200">Credit</p>
+                  <p className="font-semibold text-sky-200">신용 시장</p>
                   <p className="mt-1 text-slate-400">HY OAS 또는 HYG/IEF 정상 수집 필요</p>
                 </div>
                 <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
-                  <p className="font-semibold text-sky-200">Rates / FX</p>
+                  <p className="font-semibold text-sky-200">금리/환율</p>
                   <p className="mt-1 text-slate-400">금리 커브, 달러, 원화 민감도 확인 필요</p>
                 </div>
                 <div className="rounded-lg border border-sky-500/20 bg-slate-950/35 p-3">
-                  <p className="font-semibold text-sky-200">Volatility</p>
+                  <p className="font-semibold text-sky-200">시장 불안도</p>
                   <p className="mt-1 text-slate-400">VIX 레벨과 term structure 확인 필요</p>
                 </div>
               </div>
@@ -247,25 +248,25 @@ export default function MacroPage() {
 
             {/* Run-of-play guide — mirrors master-filter's "운용 가이드라인" */}
             <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
-              <h3 className="mb-4 text-[13px] font-semibold text-[var(--text-primary)]">매크로 운용 원칙</h3>
+              <h3 className="mb-4 text-[13px] font-semibold text-[var(--text-primary)]">큰 흐름 운용 원칙</h3>
               <ul className="space-y-3 text-xs text-[var(--text-secondary)]">
                 <li className="flex gap-2">
                   <span className="flex items-center gap-1 font-semibold text-emerald-300 shrink-0">
-                    <TrendingUp className="h-3 w-3" /> RISK-ON:
+                    <TrendingUp className="h-3 w-3" /> 투자하기 좋은 흐름:
                   </span>
-                  진입 비중 최대화. 마스터 필터 GREEN 조건 충족 시 공격적 후보 탐색.
+                  권장 비중을 높일 수 있습니다. 진입 가능 신호가 좋을 때 후보를 적극 검토합니다.
                 </li>
                 <li className="flex gap-2">
                   <span className="flex items-center gap-1 font-semibold text-amber-300 shrink-0">
-                    <Minus className="h-3 w-3" /> NEUTRAL:
+                    <Minus className="h-3 w-3" /> 애매한 흐름:
                   </span>
-                  진입 비중 절반 이하. 이미 보유 중인 종목 손절선 점검 우선.
+                  권장 비중을 줄입니다. 이미 보유 중인 종목은 손절선을 먼저 점검합니다.
                 </li>
                 <li className="flex gap-2">
                   <span className="flex items-center gap-1 font-semibold text-rose-300 shrink-0">
-                    <TrendingDown className="h-3 w-3" /> RISK-OFF:
+                    <TrendingDown className="h-3 w-3" /> 조심해야 할 흐름:
                   </span>
-                  신규 매수 중단. 현금 비중 확대 및 포지션 정리 우선.
+                  새 매수보다 현금 비중 확대와 포지션 정리가 우선입니다.
                 </li>
               </ul>
             </div>
@@ -275,10 +276,10 @@ export default function MacroPage() {
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             <div className="grid gap-3 md:grid-cols-4">
               {[
-                ['Credit', 'HY OAS · HYG/IEF', '크레딧 스프레드 축소 여부'],
-                ['Rates / FX', 'UUP · TLT · Curve', '달러와 금리 충격 방향'],
-                ['Volatility', 'VIX', '변동성 레벨과 급등 위험'],
-                ['Leadership', 'QQQ/SPY · IWM/SPY', '성장주·소형주 참여 폭'],
+                ['신용 시장', 'HY OAS · HYG/IEF', '돈이 위험자산을 편하게 보는지'],
+                ['금리/달러 부담', 'UUP · TLT · Curve', '달러와 금리가 시장에 주는 압박'],
+                ['시장 불안도', 'VIX', '불안 심리와 급등 위험'],
+                ['시장 참여 폭', 'QQQ/SPY · IWM/SPY', '성장주·소형주가 함께 움직이는지'],
               ].map(([title, metric, desc]) => (
                 <div key={title} className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
                   <p className="text-[10px] font-bold uppercase text-slate-500">{title}</p>
@@ -291,7 +292,7 @@ export default function MacroPage() {
             {/* Commentary Card */}
             {commentary && (
               <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-[var(--panel-shadow)]">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">매크로 해석</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">큰 흐름 해석</p>
                 <p className="text-[13px] font-semibold text-[var(--text-primary)] mb-3">{commentary.headline}</p>
                 <ul className="space-y-1.5">
                   {commentary.points.map((pt) => (
@@ -382,7 +383,7 @@ export default function MacroPage() {
         </div>
       )}
 
-      {/* Next Step CTA — 매크로는 사이즈 조절용. 진입 결정은 마스터 필터에서 */}
+      {/* Next Step CTA — 큰 흐름은 비중 조절용. 진입 결정은 오늘 시장 신호판에서 */}
       {!isLoading && (
         <div className="flex items-center justify-between gap-4 rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
           <div>
@@ -393,7 +394,7 @@ export default function MacroPage() {
             href="/master-filter"
             className="flex items-center gap-1.5 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
           >
-            마스터 필터
+            오늘 시장 신호판
             <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>

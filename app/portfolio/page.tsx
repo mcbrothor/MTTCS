@@ -61,6 +61,13 @@ export default function PortfolioPage() {
     load('US');
   }, [load]);
 
+  // 장 시간 중 3분 자동 갱신
+  useEffect(() => {
+    if (loading || error) return;
+    const interval = setInterval(() => load(market), 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [load, market, loading, error]);
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -212,7 +219,7 @@ export default function PortfolioPage() {
                       오픈 리스크 {money(position.openRisk, market)}{typeof position.openRiskPct === 'number' ? ` (${position.openRiskPct}%)` : ''}
                     </span>
                     <Link
-                      href={`/history?market=${market}`}
+                      href={`/history?market=${market}&ticker=${position.ticker}`}
                       className="rounded-full border border-violet-500/20 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200 transition-colors hover:bg-violet-500/20"
                     >
                       복기 작성 →

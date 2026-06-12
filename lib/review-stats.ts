@@ -112,3 +112,52 @@ export function filterTradesByMistakeTag(trades: Trade[], tag: string | null) {
   if (!tag) return trades;
   return trades.filter((trade) => (trade.mistake_tags || []).includes(tag));
 }
+
+export type EquityCurvePeriod = '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
+
+export function filterTradesByPeriod(trades: Trade[], period: EquityCurvePeriod): Trade[] {
+  if (period === 'ALL') return trades;
+  
+  const now = new Date();
+  let cutoffDate = new Date();
+
+  switch (period) {
+    case '1M': cutoffDate.setMonth(now.getMonth() - 1); break;
+    case '3M': cutoffDate.setMonth(now.getMonth() - 3); break;
+    case '6M': cutoffDate.setMonth(now.getMonth() - 6); break;
+    case '1Y': cutoffDate.setFullYear(now.getFullYear() - 1); break;
+    case 'YTD': cutoffDate = new Date(now.getFullYear(), 0, 1); break;
+    default: return trades;
+  }
+
+  return trades.filter(trade => {
+    const dateStr = trade.updated_at || trade.created_at;
+    if (!dateStr) return false;
+    return new Date(dateStr) > cutoffDate;
+  });
+}
+
+export function buildEquityCurveData(trades: Trade[]) {
+  const completed = trades.filter((t) => t.status === 'COMPLETED');
+  
+  // 날짜순 오름차순 정렬 (오래된 것부터)
+  const sorted = [...completed].sort((a, b) => {
+    const da = a.updated_at || a.created_at;
+    const db = b.updated_at || b.created_at;
+    return new Date(da).getTime() - new Date(db).getTime();
+  });
+
+  let cumulativePnL = 0;
+  const data: { date: string; cumulativePnL: number }[] = [];
+
+  sorted.forEach(trade => {
+    cumulativePnL += getTradePnL(trade);
+    const dateStr = trade.updated_at || trade.created_at;
+    data.push({
+      date: dateStr ? new Date(dateStr).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }) : 'Unknown',
+      cumulativePnL
+    });
+  });
+
+  return data;
+}

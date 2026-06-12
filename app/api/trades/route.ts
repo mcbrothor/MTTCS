@@ -1,10 +1,9 @@
 ﻿import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/session';
+import { getMtnKrLivePrice, getMtnUsLiveQuotes } from '@/lib/finance/core/live-price-providers';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { buildEntrySnapshot } from '@/lib/finance/core/snapshot';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
-import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
-import { getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { Trade, TradeStatus } from '@/types';
 
@@ -304,8 +303,8 @@ export async function GET(request: Request) {
 
     const priceMap = includeLivePrices
       ? await buildLivePriceMap(allRecords, {
-          getUsQuotes: getYahooQuotes,
-          getKrPrice: getKisDomesticPrice,
+          getUsQuotes: getMtnUsLiveQuotes,
+          getKrPrice: getMtnKrLivePrice,
         })
       : new Map<string, number>();
 

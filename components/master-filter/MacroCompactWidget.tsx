@@ -3,23 +3,24 @@
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
+import { friendlyMacroComponentLabel, friendlyMacroRegimeLabel } from '@/lib/market-display';
 import type { MacroRegime } from '@/lib/macro/compute';
 
 const REGIME_CONFIG: Record<MacroRegime, { label: string; color: string; border: string; bg: string }> = {
   RISK_ON: {
-    label: 'RISK-ON',
+    label: friendlyMacroRegimeLabel('RISK_ON'),
     color: 'text-emerald-400',
     border: 'border-emerald-500/40',
     bg: 'bg-emerald-500/10',
   },
   NEUTRAL: {
-    label: 'NEUTRAL',
+    label: friendlyMacroRegimeLabel('NEUTRAL'),
     color: 'text-amber-400',
     border: 'border-amber-500/40',
     bg: 'bg-amber-500/10',
   },
   RISK_OFF: {
-    label: 'RISK-OFF',
+    label: friendlyMacroRegimeLabel('RISK_OFF'),
     color: 'text-rose-400',
     border: 'border-rose-500/40',
     bg: 'bg-rose-500/10',
@@ -41,11 +42,11 @@ export default function MacroCompactWidget() {
     <Link
       href="/macro"
       className="block rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 transition-colors hover:bg-[var(--surface-strong)]"
-      aria-label="매크로 상세 분석으로 이동"
+      aria-label="큰 흐름 상세 점검으로 이동"
     >
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">매크로 레짐</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">큰 흐름 점검</p>
           {cfg ? (
             <span
               className={`inline-block rounded border px-2 py-0.5 text-xs font-bold ${cfg.color} ${cfg.border} ${cfg.bg}`}
@@ -68,10 +69,12 @@ export default function MacroCompactWidget() {
       {macroBreakdown.length > 0 && (
         <div className="space-y-1.5">
           {macroBreakdown.map((item) => {
-            const pct = item.weight > 0 ? Math.round((item.score / item.weight) * 100) : 0;
+            const label = item.label ?? (item as unknown as { component?: string }).component ?? '';
+            const weight = item.weight ?? (item as unknown as { maxScore?: number }).maxScore ?? 0;
+            const pct = weight > 0 ? Math.round((item.score / weight) * 100) : 0;
             return (
-              <div key={item.label} className="flex items-center gap-2">
-                <span className="w-[60px] shrink-0 text-[9px] text-slate-500 truncate">{item.label}</span>
+              <div key={label} className="flex items-center gap-2">
+                <span className="w-[72px] shrink-0 text-[9px] text-slate-500 truncate">{friendlyMacroComponentLabel(label)}</span>
                 <div className="flex-1 h-1 rounded-full bg-slate-800 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
@@ -81,7 +84,7 @@ export default function MacroCompactWidget() {
                   />
                 </div>
                 <span className="w-[26px] shrink-0 text-right text-[9px] font-mono text-slate-500">
-                  {item.score}/{item.weight}
+                  {item.score}/{weight}
                 </span>
               </div>
             );

@@ -41,12 +41,147 @@
   "master_filter": {
     "state": "GREEN",
     "market": "US",
-    "metrics": { "p3Score": 87 },
-    "trend": {
-      "action_level": "FULL",
-      "index_code": "SPY",
-      "is_uptrend_50": true,
-      "is_uptrend_200": true
-    }
+    "metrics": {
+      "trend": {
+        "label": "Trend Alignment",
+        "value": "542 / 525",
+        "threshold": "price > 50D/200D",
+        "status": "PASS",
+        "unit": "",
+        "description": "SPY가 주요 이동평균선 위에 있습니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "breadth": {
+        "label": "Market Breadth",
+        "value": 68,
+        "threshold": 60,
+        "status": "PASS",
+        "unit": "%",
+        "description": "주요 종목 다수가 장기 추세 위에 있습니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "volatility": {
+        "label": "Volatility (VIX)",
+        "value": 14.2,
+        "threshold": 20,
+        "status": "PASS",
+        "unit": "pts",
+        "description": "시장 불안도가 낮은 구간입니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "ftd": {
+        "label": "Follow-Through Day",
+        "value": "Confirmed",
+        "threshold": "recent rally confirmation",
+        "status": "PASS",
+        "unit": "",
+        "description": "반등 확인일이 포착되었습니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "distribution": {
+        "label": "Distribution Pressure",
+        "value": 2,
+        "threshold": 5,
+        "status": "PASS",
+        "unit": "days",
+        "description": "최근 큰손 매도 흔적이 낮습니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "newHighLow": {
+        "label": "NH/NL Proxy",
+        "value": 2.3,
+        "threshold": 1.8,
+        "status": "PASS",
+        "unit": "ratio",
+        "description": "새 고점 종목이 새 저점 종목보다 우세합니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "sectorRotation": {
+        "label": "Sector Leadership",
+        "value": "3/3",
+        "threshold": "2+ risk-on sectors",
+        "status": "PASS",
+        "unit": "",
+        "description": "강한 업종이 넓게 확산되고 있습니다.",
+        "source": "e2e fixture",
+        "score": 20,
+        "weight": 20
+      },
+      "score": 87,
+      "p3Score": 87,
+      "meta": {
+        "asOf": "2026-05-23T14:00:00.000Z",
+        "source": "e2e fixture",
+        "provider": "mock",
+        "delay": "EOD",
+        "fallbackUsed": false,
+        "warnings": []
+      },
+      "mainPrice": 542.3,
+      "ma50": 525.1,
+      "ma150": 510,
+      "ma200": 498,
+      "mainHistory": [
+        { "date": "2026-05-20", "close": 535 },
+        { "date": "2026-05-21", "close": 538 },
+        { "date": "2026-05-22", "close": 540 },
+        { "date": "2026-05-23", "close": 542.3 }
+      ],
+      "movingAverageHistory": [
+        { "date": "2026-05-20", "ma50": 522, "ma200": 497 },
+        { "date": "2026-05-21", "ma50": 523, "ma200": 497.5 },
+        { "date": "2026-05-22", "ma50": 524, "ma200": 497.8 },
+        { "date": "2026-05-23", "ma50": 525.1, "ma200": 498 }
+      ],
+      "vixHistory": [
+        { "date": "2026-05-20", "close": 15.8 },
+        { "date": "2026-05-21", "close": 15.1 },
+        { "date": "2026-05-22", "close": 14.7 },
+        { "date": "2026-05-23", "close": 14.2 }
+      ],
+      "sectorRows": [
+        { "symbol": "XLK", "name": "Technology", "return20": 8.1, "riskOn": true, "rank": 1 },
+        { "symbol": "XLY", "name": "Consumer Discretionary", "return20": 5.4, "riskOn": true, "rank": 2 },
+        { "symbol": "XLI", "name": "Industrials", "return20": 3.6, "riskOn": true, "rank": 3 }
+      ],
+      "ftdReason": "반등 확인일이 포착되었습니다.",
+      "distributionDetails": [
+        { "date": "2026-05-16", "close": 532.4, "volume": 72000000, "pctChange": -0.5 },
+        { "date": "2026-05-22", "close": 540, "volume": 69000000, "pctChange": -0.3 }
+      ],
+      "updatedAt": "2026-05-23T14:00:00.000Z"
+    },
+    "insightLog": "진입 가능 신호가 좋고 큰 흐름도 우호적입니다. 계획한 종목을 정상 비중 안에서 검토할 수 있습니다.",
+    "isAiGenerated": false,
+    "aiProviderUsed": "rules",
+    "aiModelUsed": "e2e-fixture",
+    "aiFallbackChain": [
+      { "provider": "rules", "model": "e2e-fixture", "status": "success" }
+    ],
+    "aiModelInsights": [
+      {
+        "id": "rules-e2e",
+        "provider": "rules",
+        "label": "rules",
+        "model": "e2e-fixture",
+        "status": "success",
+        "text": "진입 가능 신호가 좋고 큰 흐름도 우호적입니다.",
+        "selected": true,
+        "priority": 1,
+        "generatedAt": "2026-05-23T14:00:00.000Z"
+      }
+    ]
   }
 }

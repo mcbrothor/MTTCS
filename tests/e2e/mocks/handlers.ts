@@ -67,10 +67,7 @@ export async function setupMasterFilterMock(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        data: marketData.master_filter,
-        meta: { source: 'e2e-mock', timestamp: new Date().toISOString() },
-      }),
+      body: JSON.stringify(marketData.master_filter),
     });
   });
 }
@@ -301,22 +298,42 @@ export async function setupHaltMocks(page: Page): Promise<void> {
 
   // Override master filter to RED
   await page.route('**/api/master-filter*', async (route) => {
+    const redMasterFilter = {
+      ...marketData.master_filter,
+      state: 'RED',
+      insightLog: '진입 가능 신호가 위험 구간입니다. 새 매수보다 현금 확보와 보유 종목 방어가 먼저입니다.',
+      metrics: {
+        ...marketData.master_filter.metrics,
+        score: 28,
+        p3Score: 28,
+        trend: {
+          ...marketData.master_filter.metrics.trend,
+          status: 'FAIL',
+          value: '498 / 525',
+          score: 4,
+          description: 'SPY가 주요 이동평균선 아래에 있습니다.',
+        },
+        breadth: {
+          ...marketData.master_filter.metrics.breadth,
+          status: 'FAIL',
+          value: 28,
+          score: 5,
+          description: '함께 오르는 종목 비율이 낮습니다.',
+        },
+        distribution: {
+          ...marketData.master_filter.metrics.distribution,
+          status: 'FAIL',
+          value: 7,
+          score: 4,
+          description: '큰손 매도 흔적이 많이 쌓였습니다.',
+        },
+      },
+    };
+
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        data: {
-          state: 'RED',
-          market: 'US',
-          metrics: { p3Score: 28 },
-          trend: {
-            action_level: 'HALT',
-            index_code: 'SPY',
-            is_uptrend_50: false,
-            is_uptrend_200: false,
-          },
-        },
-      }),
+      body: JSON.stringify(redMasterFilter),
     });
   });
 

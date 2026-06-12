@@ -8,11 +8,11 @@ import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep, isActiveTab } from '@/com
 
 // 하단 탭바 — 핵심 5개 Flow
 const BOTTOM_TABS = [
-  { key: 'home',    href: '/',               label: '오늘',   icon: Activity },
-  { key: 'market',  href: '/master-filter',  label: '시장',   icon: TrendingUp },
-  { key: 'scanner', href: '/scanner',        label: '발굴',   icon: Search },
-  { key: 'plan',    href: '/plan',           label: '계획',   icon: Target },
-  { key: 'review',  href: '/history',        label: '복기',   icon: BarChart2 },
+  { key: 'home',      href: '/',              label: '오늘',     icon: Activity },
+  { key: 'market',    href: '/master-filter',  label: '시장',     icon: TrendingUp },
+  { key: 'scanner',   href: '/scanner',        label: '발굴',     icon: Search },
+  { key: 'portfolio', href: '/portfolio',       label: '포트',     icon: BarChart3 },
+  { key: 'review',    href: '/history',         label: '복기',     icon: BarChart2 },
 ] as const;
 
 const FLOW_ICON_MAP: Record<string, React.ElementType> = {

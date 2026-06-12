@@ -1,5 +1,6 @@
 import { supabaseServer } from '@/lib/supabase/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { calculateMacroTrendFromData, calculateMansfieldFromData, calculateRSRating, calculateWeightedMomentum } from '@/lib/finance/market/rs-proxy';
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
@@ -45,12 +46,24 @@ function yahooTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
+function isKoreanExchange(exchange: string) {
+  return exchange === 'KOSPI' || exchange === 'KOSDAQ';
+}
+
 async function fetchDailyBars(ticker: string, exchange: string, bars = 300): Promise<{ data: OHLCData[]; source: string }> {
-  try {
-    const data = await getMarketDailyPrice(ticker, exchange, bars);
-    if (data.length > 0) return { data, source: `KIS ${exchange}` };
-  } catch {
-    // Yahoo fallback below keeps one ticker failure from breaking a whole RS chunk.
+  const providerOrder = isKoreanExchange(exchange) ? ['KIS', 'Toss Securities'] : ['Toss Securities', 'KIS'];
+
+  for (const provider of providerOrder) {
+    if (provider === 'Toss Securities' && !isTossInvestConfigured()) continue;
+
+    try {
+      const data = provider === 'KIS'
+        ? await getMarketDailyPrice(ticker, exchange, bars)
+        : await getTossDailyPrice(ticker, bars);
+      if (data.length > 0) return { data, source: `${provider} ${exchange}` };
+    } catch {
+      // Yahoo fallback below keeps one ticker failure from breaking a whole RS chunk.
+    }
   }
 
   const formatted = yahooTicker(ticker, exchange);

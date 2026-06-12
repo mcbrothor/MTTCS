@@ -78,6 +78,7 @@ export default function MomentumScannerPage() {
   
   const [results, setResults] = useState<SurgeResult[]>([]);
   const [scanErrors, setScanErrors] = useState<MomentumScanError[]>([]);
+  const [scanFatalError, setScanFatalError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('rvol');
   const [viewType, setViewType] = useState<ViewType>('card');
@@ -90,6 +91,7 @@ export default function MomentumScannerPage() {
     setProgress({ current: 0, total: 0 });
     setScanStage('유니버스 로딩 중');
     setScanErrors([]);
+    setScanFatalError(null);
 
     const abort = new AbortController();
     abortRef.current = abort;
@@ -172,7 +174,7 @@ export default function MomentumScannerPage() {
       setScanStage(allErrors.length > 0 ? `완료 · 실패 ${allErrors.length}건` : '완료');
     } catch (err: unknown) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
-        alert(`스캔 실패: ${err instanceof Error ? err.message : '알 수 없는 오류'}`);
+        setScanFatalError(err instanceof Error ? err.message : '알 수 없는 오류');
       }
     } finally {
       setIsScanning(false);
@@ -225,6 +227,13 @@ export default function MomentumScannerPage() {
       </header>
 
       <ScannerTabNav />
+
+      {scanFatalError && (
+        <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <p className="text-sm text-red-100">스캔 실패: {scanFatalError}</p>
+          <button type="button" onClick={() => setScanFatalError(null)} className="ml-3 rounded-md px-3 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20">닫기</button>
+        </div>
+      )}
 
       {/* Universe Selection */}
       <section className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800">
