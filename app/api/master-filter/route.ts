@@ -23,7 +23,7 @@ interface CachedInsight {
 const insightCache = new Map<string, CachedInsight>();
 const INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000;
 const INSIGHT_RESPONSE_TIMEOUT_MS = process.env.VERCEL === '1'
-  ? 3500
+  ? 9000 // Vercel 서버리스 기본 타임아웃(10초) 직전까지 대기
   : Number(process.env.MARKET_INSIGHT_TIMEOUT_MS || 30000);
 
 const US_MACRO_SYMBOLS = [
