@@ -1,5 +1,11 @@
 import axios from 'axios';
-import { tossInvestBaseUrl, tossInvestClientId, tossInvestClientSecret } from '../../env';
+import {
+  tossInvestAccountId,
+  tossInvestBaseUrl,
+  tossInvestClientId,
+  tossInvestClientSecret,
+  tossInvestHoldingsPath,
+} from '../../env';
 import type { OHLCData } from '../../../types';
 
 interface TossTokenCache {
@@ -41,11 +47,38 @@ interface TossPricesResponse {
   result?: TossPriceRow[];
 }
 
+interface TossHoldingResponse {
+  result?: unknown;
+  data?: unknown;
+  holdings?: unknown;
+  positions?: unknown;
+}
+
 export interface TossPriceQuote {
   symbol: string;
   timestamp: string | null;
   lastPrice: number;
   currency: string | null;
+}
+
+export interface TossHoldingPosition {
+  symbol: string;
+  name: string | null;
+  quantity: number;
+  avgPrice: number | null;
+  currentPrice: number | null;
+  evaluationAmount: number | null;
+  purchaseAmount: number | null;
+  profitLoss: number | null;
+  profitLossRate: number | null;
+  currency: string | null;
+}
+
+export interface TossHoldingsSnapshot {
+  positions: TossHoldingPosition[];
+  totalEquity: number | null;
+  cash: number | null;
+  asOf: string | null;
 }
 
 const TOKEN_EXPIRY_SAFETY_MS = 60 * 1000;
@@ -160,6 +193,49 @@ function parseFiniteNumber(value: unknown): number | null {
   if (typeof value === 'string' && value.trim() === '') return null;
   const parsed = typeof value === 'string' ? Number(value.replaceAll(',', '')) : Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function pickFirstString(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function pickFirstNumber(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const parsed = parseFiniteNumber(source[key]);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function firstArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  const record = value as Record<string, unknown>;
+  for (const key of ['holdings', 'positions', 'stocks', 'items', 'balances', 'securities', 'output1']) {
+    if (Array.isArray(record[key])) return record[key];
+  }
+  for (const nestedKey of ['result', 'data', 'body']) {
+    const nested = firstArray(record[nestedKey]);
+    if (nested.length > 0) return nested;
+  }
+  return [];
+}
+
+function summaryObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {};
+  const record = value as Record<string, unknown>;
+  for (const key of ['summary', 'account', 'portfolio', 'output2', 'result', 'data']) {
+    const nested = record[key];
+    if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+      return { ...summaryObject(nested), ...(nested as Record<string, unknown>) };
+    }
+  }
+  return record;
 }
 
 function normalizeTimestampDate(timestamp: string | undefined) {
@@ -277,4 +353,116 @@ export async function getTossPrices(symbols: string[]): Promise<TossPriceQuote[]
   }
 
   return results;
+}
+
+export function normalizeTossHoldings(payload: TossHoldingResponse | unknown): TossHoldingsSnapshot {
+  const positions = firstArray(payload)
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const rawSymbol = pickFirstString(row, [
+        'symbol',
+        'ticker',
+        'stockCode',
+        'stock_code',
+        'securityCode',
+        'isinCode',
+        'pdno',
+      ]);
+      const symbol = rawSymbol?.replace(/[^0-9A-Za-z.]/g, '').toUpperCase() || null;
+      const quantity = pickFirstNumber(row, [
+        'quantity',
+        'shares',
+        'balanceQuantity',
+        'holdingQuantity',
+        'holdQuantity',
+        'qty',
+        'hldgQty',
+        'hldg_qty',
+      ]);
+      if (!symbol || quantity === null || quantity <= 0) return null;
+
+      const avgPrice = pickFirstNumber(row, [
+        'avgPrice',
+        'averagePrice',
+        'averagePurchasePrice',
+        'purchaseAvgPrice',
+        'buyAvgPrice',
+        'pchsAvgPric',
+        'pchs_avg_pric',
+      ]);
+      const currentPrice = pickFirstNumber(row, ['currentPrice', 'lastPrice', 'price', 'marketPrice', 'prpr']);
+      const evaluationAmount = pickFirstNumber(row, [
+        'evaluationAmount',
+        'valuationAmount',
+        'marketValue',
+        'evalAmount',
+        'evluAmt',
+        'evlu_amt',
+      ]);
+      const purchaseAmount = pickFirstNumber(row, [
+        'purchaseAmount',
+        'buyAmount',
+        'costBasis',
+        'pchsAmt',
+        'pchs_amt',
+      ]);
+
+      return {
+        symbol,
+        name: pickFirstString(row, ['name', 'stockName', 'securityName', 'prdtName', 'prdt_name']),
+        quantity,
+        avgPrice,
+        currentPrice,
+        evaluationAmount,
+        purchaseAmount,
+        profitLoss: pickFirstNumber(row, ['profitLoss', 'pnl', 'evaluationProfitLoss', 'evluPflsAmt', 'evlu_pfls_amt']),
+        profitLossRate: pickFirstNumber(row, ['profitLossRate', 'pnlRate', 'returnRate', 'evluPflsRt', 'evlu_pfls_rt']),
+        currency: pickFirstString(row, ['currency', 'currencyCode', 'crcyCd', 'crcy_cd']),
+      };
+    })
+    .filter((item): item is TossHoldingPosition => item !== null);
+
+  const summary = summaryObject(payload);
+  return {
+    positions,
+    totalEquity: pickFirstNumber(summary, [
+      'totalEquity',
+      'totalAsset',
+      'totalAssets',
+      'netAsset',
+      'accountEvaluationAmount',
+      'totEvluAmt',
+      'tot_evlu_amt',
+    ]),
+    cash: pickFirstNumber(summary, ['cash', 'cashBalance', 'deposit', 'dncaTotAmt', 'dnca_tot_amt']),
+    asOf: pickFirstString(summary, ['timestamp', 'asOf', 'baseDate', 'updatedAt']),
+  };
+}
+
+export async function getTossHoldings(market: 'US' | 'KR'): Promise<TossHoldingsSnapshot> {
+  const token = await getTossToken();
+  const accountId = tossInvestAccountId();
+  const path = tossInvestHoldingsPath();
+
+  if (!accountId) {
+    throw new Error('Toss Securities holdings requires TOSS_INVEST_ACCOUNT_ID or TOSS_ACCOUNT_ID.');
+  }
+
+  try {
+    const response = await axios.get(`${trimTrailingSlash(tossInvestBaseUrl())}${path.startsWith('/') ? path : `/${path}`}`, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/json',
+        'x-tossinvest-account': accountId,
+      },
+      params: {
+        market,
+      },
+    });
+
+    return normalizeTossHoldings(response.data);
+  } catch (error) {
+    throw new Error(`Toss Securities holdings failed: ${tossErrorMessage(error, 'unknown holdings error')}`);
+  }
 }

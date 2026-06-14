@@ -21,7 +21,7 @@ interface CachedInsight {
   cachedAt: number;
 }
 const insightCache = new Map<string, CachedInsight>();
-const INSIGHT_CACHE_TTL_MS = 5 * 60 * 1000;
+const INSIGHT_CACHE_TTL_MS = Number(process.env.MARKET_INSIGHT_CACHE_TTL_MS || 60 * 60 * 1000);
 const INSIGHT_RESPONSE_TIMEOUT_MS = process.env.VERCEL === '1'
   ? 9000 // Vercel 서버리스 기본 타임아웃(10초) 직전까지 대기
   : Number(process.env.MARKET_INSIGHT_TIMEOUT_MS || 30000);
@@ -79,7 +79,14 @@ async function safeDaily(symbol: string): Promise<OHLCData[]> {
   });
 }
 
-function fallbackInsight(message: string): CachedInsight {
+function fallbackInsight(message: string, staleInsight?: CachedInsight): CachedInsight {
+  if (staleInsight?.isAiGenerated) {
+    return {
+      ...staleInsight,
+      errorSummary: 'LLM insight refresh timed out; showing the last successful LLM briefing.',
+    };
+  }
+
   const generatedAt = new Date().toISOString();
   return {
     text: message,
@@ -107,11 +114,11 @@ function fallbackInsight(message: string): CachedInsight {
   };
 }
 
-async function generateInsightWithTimeout(input: Parameters<typeof generateMarketInsight>[0]) {
+async function generateInsightWithTimeout(input: Parameters<typeof generateMarketInsight>[0], staleInsight?: CachedInsight) {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<CachedInsight>((resolve) => {
     timer = setTimeout(() => {
-      resolve(fallbackInsight('시장 데이터 계산은 완료되었으나 LLM 인사이트 생성이 지연되어 규칙 기반 요약으로 대체했습니다. P3 점수, 추세, 시장폭, 분산일, 섹터 리더십 지표를 우선 확인하세요.'));
+      resolve(fallbackInsight('시장 데이터 계산은 완료되었으나 LLM 인사이트 생성이 지연되고 있습니다. 잠시 후 새로고침하면 실제 LLM 브리핑을 다시 요청합니다.', staleInsight));
     }, INSIGHT_RESPONSE_TIMEOUT_MS);
   });
 
@@ -282,8 +289,12 @@ export async function GET(request: Request) {
     if (cached && now - cached.cachedAt < INSIGHT_CACHE_TTL_MS) {
       insight = cached;
     } else {
-      insight = await generateInsightWithTimeout(insightInput);
-      insightCache.set(cacheKey, insight);
+      insight = await generateInsightWithTimeout(insightInput, cached);
+      if (insight.isAiGenerated) {
+        insightCache.set(cacheKey, insight);
+      } else {
+        insightCache.delete(cacheKey);
+      }
     }
 
     // 3. 최종 응답 구조 생성 (기존 호환성 유지)

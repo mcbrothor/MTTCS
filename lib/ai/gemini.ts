@@ -10,7 +10,7 @@ const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completio
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-2507';
 const CEREBRAS_CHAT_COMPLETIONS_URL = 'https://api.cerebras.ai/v1/chat/completions';
-const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || 9000);
+const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || (process.env.VERCEL === '1' ? 4500 : 9000));
 
 export const LOCAL_LLM_ENABLED = process.env.LOCAL_LLM_ENABLED?.toLowerCase() === 'true';
 export const LOCAL_LLM_API_URL = process.env.LOCAL_LLM_API_URL || 'http://localhost:11434/v1';
@@ -109,6 +109,49 @@ function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = MODEL_TI
   });
 
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+export async function settleModelInsightsUntilFirstSuccess(tasks: Promise<AiModelInsight>[]) {
+  const modelInsights: AiModelInsight[] = [];
+  const pending = new Map(
+    tasks.map((task, index) => [
+      index,
+      task
+        .then((insight) => ({ index, insight }))
+        .catch((error: unknown) => ({
+          index,
+          insight: attemptToInsight({
+            provider: 'rules',
+            label: 'internal-error',
+            model: 'insight-router',
+            status: 'failed',
+            message: compactMessage(error),
+            priority: 98,
+          }),
+        })),
+    ]),
+  );
+
+  while (pending.size > 0) {
+    const { index, insight } = await Promise.race(pending.values());
+    pending.delete(index);
+    modelInsights.push(insight);
+
+    if (insight.status === 'success' && insight.text) {
+      for (const task of pending.values()) {
+        void task.catch(() => {});
+      }
+      return {
+        selected: insight,
+        modelInsights: modelInsights.sort((a, b) => a.priority - b.priority),
+      };
+    }
+  }
+
+  return {
+    selected: null,
+    modelInsights: modelInsights.sort((a, b) => a.priority - b.priority),
+  };
 }
 
 function compactMessage(value: unknown, max = 500) {
@@ -427,33 +470,29 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
   const prompt = buildPrompt(input);
   const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
-    collectCodexCli(prompt, chain, 0), // codex-cli를 최우선 순위로 탐색!
-    collectLocalLlm(prompt, chain, 1),
-    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 2),
-    collectGroq(prompt, chain, 4),
-    collectCerebras(prompt, chain, 5),
+    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 0),
+    collectGroq(prompt, chain, 2),
+    collectCerebras(prompt, chain, 3),
+    collectLocalLlm(prompt, chain, 4),
+    collectCodexCli(prompt, chain, 5),
   ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 3));
+    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 1));
   } else {
     const model = GEMINI_FALLBACK_MODEL || '(not configured)';
     const message = 'GEMINI_FALLBACK_MODEL is not configured.';
     chain.push({ provider: 'gemini-fallback', model, status: 'skipped', message });
-    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 3 })));
+    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 1 })));
   }
 
-  const modelInsights = (await Promise.all(tasks)).sort((a, b) => a.priority - b.priority);
+  const { selected, modelInsights } = await settleModelInsightsUntilFirstSuccess(tasks);
   const priorityByChainKey = new Map<string, number>();
   for (const item of modelInsights) {
     priorityByChainKey.set(item.label, item.priority);
     priorityByChainKey.set(item.provider, Math.min(item.priority, priorityByChainKey.get(item.provider) ?? 99));
   }
   chain.sort((a, b) => (priorityByChainKey.get(a.provider) ?? 99) - (priorityByChainKey.get(b.provider) ?? 99));
-
-  const selected = modelInsights
-    .filter((item) => item.status === 'success' && item.text)
-    .sort((a, b) => a.priority - b.priority)[0];
 
   if (selected) {
     const selectedInsights = modelInsights.map((item) => ({ ...item, selected: item.id === selected.id }));

@@ -31,6 +31,7 @@ const tests = [
   'tests/contest-rule-engine-sir.test.mjs',
   'tests/contest-ib-prompt-sir.test.mjs',
   'tests/codex-cli-worker-utils.test.mjs',
+  'tests/market-insight-router.test.mjs',
   'tests/contest-presentation.test.mjs',
   'tests/history-presentation.test.mjs',
   'tests/review-stats.test.mjs',

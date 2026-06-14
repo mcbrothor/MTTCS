@@ -34,6 +34,8 @@ Optional market data fallback variables:
 - `TOSS_INVEST_CLIENT_ID` or `TOSS_CLIENT_ID`
 - `TOSS_INVEST_CLIENT_SECRET` or `TOSS_CLIENT_SECRET`
 - `TOSS_INVEST_BASE_URL` (defaults to `https://openapi.tossinvest.com`)
+- `TOSS_INVEST_ACCOUNT_ID` or `TOSS_ACCOUNT_ID` (needed when the Toss holdings endpoint requires an account identifier)
+- `TOSS_INVEST_HOLDINGS_PATH` (defaults to `/api/v1/holdings`)
 
 Local Codex worker optional variables:
 
@@ -81,6 +83,8 @@ Run after deployment with an authenticated session:
   - Expected provider: `KIS (260 daily bars)`
 - `GET /api/macro`
   - Expected: `score` present, `regime` present, `^KS11.source = KIS`
+- `GET /api/portfolio/risk?market=KR&source=toss`
+  - Expected provider: `Toss Securities`, with active positions matching the Toss account holdings
 
 ## 5. Local Codex Worker
 

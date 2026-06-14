@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { normalizeTossCandles } from '../lib/finance/providers/toss-api.ts';
+import { normalizeTossCandles, normalizeTossHoldings } from '../lib/finance/providers/toss-api.ts';
 
 function run(name, fn) {
   try {
@@ -48,4 +48,51 @@ run('drops incomplete Toss candle rows', () => {
   ]);
 
   assert.deepEqual(rows, []);
+});
+
+run('normalizes Toss holdings into MTN positions', () => {
+  const snapshot = normalizeTossHoldings({
+    result: {
+      summary: {
+        totalAsset: '1,500,000',
+        cash: '250000',
+        timestamp: '2026-06-14T09:00:00+09:00',
+      },
+      holdings: [
+        {
+          stockCode: '005930',
+          stockName: '삼성전자',
+          balanceQuantity: '10',
+          averagePurchasePrice: '70000',
+          currentPrice: '75000',
+          evaluationAmount: '750000',
+          evaluationProfitLoss: '50000',
+          profitLossRate: '7.14',
+          currency: 'KRW',
+        },
+        {
+          stockCode: '000000',
+          balanceQuantity: '0',
+        },
+      ],
+    },
+  });
+
+  assert.equal(snapshot.totalEquity, 1500000);
+  assert.equal(snapshot.cash, 250000);
+  assert.equal(snapshot.asOf, '2026-06-14T09:00:00+09:00');
+  assert.deepEqual(snapshot.positions, [
+    {
+      symbol: '005930',
+      name: '삼성전자',
+      quantity: 10,
+      avgPrice: 70000,
+      currentPrice: 75000,
+      evaluationAmount: 750000,
+      purchaseAmount: null,
+      profitLoss: 50000,
+      profitLossRate: 7.14,
+      currency: 'KRW',
+    },
+  ]);
 });

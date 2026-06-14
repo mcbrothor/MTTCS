@@ -68,6 +68,14 @@ export function tossInvestBaseUrl(): string {
   return optional('TOSS_INVEST_BASE_URL', 'https://openapi.tossinvest.com');
 }
 
+export function tossInvestAccountId(): string | null {
+  return optionalAny(['TOSS_INVEST_ACCOUNT_ID', 'TOSS_ACCOUNT_ID']);
+}
+
+export function tossInvestHoldingsPath(): string {
+  return optional('TOSS_INVEST_HOLDINGS_PATH', '/api/v1/holdings');
+}
+
 // --- Telegram ---
 
 export function telegramBotToken(): string {

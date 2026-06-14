@@ -42,7 +42,7 @@ function labelFor(insight: AiModelInsight) {
 function routerSummary(aiProviderUsed: string) {
   if (aiProviderUsed === 'codex-cli') return 'Codex CLI가 대표 브리핑을 생성했습니다.';
   if (aiProviderUsed === 'rules') return 'LLM 응답 지연으로 규칙 기반 브리핑을 표시합니다.';
-  return 'Codex CLI 우선 확인 후 가능한 모델의 첫 성공 답변을 표시합니다.';
+  return '빠른 클라우드 모델부터 확인해 첫 성공 답변을 즉시 표시합니다.';
 }
 
 function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
@@ -288,7 +288,7 @@ export default function InsightLog() {
 
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-800/50 pt-4">
               <span className="text-[10px] italic text-slate-500">
-                Codex CLI → Local LLM → Gemini → Groq → Cerebras 순서로 수집하고, 첫 성공 답변을 대표로 표시합니다.
+                Gemini → Groq → Cerebras → Local LLM → Codex CLI 순서로 우선순위를 두고, 첫 성공 답변을 대표로 표시합니다.
               </span>
               <span className="text-[10px] uppercase tracking-tight text-slate-500">Navigation Protocol 4.1</span>
             </div>
