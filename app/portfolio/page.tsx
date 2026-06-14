@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import type { ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
 
 async function parseResponse<T>(response: Response) {
@@ -100,11 +100,25 @@ export default function PortfolioPage() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <LoadingSpinner size="lg" />
-        </div>
+        <AsyncStatePanel
+          state="loading"
+          title="포트폴리오 리스크를 불러오는 중입니다"
+          message="총 노출, 현금 비중, 오픈 리스크를 계산하고 있습니다."
+          delayedTitle="포트폴리오 데이터를 불러오지 못하고 있습니다"
+          delayedMessage="데이터 소스가 지연 중입니다. 다시 시도하거나 매매 계획 화면에서 새 계획을 먼저 작성할 수 있습니다."
+          onRetry={() => load(market)}
+          primaryAction={{ label: '새 매매 계획 작성', href: '/plan', variant: 'outline' }}
+        >
+          <PortfolioSkeleton />
+        </AsyncStatePanel>
       ) : error ? (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">{error}</div>
+        <AsyncStatePanel
+          state="error"
+          title="포트폴리오 리스크를 불러오지 못했습니다"
+          message={`원인: ${error}. 잠시 후 다시 시도하거나 새 매매 계획을 먼저 작성하세요.`}
+          onRetry={() => load(market)}
+          primaryAction={{ label: '새 매매 계획 작성', href: '/plan', variant: 'outline' }}
+        />
       ) : summary ? (
         <>
           {summary.warnings.length > 0 && (
@@ -256,6 +270,19 @@ function Metric({ label, value, tooltip }: { label: string; value: string; toolt
           <div className="absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
         </div>
       )}
+    </div>
+  );
+}
+
+function PortfolioSkeleton() {
+  return (
+    <div className="grid w-full max-w-3xl gap-3 sm:grid-cols-3">
+      {['총 자산', '오픈 리스크', '보유 포지션'].map((label) => (
+        <div key={label} className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-left">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+          <div className="mt-3 h-5 w-24 animate-pulse rounded bg-slate-800" />
+        </div>
+      ))}
     </div>
   );
 }

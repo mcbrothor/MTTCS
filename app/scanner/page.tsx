@@ -254,16 +254,16 @@ export default function ScannerPage() {
             <div className="grid gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-                  Scan Control
+                  스캔 설정
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
+                  시장 상태를 확인한 뒤 유니버스를 고르고 후보 발굴을 시작합니다.
                 </p>
               </div>
 
               <div className="grid gap-3">
                 <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                  Universe Selection
+                  유니버스 선택
                   <div className="grid grid-cols-2 gap-2">
                     {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
                       <button
@@ -292,7 +292,7 @@ export default function ScannerPage() {
                 <div className="grid grid-cols-2 gap-3">
                   {!isMobile && (
                     <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                      View Mode
+                      보기 방식
                       <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
                         {(['web', 'app'] as const).map((mode) => (
                           <button
@@ -302,7 +302,7 @@ export default function ScannerPage() {
                               viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
                             }`}
                           >
-                            {mode === 'web' ? 'TABLE' : 'CARDS'}
+                            {mode === 'web' ? '표 보기' : '카드 보기'}
                           </button>
                         ))}
                       </div>
@@ -332,7 +332,7 @@ export default function ScannerPage() {
                   className="h-10 w-full justify-center gap-2 rounded-xl border-emerald-500/30 text-emerald-100"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  {telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}
+                  {telegramBusy ? '전송 중...' : telegramCandidates.length === 0 ? '보낼 후보가 없습니다' : `텔레그램 전송 (${telegramCandidates.length})`}
                 </Button>
               </div>
             </div>
@@ -599,6 +599,7 @@ export default function ScannerPage() {
         label="최고의 차트 선정하기"
         subLabel="Step 3: Beauty Contest"
         variant="emerald"
+        show={filteredResults.length > 0 || selectedTickers.size > 0}
       />
 
       <VcpDrilldownModal

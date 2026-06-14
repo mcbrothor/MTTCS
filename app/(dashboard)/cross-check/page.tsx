@@ -26,6 +26,17 @@ interface CrossCheckResult {
   hits: ScannerSource[];
 }
 
+interface CrossCheckSnapshotRow {
+  ticker?: string;
+  name?: string;
+  exchange?: string;
+  marketCap?: number | null;
+  currentPrice?: number | null;
+  status?: string;
+  leaderGrade?: string;
+  sepaPassRate?: number;
+}
+
 const SOURCES: { key: ScannerSource; label: string; tone: string }[] = [
   { key: 'minervini', label: '미너비니', tone: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' },
   { key: 'canslim', label: 'CAN SLIM', tone: 'bg-rose-500/10 text-rose-300 border-rose-500/20' },
@@ -61,8 +72,9 @@ export default function CrossCheckPage() {
           const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
           if (!parsed?.results || !Array.isArray(parsed.results)) return;
 
-          parsed.results.forEach((r: any) => {
+          parsed.results.forEach((r: CrossCheckSnapshotRow) => {
             // 필터링: 성공한 항목 중 의미있는 결과만. (예: leaderGrade !== 'LAGGARD')
+            if (!r.ticker) return;
             if (r.status === 'error') return;
             if (source === 'leader' && r.leaderGrade === 'LAGGARD') return;
             if (source === 'canslim' && r.sepaPassRate && r.sepaPassRate < 60) return;
@@ -70,8 +82,8 @@ export default function CrossCheckPage() {
 
             const existing = aggregated.get(r.ticker) || {
               ticker: r.ticker,
-              name: r.name,
-              exchange: r.exchange,
+              name: r.name ?? '',
+              exchange: r.exchange ?? 'NAS',
               marketCap: r.marketCap ?? null,
               currentPrice: r.currentPrice ?? null,
               hits: [] as ScannerSource[],

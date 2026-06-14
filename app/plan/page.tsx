@@ -13,7 +13,6 @@ import ChecklistForm from '@/components/plan/ChecklistForm';
 import ScannerContextBanner from '@/components/plan/ScannerContextBanner';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
 import type { ApiSuccess, PortfolioRiskSummary, RiskStrategy } from '@/types';
@@ -320,13 +319,6 @@ function PlanPageContent() {
           )}
         </>
       )}
-
-      <FlowCtaButton 
-        nextPath="/portfolio" 
-        label="내 포트폴리오 관리" 
-        subLabel="Step 5: Execution"
-        variant="emerald"
-      />
     </div>
   );
 }

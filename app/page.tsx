@@ -79,7 +79,7 @@ export default function CommandCenterPage() {
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Next Action</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">다음에 할 일</p>
               <h2 className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{summary.nextAction.label}</h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--text-secondary)]">{summary.nextAction.reason}</p>
             </div>
@@ -87,7 +87,7 @@ export default function CommandCenterPage() {
               href={summary.nextAction.href}
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-500"
             >
-              이동 <ArrowUpRight className="h-4 w-4" />
+              {summary.nextAction.href === '/master-filter' ? '시장 신호판 확인하기' : `${summary.nextAction.label} 시작하기`} <ArrowUpRight className="h-4 w-4" />
             </Link>
           </div>
 
@@ -101,7 +101,7 @@ export default function CommandCenterPage() {
         <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">Today Snapshot</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">오늘 요약</p>
               <p className="mt-1 text-xs text-[var(--text-secondary)]">Updated {formatDate(summary.updatedAt)}</p>
             </div>
             {summary.loading && <LoadingSpinner />}
@@ -130,7 +130,7 @@ export default function CommandCenterPage() {
               ))}
             </div>
           ) : (
-            <EmptyState href="/scanner" label="스캐너에서 후보 발굴" text="아직 표시할 관심 후보가 없습니다." />
+            <EmptyState href="/scanner" label="스캐너 실행하기" text="아직 표시할 관심 후보가 없습니다. 스캐너를 실행하거나 관심종목을 직접 추가하세요." />
           )}
         </Panel>
 
@@ -150,7 +150,7 @@ export default function CommandCenterPage() {
               ))}
             </div>
           ) : (
-            <EmptyState href="/master-filter" label="시장부터 확인" text="아직 표시할 매매 기록이 없습니다." />
+            <EmptyState href="/master-filter" label="시장 신호판 확인하기" text="아직 표시할 매매 기록이 없습니다. 오늘 시장 상태를 먼저 확인하세요." />
           )}
         </Panel>
       </section>

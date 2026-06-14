@@ -109,7 +109,7 @@ function calculateMetrics(trades: Trade[], lastSuccessfulAt: string | null): Das
   };
 }
 
-export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
+export function useDashboardMetrics(market: 'US' | 'KR' = 'US', refreshKey = 0) {
   const [data, setData] = useState<DashboardMetricsState>(initialState);
 
   useEffect(() => {
@@ -155,7 +155,7 @@ export function useDashboardMetrics(market: 'US' | 'KR' = 'US') {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [market]);
+  }, [market, refreshKey]);
 
   return data;
 }

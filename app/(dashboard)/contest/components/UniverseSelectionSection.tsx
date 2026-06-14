@@ -1,8 +1,8 @@
 import React from 'react';
-import Link from 'next/link';
 import { CheckCircle2, RefreshCw } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import { ScannerUniverse, StoredScannerSnapshot, MasterFilterResponse, ScannerResult } from '@/types';
 import { tierClass } from '@/lib/contest-ui-utils';
 import { MAX_CONTEST_CANDIDATES } from '@/lib/contest-sources';
@@ -71,10 +71,20 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
       </div>
 
       {!snapshot ? (
-        <div className="mt-6 rounded-xl border border-dashed border-slate-800 bg-slate-900/40 p-12 text-center text-slate-400">
-          <p>저장된 스캔 결과가 없습니다.</p>
-          <Link href="/scanner" className="mt-4 inline-block text-emerald-400 hover:underline">스캐너로 이동 &rarr;</Link>
-        </div>
+        <AsyncStatePanel
+          state="empty"
+          title="저장된 스캔 결과가 없습니다"
+          message="콘테스트는 스캐너에서 고른 후보를 비교하는 단계입니다. 먼저 스캐너를 실행하고 10~15개 후보를 선택하세요."
+          className="mt-6 border-dashed"
+          primaryAction={{ label: '미너비니 스캐너 열기', href: '/scanner' }}
+          secondaryAction={{ label: '오닐 스캐너 열기', href: '/canslim', variant: 'outline' }}
+        >
+          <div className="grid max-w-lg gap-2 text-left text-xs text-slate-400 sm:grid-cols-3">
+            <span className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">1. 스캐너 실행</span>
+            <span className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">2. 후보 선택</span>
+            <span className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">3. 콘테스트 시작</span>
+          </div>
+        </AsyncStatePanel>
       ) : (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500">

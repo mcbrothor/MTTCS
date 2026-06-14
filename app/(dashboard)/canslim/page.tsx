@@ -976,16 +976,16 @@ export default function CanslimScannerPage() {
             <div className="grid gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Scan Control
+                  스캔 설정
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
-                  유니버스와 뷰 모드를 정한 뒤 바로 스캔을 실행할 수 있습니다.
+                  유니버스를 고르고 실적 성장 후보 발굴을 시작합니다.
                 </p>
               </div>
 
               <div className="grid gap-3">
                 <div className="grid gap-1.5 text-xs text-slate-500">
-                  Universe Selection
+                  유니버스 선택
                   <div className="grid grid-cols-2 gap-2">
                     {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
                       <button
@@ -1013,7 +1013,7 @@ export default function CanslimScannerPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="grid gap-1.5 text-xs text-slate-500">
-                    View Mode
+                    보기 방식
                     <div className="flex rounded-xl border border-slate-800 bg-slate-950/40 p-1">
                       {(['web', 'app'] as const).map((mode) => (
                         <button
@@ -1023,7 +1023,7 @@ export default function CanslimScannerPage() {
                             viewMode === mode ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'text-slate-500'
                           }`}
                         >
-                          {mode === 'web' ? 'TABLE' : 'CARDS'}
+                          {mode === 'web' ? '표 보기' : '카드 보기'}
                         </button>
                       ))}
                     </div>
@@ -1051,7 +1051,7 @@ export default function CanslimScannerPage() {
                   className="h-10 w-full justify-center gap-2 rounded-xl border-rose-500/30 text-rose-100"
                 >
                   <Send className="h-3.5 w-3.5" />
-                  {telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}
+                  {telegramBusy ? '전송 중...' : telegramCandidates.length === 0 ? '보낼 후보가 없습니다' : `텔레그램 전송 (${telegramCandidates.length})`}
                 </Button>
               </div>
             </div>
@@ -1306,6 +1306,7 @@ export default function CanslimScannerPage() {
         label="최고의 차트 선정하기" 
         subLabel="Step 3: Beauty Contest"
         variant="emerald"
+        show={filteredResults.length > 0 || selectedTickers.size > 0}
       />
 
       {/* 드릴다운 모달 */}

@@ -76,45 +76,35 @@ export default function ScannerTabNav() {
   const stateDot = data?.state ? STATE_TONE[data.state] : 'bg-slate-500';
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.href;
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
+      <div className="no-scrollbar flex gap-2 overflow-x-auto">
+        {tabs.map((tab) => {
+          const isActive = pathname === tab.href;
 
-        return (
-          <Link
-            key={tab.id}
-            href={tab.href}
-            className={`rounded-[20px] border px-4 py-4 transition-all ${
-              isActive
-                ? tab.activeColor
-                : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${isActive ? 'border-white/10 bg-black/10' : 'border-[var(--border)] bg-[var(--surface-strong)]'} ${isActive ? '' : tab.idleColor}`}>
-                  {tab.icon}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-                      Scanner Mode
-                    </span>
-                    <span className={`h-2 w-2 rounded-full ${stateDot}`} />
-                  </div>
-                  <p className="mt-1 text-sm font-semibold">{tab.label}</p>
-                </div>
-              </div>
-              {isActive && (
-                <span className="rounded-full border border-white/10 bg-black/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]">
-                  Active
-                </span>
-              )}
-            </div>
-            <p className="mt-3 text-sm text-[var(--text-secondary)]">{tab.description}</p>
-          </Link>
-        );
-      })}
+          return (
+            <Link
+              key={tab.id}
+              href={tab.href}
+              className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                isActive
+                  ? tab.activeColor
+                  : `border-transparent text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] ${tab.idleColor}`
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+              {isActive && <span className={`h-2 w-2 rounded-full ${stateDot}`} />}
+            </Link>
+          );
+        })}
+      </div>
+      {tabs.map((tab) => (
+        pathname === tab.href ? (
+          <p key={tab.id} className="px-2 pt-2 text-xs leading-5 text-[var(--text-secondary)]">
+            {tab.description}
+          </p>
+        ) : null
+      ))}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import TradeHistoryTable from '@/components/dashboard/TradeHistoryTable';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics';
 import { filterTradesByMistakeTag } from '@/lib/review-stats';
 
@@ -29,7 +30,8 @@ function HistoryPageContent() {
   const [market, setMarket] = useState<'US' | 'KR'>(requestedMarket);
   const [view, setView] = useState<HistoryView>(requestedView);
   const [selectedMistakeTag, setSelectedMistakeTag] = useState<string | null>(null);
-  const metrics = useDashboardMetrics(market);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const metrics = useDashboardMetrics(market, refreshKey);
 
   useEffect(() => {
     setMarket(requestedMarket);
@@ -58,57 +60,72 @@ function HistoryPageContent() {
 
   if (metrics.loading) {
     return (
-      <div className="flex h-[70vh] flex-col items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="space-y-6 pb-12">
+        <HistoryHeader
+          market={market}
+          view={view}
+          onMarketChange={(key) => {
+            setMarket(key);
+            updateParams({ market: key });
+          }}
+          onViewChange={(key) => {
+            setView(key);
+            updateParams({ view: key });
+          }}
+        />
+        <AsyncStatePanel
+          state="loading"
+          title="복기 데이터를 불러오는 중입니다"
+          message="매매 기록과 성과 통계를 확인하고 있습니다."
+          delayedTitle="복기 데이터를 불러오지 못하고 있습니다"
+          delayedMessage="데이터 요청이 지연 중입니다. 다시 시도하거나 오늘의 의사결정으로 돌아가 새 작업을 시작할 수 있습니다."
+          onRetry={() => setRefreshKey((value) => value + 1)}
+          primaryAction={{ label: '오늘의 의사결정으로', href: '/', variant: 'outline' }}
+        />
       </div>
     );
   }
 
   if (metrics.error) {
     return (
-      <div className="flex h-[70vh] flex-col items-center justify-center text-coral-red">
-        <p className="text-xl font-bold">복기 데이터를 불러오지 못했습니다.</p>
-        <p className="mt-2 text-slate-400">{metrics.error}</p>
+      <div className="space-y-6 pb-12">
+        <HistoryHeader
+          market={market}
+          view={view}
+          onMarketChange={(key) => {
+            setMarket(key);
+            updateParams({ market: key });
+          }}
+          onViewChange={(key) => {
+            setView(key);
+            updateParams({ view: key });
+          }}
+        />
+        <AsyncStatePanel
+          state="error"
+          title="복기 데이터를 불러오지 못했습니다"
+          message={`원인: ${metrics.error}. 잠시 후 다시 시도하세요.`}
+          onRetry={() => setRefreshKey((value) => value + 1)}
+          primaryAction={{ label: '오늘의 의사결정으로', href: '/', variant: 'outline' }}
+        />
       </div>
     );
   }
 
   return (
     <div className="space-y-6 pb-12">
-      <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Review</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">성과 복기</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-            매매가 끝난 뒤 결과와 실수 태그를 축적하고, 통계는 필요할 때만 열어 확인합니다.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented
-            items={[
-              { key: 'US', label: '미국' },
-              { key: 'KR', label: '한국' },
-            ]}
-            active={market}
-            onChange={(key) => {
-              setMarket(key as 'US' | 'KR');
-              updateParams({ market: key as 'US' | 'KR' });
-            }}
-          />
-          <Segmented
-            items={[
-              { key: 'review', label: '복기 목록' },
-              { key: 'stats', label: '성과 통계' },
-            ]}
-            active={view}
-            onChange={(key) => {
-              setView(key as HistoryView);
-              updateParams({ view: key as HistoryView });
-            }}
-          />
-        </div>
-      </div>
+      <HistoryHeader
+        market={market}
+        view={view}
+        onMarketChange={(key) => {
+          setMarket(key);
+          updateParams({ market: key });
+        }}
+        onViewChange={(key) => {
+          setView(key);
+          updateParams({ view: key });
+        }}
+      />
 
       {view === 'review' ? (
         <TradeHistoryTable
@@ -152,6 +169,49 @@ function HistoryPageContent() {
         subLabel="Cycle Complete"
         variant="indigo"
       />
+    </div>
+  );
+}
+
+function HistoryHeader({
+  market,
+  view,
+  onMarketChange,
+  onViewChange,
+}: {
+  market: 'US' | 'KR';
+  view: HistoryView;
+  onMarketChange: (market: 'US' | 'KR') => void;
+  onViewChange: (view: HistoryView) => void;
+}) {
+  return (
+    <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Review</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">성과 복기</h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+          매매가 끝난 뒤 결과와 실수 태그를 축적하고, 통계는 필요할 때만 열어 확인합니다.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Segmented
+          items={[
+            { key: 'US', label: '미국' },
+            { key: 'KR', label: '한국' },
+          ]}
+          active={market}
+          onChange={(key) => onMarketChange(key as 'US' | 'KR')}
+        />
+        <Segmented
+          items={[
+            { key: 'review', label: '복기 목록' },
+            { key: 'stats', label: '성과 통계' },
+          ]}
+          active={view}
+          onChange={(key) => onViewChange(key as HistoryView)}
+        />
+      </div>
     </div>
   );
 }

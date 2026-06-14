@@ -7,6 +7,7 @@ import { Eye, Plus, Save, Star, Trash2, X } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import { getVolumeSignalTier } from '@/lib/scanner-recommendation';
 import type { MarketAnalysisResponse, WatchlistItem, WatchlistPriority } from '@/types';
 
@@ -158,7 +159,10 @@ export default function WatchlistPage() {
       {error && (
         <div className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm text-red-100">{error}</p>
-          <button type="button" onClick={() => setError(null)} className="ml-3 text-xs text-red-300 hover:text-red-100">닫기</button>
+          <div className="ml-3 flex items-center gap-2">
+            <button type="button" onClick={fetchItems} className="text-xs font-semibold text-red-200 hover:text-red-100">다시 불러오기</button>
+            <button type="button" onClick={() => setError(null)} className="text-xs text-red-300 hover:text-red-100">닫기</button>
+          </div>
         </div>
       )}
 
@@ -181,20 +185,27 @@ export default function WatchlistPage() {
       )}
 
       {loading && (
-        <div className="flex items-center justify-center gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-8 text-slate-300">
-          <LoadingSpinner />
-          관심종목을 불러오는 중입니다.
-        </div>
+        <AsyncStatePanel
+          state="loading"
+          title="관심종목을 불러오는 중입니다"
+          message="저장된 후보와 최근 분석 요약을 확인하고 있습니다."
+          delayedTitle="관심종목을 불러오지 못하고 있습니다"
+          delayedMessage="네트워크나 데이터 소스가 지연 중일 수 있습니다. 다시 시도하거나 종목을 직접 추가할 수 있습니다."
+          onRetry={fetchItems}
+          primaryAction={{ label: '직접 종목 추가', onClick: () => setShowAddForm(true) }}
+        />
       )}
 
       {!loading && items.length === 0 && (
-        <Card>
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Star className="mb-4 h-12 w-12 text-slate-600" />
-            <p className="text-lg font-semibold text-slate-300">관심종목이 없습니다</p>
-            <p className="mt-2 text-sm text-slate-500">상단의 종목 추가 버튼으로 추적할 종목을 등록하세요.</p>
-          </div>
-        </Card>
+        <AsyncStatePanel
+          state="empty"
+          title="관심종목이 없습니다"
+          message="스캐너에서 후보를 저장하거나 직접 종목을 추가해 추적을 시작하세요."
+          primaryAction={{ label: '스캐너에서 후보 찾기', href: '/scanner' }}
+          secondaryAction={{ label: '직접 종목 추가', variant: 'outline', onClick: () => setShowAddForm(true) }}
+        >
+          <Star className="h-5 w-5 text-slate-500" />
+        </AsyncStatePanel>
       )}
 
       {!loading && items.length > 0 && (
