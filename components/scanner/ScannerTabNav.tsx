@@ -76,7 +76,7 @@ export default function ScannerTabNav() {
   const stateDot = data?.state ? STATE_TONE[data.state] : 'bg-slate-500';
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
+    <div data-testid="scanner-workspace-nav" className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
       <div className="no-scrollbar flex gap-2 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = pathname === tab.href;

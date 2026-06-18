@@ -16,7 +16,6 @@ import {
 import { get, set } from 'idb-keyval';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import MarketBanner from '@/components/ui/MarketBanner';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import { useContestSelection } from '@/hooks/useContestSelection';
@@ -538,9 +537,7 @@ export default function LeaderScannerPage() {
 
   // ── 렌더링 ──────────────────────────────────────────────────────────────
   return (
-    <div className="mx-auto max-w-[1400px] space-y-8 p-4 md:p-8">
-      {/* 탭 네비게이션 */}
-      <ScannerTabNav />
+    <div className="space-y-6 pb-12">
       <MarketBanner />
 
       {scanFatalError && (

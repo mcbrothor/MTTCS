@@ -7,7 +7,6 @@ import dynamic from 'next/dynamic';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import Button from '@/components/ui/Button';
 const VcpDrilldownModal = dynamic(() => import('@/components/scanner/VcpDrilldownModal'), { ssr: false });
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS, type SortKey } from '@/hooks/scanner';
 import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
@@ -220,7 +219,6 @@ export default function ScannerPage() {
         </div>
       )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
-        <ScannerTabNav />
         <MarketBanner compact={true} />
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">

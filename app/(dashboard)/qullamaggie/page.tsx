@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import type { ScannerUniverse } from '@/types';
 import type {
   QullamaggieAnalysis,
@@ -245,8 +244,6 @@ export default function QullamaggieScannerPage() {
           <p className="mt-1 text-slate-400">Breakout · EP · Super Breakout 후보 발굴</p>
         </div>
       </header>
-
-      <ScannerTabNav />
 
       {scanFatalError && (
         <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">

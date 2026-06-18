@@ -112,4 +112,35 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
     // Should navigate to contest page
     await expect(page).toHaveURL(/\/contest/);
   });
+
+  test('SCAN-11: 스캐너 메뉴 전환 시 공통 프레임 위치 유지', async ({ page }) => {
+    const routes = ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie'];
+
+    await page.goto(routes[0]);
+
+    const nav = page.getByTestId('scanner-workspace-nav');
+    const content = page.getByTestId('scanner-page-content');
+    await expect(nav).toBeVisible();
+    await expect(content).toBeVisible();
+
+    const navBox = await nav.boundingBox();
+    const contentBox = await content.boundingBox();
+    expect(navBox).not.toBeNull();
+    expect(contentBox).not.toBeNull();
+
+    for (const route of routes.slice(1)) {
+      await nav.locator(`a[href="${route}"]`).click();
+      await expect(page).toHaveURL(route);
+      expect(await nav.boundingBox()).toMatchObject({
+        x: navBox!.x,
+        y: navBox!.y,
+        width: navBox!.width,
+      });
+      expect(await content.boundingBox()).toMatchObject({
+        x: contentBox!.x,
+        y: contentBox!.y,
+        width: contentBox!.width,
+      });
+    }
+  });
 });

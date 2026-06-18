@@ -29,7 +29,6 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import dynamic from 'next/dynamic';
 const CanslimDrilldownModal = dynamic(() => import('@/components/scanner/CanslimDrilldownModal'), { ssr: false });
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import MarketBanner from '@/components/ui/MarketBanner';
 import { getCanslimLabel } from '@/lib/finance/engines/canslim-labels';
 import {
@@ -915,8 +914,6 @@ export default function CanslimScannerPage() {
         </div>
       )}
       <section className="panel-grid space-y-5 p-5 sm:p-6">
-      {/* 글로벌 스캐너 탭 네비게이션 */}
-      <ScannerTabNav />
       <MarketBanner compact={true} />
 
       {scanFatalError && (

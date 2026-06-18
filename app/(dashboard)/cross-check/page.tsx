@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import { Eye, ScanSearch } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { get } from 'idb-keyval';
@@ -126,9 +125,7 @@ export default function CrossCheckPage() {
   }, [universe]);
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-8 p-4 md:p-8">
-      <ScannerTabNav />
-
+    <div className="space-y-6 pb-12">
       <div className="flex flex-wrap items-center gap-3">
         {(Object.entries(UNIVERSES) as [ScannerUniverse, { label: string; desc: string }][]).map(([key, { label }]) => (
           <button

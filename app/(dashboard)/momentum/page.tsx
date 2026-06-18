@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import type { ScannerUniverse } from '@/types';
 import type { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
 
@@ -225,8 +224,6 @@ export default function MomentumScannerPage() {
           <p className="text-slate-400 mt-1">상대 거래량(RVOL)과 등락률(ROC) 기반의 모멘텀 돌파/급등 포착 스캐너</p>
         </div>
       </header>
-
-      <ScannerTabNav />
 
       {scanFatalError && (
         <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
