@@ -51,4 +51,16 @@ assert.ok(summary.warnings.some((warning) => warning.includes('Technology concen
 assert.ok(summary.actions?.some((item) => item.title.includes('Technology')));
 assert.ok(summary.actions?.some((item) => item.severity === 'BLOCK'));
 
+const markedTrades = trades.map((trade) => trade.status === 'ACTIVE' ? {
+  ...trade,
+  stoploss_price: trade.ticker === 'NVDA' ? 92 : 188,
+  metrics: { ...trade.metrics, currentPrice: trade.ticker === 'NVDA' ? 150 : 180 },
+} : trade);
+const marked = calculatePortfolioRiskSummary(markedTrades, 2_500, profiles);
+assert.equal(marked.costBasis, 2000);
+assert.equal(marked.marketValue, 2400);
+assert.equal(marked.cash, 100);
+assert.equal(marked.sectorExposure[0].exposure, 2400);
+assert.equal(marked.unknownRiskPositions, 0);
+
 console.log('portfolio risk tests passed');

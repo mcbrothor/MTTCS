@@ -33,20 +33,28 @@ export function calculatePortfolioRiskSummary(
 ): PortfolioRiskSummary {
   const active = trades.filter((trade) => trade.status === 'ACTIVE');
   const profileByTicker = new Map(profiles.map((profile) => [profile.ticker.toUpperCase(), profile]));
-  const investedCapital = active.reduce((sum, trade) => {
+  const costBasis = active.reduce((sum, trade) => {
     const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
     const entry = finite(trade.metrics?.avgEntryPrice ?? trade.entry_price);
     return sum + shares * entry;
   }, 0);
+  const marketValue = active.reduce((sum, trade) => {
+    const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
+    const current = trade.metrics?.currentPrice;
+    const fallback = trade.metrics?.avgEntryPrice ?? trade.entry_price;
+    return sum + shares * finite(current ?? fallback);
+  }, 0);
+  const unknownRiskPositions = active.filter((trade) => !finite(trade.metrics?.currentPrice) || !trade.stoploss_price).length;
   const totalOpenRisk = active.reduce((sum, trade) => sum + finite(trade.metrics?.openRisk), 0);
-  const equity = totalEquity > 0 ? totalEquity : investedCapital;
+  const equity = totalEquity > 0 ? totalEquity : marketValue;
   const sectorMap = new Map<string, { sector: string; exposure: number; count: number }>();
   const sectorRiskMap = new Map<string, { sector: string; openRisk: number; count: number }>();
 
   for (const trade of active) {
     const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
+    const current = finite(trade.metrics?.currentPrice);
     const entry = finite(trade.metrics?.avgEntryPrice ?? trade.entry_price);
-    const exposure = shares * entry;
+    const exposure = shares * (current > 0 ? current : entry);
     const profile = profileByTicker.get(trade.ticker.toUpperCase());
     const sector = profile?.sector || 'Unknown';
     const row = sectorMap.get(sector) || { sector, exposure: 0, count: 0 };
@@ -66,6 +74,10 @@ export function calculatePortfolioRiskSummary(
   const riskBudgetRemaining = Number(Math.max(equity * policy.maxPortfolioHeatPct - totalOpenRisk, 0).toFixed(2));
   const warnings: string[] = [];
   const actions: PortfolioRiskSummary['actions'] = [];
+  if (unknownRiskPositions > 0) {
+    warnings.push(`${unknownRiskPositions} active positions have missing live prices or stop prices.`);
+    actions.push(action('BLOCK', 'Resolve unknown position risk', '현재가 또는 손절가가 없는 포지션의 위험을 확인하기 전까지 신규 진입을 중단합니다.'));
+  }
   if (active.length > maxPositions) {
     warnings.push(`Active positions exceed the seed-size limit: ${active.length}/${maxPositions}.`);
     actions.push(action('REDUCE', 'Reduce position count', `활성 포지션을 ${maxPositions}개 이하로 줄이기 전까지 신규 진입을 보류합니다.`));
@@ -110,9 +122,14 @@ export function calculatePortfolioRiskSummary(
     const currentPrice = trade.metrics?.currentPrice ?? null;
     return {
       ticker: trade.ticker,
+      name: profile?.name ?? null,
+      industry: profile?.industry ?? null,
       status: trade.status,
       sector: profile?.sector || 'Unknown',
-      exposure: Number((netShares * finite(avgEntryPrice)).toFixed(2)),
+      exposure: Number((netShares * finite(currentPrice ?? avgEntryPrice)).toFixed(2)),
+      costBasis: Number((netShares * finite(avgEntryPrice)).toFixed(2)),
+      marketValue: currentPrice === null ? null : Number((netShares * finite(currentPrice)).toFixed(2)),
+      priceStatus: currentPrice === null ? 'UNKNOWN' as const : 'LIVE' as const,
       netShares: Number(netShares.toFixed(4)),
       avgEntryPrice: avgEntryPrice === null ? null : Number(avgEntryPrice.toFixed(4)),
       currentPrice: currentPrice === null ? null : Number(currentPrice.toFixed(4)),
@@ -141,15 +158,18 @@ export function calculatePortfolioRiskSummary(
 
   return {
     totalEquity: Number(equity.toFixed(2)),
-    investedCapital: Number(investedCapital.toFixed(2)),
-    cash: Number(Math.max(equity - investedCapital, 0).toFixed(2)),
-    cashPct: equity > 0 ? Number((((equity - investedCapital) / equity) * 100).toFixed(2)) : 0,
+    investedCapital: Number(costBasis.toFixed(2)),
+    costBasis: Number(costBasis.toFixed(2)),
+    marketValue: Number(marketValue.toFixed(2)),
+    cash: Number(Math.max(equity - marketValue, 0).toFixed(2)),
+    cashPct: equity > 0 ? Number((((equity - marketValue) / equity) * 100).toFixed(2)) : 0,
     activePositions: active.length,
     maxPositions,
     totalOpenRisk: Number(totalOpenRisk.toFixed(2)),
     openRiskPct: equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0,
     portfolioHeatPct,
     riskBudgetRemaining,
+    unknownRiskPositions,
     sectorExposure,
     sectorRisk,
     riskGate,

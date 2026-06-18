@@ -4,8 +4,10 @@ import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { calculatePortfolioRiskSummary } from '@/lib/finance/core/portfolio-risk';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
 import { getTossHoldings, isTossInvestConfigured, type TossHoldingPosition } from '@/lib/finance/providers/toss-api';
+import { getYahooFundamentals, getYahooSecurityProfile, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { SecurityProfile, Trade } from '@/types';
+import { recordPipelineRun } from '@/lib/data/pipeline-health';
 
 function isKoreanTicker(ticker: string) {
   return /^\d{6}$/.test(ticker);
@@ -85,9 +87,117 @@ function baseTradeFromHolding(
   };
 }
 
+function yahooTickerForProfile(ticker: string, market: 'US' | 'KR', exchange?: string | null) {
+  if (market === 'KR') return `${ticker}.${exchange === 'KOSDAQ' ? 'KQ' : 'KS'}`;
+  return ticker;
+}
+
+async function fetchProfileFromPublicSources(
+  holding: TossHoldingPosition,
+  market: 'US' | 'KR',
+  existing?: SecurityProfile
+): Promise<SecurityProfile> {
+  const ticker = holding.symbol.toUpperCase();
+  const yahooTicker = yahooTickerForProfile(ticker, market, existing?.exchange);
+  const [security, fundamentals] = await Promise.all([
+    getYahooSecurityProfile(yahooTicker).catch(() => null),
+    getYahooFundamentals(yahooTicker).catch(() => null),
+  ]);
+
+  return {
+    ticker,
+    exchange: security?.exchangeName || existing?.exchange || market,
+    name: security?.name || existing?.name || holding.name || ticker,
+    sector: fundamentals?.sector || existing?.sector || null,
+    industry: fundamentals?.industry || existing?.industry || null,
+    market,
+  };
+}
+
+async function enrichTossSecurityProfiles(
+  holdings: TossHoldingPosition[],
+  profiles: SecurityProfile[],
+  market: 'US' | 'KR'
+) {
+  const byTicker = new Map(profiles.map((profile) => [profile.ticker.toUpperCase(), profile]));
+  const targets = holdings.filter((holding) => {
+    const profile = byTicker.get(holding.symbol.toUpperCase());
+    return !profile || !profile.name || !profile.sector;
+  });
+
+  if (targets.length === 0) return profiles;
+
+  const enriched = await Promise.all(targets.map((holding) =>
+    fetchProfileFromPublicSources(holding, market, byTicker.get(holding.symbol.toUpperCase()))
+  ));
+
+  const now = new Date().toISOString();
+  const { error } = await supabaseServer.from('security_profiles').upsert(
+    enriched.map((profile) => ({ ...profile, updated_at: now })),
+    { onConflict: 'ticker' }
+  );
+  if (error) {
+    console.warn('[portfolio-risk] security profile enrichment cache write failed:', error.message);
+  }
+
+  for (const profile of enriched) {
+    byTicker.set(profile.ticker.toUpperCase(), profile);
+  }
+
+  return Array.from(byTicker.values());
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    const rawMarket = searchParams.get('market')?.toUpperCase() || 'US';
+    if (rawMarket === 'ALL') {
+      const baseCurrency = searchParams.get('baseCurrency') === 'USD' ? 'USD' : 'KRW';
+      const [{ data: allRows, error }, { data: allSettings }, { data: allProfiles }, fxQuotes] = await Promise.all([
+        supabaseServer.from('trades').select('*, trade_executions(*)').in('status', ['ACTIVE', 'PLANNED']),
+        supabaseServer.from('portfolio_settings').select('*').in('market', ['US', 'KR']),
+        supabaseServer.from('security_profiles').select('*').in('market', ['US', 'KR']),
+        getYahooQuotes(['KRW=X']).catch(() => []),
+      ]);
+      if (error) throw error;
+      const rows = (allRows || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[];
+      const profiles = (allProfiles || []) as SecurityProfile[];
+      const settingsByMarket = new Map((allSettings || []).map((row) => [row.market, Number(row.total_equity || 0)]));
+      const fx = Number(fxQuotes[0]?.regularMarketPrice || 0);
+      const summaries = {} as Record<'US' | 'KR', ReturnType<typeof calculatePortfolioRiskSummary>>;
+      for (const itemMarket of ['US', 'KR'] as const) {
+        const scoped = scopeTradesByMarket(rows, itemMarket);
+        const priceMap = await buildLivePriceMap(scoped, { getUsQuotes: getMtnUsLiveQuotes, getKrPrice: getMtnKrLivePrice });
+        const enriched = scoped.map((trade) => {
+          const { trade_executions: executions, ...rest } = trade;
+          return attachTradeMetrics({ ...rest, executions: executions || [] } as Trade, trade.status === 'ACTIVE' ? priceMap.get(trade.ticker) || null : null);
+        });
+        summaries[itemMarket] = calculatePortfolioRiskSummary(enriched, settingsByMarket.get(itemMarket) || 0, profiles.filter((profile) => profile.market === itemMarket), itemMarket);
+      }
+      const fxValid = fx > 0;
+      const usFactor = baseCurrency === 'KRW' ? fx : 1;
+      const krFactor = baseCurrency === 'USD' ? (fxValid ? 1 / fx : 0) : 1;
+      const convert = (value: number, market: 'US' | 'KR') => value * (market === 'US' ? usFactor : krFactor);
+      const totalEquity = convert(summaries.US.totalEquity, 'US') + convert(summaries.KR.totalEquity, 'KR');
+      const marketValue = convert(summaries.US.marketValue || 0, 'US') + convert(summaries.KR.marketValue || 0, 'KR');
+      const totalOpenRisk = convert(summaries.US.totalOpenRisk, 'US') + convert(summaries.KR.totalOpenRisk, 'KR');
+      const unknownRiskPositions = (summaries.US.unknownRiskPositions || 0) + (summaries.KR.unknownRiskPositions || 0) + (fxValid ? 0 : 1);
+      return apiSuccess({
+        baseCurrency,
+        fx: { pair: 'USD/KRW', rate: fxValid ? fx : null, status: fxValid ? 'LIVE' : 'UNKNOWN' },
+        combined: {
+          totalEquity: Number(totalEquity.toFixed(2)), marketValue: Number(marketValue.toFixed(2)),
+          cash: Number(Math.max(totalEquity - marketValue, 0).toFixed(2)), totalOpenRisk: Number(totalOpenRisk.toFixed(2)),
+          portfolioHeatPct: totalEquity > 0 ? Number((totalOpenRisk / totalEquity * 100).toFixed(2)) : 0,
+          activePositions: summaries.US.activePositions + summaries.KR.activePositions, unknownRiskPositions,
+          decisionStatus: unknownRiskPositions ? 'BLOCKED' : 'VALID',
+        },
+        markets: summaries,
+      }, {
+        source: 'Supabase trades + KIS/Yahoo prices', provider: 'MTN Aggregator', delay: 'REALTIME',
+        fallbackUsed: !fxValid, fallbackReason: fxValid ? null : 'USD/KRW 환율 누락', modelVersion: 'portfolio-risk-2026.06-v1',
+      });
+    }
     const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
     const source = searchParams.get('source') || searchParams.get('broker') || 'auto';
     const preferToss = source !== 'supabase' && isTossInvestConfigured();
@@ -116,8 +226,12 @@ export async function GET(request: Request) {
             const trade = baseTradeFromHolding(holding, existingByTicker.get(holding.symbol.toUpperCase()), now);
             return attachTradeMetrics(trade, holding.currentPrice ?? null);
           });
-          const profilesByTicker = new Map((profiles || []).map((profile) => [String(profile.ticker).toUpperCase(), profile]));
-          const profileRows = [...(profiles || [])] as SecurityProfile[];
+          const profileRows = await enrichTossSecurityProfiles(
+            holdings.positions,
+            (profiles || []) as SecurityProfile[],
+            market
+          );
+          const profilesByTicker = new Map(profileRows.map((profile) => [String(profile.ticker).toUpperCase(), profile]));
           for (const holding of holdings.positions) {
             if (!profilesByTicker.has(holding.symbol.toUpperCase())) {
               profileRows.push({
@@ -139,6 +253,7 @@ export async function GET(request: Request) {
           if (trades.some((trade) => !trade.stoploss_price)) {
             summary.warnings.push('Toss 보유 종목 중 MTN 손절가가 없는 포지션은 오픈 리스크가 0으로 계산됩니다.');
           }
+          await recordPipelineRun({ pipeline: 'portfolio-risk', provider: 'Toss Securities', market, status: summary.unknownRiskPositions ? 'DEGRADED' : 'SUCCESS', observedAt: holdings.asOf, fallbackUsed: false, metadata: { positions: summary.activePositions } }).catch(() => undefined);
 
           return apiSuccess(summary, {
             source: 'Toss Securities holdings + MTN trade plans',
@@ -164,6 +279,7 @@ export async function GET(request: Request) {
 
     const totalEquity = Number(settings?.total_equity || fallbackEquity);
     const summary = calculatePortfolioRiskSummary(trades, totalEquity, (profiles || []) as SecurityProfile[], market);
+    await recordPipelineRun({ pipeline: 'portfolio-risk', provider: 'Supabase+KIS', market, status: summary.unknownRiskPositions ? 'DEGRADED' : 'SUCCESS', observedAt: new Date().toISOString(), fallbackUsed: false, metadata: { positions: summary.activePositions } }).catch(() => undefined);
 
     return apiSuccess(summary, {
       source: 'Supabase trades + portfolio_settings',

@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   BarChart2,
+  Activity,
 } from 'lucide-react';
 
 type Market = 'KR' | 'US';
@@ -90,6 +91,18 @@ interface CacheResult {
   deleted?: number;
 }
 
+interface PipelineHealth {
+  id: string;
+  pipeline: string;
+  provider: string;
+  market: string | null;
+  status: 'SUCCESS' | 'DEGRADED' | 'FAILED';
+  observed_at: string | null;
+  completed_at: string | null;
+  fallback_used: boolean;
+  error_message: string | null;
+}
+
 function formatDate(iso: string | null) {
   if (!iso) return '없음';
   return new Date(iso).toLocaleString('ko-KR', {
@@ -165,11 +178,26 @@ export default function AdminPage() {
   // ── 캐시 초기화 상태 ────────────────────────────────────────────────────
   const [cacheClearing, setCacheClearing] = useState(false);
   const [cacheResult, setCacheResult] = useState<CacheResult | null>(null);
+  const [pipelineHealth, setPipelineHealth] = useState<PipelineHealth[]>([]);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchKrCacheStatus();
     fetchUsCacheStatus();
+    fetchDataHealth();
   }, []);
+
+  async function fetchDataHealth() {
+    try {
+      const res = await fetch('/api/admin/data-health');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Data Health 조회 실패');
+      setPipelineHealth(json.data || []);
+      setHealthError(null);
+    } catch (error) {
+      setHealthError(error instanceof Error ? error.message : 'Data Health 조회 실패');
+    }
+  }
 
   async function fetchKrCacheStatus() {
     setKrCacheLoading(true);
@@ -373,6 +401,30 @@ export default function AdminPage() {
         </h1>
         <p className="mt-1 text-sm text-slate-400">한국·미국 시장 데이터 동기화 및 캐시 관리</p>
       </div>
+
+      <section className="rounded-xl border border-slate-700 bg-slate-900/60 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold text-white"><Activity className="h-4 w-4 text-emerald-400" />Data Health</h2>
+            <p className="mt-1 text-sm text-slate-400">원천 데이터의 마지막 성공, 폴백, 장애 상태를 확인합니다.</p>
+          </div>
+          <button onClick={fetchDataHealth} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white">새로고침</button>
+        </div>
+        {healthError ? (
+          <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">{healthError}</p>
+        ) : pipelineHealth.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">기록된 파이프라인 실행이 없습니다. 신규 migration 적용 후 실행 기록이 표시됩니다.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {pipelineHealth.map((row) => (
+              <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm">
+                <div><p className="font-semibold text-white">{row.pipeline} · {row.market || 'ALL'}</p><p className="mt-1 text-xs text-slate-500">{row.provider} · 관측 {formatDate(row.observed_at)}</p></div>
+                <span className={`rounded px-2 py-1 text-xs font-bold ${row.status === 'SUCCESS' && !row.fallback_used ? 'bg-emerald-500/15 text-emerald-200' : row.status === 'FAILED' ? 'bg-rose-500/15 text-rose-200' : 'bg-amber-500/15 text-amber-200'}`}>{row.fallback_used ? 'FALLBACK' : row.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* 시장 탭 선택 */}
       <div className="flex gap-3">
