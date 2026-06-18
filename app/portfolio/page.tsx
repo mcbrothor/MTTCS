@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { AlertTriangle, CheckCircle2, Clipboard, ShieldAlert, ShieldCheck } from 'lucide-react';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import type { ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
+
+type PortfolioActionSeverity = 'BLOCK' | 'REDUCE' | 'WARN';
 
 async function parseResponse<T>(response: Response) {
   const body = await response.json();
@@ -33,6 +36,84 @@ function actionLabel(value: string | null | undefined) {
   if (value === 'FULL_EXIT') return '전량 청산';
   if (value === 'MANUAL_EXIT') return '수동 청산';
   return value || '-';
+}
+
+function riskStatus(summary: PortfolioRiskSummary) {
+  const blockCount = summary.actions?.filter((item) => item.severity === 'BLOCK').length ?? 0;
+  const reduceCount = summary.actions?.filter((item) => item.severity === 'REDUCE').length ?? 0;
+  if (blockCount > 0 || (summary.riskGate?.status === 'BLOCK')) {
+    return {
+      label: '신규 진입 중단',
+      tone: 'border-rose-500/35 bg-rose-500/10 text-rose-100',
+      icon: ShieldAlert,
+      guidance: '새 매수보다 기존 포지션 리스크 축소가 먼저입니다.',
+    };
+  }
+  if (reduceCount > 0 || (summary.riskGate?.status === 'REDUCE')) {
+    return {
+      label: '축소 사이징',
+      tone: 'border-amber-500/35 bg-amber-500/10 text-amber-100',
+      icon: AlertTriangle,
+      guidance: '신규 후보는 평소보다 작은 수량으로만 검토합니다.',
+    };
+  }
+  return {
+    label: '정상 감시',
+    tone: 'border-emerald-500/35 bg-emerald-500/10 text-emerald-100',
+    icon: ShieldCheck,
+    guidance: '계획된 손절선과 섹터 노출만 유지 점검합니다.',
+  };
+}
+
+function severityLabel(value: PortfolioActionSeverity) {
+  if (value === 'BLOCK') return '중단';
+  if (value === 'REDUCE') return '축소';
+  return '주의';
+}
+
+function actionTitle(value: string) {
+  const map: Record<string, string> = {
+    'Reduce position count': '보유 종목 수 축소',
+    'Stop new entries': '신규 진입 중단',
+    'Restore risk budget': '리스크 예산 회복',
+    'Use reduced sizing': '축소 사이징 적용',
+    'Portfolio risk gate blocked': '포트폴리오 리스크 차단',
+  };
+  if (value.startsWith('Trim ') && value.includes(' concentration')) return '섹터 집중 완화';
+  return map[value] || value;
+}
+
+function actionDetail(title: string, detail: string) {
+  if (title === 'Restore risk budget') return '리스크 예산이 회복될 때까지 신규 매수 계획 저장을 보류합니다. 먼저 손절선 조정, 부분 청산, 약한 포지션 축소를 검토합니다.';
+  if (title === 'Use reduced sizing') return '새 후보를 검토하더라도 기본 수량보다 작게 잡고, 기존 포지션 리스크가 늘지 않게 관리합니다.';
+  if (title === 'Portfolio risk gate blocked') return '포트폴리오 리스크 기준이 차단 상태입니다. 기존 리스크를 낮추기 전까지 신규 진입을 중단합니다.';
+  return detail;
+}
+
+function warningText(value: string) {
+  const positionMatch = value.match(/Active positions exceed the seed-size limit: (\d+)\/(\d+)/);
+  if (positionMatch) return `활성 포지션이 계좌 규모 기준을 초과했습니다. 현재 ${positionMatch[1]}개, 권장 최대 ${positionMatch[2]}개입니다.`;
+  if (value.includes('Total open risk is above 8%')) return '총 오픈 리스크가 계좌 기준 8%를 넘었습니다.';
+  const heatMatch = value.match(/Portfolio heat is above the standard risk policy limit: ([\d.]+)%/);
+  if (heatMatch) return `Portfolio Heat가 정책 한도를 넘었습니다. 현재 ${heatMatch[1]}%입니다.`;
+  const concentrationMatch = value.match(/(.+) concentration is high: ([\d.]+)%/);
+  if (concentrationMatch) return `${concentrationMatch[1]} 노출이 높습니다. 현재 ${concentrationMatch[2]}%입니다.`;
+  return value;
+}
+
+function priorityActions(summary: PortfolioRiskSummary) {
+  if (summary.actions && summary.actions.length > 0) {
+    return summary.actions.slice(0, 3).map((item) => ({
+      severity: item.severity,
+      title: actionTitle(item.title),
+      detail: actionDetail(item.title, item.detail),
+    }));
+  }
+  return [{
+    severity: 'WARN' as const,
+    title: '손절선 유지 점검',
+    detail: '보유 포지션의 손절선과 현재가 괴리를 확인하고, 계획 없는 추가 매수는 보류합니다.',
+  }];
 }
 
 export default function PortfolioPage() {
@@ -121,87 +202,81 @@ export default function PortfolioPage() {
         />
       ) : summary ? (
         <>
-          {summary.warnings.length > 0 && (
-            <div className="space-y-2">
-              {summary.warnings.map((warning) => (
-                <div key={warning} className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-                  {warning}
-                </div>
-              ))}
-            </div>
-          )}
+          <PortfolioCommandCenter summary={summary} market={market} />
 
-          {summary.actions && summary.actions.length > 0 && (
-            <section className="grid gap-3 lg:grid-cols-2">
-              {summary.actions.map((item) => {
-                const tone = item.severity === 'BLOCK'
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
-                  : item.severity === 'REDUCE'
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                    : 'border-sky-500/30 bg-sky-500/10 text-sky-100';
-                return (
-                  <div key={`${item.severity}-${item.title}`} className={`rounded-lg border p-4 ${tone}`}>
-                    <p className="text-xs font-bold uppercase tracking-wide opacity-80">{item.severity}</p>
-                    <p className="mt-2 text-sm font-bold text-white">{item.title}</p>
-                    <p className="mt-1 text-sm leading-6">{item.detail}</p>
-                  </div>
-                );
-              })}
-            </section>
-          )}
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
-            <Metric label="총 자산" value={money(summary.totalEquity, market)} />
-            <Metric label="투입 금액" value={money(summary.investedCapital, market)} />
-            <Metric label="현금" value={`${money(summary.cash, market)} (${summary.cashPct}%)`} />
-            <Metric label="오픈 리스크" value={`${money(summary.totalOpenRisk, market)} (${summary.openRiskPct}%)`} />
-            <Metric label="Portfolio Heat" value={`${summary.portfolioHeatPct ?? summary.openRiskPct}%`} />
-            <Metric label="Risk Budget" value={money(summary.riskBudgetRemaining ?? 0, market)} />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Metric label="총 자산" value={money(summary.totalEquity, market)} helper="계좌 평가 기준" emphasis />
+            <Metric label="현금" value={`${money(summary.cash, market)} (${summary.cashPct}%)`} helper="방어 여력" />
+            <Metric label="오픈 리스크" value={`${money(summary.totalOpenRisk, market)} (${summary.openRiskPct}%)`} helper="손절 도달 시 예상 손실" alert={summary.openRiskPct >= 8} />
             <Metric
               label="보유 포지션"
               value={`${summary.activePositions}/${summary.maxPositions}`}
-              tooltip={
-                market === 'KR'
-                  ? '• 200만 이하: 최대 2개\n• 1000만 이하: 최대 5개\n• 1000만 초과: 최대 10개'
-                  : '• $1,000 이하: 최대 2개\n• $10,000 이하: 최대 5개\n• $10,000 초과: 최대 10개'
-              }
+              helper={market === 'US' && (summary.scoutPositions ?? 0) > 0 ? `정찰병 ${summary.scoutPositions}개 제외` : '공식 / 권장 최대'}
+              alert={summary.activePositions > summary.maxPositions}
             />
           </div>
 
-          <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
-            <h2 className="text-lg font-bold text-white">섹터 노출도</h2>
-            <div className="mt-4 space-y-3">
-              {summary.sectorExposure.length === 0 ? (
-                <p className="text-sm text-slate-400">현재 노출된 섹터가 없습니다.</p>
-              ) : summary.sectorExposure.map((row) => (
-                <div key={row.sector}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="font-semibold text-slate-200">{row.sector} ({row.count})</span>
-                    <span className="font-mono text-slate-400">{money(row.exposure, market)} | {row.exposurePct}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-lg bg-slate-800">
-                    <div className="h-full bg-emerald-500" style={{ width: `${Math.min(row.exposurePct, 100)}%` }} />
-                  </div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <section className="rounded-lg border border-slate-800 bg-slate-950/55 p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase text-slate-500">Exposure Map</p>
+                  <h2 className="mt-1 text-lg font-bold text-white">섹터 노출도</h2>
                 </div>
-              ))}
-            </div>
-          </section>
+                <p className="text-xs text-slate-500">같은 섹터 과집중은 신규 진입보다 먼저 줄입니다.</p>
+              </div>
+              <div className="mt-5 space-y-4">
+                {summary.sectorExposure.length === 0 ? (
+                  <p className="text-sm text-slate-400">현재 노출된 섹터가 없습니다.</p>
+                ) : summary.sectorExposure.map((row) => (
+                  <div key={row.sector}>
+                    <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                      <span className="font-semibold text-slate-200">{row.sector} ({row.count})</span>
+                      <span className="shrink-0 font-mono text-slate-400">{money(row.exposure, market)} | {row.exposurePct}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded bg-slate-800">
+                      <div
+                        className={`${row.exposurePct >= 35 ? 'bg-amber-400' : 'bg-emerald-500'} h-full`}
+                        style={{ width: `${Math.min(row.exposurePct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-slate-800 bg-slate-950/55 p-5">
+              <p className="text-xs font-bold uppercase text-slate-500">Risk Budget</p>
+              <h2 className="mt-1 text-lg font-bold text-white">리스크 예산</h2>
+              <div className="mt-5 space-y-3">
+                <BudgetRow label="Portfolio Heat" value={`${summary.portfolioHeatPct ?? summary.openRiskPct}%`} />
+                <BudgetRow label="남은 예산" value={money(summary.riskBudgetRemaining ?? 0, market)} />
+                <BudgetRow label="투입 금액" value={money(summary.investedCapital, market)} />
+              </div>
+              <p className="mt-4 rounded-lg border border-slate-800 bg-slate-900/45 p-3 text-sm leading-6 text-slate-300">
+                신규 매수는 남은 예산이 회복되고, 보유 종목 수가 권장 범위 안으로 들어온 뒤 검토합니다.
+              </p>
+            </section>
+          </div>
 
           <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-5">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-white">활성 포지션</h2>
-              <p className="text-xs text-slate-400">실시간 손익과 피라미딩/부분매도 이력을 함께 표시합니다.</p>
+              <div>
+                <p className="text-xs font-bold uppercase text-slate-500">Open Positions</p>
+                <h2 className="mt-1 text-lg font-bold text-white">활성 포지션</h2>
+              </div>
+              <p className="hidden text-xs text-slate-400 sm:block">실시간 손익, 오픈 리스크, 실행 이력을 함께 점검합니다.</p>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               {summary.positions && summary.positions.length > 0 ? summary.positions.map((position) => (
-                <div key={position.ticker} className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                <div key={position.ticker} className="rounded-lg border border-slate-800 bg-slate-900/45 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-lg font-bold text-white">{position.ticker}</p>
-                      <p className="mt-1 text-xs text-slate-500">{position.sector}</p>
+                      <p className="mt-1 text-xs text-slate-500">{position.name || position.industry || position.sector || '종목명 확인 중'}</p>
                     </div>
                     <div className="rounded-full border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200">
-                      {actionLabel(position.latestAction)}
+                      {position.isScout ? '정찰병' : actionLabel(position.latestAction)}
                     </div>
                   </div>
 
@@ -258,18 +333,103 @@ export default function PortfolioPage() {
   );
 }
 
-function Metric({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
+function PortfolioCommandCenter({ summary, market }: { summary: PortfolioRiskSummary; market: 'US' | 'KR' }) {
+  const status = riskStatus(summary);
+  const StatusIcon = status.icon;
+  const actions = priorityActions(summary);
+  const warnings = summary.warnings.map(warningText);
+
   return (
-    <div className="group relative rounded-lg border border-slate-800 bg-slate-950/50 p-4 transition-colors hover:border-slate-700">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 font-mono text-xl font-bold text-white">{value}</p>
-      {tooltip && (
-        <div className="pointer-events-none absolute -top-2 left-1/2 z-50 w-max -translate-x-1/2 -translate-y-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-300 opacity-0 shadow-xl transition-all group-hover:top-0 group-hover:opacity-100">
-          <p className="font-semibold text-emerald-400 mb-1">포지션 제한 규칙</p>
-          <div className="whitespace-pre-line leading-relaxed">{tooltip}</div>
-          <div className="absolute bottom-0 left-1/2 h-2 w-2 -translate-x-1/2 translate-y-1/2 rotate-45 border-b border-r border-slate-700 bg-slate-900" />
+    <section className="rounded-lg border border-slate-800 bg-slate-950/60 p-5">
+      <div className="grid items-start gap-5 xl:grid-cols-[320px_minmax(0,1fr)_360px]">
+        <div className={`rounded-lg border p-4 ${status.tone}`}>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-current/25 bg-black/15">
+              <StatusIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase opacity-75">오늘의 상태</p>
+              <p className="text-lg font-bold text-white">{status.label}</p>
+            </div>
+          </div>
+          <p className="mt-4 text-sm leading-6">{status.guidance}</p>
         </div>
-      )}
+
+        <div>
+          <div className="flex items-center gap-2">
+            <Clipboard className="h-4 w-4 text-emerald-300" />
+            <h2 className="text-base font-bold text-white">우선 지침</h2>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            {actions.map((item, index) => (
+              <div key={`${item.severity}-${item.title}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900/45 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`rounded px-2 py-1 text-[11px] font-bold ${
+                    item.severity === 'BLOCK' ? 'bg-rose-500/15 text-rose-200' : item.severity === 'REDUCE' ? 'bg-amber-500/15 text-amber-200' : 'bg-sky-500/15 text-sky-200'
+                  }`}>
+                    {severityLabel(item.severity)}
+                  </span>
+                  <span className="font-mono text-xs text-slate-600">0{index + 1}</span>
+                </div>
+                <p className="mt-3 text-sm font-bold text-white">{item.title}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/35 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-300" />
+              <h2 className="text-base font-bold text-white">경고 큐</h2>
+            </div>
+            <span className="rounded bg-slate-800 px-2 py-1 text-xs font-bold text-slate-300">{warnings.length}</span>
+          </div>
+          <div className="mt-3 space-y-2">
+            {warnings.length === 0 ? (
+              <div className="flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>현재 즉시 조치가 필요한 경고는 없습니다.</span>
+              </div>
+            ) : warnings.slice(0, 5).map((warning) => (
+              <div key={warning} className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-sm leading-6 text-amber-100">
+                {warning}
+              </div>
+            ))}
+            {warnings.length > 5 && <p className="text-xs text-slate-500">외 {warnings.length - 5}개 경고가 더 있습니다.</p>}
+          </div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 border-t border-slate-800 pt-4 text-sm text-slate-400 sm:grid-cols-3">
+        <QuickRule label="공식 포지션 수" value={`${summary.activePositions}/${summary.maxPositions}`} detail={summary.scoutPositions ? `$100 미만 정찰병 ${summary.scoutPositions}개 제외` : '권장 최대 초과 시 신규 진입 보류'} />
+        <QuickRule label="현금 비중" value={`${summary.cashPct}%`} detail="방어 여력과 추가 매수 여지를 같이 판단" />
+        <QuickRule label="기준 시장" value={market === 'KR' ? '한국' : '미국'} detail="시장별 계좌 규모 제한을 별도로 적용" />
+      </div>
+    </section>
+  );
+}
+
+function QuickRule({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/25 p-3">
+      <div>
+        <p className="text-xs font-bold uppercase text-slate-500">{label}</p>
+        <p className="mt-1 text-sm text-slate-300">{detail}</p>
+      </div>
+      <p className="shrink-0 font-mono text-sm font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function Metric({ label, value, helper, emphasis = false, alert = false }: { label: string; value: string; helper: string; emphasis?: boolean; alert?: boolean }) {
+  return (
+    <div className={`rounded-lg border p-4 transition-colors ${
+      alert ? 'border-rose-500/30 bg-rose-500/10' : emphasis ? 'border-emerald-500/25 bg-emerald-500/10' : 'border-slate-800 bg-slate-950/50'
+    }`}>
+      <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+      <p className="mt-2 break-words font-mono text-xl font-bold text-white">{value}</p>
+      <p className="mt-2 text-xs text-slate-500">{helper}</p>
     </div>
   );
 }
@@ -289,9 +449,18 @@ function PortfolioSkeleton() {
 
 function PositionMetric({ label, value, accent = 'text-white' }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+    <div className="rounded-lg border border-slate-800 bg-slate-950/45 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className={`mt-2 font-mono text-sm font-bold ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function BudgetRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3 last:border-b-0 last:pb-0">
+      <span className="text-sm text-slate-400">{label}</span>
+      <span className="font-mono text-sm font-bold text-white">{value}</span>
     </div>
   );
 }
