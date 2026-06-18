@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { ApiErrorCode, ApiFailure, ApiSuccess, DataSourceMeta } from '@/types';
+import { buildFreshnessMeta } from '@/lib/data/freshness';
 
 export function nowMeta(partial: Partial<DataSourceMeta> = {}): DataSourceMeta {
-  return {
-    asOf: partial.asOf || new Date().toISOString(),
+  return buildFreshnessMeta({
+    ...partial,
     source: partial.source || 'MTN',
     provider: partial.provider || 'Internal',
     delay: partial.delay || 'UNKNOWN',
-    fallbackUsed: Boolean(partial.fallbackUsed),
-    warnings: partial.warnings || [],
-  };
+  });
 }
 
 export function apiSuccess<T>(data: T, meta: Partial<DataSourceMeta> = {}, status = 200) {

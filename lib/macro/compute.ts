@@ -1,6 +1,6 @@
-import type { OHLCData } from '@/types';
-import type { FredObservation } from '@/lib/data/fred';
-import { hyOasToScore, hyOasTrend } from '@/lib/data/fred';
+import type { OHLCData } from '../../types/index.ts';
+import type { FredObservation } from '../data/fred.ts';
+import { hyOasToScore, hyOasTrend } from '../data/fred.ts';
 
 export type MacroRegime = 'RISK_ON' | 'RISK_OFF' | 'NEUTRAL';
 
@@ -92,6 +92,8 @@ function nDayReturn(data: OHLCData[], days: number): number | null {
 interface FredInputData {
   hyOas?: FredObservation[];
   breakeven5y?: FredObservation[];
+  dgs10?: FredObservation[];
+  dgs2?: FredObservation[];
 }
 
 export function computeMacroScore(
@@ -191,15 +193,14 @@ export function computeMacroScore(
   }
   dollarRateScore = Math.min(dollarRateScore, W_DOLLAR_RATE);
 
-  // 4. 수익률 곡선 (15점) — 10Y(^TNX) - 2Y(^IRX) 스프레드
+  // 4. 수익률 곡선 (15점) — FRED 10Y(DGS10) - 2Y(DGS2) 스프레드
   // 정상 곡선(양수 스프레드) = Risk-On, 역전(음수) = Risk-Off 신호
   let yieldCurveScore = 0;
-  const tnx = get('^TNX');
-  const irx = get('^IRX');
+  const dgs10 = fredData?.dgs10?.at(-1)?.value ?? null;
+  const dgs2 = fredData?.dgs2?.at(-1)?.value ?? null;
   let yieldSpread: number | null = null;
-  if (tnx && irx) {
-    // Yahoo에서 ^TNX, ^IRX는 % 단위로 반환 (e.g. 4.25 = 4.25%)
-    yieldSpread = tnx.regularMarketPrice - irx.regularMarketPrice;
+  if (dgs10 !== null && dgs2 !== null) {
+    yieldSpread = dgs10 - dgs2;
     if (yieldSpread > 1.0) yieldCurveScore = W_YIELD_CURVE;          // 정상: 스프레드 충분
     else if (yieldSpread > 0) yieldCurveScore = Math.round(W_YIELD_CURVE * 0.65);  // 완만한 정상
     else if (yieldSpread > -0.5) yieldCurveScore = Math.round(W_YIELD_CURVE * 0.25); // 미미한 역전
@@ -290,7 +291,7 @@ export function computeMacroScore(
     {
       label: '수익률 곡선', weight: W_YIELD_CURVE, score: yieldCurveScore,
       description: `10Y−2Y 스프레드${yieldSpread !== null ? ` ${yieldSpread >= 0 ? '+' : ''}${yieldSpread.toFixed(2)}%p` : ' (데이터 없음)'}`,
-      rawValue: yieldSpread !== null ? `10Y(${tnx?.regularMarketPrice.toFixed(2)}%) − 2Y(${irx?.regularMarketPrice.toFixed(2)}%) = ${yieldSpread.toFixed(2)}%p` : '데이터 없음',
+      rawValue: yieldSpread !== null ? `DGS10(${dgs10?.toFixed(2)}%) − DGS2(${dgs2?.toFixed(2)}%) = ${yieldSpread.toFixed(2)}%p` : 'FRED DGS10/DGS2 데이터 없음',
       threshold: '>+1%p 만점 · >0 +10 · >−0.5% +4 · 역전 0 (총 15점)',
     },
     {

@@ -2,7 +2,7 @@
  * FRED (Federal Reserve Economic Data) API 클라이언트
  *
  * 주요 시리즈:
- *   BAMLH0A0HYM2  — ICE BofA US High Yield OAS (basis points, 낮을수록 Risk-On)
+ *   BAMLH0A0HYM2  — ICE BofA US High Yield OAS (FRED 원자료 %, 내부 bps)
  *   T5YIE         — 5-Year Breakeven Inflation Rate (%, 높을수록 경기 기대 좋음)
  *   DGS10         — 10-Year Treasury Constant Maturity Rate
  *   DGS2          — 2-Year Treasury Constant Maturity Rate
@@ -10,7 +10,7 @@
  * API 키: FRED_API_KEY (.env.local)
  */
 
-import { fredApiKeyOptional } from '@/lib/env';
+import { fredApiKeyOptional } from '../env.ts';
 
 export interface FredObservation {
   date: string;   // YYYY-MM-DD
@@ -60,7 +60,11 @@ export async function getFredSeries(
 
 /** HY OAS (bps) 최근값 — 낮을수록 Risk-On */
 export async function getHyOas(): Promise<FredObservation[]> {
-  return getFredSeries('BAMLH0A0HYM2', 30);
+  return (await getFredSeries('BAMLH0A0HYM2', 30)).map((row) => ({ ...row, value: percentToBasisPoints(row.value) }));
+}
+
+export function percentToBasisPoints(value: number) {
+  return value * 100;
 }
 
 /** 5Y Breakeven Inflation (%) */

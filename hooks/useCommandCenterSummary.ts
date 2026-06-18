@@ -108,7 +108,7 @@ export function useCommandCenterSummary(market: 'US' | 'KR' = 'US') {
       try {
         const [masterFilterResponse, macroResponse, tradesResponse, watchlistResponse] = await Promise.all([
           fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
-          fetch('/api/macro', { signal: controller.signal }),
+          fetch(`/api/macro?market=${market}`, { signal: controller.signal }),
           fetch(`/api/trades?market=${market}&includeLivePrices=false&limit=40`, { signal: controller.signal }),
           fetch('/api/watchlist', { signal: controller.signal }),
         ]);

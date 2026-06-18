@@ -321,6 +321,7 @@ export interface FundamentalSnapshot {
   sharesOutstanding?: number | null;
   sharesBuyback?: boolean | null;
   sector?: string | null;
+  industry?: string | null;
   source: string;
 }
 
@@ -710,6 +711,7 @@ export interface MasterFilterMetrics {
   trend: MasterFilterMetricDetail;
   breadth: MasterFilterMetricDetail;
   volatility: MasterFilterMetricDetail;
+  adr?: MasterFilterMetricDetail;
   ftd: MasterFilterMetricDetail;
   distribution: MasterFilterMetricDetail;
   newHighLow: MasterFilterMetricDetail;
@@ -759,12 +761,29 @@ export interface MacroResponse {
   spyAbove50ma: boolean;
   hygIefDiff: number;
   vixLevel: number;
+  market?: MarketCode;
+  decisionStatus?: 'VALID' | 'DEGRADED' | 'BLOCKED';
+  modelVersion?: string;
+  globalOverlay?: Pick<MacroResponse, 'score' | 'regime' | 'decisionStatus' | 'modelVersion'> | null;
 }
 
 export type ApiErrorCode = 'API_ERROR' | 'NO_DATA' | 'AUTH_REQUIRED' | 'TIMEOUT' | 'INVALID_INPUT' | 'NOT_FOUND';
 
 export interface DataSourceMeta {
-  asOf: string; source: string; provider: string; delay: 'REALTIME' | 'DELAYED_15M' | 'EOD' | 'UNKNOWN'; fallbackUsed: boolean; warnings: string[];
+  asOf: string;
+  source: string;
+  provider: string;
+  delay: 'REALTIME' | 'DELAYED_15M' | 'EOD' | 'UNKNOWN';
+  fallbackUsed: boolean;
+  warnings: string[];
+  observedAt?: string;
+  fetchedAt?: string;
+  calculatedAt?: string;
+  expectedDelaySeconds?: number;
+  isStale?: boolean;
+  staleReason?: string | null;
+  fallbackReason?: string | null;
+  modelVersion?: string;
 }
 
 export interface ApiSuccess<T> { data: T; meta: DataSourceMeta; }
@@ -828,7 +847,7 @@ export interface SecurityProfile {
 }
 
 export interface PortfolioRiskSummary {
-  totalEquity: number; investedCapital: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; portfolioHeatPct?: number; riskBudgetRemaining?: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; sectorRisk?: { sector: string; openRisk: number; riskPct: number; count: number }[]; riskGate?: RiskGateResult; warnings: string[]; actions?: { severity: 'BLOCK' | 'REDUCE' | 'WARN'; title: string; detail: string }[]; positions?: { ticker: string; status: TradeStatus; sector: string; exposure: number; netShares: number; avgEntryPrice: number | null; currentPrice: number | null; unrealizedPnL: number | null; unrealizedR: number | null; openRisk: number; openRiskPct?: number; pyramidCount: number; partialExitCount: number; latestAction: string | null; }[];
+  totalEquity: number; investedCapital: number; marketValue?: number; costBasis?: number; cash: number; cashPct: number; activePositions: number; maxPositions: number; totalOpenRisk: number; openRiskPct: number; portfolioHeatPct?: number; riskBudgetRemaining?: number; unknownRiskPositions?: number; sectorExposure: { sector: string; exposure: number; exposurePct: number; count: number }[]; sectorRisk?: { sector: string; openRisk: number; riskPct: number; count: number }[]; riskGate?: RiskGateResult; warnings: string[]; actions?: { severity: 'BLOCK' | 'REDUCE' | 'WARN'; title: string; detail: string }[]; positions?: { ticker: string; name?: string | null; sector: string; industry?: string | null; status: TradeStatus; exposure: number; costBasis?: number; marketValue?: number | null; priceStatus?: 'LIVE' | 'STALE' | 'UNKNOWN'; netShares: number; avgEntryPrice: number | null; currentPrice: number | null; unrealizedPnL: number | null; unrealizedR: number | null; openRisk: number; openRiskPct?: number; pyramidCount: number; partialExitCount: number; latestAction: string | null; }[];
 }
 
 // --- CAN SLIM 스캐너 모듈 ---

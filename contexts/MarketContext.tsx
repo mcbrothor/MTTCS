@@ -87,6 +87,7 @@ function fallbackMarketData(market: MarketSelection): MasterFilterResponse {
       trend: createEmptyMetric('추세', '좋음', ''),
       breadth: createEmptyMetric('함께 오르는 종목 비율', '좋음', ''),
       volatility: createEmptyMetric('시장 불안도', '낮음', ''),
+      adr: createEmptyMetric('ADR 변동폭', '낮음', '%'),
       ftd: createEmptyMetric('반등 확인일', '확인됨', ''),
       distribution: createEmptyMetric('큰손 매도 흔적', '적음', ''),
       newHighLow: createEmptyMetric('새 고점/새 저점 균형', '좋음', ''),
@@ -156,7 +157,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
       try {
         const [mfResponse, macroResponse] = await Promise.allSettled([
           fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
-          fetch('/api/macro', { signal: controller.signal }),
+          fetch(`/api/macro?market=${market}`, { signal: controller.signal }),
         ]);
 
         if (mfResponse.status === 'rejected' || (mfResponse.status === 'fulfilled' && !mfResponse.value.ok)) {

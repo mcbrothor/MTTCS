@@ -3,6 +3,9 @@ import path from 'node:path';
 
 const tests = [
   'tests/calculations.test.mjs',
+  'tests/macro-reliability.test.mjs',
+  'tests/model-governance.test.mjs',
+  'tests/professional-risk.test.mjs',
   'tests/risk-gate.test.mjs',
   'tests/price-metrics.test.mjs',
   'tests/toss-api.test.mjs',
