@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { calculatePortfolioRiskSummary, getMaxPositionsForEquity } from '../lib/finance/core/portfolio-risk.ts';
+import { calculatePortfolioRiskSummary, getMaxPositionsForEquity, isScoutPosition } from '../lib/finance/core/portfolio-risk.ts';
 
 assert.equal(getMaxPositionsForEquity(1_000_000), 2);
 assert.equal(getMaxPositionsForEquity(10_000_000), 5);
@@ -62,5 +62,24 @@ assert.equal(marked.marketValue, 2400);
 assert.equal(marked.cash, 100);
 assert.equal(marked.sectorExposure[0].exposure, 2400);
 assert.equal(marked.unknownRiskPositions, 0);
+
+const scoutTrade = {
+  ticker: 'SCOUT', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
+  metrics: { netShares: 10, avgEntryPrice: 10, currentPrice: 9.999, openRisk: 20 },
+};
+const boundaryTrade = {
+  ticker: 'BOUNDARY', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
+  metrics: { netShares: 10, avgEntryPrice: 10, currentPrice: 10, openRisk: 20 },
+};
+assert.equal(isScoutPosition(scoutTrade, 'US'), true);
+assert.equal(isScoutPosition(boundaryTrade, 'US'), false);
+assert.equal(isScoutPosition(scoutTrade, 'KR'), false);
+const scoutSummary = calculatePortfolioRiskSummary([...markedTrades, scoutTrade, boundaryTrade], 3_000, profiles, 'US');
+assert.equal(scoutSummary.activePositions, 3);
+assert.equal(scoutSummary.officialPositions, 3);
+assert.equal(scoutSummary.scoutPositions, 1);
+assert.equal(scoutSummary.totalActivePositions, 4);
+assert.equal(scoutSummary.positions?.find((position) => position.ticker === 'SCOUT')?.isScout, true);
+assert.equal(scoutSummary.totalOpenRisk, 180);
 
 console.log('portfolio risk tests passed');

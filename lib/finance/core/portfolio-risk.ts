@@ -12,6 +12,19 @@ function action(severity: 'BLOCK' | 'REDUCE' | 'WARN', title: string, detail: st
   return { severity, title, detail };
 }
 
+export const US_SCOUT_POSITION_MAX_VALUE = 100;
+
+function getPositionMarketValue(trade: Trade) {
+  const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
+  const currentPrice = finite(trade.metrics?.currentPrice);
+  return currentPrice > 0 ? shares * currentPrice : null;
+}
+
+export function isScoutPosition(trade: Trade, market: 'US' | 'KR') {
+  const marketValue = getPositionMarketValue(trade);
+  return market === 'US' && marketValue !== null && marketValue < US_SCOUT_POSITION_MAX_VALUE;
+}
+
 export function getMaxPositionsForEquity(totalEquity: number, market: 'US' | 'KR' = 'KR') {
   if (market === 'KR') {
     if (totalEquity <= 2_000_000) return 2;
@@ -32,6 +45,8 @@ export function calculatePortfolioRiskSummary(
   market: 'US' | 'KR' = 'US'
 ): PortfolioRiskSummary {
   const active = trades.filter((trade) => trade.status === 'ACTIVE');
+  const scouts = active.filter((trade) => isScoutPosition(trade, market));
+  const official = active.filter((trade) => !isScoutPosition(trade, market));
   const profileByTicker = new Map(profiles.map((profile) => [profile.ticker.toUpperCase(), profile]));
   const costBasis = active.reduce((sum, trade) => {
     const shares = finite(trade.metrics?.netShares ?? trade.total_shares ?? trade.position_size);
@@ -78,8 +93,8 @@ export function calculatePortfolioRiskSummary(
     warnings.push(`${unknownRiskPositions} active positions have missing live prices or stop prices.`);
     actions.push(action('BLOCK', 'Resolve unknown position risk', '현재가 또는 손절가가 없는 포지션의 위험을 확인하기 전까지 신규 진입을 중단합니다.'));
   }
-  if (active.length > maxPositions) {
-    warnings.push(`Active positions exceed the seed-size limit: ${active.length}/${maxPositions}.`);
+  if (official.length > maxPositions) {
+    warnings.push(`Active positions exceed the seed-size limit: ${official.length}/${maxPositions}.`);
     actions.push(action('REDUCE', 'Reduce position count', `활성 포지션을 ${maxPositions}개 이하로 줄이기 전까지 신규 진입을 보류합니다.`));
   }
   if (equity > 0 && totalOpenRisk / equity > 0.08) {
@@ -130,6 +145,7 @@ export function calculatePortfolioRiskSummary(
       costBasis: Number((netShares * finite(avgEntryPrice)).toFixed(2)),
       marketValue: currentPrice === null ? null : Number((netShares * finite(currentPrice)).toFixed(2)),
       priceStatus: currentPrice === null ? 'UNKNOWN' as const : 'LIVE' as const,
+      isScout: isScoutPosition(trade, market),
       netShares: Number(netShares.toFixed(4)),
       avgEntryPrice: avgEntryPrice === null ? null : Number(avgEntryPrice.toFixed(4)),
       currentPrice: currentPrice === null ? null : Number(currentPrice.toFixed(4)),
@@ -163,7 +179,10 @@ export function calculatePortfolioRiskSummary(
     marketValue: Number(marketValue.toFixed(2)),
     cash: Number(Math.max(equity - marketValue, 0).toFixed(2)),
     cashPct: equity > 0 ? Number((((equity - marketValue) / equity) * 100).toFixed(2)) : 0,
-    activePositions: active.length,
+    activePositions: official.length,
+    officialPositions: official.length,
+    scoutPositions: scouts.length,
+    totalActivePositions: active.length,
     maxPositions,
     totalOpenRisk: Number(totalOpenRisk.toFixed(2)),
     openRiskPct: equity > 0 ? Number(((totalOpenRisk / equity) * 100).toFixed(2)) : 0,
