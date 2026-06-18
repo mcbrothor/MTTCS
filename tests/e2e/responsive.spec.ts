@@ -36,11 +36,27 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
 
     test('RESP-04: 모바일 내비게이션 바 메뉴 확인', async ({ page }) => {
       await page.goto('/');
-      // Often mobile has a hamburger menu instead of full links
-      // Let's verify we can still navigate to history
-      const historyLink = page.locator('a[href="/history"]').first();
-      // It might be inside a mobile menu or just an icon. We check it's attached.
-      expect(await historyLink.count()).toBeGreaterThan(0);
+
+      const menuButton = page.getByRole('button', { name: '메뉴 열기' });
+      const mainBefore = await page.locator('main').boundingBox();
+      const scrollBefore = await page.evaluate(() => window.scrollY);
+
+      await menuButton.click();
+
+      const drawer = page.getByRole('dialog', { name: '전체 메뉴' });
+      await expect(drawer).toBeVisible();
+      await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+      expect(await page.locator('main').boundingBox()).toEqual(mainBefore);
+      expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+      await page.keyboard.press('PageDown');
+      expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+      await page.keyboard.press('Escape');
+
+      await expect(drawer).not.toBeAttached();
+      await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+      expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+      await expect(menuButton).toBeFocused();
     });
   });
 

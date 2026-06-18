@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, X, TrendingUp, Search, BarChart2, BarChart3, Target, Star, HelpCircle, ArrowUpRight, Database } from 'lucide-react';
 import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
 
@@ -36,6 +36,29 @@ export default function NavbarMobile() {
   const pathname = usePathname();
   const activeStep = getActiveFlowStep(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+
+    const menuButton = menuButtonRef.current;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDrawerOpen(false);
+        return;
+      }
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      menuButton?.focus({ preventScroll: true });
+    };
+  }, [drawerOpen]);
 
   return (
     <>
@@ -49,10 +72,13 @@ export default function NavbarMobile() {
         </Link>
 
         <button
+          ref={menuButtonRef}
           type="button"
           onClick={() => setDrawerOpen(true)}
           className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)]"
           aria-label="메뉴 열기"
+          aria-controls="mobile-menu-drawer"
+          aria-expanded={drawerOpen}
         >
           메뉴
         </button>
@@ -98,33 +124,35 @@ export default function NavbarMobile() {
         </div>
       </nav>
 
-      {/* 드로어 오버레이 */}
       {drawerOpen && (
-        <div
-          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
-          onClick={() => setDrawerOpen(false)}
-        />
-      )}
-
-      {/* 드로어 */}
-      <aside
-        className={`fixed right-0 top-0 z-[70] flex h-full w-72 flex-col bg-[var(--surface-strong)] shadow-2xl transition-transform duration-200 ${
-          drawerOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-          <span className="text-sm font-semibold text-[var(--text-primary)]">전체 메뉴</span>
-          <button
-            type="button"
+        <div className="fixed inset-0 z-[60] isolate" data-testid="mobile-menu-layer">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrawerOpen(false)}
-            className="rounded-md p-1 text-[var(--text-secondary)]"
-            aria-label="메뉴 닫기"
+            onTouchMove={(event) => event.preventDefault()}
+            onWheel={(event) => event.preventDefault()}
+            aria-hidden="true"
+          />
+          <aside
+            id="mobile-menu-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="전체 메뉴"
+            className="absolute inset-y-0 right-0 flex h-dvh w-72 max-w-[calc(100vw-2rem)] flex-col overflow-hidden bg-[var(--surface-strong)] shadow-2xl"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+              <span className="text-sm font-semibold text-[var(--text-primary)]">전체 메뉴</span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="rounded-md p-1 text-[var(--text-secondary)]"
+                aria-label="메뉴 닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4">
+            <div className="flex-1 overflow-y-auto px-3 py-4">
           <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
             트레이딩 플로우
           </p>
@@ -168,19 +196,21 @@ export default function NavbarMobile() {
               </Link>
             );
           })}
-        </div>
+            </div>
 
-        <div className="border-t border-[var(--border)] px-3 py-3">
-          <form action="/api/auth/logout" method="post">
-            <button
-              type="submit"
-              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-            >
-              로그아웃
-            </button>
-          </form>
+            <div className="border-t border-[var(--border)] px-3 py-3">
+              <form action="/api/auth/logout" method="post">
+                <button
+                  type="submit"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                >
+                  로그아웃
+                </button>
+              </form>
+            </div>
+          </aside>
         </div>
-      </aside>
+      )}
     </>
   );
 }
