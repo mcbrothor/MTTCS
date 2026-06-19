@@ -38,6 +38,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
+const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
 const CODEX_OUTPUT_SCHEMA = process.env.CODEX_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'ib-validation-result.schema.json');
 const DAILY_TOP5_OUTPUT_SCHEMA = process.env.DAILY_TOP5_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'daily-screener-top5.schema.json');
@@ -487,6 +488,35 @@ async function insertDailyCandidates(run, candidates, topBySource) {
   }
 }
 
+async function loadRecommendationMarketContext(runDate) {
+  const macroQuery = await supabase
+    .from('macro_snapshot')
+    .select('calc_date, macro_score, regime, vix_level')
+    .lte('calc_date', runDate)
+    .order('calc_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (macroQuery.error) throw macroQuery.error;
+
+  const contexts = {};
+  for (const market of ['US', 'KR']) {
+    const marketQuery = await supabase
+      .from('master_filter_snapshot')
+      .select('calc_date, p3_score, state, trend_score, breadth_score, volatility_score, sector_score')
+      .eq('market', market)
+      .lte('calc_date', runDate)
+      .order('calc_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (marketQuery.error) throw marketQuery.error;
+    contexts[market] = {
+      market_state: marketQuery.data || null,
+      macro: macroQuery.data || null,
+    };
+  }
+  return contexts;
+}
+
 async function processDailyScreenerRun(run) {
   console.log(`\n[Worker] 🚀 Found pending Daily Screener run ${run.id} (${run.run_date})`);
   const now = new Date().toISOString();
@@ -581,13 +611,51 @@ async function processDailyScreenerRun(run) {
       generated_at: new Date().toISOString(),
     };
 
+    const marketContextByMarket = await loadRecommendationMarketContext(run.run_date);
+    const recommendationPublications = await recommendationPersistence.persistRecommendationPublications({
+      client: supabase,
+      runId: run.id,
+      runDate: run.run_date,
+      generatedAt: top5Result.generated_at,
+      provider: top5Attempt.provider,
+      model: top5Attempt.model,
+      result: top5Attempt.result,
+      candidates: scan.candidates,
+      marketContext: {
+        scan_summary: scanSummary,
+        provider_chain: top5Attempt.chain,
+      },
+      marketContextByMarket: Object.fromEntries(Object.entries(marketContextByMarket).map(([market, context]) => [market, {
+        ...context,
+        scan_summary: scanSummary,
+        provider_chain: top5Attempt.chain,
+      }])),
+    });
+    const publicationByMarket = new Map(recommendationPublications.map((publication) => [publication.market, publication]));
+
     for (const market of ['US', 'KR']) {
-      await sendTelegramMessage(dailyScreeners.formatDailyMarketTop10TelegramMessage({
-        runDate: run.run_date,
-        market,
-        top10: top5Attempt.result.markets[market],
-        provider: `${top5Attempt.provider} (${top5Attempt.model})`,
-      }));
+      const publication = publicationByMarket.get(market);
+      try {
+        await sendTelegramMessage(dailyScreeners.formatDailyMarketTop10TelegramMessage({
+          runDate: run.run_date,
+          market,
+          top10: top5Attempt.result.markets[market],
+          provider: `${top5Attempt.provider} (${top5Attempt.model})`,
+        }));
+        if (publication) {
+          await recommendationPersistence.markRecommendationTelegramStatus(
+            supabase,
+            publication.id,
+            'SENT',
+            new Date().toISOString(),
+          );
+        }
+      } catch (error) {
+        if (publication) {
+          await recommendationPersistence.markRecommendationTelegramStatus(supabase, publication.id, 'FAILED');
+        }
+        throw error;
+      }
     }
 
     await supabase

@@ -102,10 +102,13 @@ export const FLOW_STEPS: FlowStep[] = [
     label: '성과 복기',
     sub: '결과 축적',
     href: '/history',
-    matchers: ['/history'],
+    matchers: ['/history', '/recommendations'],
     tabs: [
       { href: '/history', label: '매매 복기' },
       { href: '/history?view=stats', label: '성과 통계' },
+      { href: '/recommendations', label: '추천 이력' },
+      { href: '/recommendations?view=metrics', label: '추천 성과' },
+      { href: '/recommendations?view=diagnostics', label: '원인 분석' },
     ],
   },
 ];

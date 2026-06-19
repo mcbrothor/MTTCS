@@ -8,6 +8,7 @@ import HelpButton from '@/components/ui/HelpButton';
 import StatusBadge from '@/components/master-filter/StatusBadge';
 import { useMarket } from '@/contexts/MarketContext';
 import { formatDelay, formatTimestamp } from '@/lib/format';
+import { ADVANCE_DECLINE_RATIO_BANDS, getAverageDailyRangeGuidance } from '@/lib/master-filter/adr-presentation';
 import { friendlyMetricLabel, friendlyMetricStatus } from '@/lib/market-display';
 import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
@@ -37,6 +38,12 @@ const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: stri
     tooltip: 'S&P 500 옵션의 내재변동성으로 계산되는 "공포 지수". 낮을수록 시장이 안정적입니다.',
     accordion: 'VIX 15 이하: 낮은 변동성, 진입 유리. 20 이상: 위험 증가. 30 이상: 패닉 구간.',
   },
+  'ADR': {
+    alias: '20일 평균 하루 변동폭',
+    tooltip: '최근 20거래일 동안 하루의 고가와 저가가 평균적으로 얼마나 벌어졌는지 보여줍니다. 높을수록 가격 흔들림이 큽니다.',
+    formula: '평균(고가 - 저가) ÷ 평균((고가 + 저가) ÷ 2) × 100',
+    accordion: '현재 카드는 Average Daily Range입니다. 상승 종목 수와 하락 종목 수를 비교하는 Advance/Decline Ratio와 약어만 같고 계산법과 기준은 다릅니다.',
+  },
 };
 
 function getMetricHelp(label: string) {
@@ -48,6 +55,12 @@ interface MetricCardProps {
   chartData?: { date: string; close: number }[];
   movingAverageData?: NonNullable<MasterFilterMetrics['movingAverageHistory']>;
   compact?: boolean;
+}
+
+interface MetricDisplayItem {
+  detail: MasterFilterMetricDetail | undefined;
+  chartData?: { date: string; close: number }[];
+  movingAverageData?: NonNullable<MasterFilterMetrics['movingAverageHistory']>;
 }
 
 function statusClass(status: MasterFilterMetricDetail['status']) {
@@ -286,7 +299,8 @@ function DataQualityPanel({
     metrics.distribution,
     metrics.newHighLow,
     metrics.sectorRotation,
-  ];
+    metrics.adr,
+  ].filter((row): row is MasterFilterMetricDetail => Boolean(row));
 
   return (
     <section className="rounded-xl border border-sky-500/25 bg-slate-950/55 p-4 shadow-[var(--panel-shadow)]">
@@ -351,6 +365,56 @@ function DataQualityPanel({
   );
 }
 
+function AdrEducationPanel({ detail }: { detail: MasterFilterMetricDetail }) {
+  const guidance = getAverageDailyRangeGuidance(detail.status);
+
+  return (
+    <section className="rounded-lg border border-amber-500/25 bg-slate-950/50 p-4" aria-labelledby="adr-guide-title">
+      <div className="flex items-start gap-3">
+        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+        <div>
+          <h3 id="adr-guide-title" className="text-sm font-bold text-slate-200">ADR 바로 읽기</h3>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            현재 값 <strong className="text-white">{detail.value}{detail.unit}</strong>은 <strong className="text-amber-200">{guidance.label}</strong>입니다. {guidance.action}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+          <p className="text-xs font-bold text-sky-200">현재 화면: Average Daily Range</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            지수의 <strong className="text-slate-200">하루 가격 변동폭</strong>을 20일 평균으로 계산합니다. 기준은 <span className="font-mono text-slate-300">{detail.threshold}</span>이며 시장별로 다릅니다.
+          </p>
+        </div>
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+          <p className="text-xs font-bold text-violet-200">같은 약어, 다른 지표: Advance/Decline Ratio</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            <strong className="text-slate-200">상승 종목 수 ÷ 하락 종목 수 × 100</strong>으로 시장 참여 폭을 봅니다. 아래 75·120 기준은 이 등락비율에만 적용되며 현재 카드 값에는 적용하지 않습니다.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-lg border border-slate-800">
+        <div className="grid grid-cols-2 bg-slate-900/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          <span>등락비율 ADR</span>
+          <span>일반적 해석</span>
+        </div>
+        {ADVANCE_DECLINE_RATIO_BANDS.map((band) => (
+          <div key={band.range} className="grid grid-cols-2 border-t border-slate-800 px-3 py-2 text-xs">
+            <span className="font-mono font-bold text-slate-300">{band.range}</span>
+            <span className="text-slate-400">{band.meaning}</span>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        등락비율은 숫자 자체보다 방향 전환이 중요합니다. 75 이하에서 상승 전환, 120 이상에서 하락 전환, 지수와 반대로 움직이는 다이버전스를 함께 확인하세요. 한 번의 값만으로 매수·매도를 결정하지 않습니다.
+      </p>
+    </section>
+  );
+}
+
 export default function MetricsGrid() {
   const { data, isLoading } = useMarket();
 
@@ -368,7 +432,7 @@ export default function MetricsGrid() {
 
   const { metrics } = data;
   const isUnscored = data.state === 'GREY';
-  const displayMetricsList = [
+  const scoredMetricsList: MetricDisplayItem[] = [
     { detail: metrics.trend, movingAverageData: metrics.movingAverageHistory && metrics.movingAverageHistory.length > 1 ? metrics.movingAverageHistory : undefined },
     { detail: metrics.breadth, chartData: metrics.mainHistory && metrics.mainHistory.length > 1 ? metrics.mainHistory : undefined },
     { detail: metrics.volatility, chartData: metrics.vixHistory && metrics.vixHistory.length > 1 ? metrics.vixHistory : undefined },
@@ -377,6 +441,10 @@ export default function MetricsGrid() {
     { detail: metrics.newHighLow },
     { detail: metrics.sectorRotation }
   ];
+  const supplementalMetricsList: MetricDisplayItem[] = [
+    { detail: metrics.adr },
+  ].filter((item) => Boolean(item.detail));
+  const displayMetricsList = [...scoredMetricsList, ...supplementalMetricsList];
 
   if (isUnscored) {
     return <DataQualityPanel metrics={metrics} market={data.market} />;
@@ -402,7 +470,7 @@ export default function MetricsGrid() {
         </div>
 
         <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
-          {displayMetricsList.map(({ detail }) => detail ? (
+          {scoredMetricsList.map(({ detail }) => detail ? (
             <div key={detail.label}>
               <div className="mb-1 flex justify-between text-[10px] text-slate-500">
                 <span>{friendlyMetricLabel(detail.label)}</span>
@@ -434,6 +502,8 @@ export default function MetricsGrid() {
           />
         ) : null)}
       </div>
+
+      {metrics.adr && <AdrEducationPanel detail={metrics.adr} />}
 
       <SectorTable rows={metrics.sectorRows || []} />
       <DistributionTable details={metrics.distributionDetails || []} />

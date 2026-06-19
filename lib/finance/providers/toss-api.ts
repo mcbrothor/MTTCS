@@ -5,6 +5,8 @@ import {
   tossInvestClientId,
   tossInvestClientSecret,
   tossInvestHoldingsPath,
+  tossInvestProxyUrl,
+  tossProxySecret,
 } from '../../env';
 import type { OHLCData } from '../../../types';
 
@@ -52,6 +54,20 @@ interface TossHoldingResponse {
   data?: unknown;
   holdings?: unknown;
   positions?: unknown;
+}
+
+interface TossAccountRow {
+  accountNo?: string | number;
+  accountSeq?: string | number;
+  accountType?: string;
+}
+
+interface TossAccountsResponse {
+  result?: TossAccountRow[];
+}
+
+interface TossHoldingsOptions {
+  bypassProxy?: boolean;
 }
 
 export interface TossPriceQuote {
@@ -108,6 +124,10 @@ function trimTrailingSlash(value: string) {
 }
 
 export function isTossInvestConfigured() {
+  return Boolean((tossInvestClientId() && tossInvestClientSecret()) || tossInvestProxyUrl());
+}
+
+function isTossDirectConfigured() {
   return Boolean(tossInvestClientId() && tossInvestClientSecret());
 }
 
@@ -143,6 +163,14 @@ function tossErrorMessage(error: unknown, fallback: string) {
     return data.error_description ? `${data.error}: ${data.error_description}` : data.error;
   }
   return error.message || fallback;
+}
+
+function tossErrorCode(error: unknown) {
+  if (!axios.isAxiosError(error)) return null;
+  const data = error.response?.data as {
+    error?: { code?: string; message?: string } | string;
+  } | undefined;
+  return typeof data?.error === 'object' ? data.error?.code || null : null;
 }
 
 async function getTossToken(): Promise<string> {
@@ -187,6 +215,12 @@ async function getTossToken(): Promise<string> {
   } finally {
     tokenCache.pendingTokenRequest = null;
   }
+}
+
+function clearTossTokenCache() {
+  tokenCache.cachedToken = null;
+  tokenCache.tokenExpiresAt = 0;
+  tokenCache.pendingTokenRequest = null;
 }
 
 function parseFiniteNumber(value: unknown): number | null {
@@ -440,29 +474,104 @@ export function normalizeTossHoldings(payload: TossHoldingResponse | unknown): T
   };
 }
 
-export async function getTossHoldings(market: 'US' | 'KR'): Promise<TossHoldingsSnapshot> {
-  const token = await getTossToken();
-  const accountId = tossInvestAccountId();
+async function getTossAccounts(token: string): Promise<TossAccountRow[]> {
+  const response = await axios.get(`${trimTrailingSlash(tossInvestBaseUrl())}/api/v1/accounts`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+    },
+  });
+  const payload = response.data as TossAccountsResponse;
+  return Array.isArray(payload.result) ? payload.result : [];
+}
+
+function accountCandidates(accounts: TossAccountRow[], configuredAccountId: string | null) {
+  const candidates: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value !== 'string' && typeof value !== 'number') return;
+    const normalized = String(value).trim();
+    if (normalized && !candidates.includes(normalized)) candidates.push(normalized);
+  };
+
+  add(configuredAccountId);
+  for (const account of accounts) add(account.accountSeq);
+  for (const account of accounts) add(account.accountNo);
+  return candidates;
+}
+
+async function requestTossHoldings(token: string, accountId: string, market: 'US' | 'KR') {
   const path = tossInvestHoldingsPath();
+  const response = await axios.get(`${trimTrailingSlash(tossInvestBaseUrl())}${path.startsWith('/') ? path : `/${path}`}`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+      'x-tossinvest-account': accountId,
+    },
+    params: {
+      market,
+    },
+  });
 
-  if (!accountId) {
-    throw new Error('Toss Securities holdings requires TOSS_INVEST_ACCOUNT_ID or TOSS_ACCOUNT_ID.');
+  return normalizeTossHoldings(response.data);
+}
+
+async function getTossHoldingsFromProxy(market: 'US' | 'KR') {
+  const proxyUrl = tossInvestProxyUrl();
+  if (!proxyUrl) return null;
+
+  const url = new URL(proxyUrl);
+  url.searchParams.set('market', market);
+  const response = await axios.get(url.toString(), {
+    headers: {
+      accept: 'application/json',
+      ...(tossProxySecret() ? { authorization: `Bearer ${tossProxySecret()}` } : {}),
+    },
+  });
+  const payload = response.data as { data?: unknown };
+  return normalizeTossHoldings(payload.data ?? payload);
+}
+
+export async function getTossHoldings(market: 'US' | 'KR', options: TossHoldingsOptions = {}): Promise<TossHoldingsSnapshot> {
+  if (!options.bypassProxy) {
+    const proxySnapshot = await getTossHoldingsFromProxy(market);
+    if (proxySnapshot) return proxySnapshot;
   }
 
-  try {
-    const response = await axios.get(`${trimTrailingSlash(tossInvestBaseUrl())}${path.startsWith('/') ? path : `/${path}`}`, {
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: 'application/json',
-        'x-tossinvest-account': accountId,
-      },
-      params: {
-        market,
-      },
-    });
-
-    return normalizeTossHoldings(response.data);
-  } catch (error) {
-    throw new Error(`Toss Securities holdings failed: ${tossErrorMessage(error, 'unknown holdings error')}`);
+  if (!isTossDirectConfigured()) {
+    throw new Error('Toss Securities Open API credentials are not configured.');
   }
+
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = await getTossToken();
+    const accountId = tossInvestAccountId();
+    const accounts = await getTossAccounts(token).catch(() => []);
+    const candidates = accountCandidates(accounts, accountId);
+
+    if (candidates.length === 0) {
+      throw new Error('Toss Securities holdings requires an account from /api/v1/accounts or TOSS_INVEST_ACCOUNT_ID.');
+    }
+
+    for (const candidate of candidates) {
+      try {
+        return await requestTossHoldings(token, candidate, market);
+      } catch (error) {
+        lastError = error;
+        const code = tossErrorCode(error);
+        if (code === 'account-not-found') continue;
+        if (code === 'invalid-token' && attempt === 0) {
+          clearTossTokenCache();
+          break;
+        }
+        attempt = 2;
+        break;
+      }
+    }
+  }
+
+  if (lastError) {
+    throw new Error(`Toss Securities holdings failed: ${tossErrorMessage(lastError, 'unknown holdings error')}`);
+  }
+  throw new Error('Toss Securities holdings failed: no account candidates were available.');
 }

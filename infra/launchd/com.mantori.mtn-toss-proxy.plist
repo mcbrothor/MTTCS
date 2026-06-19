@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mantori.mtn-toss-proxy</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/mantori/vibecoding/MTN/scripts/run-toss-proxy-server.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mantori/vibecoding/MTN</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/mtn-toss-proxy.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/mtn-toss-proxy.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>MTN_TOSS_PROXY_SECRET_FILE</key>
+    <string>/Users/mantori/.config/mtn/toss-proxy-secret</string>
+  </dict>
+</dict>
+</plist>

@@ -16,6 +16,11 @@ test.describe('TC-MF: 오늘 시장 신호판', () => {
       await expect(page.getByRole('status', { name: '오늘 진입 결정: 투자 가능 · 권장 비중 100%' })).toBeVisible();
       await expect(page.getByText('시장 건강 점수').first()).toBeVisible();
       await expect(page.locator('text=함께 오르는 종목 비율').first()).toBeVisible();
+      await expect(page.getByText('20일 평균 하루 변동폭').first()).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'ADR 바로 읽기' })).toBeVisible();
+      await expect(page.getByText('같은 약어, 다른 지표: Advance/Decline Ratio')).toBeVisible();
+      await expect(page.getByText('75% 이하', { exact: true })).toBeVisible();
+      await expect(page.getByText('120% 이상', { exact: true })).toBeVisible();
     });
   });
 

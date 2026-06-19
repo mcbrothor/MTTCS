@@ -76,6 +76,18 @@ export function tossInvestHoldingsPath(): string {
   return optional('TOSS_INVEST_HOLDINGS_PATH', '/api/v1/holdings');
 }
 
+export function tossInvestProxyUrl(): string | null {
+  return process.env['TOSS_INVEST_PROXY_URL'] || null;
+}
+
+export function tossProxySecret(): string | null {
+  return process.env['TOSS_PROXY_SECRET'] || null;
+}
+
+export function localLlmProxySecret(): string | null {
+  return process.env['LOCAL_LLM_PROXY_SECRET'] || tossProxySecret();
+}
+
 // --- Telegram ---
 
 export function telegramBotToken(): string {

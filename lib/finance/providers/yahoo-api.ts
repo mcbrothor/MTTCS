@@ -168,6 +168,7 @@ export async function getYahooFundamentals(ticker: string): Promise<FundamentalS
       floatShares: rawNumber(defaultKeyStatistics.floatShares),
       sharesOutstanding: rawNumber(defaultKeyStatistics.sharesOutstanding),
       sector: typeof assetProfile.sector === 'string' ? assetProfile.sector : null,
+      industry: typeof assetProfile.industry === 'string' ? assetProfile.industry : null,
       source: 'Yahoo Finance quoteSummary',
     };
   } catch {

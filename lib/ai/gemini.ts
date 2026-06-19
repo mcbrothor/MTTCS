@@ -15,6 +15,7 @@ const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || (process
 export const LOCAL_LLM_ENABLED = process.env.LOCAL_LLM_ENABLED?.toLowerCase() === 'true';
 export const LOCAL_LLM_API_URL = process.env.LOCAL_LLM_API_URL || 'http://localhost:11434/v1';
 export const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen3.6:14b';
+const LOCAL_LLM_PROXY_SECRET = process.env.LOCAL_LLM_PROXY_SECRET || process.env.TOSS_PROXY_SECRET || '';
 
 export interface MarketAnalysisInput {
   marketState: string;
@@ -22,6 +23,7 @@ export interface MarketAnalysisInput {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
     volatility: MasterFilterMetricDetail;
+    adr?: MasterFilterMetricDetail;
     distribution: MasterFilterMetricDetail;
     ftd: MasterFilterMetricDetail;
     newHighLow: MasterFilterMetricDetail;
@@ -113,6 +115,7 @@ function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = MODEL_TI
 
 export async function settleModelInsightsUntilFirstSuccess(tasks: Promise<AiModelInsight>[]) {
   const modelInsights: AiModelInsight[] = [];
+  let selected: { index: number; insight: AiModelInsight } | null = null;
   const pending = new Map(
     tasks.map((task, index) => [
       index,
@@ -138,13 +141,21 @@ export async function settleModelInsightsUntilFirstSuccess(tasks: Promise<AiMode
     modelInsights.push(insight);
 
     if (insight.status === 'success' && insight.text) {
-      for (const task of pending.values()) {
-        void task.catch(() => {});
+      if (!selected || insight.priority < selected.insight.priority) selected = { index, insight };
+    }
+
+    const chosen = selected;
+    if (chosen) {
+      const hasHigherPriorityPending = Array.from(pending.keys()).some((pendingIndex) => pendingIndex < chosen.index);
+      if (!hasHigherPriorityPending) {
+        for (const task of pending.values()) {
+          void task.catch(() => {});
+        }
+        return {
+          selected: chosen.insight,
+          modelInsights: modelInsights.sort((a, b) => a.priority - b.priority),
+        };
       }
-      return {
-        selected: insight,
-        modelInsights: modelInsights.sort((a, b) => a.priority - b.priority),
-      };
     }
   }
 
@@ -181,6 +192,7 @@ function buildPrompt(input: MarketAnalysisInput) {
     `Breadth: ${input.metrics.breadth.value} / threshold ${input.metrics.breadth.threshold}`,
     `Distribution: ${input.metrics.distribution.value} days / threshold ${input.metrics.distribution.threshold}`,
     `Volatility: ${input.metrics.volatility.value} (${input.metrics.volatility.status})`,
+    input.metrics.adr ? `ADR: ${input.metrics.adr.value}${input.metrics.adr.unit} (${input.metrics.adr.status}) - ${input.metrics.adr.description}` : null,
     `FTD: ${input.metrics.ftd.value}`,
     `NH/NL Proxy: ${input.metrics.newHighLow.value}`,
     `Sector Leadership: ${input.metrics.sectorRotation.value}`,
@@ -194,7 +206,7 @@ function buildPrompt(input: MarketAnalysisInput) {
     '  "bullets": ["<핵심 포인트 1>", "<핵심 포인트 2>", "<핵심 포인트 3>"],',
     '  "detail": "<상세 서술: 시장 추세 근거, 매크로 리스크, 실전 행동 지침>"',
     '}',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 interface StructuredInsight {
@@ -364,6 +376,23 @@ function attemptToInsight(input: {
   };
 }
 
+function withProviderSummaries(insights: AiModelInsight[]) {
+  const hasLocalLlm = insights.some((item) => item.provider === 'local-llm');
+  if (!hasLocalLlm) {
+    insights.push(attemptToInsight({
+      provider: 'local-llm',
+      label: 'local-llm',
+      model: LOCAL_LLM_MODEL,
+      status: 'skipped',
+      message: LOCAL_LLM_ENABLED
+        ? 'Local LLM is enabled; skipped waiting after a higher-priority model succeeded.'
+        : 'Local LLM is not enabled.',
+      priority: 4,
+    }));
+  }
+  return insights.sort((a, b) => a.priority - b.priority);
+}
+
 async function collectGemini(
   model: string,
   prompt: string,
@@ -471,10 +500,6 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
   const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
     collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 0),
-    collectGroq(prompt, chain, 2),
-    collectCerebras(prompt, chain, 3),
-    collectLocalLlm(prompt, chain, 4),
-    collectCodexCli(prompt, chain, 5),
   ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
@@ -486,6 +511,13 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 1 })));
   }
 
+  tasks.push(
+    collectGroq(prompt, chain, 2),
+    collectCerebras(prompt, chain, 3),
+    collectLocalLlm(prompt, chain, 4),
+    collectCodexCli(prompt, chain, 5)
+  );
+
   const { selected, modelInsights } = await settleModelInsightsUntilFirstSuccess(tasks);
   const priorityByChainKey = new Map<string, number>();
   for (const item of modelInsights) {
@@ -495,7 +527,8 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
   chain.sort((a, b) => (priorityByChainKey.get(a.provider) ?? 99) - (priorityByChainKey.get(b.provider) ?? 99));
 
   if (selected) {
-    const selectedInsights = modelInsights.map((item) => ({ ...item, selected: item.id === selected.id }));
+    const selectedInsights = withProviderSummaries(modelInsights)
+      .map((item) => ({ ...item, selected: item.id === selected.id }));
     return {
       text: selected.text || '',
       isAiGenerated: true,
@@ -554,6 +587,7 @@ export async function callLocalLlmModel(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        ...(LOCAL_LLM_PROXY_SECRET ? { authorization: `Bearer ${LOCAL_LLM_PROXY_SECRET}` } : {}),
       },
       signal: controller.signal,
       body: JSON.stringify({
@@ -608,7 +642,6 @@ export async function callCodexCli(prompt: string, timeoutMs = 25000): Promise<s
       'exec',
       '--ephemeral',
       '--sandbox', 'read-only',
-      '--ask-for-approval', 'never',
       '--skip-git-repo-check',
       '--cd', cwd,
       '--output-last-message', outputPath,

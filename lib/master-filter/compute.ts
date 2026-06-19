@@ -1,6 +1,7 @@
 import type { MarketState, MasterFilterMetricDetail } from '@/types';
 import type { OHLCData } from '@/types';
 import { MACRO_CRITERIA } from '@/lib/finance/engines/canslim-criteria';
+import { calculateAdrPct } from '@/lib/finance/core/price-metrics';
 
 export function average(values: number[]) {
   return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
@@ -151,6 +152,7 @@ export interface P3ComputeResult {
   currentVix: number;
   currentVix3m: number | null;
   vixTermRatio: number | null;
+  adrPct: number | null;
   above200Pct: number;
   newHighLowProxy: number;
   distributionDays: number;
@@ -163,6 +165,7 @@ export interface P3ComputeResult {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
     volatility: MasterFilterMetricDetail;
+    adr: MasterFilterMetricDetail;
     distribution: MasterFilterMetricDetail;
     ftd: MasterFilterMetricDetail;
     newHighLow: MasterFilterMetricDetail;
@@ -196,6 +199,11 @@ export function computeP3(
   const ma200 = movingAverage(mainData, 200) ?? 0;
   const currentVix = vixData.at(-1)?.close ?? 20;
   const currentVix3m = vix3mData?.at(-1)?.close ?? null;
+  const adrPct = calculateAdrPct(mainData, 20);
+  const isKosdaqSymbol = mainSymbol.includes('KQ');
+  const isKoreaSymbol = mainSymbol.includes('KS') || isKosdaqSymbol;
+  const adrWarnThreshold = isKosdaqSymbol ? 2.8 : isKoreaSymbol ? 2.2 : 1.8;
+  const adrFailThreshold = isKosdaqSymbol ? 4.0 : isKoreaSymbol ? 3.2 : 2.8;
   // VIX/VIX3M 비율: 1.0 초과(백워데이션)은 단기 공포 급등 신호
   const vixTermRatio = currentVix3m && currentVix3m > 0 ? currentVix / currentVix3m : null;
 
@@ -323,6 +331,15 @@ export function computeP3(
       score: volatilityScoreScaled,
       weight: 20,
     },
+    adr: {
+      label: 'Average Daily Range (ADR)',
+      value: adrPct === null ? 'N/A' : adrPct,
+      threshold: `≤${adrWarnThreshold}% normal / ≥${adrFailThreshold}% hot`,
+      status: (adrPct === null ? 'WARNING' : adrPct >= adrFailThreshold ? 'FAIL' : adrPct >= adrWarnThreshold ? 'WARNING' : 'PASS') as 'PASS' | 'WARNING' | 'FAIL',
+      unit: adrPct === null ? '' : '%',
+      description: `최근 20거래일 평균 고가-저가 폭입니다. ${mainSymbol} ADR이 높으면 당일 흔들림이 커져 신규 진입 수량과 손절폭을 보수적으로 잡습니다.`,
+      source: `${mainSymbol} high/low range`,
+    },
     distribution: {
       label: 'Distribution Pressure',
       value: distributionDays,
@@ -380,7 +397,7 @@ export function computeP3(
   return {
     p3Score, state, ftdScore, distributionScore, newHighLowScore, above200Score, sectorScore,
     trendScore, breadthScore: above200Pct, volatilityScore, liquidityScore: distributionDays,
-    legacyScore, lastClose, ma50, ma150, ma200, currentVix, currentVix3m, vixTermRatio, above200Pct, newHighLowProxy,
+    legacyScore, lastClose, ma50, ma150, ma200, currentVix, currentVix3m, vixTermRatio, adrPct, above200Pct, newHighLowProxy,
     distributionDays, distributionWeighted, distributionDetails: distributionInfo.details, ftd,
     foreignNetBuy5d: foreignNetBuy5d ?? null, foreignNetBuyScore,
     metrics, mainHistory, vixHistory, movingAverageHistory,

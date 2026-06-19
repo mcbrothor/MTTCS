@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mantori.mtn-codex-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/mantori/vibecoding/MTN/scripts/run-codex-worker.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mantori/vibecoding/MTN</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/mtn-codex-worker.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/mtn-codex-worker.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/mantori/.local/node/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>CODEX_CLI_BIN</key>
+    <string>/Users/mantori/.local/node/bin/codex</string>
+  </dict>
+</dict>
+</plist>

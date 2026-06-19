@@ -36,6 +36,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/api/') &&
     !pathname.startsWith('/api/auth') &&
     !pathname.startsWith('/api/cron/') &&
+    !pathname.startsWith('/api/local-llm-proxy/') &&
+    !pathname.startsWith('/api/toss-proxy/') &&
     !pathname.startsWith('/api/telegram-webhook')
   ) {
     const token = request.cookies.get('mtn_session')?.value;

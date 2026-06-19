@@ -75,6 +75,15 @@
         "score": 20,
         "weight": 20
       },
+      "adr": {
+        "label": "Average Daily Range (ADR)",
+        "value": 1.2,
+        "threshold": "≤1.8% normal / ≥2.8% hot",
+        "status": "PASS",
+        "unit": "%",
+        "description": "최근 20거래일 평균 고가-저가 폭이 안정적입니다.",
+        "source": "e2e fixture"
+      },
       "ftd": {
         "label": "Follow-Through Day",
         "value": "Confirmed",

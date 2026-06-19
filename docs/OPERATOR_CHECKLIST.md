@@ -36,6 +36,8 @@ Optional market data fallback variables:
 - `TOSS_INVEST_BASE_URL` (defaults to `https://openapi.tossinvest.com`)
 - `TOSS_INVEST_ACCOUNT_ID` or `TOSS_ACCOUNT_ID` (needed when the Toss holdings endpoint requires an account identifier)
 - `TOSS_INVEST_HOLDINGS_PATH` (defaults to `/api/v1/holdings`)
+- `TOSS_PROXY_SECRET` (required when exposing `/api/toss-proxy/holdings`)
+- `TOSS_INVEST_PROXY_URL` (set on Vercel when Toss must be called through a local/free proxy)
 
 Local Codex worker optional variables:
 
@@ -43,8 +45,11 @@ Local Codex worker optional variables:
 - `CODEX_CLI_BIN`
 - `CODEX_CLI_MODEL`
 - `CODEX_CLI_TIMEOUT_MS`
+- `LOCAL_LLM_ENABLED`
 - `LOCAL_LLM_API_URL`
 - `LOCAL_LLM_MODEL`
+- `LOCAL_LLM_PROXY_SECRET` (optional; defaults to `TOSS_PROXY_SECRET`)
+- `LOCAL_LLM_UPSTREAM_URL` (local only; defaults to `http://127.0.0.1:11434/v1`)
 
 ## 3. Supabase Production Schema
 
@@ -86,7 +91,34 @@ Run after deployment with an authenticated session:
 - `GET /api/portfolio/risk?market=KR&source=toss`
   - Expected provider: `Toss Securities`, with active positions matching the Toss account holdings
 
-## 5. Local Codex Worker
+## 5. Free Toss Holdings Production Workaround
+
+When Toss rejects Vercel with `access_denied: IP address not allowed`, run the Toss call from an allowed local Mac and let Vercel call that Mac through a protected proxy.
+
+Local Mac:
+
+- Set `TOSS_PROXY_SECRET` in `.env.local`.
+- Run MTN locally with `npm run dev`.
+- Expose `http://localhost:3000/api/toss-proxy/holdings` with a free HTTPS tunnel, such as Cloudflare Tunnel.
+- Test:
+  - `GET /api/toss-proxy/holdings?market=KR`
+  - Header: `Authorization: Bearer $TOSS_PROXY_SECRET`
+
+Vercel:
+
+- Set `TOSS_INVEST_PROXY_URL` to the public tunnel URL ending in `/api/toss-proxy/holdings`.
+- Set the same `TOSS_PROXY_SECRET`.
+- Redeploy.
+- Verify `GET /api/portfolio/risk?market=KR&source=toss`.
+
+## 6. Local LLM / Codex Worker
+
+For production Local LLM calls, keep the Mac mini Next server exposed through the protected local proxy:
+
+- Vercel `LOCAL_LLM_ENABLED=true`
+- Vercel `LOCAL_LLM_API_URL=https://<mac-funnel-host>/api/local-llm-proxy`
+- Vercel `LOCAL_LLM_MODEL=qwen3.6:14b`
+- The local proxy authenticates with `LOCAL_LLM_PROXY_SECRET` or `TOSS_PROXY_SECRET`.
 
 Start on the Mac mini when IB validation queue processing is needed:
 
@@ -94,13 +126,27 @@ Start on the Mac mini when IB validation queue processing is needed:
 npm run codex:worker
 ```
 
+Persistent launchd worker:
+
+```bash
+cp infra/launchd/com.mantori.mtn-codex-worker.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mantori.mtn-codex-worker.plist
+launchctl enable "gui/$(id -u)/com.mantori.mtn-codex-worker"
+launchctl kickstart -k "gui/$(id -u)/com.mantori.mtn-codex-worker"
+```
+
+Logs:
+
+- `/tmp/mtn-codex-worker.out.log`
+- `/tmp/mtn-codex-worker.err.log`
+
 Expected behavior:
 
 - `pending-codex-cli` is processed by Codex CLI first.
 - Codex failure falls back to `pending-local-llm`.
 - Telegram report is sent to every id in `TELEGRAM_ALLOWED_CHAT_IDS`.
 
-## 6. Verification Commands
+## 7. Verification Commands
 
 Before deployment:
 

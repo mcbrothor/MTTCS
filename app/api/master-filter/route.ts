@@ -178,6 +178,7 @@ export async function GET(request: Request) {
           trend: emptyMetric('장기 추세'),
           breadth: emptyMetric('시장 폭'),
           volatility: emptyMetric('변동성'),
+          adr: emptyMetric('ADR 변동폭'),
           ftd: emptyMetric('팔로스루데이'),
           distribution: emptyMetric('분배일'),
           newHighLow: emptyMetric('신고가/신저가'),

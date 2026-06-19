@@ -25,6 +25,42 @@
       "schedule": "0 12 * * *"
     },
     {
+      "path": "/api/cron/recommendation-performance?market=US&shard=0&shards=4",
+      "schedule": "30 06 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=US&shard=1&shards=4",
+      "schedule": "35 06 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=US&shard=2&shards=4",
+      "schedule": "40 06 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=US&shard=3&shards=4",
+      "schedule": "45 06 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=KR&shard=0&shards=4",
+      "schedule": "10 08 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=KR&shard=1&shards=4",
+      "schedule": "15 08 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=KR&shard=2&shards=4",
+      "schedule": "20 08 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-performance?market=KR&shard=3&shards=4",
+      "schedule": "25 08 * * *"
+    },
+    {
+      "path": "/api/cron/recommendation-weekly",
+      "schedule": "0 07 * * 6"
+    },
+    {
       "path": "/api/cron/rs-metrics?market=US",
       "schedule": "15 21 * * 1-5"
     },

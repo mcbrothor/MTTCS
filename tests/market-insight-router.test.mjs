@@ -51,6 +51,40 @@ function delayedInsight(delayMs, payload) {
 }
 
 {
+  const startedAt = performance.now();
+  const result = await settleModelInsightsUntilFirstSuccess([
+    delayedInsight(45, {
+      label: 'gemini-primary',
+      model: 'gemini-2.5-flash',
+      status: 'success',
+      text: 'Gemini briefing',
+      priority: 0,
+    }),
+    delayedInsight(5, {
+      provider: 'groq',
+      label: 'groq',
+      status: 'success',
+      text: 'Groq briefing',
+      priority: 2,
+    }),
+    delayedInsight(250, {
+      provider: 'local-llm',
+      label: 'local-llm',
+      model: 'qwen',
+      status: 'failed',
+      message: 'Local LLM timed out',
+      priority: 4,
+    }),
+  ]);
+
+  const elapsedMs = performance.now() - startedAt;
+  assert.equal(result.selected?.label, 'gemini-primary');
+  assert.ok(elapsedMs >= 40, `router should wait for higher-priority Gemini; elapsed=${elapsedMs}`);
+  assert.ok(elapsedMs < 120, `router should not wait for slow lower-priority providers; elapsed=${elapsedMs}`);
+  assert.deepEqual(result.modelInsights.map((item) => item.label), ['gemini-primary', 'groq']);
+}
+
+{
   const result = await settleModelInsightsUntilFirstSuccess([
     delayedInsight(5, {
       provider: 'groq',
