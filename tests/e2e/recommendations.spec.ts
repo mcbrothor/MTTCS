@@ -30,6 +30,20 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(row.getByText('2026-06-19')).toBeVisible();
   });
 
+  test('REC-08: 시장과 분석 탭은 직접 이동 가능한 링크 제공', async ({ page }) => {
+    await page.goto('/recommendations?market=US&date=2026-05-19');
+    const main = page.getByRole('main');
+
+    await expect(main.getByRole('link', { name: '한국' })).toHaveAttribute('href', '/recommendations?market=KR&date=2026-05-19');
+    await expect(main.getByRole('link', { name: '성과 분석' })).toHaveAttribute('href', '/recommendations?market=US&date=2026-05-19&view=metrics');
+    await expect(main.getByRole('link', { name: '원인 분석' })).toHaveAttribute('href', '/recommendations?market=US&date=2026-05-19&view=diagnostics');
+    await expect(main.getByRole('link', { name: '추천 이력' })).toHaveAttribute('aria-current', 'page');
+
+    await main.getByRole('link', { name: '한국' }).click();
+    await expect(page).toHaveURL('/recommendations?market=KR&date=2026-05-19');
+    await expect(page.getByRole('main').getByRole('link', { name: '한국' })).toHaveAttribute('aria-current', 'page');
+  });
+
   test('REC-05: 미성숙 기간은 완료 거래일 수를 표시', async ({ page }) => {
     await page.goto('/recommendations');
     await expect(page.getByText('대기 4/5')).toBeVisible();
@@ -63,13 +77,13 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
 
     await expect(page).toHaveURL(/date=2026-05-19/);
     await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
-    await page.getByRole('button', { name: '전체 보기' }).click();
+    await page.getByRole('link', { name: '전체 보기' }).click();
     await expect(page).not.toHaveURL(/date=/);
   });
 
   test('REC-02: 5·20·60일 성과와 표본 수 표시', async ({ page }) => {
     await page.goto('/recommendations');
-    await page.getByRole('button', { name: '성과 분석' }).click();
+    await page.getByRole('link', { name: '성과 분석' }).click();
     await expect(page).toHaveURL(/view=metrics/);
     await expect(page.getByRole('heading', { name: 'D5' })).toBeVisible();
     await expect(page.getByText('n=40')).toBeVisible();

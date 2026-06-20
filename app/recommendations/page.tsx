@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AlertTriangle, BarChart3, CalendarDays, Database, Info, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -142,7 +142,6 @@ function MetricHeaderTooltip({ label, ariaLabel, children }: { label: string; ar
 }
 
 function RecommendationsContent() {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
@@ -163,7 +162,7 @@ function RecommendationsContent() {
   const data = loading ? null : requestState.data;
   const error = loading ? null : requestState.error;
 
-  const update = (next: { market?: Market; view?: View; date?: string | null }) => {
+  const hrefFor = (next: { market?: Market; view?: View; date?: string | null }) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('market', next.market || market);
     const nextView = next.view || view;
@@ -171,7 +170,7 @@ function RecommendationsContent() {
     else params.set('view', nextView);
     if (next.date === null) params.delete('date');
     else if (next.date !== undefined) params.set('date', next.date);
-    router.replace(`${pathname}?${params.toString()}`);
+    return `${pathname}?${params.toString()}`;
   };
 
   useEffect(() => {
@@ -200,8 +199,8 @@ function RecommendationsContent() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Segmented items={[['US', '미국'], ['KR', '한국']]} active={market} onChange={(key) => update({ market: key as Market })} />
-          <Segmented items={[['history', '추천 이력'], ['metrics', '성과 분석'], ['diagnostics', '원인 분석']]} active={view} onChange={(key) => update({ view: key as View })} />
+          <Segmented items={[['US', '미국'], ['KR', '한국']]} active={market} getHref={(key) => hrefFor({ market: key as Market })} />
+          <Segmented items={[['history', '추천 이력'], ['metrics', '성과 분석'], ['diagnostics', '원인 분석']]} active={view} getHref={(key) => hrefFor({ view: key as View })} />
         </div>
       </header>
 
@@ -232,14 +231,7 @@ function RecommendationsContent() {
             >
               조회
             </button>
-            <button
-              type="button"
-              disabled={!selectedDate}
-              onClick={() => update({ date: null })}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              전체 보기
-            </button>
+            {selectedDate ? <a href={hrefFor({ date: null })} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">전체 보기</a> : <span aria-disabled="true" className="cursor-not-allowed rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 opacity-40">전체 보기</span>}
           </form>
         </section>
       )}
@@ -361,8 +353,8 @@ function EmptyState({ icon: Icon, title, message }: { icon: typeof Database; tit
   return <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/30 px-6 text-center"><Icon className="h-8 w-8 text-slate-600" /><h2 className="mt-4 font-bold text-slate-200">{title}</h2><p className="mt-2 max-w-lg text-sm text-slate-500">{message}</p></div>;
 }
 
-function Segmented({ items, active, onChange }: { items: string[][]; active: string; onChange: (key: string) => void }) {
-  return <div className="flex rounded-lg border border-slate-800 bg-slate-900 p-1">{items.map(([key, label]) => <button key={key} type="button" onClick={() => onChange(key)} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${active === key ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>{label}</button>)}</div>;
+function Segmented({ items, active, getHref }: { items: string[][]; active: string; getHref: (key: string) => string }) {
+  return <nav className="flex rounded-lg border border-slate-800 bg-slate-900 p-1">{items.map(([key, label]) => <a key={key} href={getHref(key)} aria-current={active === key ? 'page' : undefined} className={`rounded-md px-3 py-1.5 text-xs font-semibold ${active === key ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>{label}</a>)}</nav>;
 }
 
 export default function RecommendationsPage() {
