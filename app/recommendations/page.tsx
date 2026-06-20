@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, BarChart3, CalendarDays, Database, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -112,6 +112,7 @@ function RecommendationsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
   const viewParam = searchParams.get('view');
   const view: View = viewParam === 'metrics' || viewParam === 'diagnostics' ? viewParam : 'history';
@@ -185,6 +186,7 @@ function RecommendationsContent() {
           </div>
           <div className="flex items-center gap-2">
             <input
+              ref={dateInputRef}
               id="recommendation-date"
               aria-label="추천일 선택"
               type="date"
@@ -192,6 +194,13 @@ function RecommendationsContent() {
               onInput={(event) => update({ date: event.currentTarget.value || null })}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
             />
+            <button
+              type="button"
+              onClick={() => update({ date: dateInputRef.current?.value || null })}
+              className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
+            >
+              조회
+            </button>
             <button
               type="button"
               disabled={!selectedDate}

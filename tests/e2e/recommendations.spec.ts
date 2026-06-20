@@ -34,11 +34,8 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
         && url.searchParams.get('to') === '2026-05-19';
     });
 
-    await page.getByLabel('추천일 선택').evaluate((element) => {
-      const input = element as HTMLInputElement;
-      input.value = '2026-05-19';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await page.getByLabel('추천일 선택').fill('2026-05-19');
+    await page.getByRole('button', { name: '조회' }).click();
     await requestPromise;
 
     await expect(page).toHaveURL(/date=2026-05-19/);
