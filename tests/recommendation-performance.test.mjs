@@ -71,6 +71,25 @@ assert.equal(prices.normalizeRecommendationBarDate('2026-06-19'), '2026-06-19');
 }
 
 {
+  const stock = bars('2026-06-12', 5, 100);
+  const benchmark = bars('2026-06-12', 5, 200);
+  const input = {
+    generatedAt: '2026-06-12T12:29:59.312Z',
+    market: 'US',
+    bars: stock,
+    benchmarkBars: benchmark,
+  };
+  const live = core.calculateRecommendationPerformance({ ...input, horizon: 'LIVE' });
+  const d5 = core.calculateRecommendationPerformance({ ...input, horizon: 'D5' });
+
+  assert.equal(live.status, 'MATURED', 'LIVE uses the latest available close before D5 matures');
+  assert.equal(live.sessionCount, 4);
+  assert.equal(live.evaluationDate, '2026-06-18');
+  assert.equal(d5.status, 'PENDING', 'D5 requires five complete sessions after entry');
+  assert.equal(d5.sessionCount, 4);
+}
+
+{
   const marked = core.markPriceAnomalies([
     { date: '2026-01-02', open: 100, high: 101, low: 99, close: 100, volume: 1 },
     { date: '2026-01-05', open: 50, high: 51, low: 49, close: 50, volume: 1 },

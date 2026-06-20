@@ -13,6 +13,8 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByRole('heading', { name: '추천 성과·원인 분석' })).toBeVisible();
     await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
     await expect(page.getByText('1. NVDA')).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '현재' })).toBeVisible();
+    await expect(page.getByText('+4.20%').first()).toBeVisible();
     await expect(page.getByText('+3.50%')).toBeVisible();
   });
 

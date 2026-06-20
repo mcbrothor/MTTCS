@@ -164,7 +164,7 @@ function RecommendationsContent() {
       </header>
 
       <div className="rounded-xl border border-sky-500/25 bg-sky-500/8 px-4 py-3 text-xs leading-5 text-sky-100/80">
-        가격수익률 기준이며 배당·세금·수수료·슬리피지는 포함하지 않습니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
+        가격수익률 기준이며 배당·세금·수수료·슬리피지는 포함하지 않습니다. 현재 성과는 가장 최근 거래일 종가 기준이며, D5·D20·D60은 진입일 이후 해당 거래일 수가 모두 경과해야 확정됩니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
       </div>
 
       {view === 'history' && (
@@ -227,19 +227,26 @@ function HistoryView({ publications }: { publications: Publication[] }) {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-xs">
-              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>D5</th><th>D20</th><th>D60</th><th>초과수익</th><th>MFE / MAE</th></tr></thead>
+            <table className="w-full min-w-[1060px] text-left text-xs">
+              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>현재</th><th>D5</th><th>D20</th><th>D60</th><th>초과수익</th><th>MFE / MAE</th></tr></thead>
               <tbody className="divide-y divide-slate-800/70">
                 {publication.recommendation_picks.map((pick) => {
                   const d5 = performance(pick, 'D5');
                   const d20 = performance(pick, 'D20');
                   const d60 = performance(pick, 'D60');
-                  const latest = d60?.status === 'MATURED' ? d60 : d20?.status === 'MATURED' ? d20 : d5;
+                  const live = performance(pick, 'LIVE');
+                  const latest = d60?.status === 'MATURED'
+                    ? d60
+                    : d20?.status === 'MATURED'
+                      ? d20
+                      : d5?.status === 'MATURED'
+                        ? d5
+                        : live?.status === 'MATURED' ? live : null;
                   return (
                     <tr key={pick.id} className="align-top text-slate-300">
                       <td className="px-4 py-3"><p className="font-bold text-white">{pick.rank}. {pick.ticker}</p><p className="mt-1 text-slate-500">{pick.name || pick.universe} · {pick.source}</p></td>
                       <td className="max-w-sm py-3 pr-4"><p className="line-clamp-2">{pick.reason}</p>{pick.risk && <p className="mt-1 line-clamp-1 text-rose-300/70">위험: {pick.risk}</p>}</td>
-                      {[d5, d20, d60].map((row, index) => <td key={index} className={`py-3 pr-4 font-mono font-semibold ${tone(row?.return_pct)}`}>{row?.status === 'MATURED' ? pct(row.return_pct) : row?.status === 'EXCLUDED' ? '제외' : '대기'}</td>)}
+                      {[live, d5, d20, d60].map((row, index) => <td key={index} className={`py-3 pr-4 font-mono font-semibold ${tone(row?.return_pct)}`}>{row?.status === 'MATURED' ? pct(row.return_pct) : row?.status === 'EXCLUDED' ? '제외' : '대기'}</td>)}
                       <td className={`py-3 pr-4 font-mono ${tone(latest?.excess_return_pct)}`}>{pct(latest?.excess_return_pct)}</td>
                       <td className="py-3 pr-4 font-mono text-slate-400">{pct(latest?.mfe_pct)} / {pct(latest?.mae_pct)}</td>
                     </tr>
