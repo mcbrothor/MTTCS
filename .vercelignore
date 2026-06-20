@@ -2,8 +2,11 @@
 .env.*
 .env*.local
 .next
+.next-e2e
 node_modules
 coverage
+playwright-report
+test-results
 dev-server*.log
 *.tsbuildinfo
 next-env.d.ts
