@@ -81,7 +81,7 @@ export default defineConfig({
   webServer: {
     command: e2eWebServerCommand,
     url: e2eBaseUrl,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.E2E_REUSE_EXISTING_SERVER === 'true',
     timeout: 120_000,
     env: {
       ...process.env,

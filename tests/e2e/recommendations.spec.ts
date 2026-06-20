@@ -16,6 +16,24 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByText('+3.50%')).toBeVisible();
   });
 
+  test('REC-04: 추천일을 선택하면 해당 날짜 이력만 조회', async ({ page }) => {
+    await page.goto('/recommendations');
+    const requestPromise = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === '/api/recommendations'
+        && url.searchParams.get('from') === '2026-05-19'
+        && url.searchParams.get('to') === '2026-05-19';
+    });
+
+    await page.getByLabel('추천일 선택').fill('2026-05-19');
+    await requestPromise;
+
+    await expect(page).toHaveURL(/date=2026-05-19/);
+    await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
+    await page.getByRole('button', { name: '전체 보기' }).click();
+    await expect(page).not.toHaveURL(/date=/);
+  });
+
   test('REC-02: 5·20·60일 성과와 표본 수 표시', async ({ page }) => {
     await page.goto('/recommendations');
     await page.getByRole('button', { name: '성과 분석' }).click();

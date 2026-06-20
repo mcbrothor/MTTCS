@@ -106,9 +106,12 @@ function RecommendationsContent() {
   const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
   const viewParam = searchParams.get('view');
   const view: View = viewParam === 'metrics' || viewParam === 'diagnostics' ? viewParam : 'history';
+  const dateParam = searchParams.get('date') || '';
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : '';
+  const dateRange = selectedDate ? `&from=${selectedDate}&to=${selectedDate}` : '';
   const endpoint = view === 'history'
-    ? `/api/recommendations?market=${market}&limit=30`
-    : `/api/recommendations/${view}?market=${market}`;
+    ? `/api/recommendations?market=${market}&limit=30${dateRange}`
+    : `/api/recommendations/${view}?market=${market}${view === 'metrics' ? dateRange : ''}`;
   const [requestState, setRequestState] = useState<{ endpoint: string | null; data: unknown; error: string | null }>({
     endpoint: null,
     data: null,
@@ -118,12 +121,14 @@ function RecommendationsContent() {
   const data = loading ? null : requestState.data;
   const error = loading ? null : requestState.error;
 
-  const update = (next: { market?: Market; view?: View }) => {
+  const update = (next: { market?: Market; view?: View; date?: string | null }) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('market', next.market || market);
     const nextView = next.view || view;
     if (nextView === 'history') params.delete('view');
     else params.set('view', nextView);
+    if (next.date === null) params.delete('date');
+    else if (next.date !== undefined) params.set('date', next.date);
     router.replace(`${pathname}?${params.toString()}`);
   };
 
@@ -161,6 +166,33 @@ function RecommendationsContent() {
       <div className="rounded-xl border border-sky-500/25 bg-sky-500/8 px-4 py-3 text-xs leading-5 text-sky-100/80">
         가격수익률 기준이며 배당·세금·수수료·슬리피지는 포함하지 않습니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
       </div>
+
+      {view === 'history' && (
+        <section aria-label="추천일 필터" className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <label htmlFor="recommendation-date" className="text-xs font-semibold text-slate-300">추천일 선택</label>
+            <p className="mt-1 text-xs text-slate-500">특정 발행일의 한국·미국 Top10과 기간별 성과만 확인합니다.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="recommendation-date"
+              aria-label="추천일 선택"
+              type="date"
+              value={selectedDate}
+              onChange={(event) => update({ date: event.target.value || null })}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+            />
+            <button
+              type="button"
+              disabled={!selectedDate}
+              onClick={() => update({ date: null })}
+              className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              전체 보기
+            </button>
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="flex min-h-64 items-center justify-center"><LoadingSpinner size="lg" /></div>
