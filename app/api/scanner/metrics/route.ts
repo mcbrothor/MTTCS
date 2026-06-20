@@ -23,18 +23,16 @@ export async function GET(request: Request) {
     .filter(Boolean);
 
   if (!universe) return apiError('Invalid scanner universe.', 'INVALID_UNIVERSE', 400);
-  if (tickers.length === 0) return apiError('tickers query parameter is required.', 'MISSING_TICKERS', 400);
-
   try {
     const market = marketForUniverse(universe);
     const [metrics, macroTrend, profilesResult] = await Promise.all([
-      fetchLatestStockMetrics(tickers, market),
+      tickers.length > 0 ? fetchLatestStockMetrics(tickers, market) : Promise.resolve(new Map()),
       fetchLatestMacroTrend(market, macroIndexForUniverse(universe)),
-      supabaseServer
+      tickers.length > 0 ? supabaseServer
         .from('security_profiles')
         .select('ticker, sector')
         .in('ticker', tickers)
-        .then((res) => res.data || []),
+        .then((res) => res.data || []) : Promise.resolve([]),
     ]);
 
     const sectorByTicker = new Map<string, string | null>(

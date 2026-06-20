@@ -53,47 +53,10 @@ test.describe('Wave 6: Edge Cases (심화 테스트)', () => {
   });
 
   test('EDGE-02: 매매 계획 에지 케이스 — SEPA Fail 시 저장 차단', async ({ page }) => {
-    // Override market data to simulate SEPA FAIL
-    await page.route('**/api/market-data*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          data: {
-            ticker: 'FAIL',
-            exchange: 'NAS',
-            sepaEvidence: {
-              status: 'fail', // FAIL
-              summary: { passed: 4, failed: 5, info: 0, corePassed: 3, coreFailed: 4, coreTotal: 7 },
-              metrics: { rsRating: 60, rsSource: 'DB', macroActionLevel: 'FULL' },
-              criteria: []
-            },
-            vcpAnalysis: {
-              grade: 'weak',
-              score: 30,
-              baseType: 'SAUCER',
-              pivotPrice: 100,
-              recommendedEntry: 101,
-              invalidationPrice: 90,
-              breakoutVolumeStatus: 'none',
-              contractions: [],
-              volumeDryUpScore: 20,
-              pocketPivotScore: 10,
-            },
-            riskPlan: {
-              totalEquity: 50000, riskPercent: 0.01, maxRisk: 500, atr: 4.2,
-              entryPrice: 101, stopLossPrice: 90, totalShares: 45,
-              entryTargets: null, trailingStops: null
-            },
-          },
-        }),
-      });
-    });
-
     await page.goto('/plan?ticker=FAIL&exchange=NAS&autoAnalyze=1');
 
     // SEPA fail state should be visible
-    await expect(page.locator('text=Fail').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('저장 차단', { exact: true })).toBeVisible({ timeout: 15_000 });
     
     // Save button should be disabled
     const saveButton = page.locator('button:has-text("계획 저장")');

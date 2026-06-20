@@ -39,7 +39,7 @@ test.describe('TC-DASH: Command Center', () => {
     await dashboard.nextActionCta.click();
     
     // Check we navigated away from dashboard
-    await expect(page.url()).not.toBe('http://localhost:3000/');
+    await expect(page).not.toHaveURL((url) => url.pathname === '/');
   });
 
   test('DASH-04: 관심 후보 목록 → Plan 페이지 이동', async ({ page }) => {

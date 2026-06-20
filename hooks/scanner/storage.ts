@@ -183,7 +183,6 @@ async function refreshMissingUniverseMarketCaps(universe: ScannerUniverse, rows:
 export async function loadScannerMetrics(universe: ScannerUniverse, rows: ScannerResult[]) {
   const rowsWithMarketCaps = await refreshMissingUniverseMarketCaps(universe, rows);
   const tickers = rowsWithMarketCaps.map((item) => item.ticker).filter(Boolean);
-  if (tickers.length === 0) return { results: rowsWithMarketCaps.map(withRecommendation), macroTrend: null as MacroTrend | null };
   try {
     const query = new URLSearchParams({ universe, tickers: tickers.join(',') });
     const response = await fetch('/api/scanner/metrics?' + query.toString());

@@ -45,41 +45,22 @@ test.describe('TC-PLAN: 매매 계획', () => {
   test('PLAN-07: Centaur 체크리스트 항목 표시', async ({ page }) => {
     await planPage.goto({ ticker: 'NVDA', exchange: 'NAS', autoAnalyze: true });
 
-    // Wait for analysis to load then check for checklist
-    await page.waitForTimeout(3_000);
-
-    // Checklist should be present when analysis is loaded
-    const checklistSection = page.locator('text=/체크리스트|Checklist/i');
-    if (await checklistSection.isVisible()) {
-      await expect(checklistSection).toBeVisible();
-    }
+    await expect(page.getByText('4. Centaur 체크리스트', { exact: true })).toBeVisible({ timeout: 15_000 });
   });
 
   test('PLAN-08: 계획 저장 → 성공 배너 표시', async ({ page }) => {
     await planPage.goto({ ticker: 'NVDA', exchange: 'NAS', autoAnalyze: true });
 
-    // Wait for analysis
-    await page.waitForTimeout(3_000);
-
-    // If save button exists and is enabled, test the save flow
-    const saveButton = page.locator('button:has-text("계획 저장")');
-    if (await saveButton.isVisible() && await saveButton.isEnabled()) {
-      // Fill checklist items if needed
-      const checkboxes = page.locator('input[type="checkbox"]');
-      const count = await checkboxes.count();
-      for (let i = 0; i < count; i++) {
-        const cb = checkboxes.nth(i);
-        if (!(await cb.isChecked())) {
-          await cb.check();
-        }
-      }
-
-      await saveButton.click();
-
-      // Wait for success or error response
-      const successBanner = page.locator('text=계획 저장 완료');
-      await expect(successBanner).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('4. Centaur 체크리스트', { exact: true })).toBeVisible({ timeout: 15_000 });
+    for (let step = 0; step < 5; step += 1) {
+      await page.getByRole('button', { name: '동의하고 다음' }).click();
     }
+    await page.getByRole('button', { name: '동의하고 완료' }).click();
+
+    const saveButton = page.locator('button:has-text("계획 저장")');
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    await expect(page.locator('text=계획 저장 완료')).toBeVisible({ timeout: 10_000 });
   });
 
   test('PLAN-11: 미국 ↔ 한국 시장 전환', async ({ page }) => {

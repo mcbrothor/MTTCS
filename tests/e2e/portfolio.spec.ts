@@ -19,9 +19,9 @@ test.describe('TC-PORT: 포트폴리오 리스크', () => {
     await expect(page.locator('text=포트폴리오 리스크')).toBeVisible();
     await expect(page.locator('text=Portfolio Risk')).toBeVisible();
 
-    // 5 metric cards
+    // Core summary plus risk-budget investment metric
     await expect(page.locator('p').filter({ hasText: /^총 자산$/ }).first()).toBeVisible();
-    await expect(page.locator('p').filter({ hasText: /^투입 금액$/ }).first()).toBeVisible();
+    await expect(page.getByText('투입 금액', { exact: true })).toBeVisible();
     await expect(page.locator('p').filter({ hasText: /^현금$/ }).first()).toBeVisible();
     await expect(page.locator('p').filter({ hasText: /^오픈 리스크$/ }).first()).toBeVisible();
     await expect(page.locator('p').filter({ hasText: /^보유 포지션$/ }).first()).toBeVisible();

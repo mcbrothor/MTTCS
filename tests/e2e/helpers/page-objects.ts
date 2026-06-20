@@ -27,7 +27,7 @@ export class DashboardPage {
     this.marketToggleUS = page.locator('button:has-text("미국")');
     this.marketToggleKR = page.locator('button:has-text("한국")');
     this.nextActionLabel = page.locator('h2').filter({ hasText: /.+/ }).first();
-    this.nextActionCta = page.locator('a:has-text("이동")');
+    this.nextActionCta = page.locator('a[href="/watchlist"]').filter({ hasText: '관심 후보 점검 시작하기' });
     this.marketStateCard = page.locator('div').filter({ hasText: /^진입 가능 신호$/ }).locator('..').first();
     this.macroCard = page.locator('div').filter({ hasText: /^큰 흐름$/ }).locator('..').first();
     this.riskCard = page.locator('div').filter({ hasText: /^오픈 리스크$/ }).locator('..').first();
@@ -38,7 +38,7 @@ export class DashboardPage {
 
   async goto() {
     await this.page.goto('/');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.getByText('Command Center', { exact: true }).waitFor();
   }
 
   async switchMarket(market: 'US' | 'KR') {
@@ -67,8 +67,8 @@ export class ScannerPage {
     this.progressBar = page.locator('text=Scan Progress').locator('..');
     this.filterButtons = page.locator('button').filter({ hasText: /Recommended|Action|IB Review|전체/ });
     this.sortSelect = page.locator('select');
-    this.selectedCount = page.locator('text=/Selected/');
-    this.contestButton = page.locator('button:has-text("콘테스트로 이동"), a:has-text("콘테스트로 이동")');
+    this.selectedCount = page.getByText(/Selected\s+\d+\/15/).first();
+    this.contestButton = page.getByRole('button', { name: '콘테스트로 이동', exact: true });
     this.telegramButton = page.locator('button:has-text("텔레그램 전송")');
   }
 
@@ -78,7 +78,7 @@ export class ScannerPage {
   }
 
   async getStatCardValue(label: string): Promise<string> {
-    const card = this.page.locator(`text=${label}`).locator('..').locator('p.font-mono');
+    const card = this.page.locator('p').filter({ hasText: new RegExp(`^${label}$`) }).first().locator('..').locator('..').locator('p.font-mono');
     return (await card.textContent()) ?? '';
   }
 }

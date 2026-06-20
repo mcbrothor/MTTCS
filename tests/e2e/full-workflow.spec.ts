@@ -18,7 +18,7 @@ test.describe('TC-E2E: 전체 워크플로우 통합 시나리오', () => {
       await expect(page.locator('text=오늘의 의사결정')).toBeVisible();
 
       // Market state card should show something
-      await expect(page.locator('div').filter({ hasText: /^시장 상태$/ }).first()).toBeVisible();
+      await expect(page.getByText('진입 가능 신호', { exact: true }).first()).toBeVisible();
     });
 
     test('E2E-A02: 대시보드 → 마스터 필터 → 스캐너 내비게이션', async ({ page }) => {
@@ -58,38 +58,21 @@ test.describe('TC-E2E: 전체 워크플로우 통합 시나리오', () => {
       await login(page);
       await page.goto('/plan?ticker=NVDA&exchange=NAS&autoAnalyze=1');
 
-      // Wait for analysis results
-      await page.waitForTimeout(3_000);
+      await expect(page.getByText('4. Centaur 체크리스트', { exact: true })).toBeVisible({ timeout: 15_000 });
 
-      // Listen for the POST request
-      const tradePostPromise = page.waitForRequest(
-        (request) => request.url().includes('/api/trades') && request.method() === 'POST',
-        { timeout: 15_000 }
-      );
-
-      // Complete checklist
-      const checkboxes = page.locator('input[type="checkbox"]');
-      const count = await checkboxes.count();
-      for (let i = 0; i < count; i++) {
-        const cb = checkboxes.nth(i);
-        if (!(await cb.isChecked())) {
-          await cb.check();
-        }
+      for (let step = 0; step < 5; step += 1) {
+        await page.getByRole('button', { name: '동의하고 다음' }).click();
       }
+      await page.getByRole('button', { name: '동의하고 완료' }).click();
 
       // Save
       const saveButton = page.locator('button:has-text("계획 저장")');
-      if (await saveButton.isVisible() && await saveButton.isEnabled()) {
-        await saveButton.click();
-
-        // Verify POST was sent
-        const tradePost = await tradePostPromise.catch(() => null);
-        if (tradePost) {
-          expect(tradePost.method()).toBe('POST');
-          const body = tradePost.postDataJSON();
-          expect(body.ticker).toBe('NVDA');
-        }
-      }
+      await expect(saveButton).toBeEnabled();
+      const [tradePost] = await Promise.all([
+        page.waitForRequest((request) => request.url().includes('/api/trades') && request.method() === 'POST'),
+        saveButton.click(),
+      ]);
+      expect(tradePost.postDataJSON().ticker).toBe('NVDA');
     });
 
     test('E2E-A06: 포트폴리오에 포지션 표시', async ({ page }) => {

@@ -21,7 +21,7 @@ test.describe('TC-HIST: 성과 복기', () => {
     await expect(historyPage.tradeTable).toBeVisible();
     
     // Fixture data should appear (e.g. MSFT or AAPL)
-    await expect(page.locator('text=MSFT').first()).toBeVisible();
+    await expect(page.getByText('MSFT', { exact: true }).last()).toBeVisible();
   });
 
   test('HIST-02: 성과 통계 뷰 전환', async ({ page }) => {
@@ -31,7 +31,7 @@ test.describe('TC-HIST: 성과 복기', () => {
 
     // Dashboard metrics should appear
     await expect(page.locator('div').filter({ hasText: /^승률$/ }).first()).toBeVisible();
-    await expect(page.locator('div').filter({ hasText: /^총 PnL$/ }).first()).toBeVisible();
+    await expect(page.getByText('누적 손익', { exact: true })).toBeVisible();
     await expect(page.locator('div').filter({ hasText: /^계획 준수율$/ }).first()).toBeVisible();
   });
 

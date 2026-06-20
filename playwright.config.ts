@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
 
+const e2ePort = Number(process.env.E2E_PORT || 3000);
+const e2eBaseUrl = process.env.E2E_BASE_URL || `http://localhost:${e2ePort}`;
+const e2eWebServerCommand = process.env.E2E_WEB_SERVER_COMMAND || `npm run dev -- -p ${e2ePort}`;
+
 // Load environment variables from .env.test manually to avoid dependency issues
 try {
   const envPath = path.join(__dirname, '.env.test');
@@ -41,7 +45,7 @@ export default defineConfig({
 
   /* Run tests sequentially in CI for stability, parallel locally */
   fullyParallel: !process.env.CI,
-  workers: process.env.CI ? 1 : undefined,
+  workers: Number(process.env.E2E_WORKERS || (process.env.CI ? 1 : 2)),
 
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
@@ -56,7 +60,7 @@ export default defineConfig({
 
   /* Shared settings for all projects */
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: e2eBaseUrl,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -73,16 +77,18 @@ export default defineConfig({
     },
   ],
 
-  /* Auto-start production server before running tests */
+  /* Auto-start current source; production mode is verified separately after build. */
   webServer: {
-    command: 'npm start',
-    url: 'http://localhost:3000',
+    command: e2eWebServerCommand,
+    url: e2eBaseUrl,
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      NEXT_DIST_DIR: '.next-e2e',
       MTN_TEST_ENVIRONMENT: 'true',
+      MTN_BASE_URL: e2eBaseUrl,
     },
   },
 });

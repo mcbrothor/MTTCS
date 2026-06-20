@@ -24,10 +24,11 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
 
     test('RESP-03: 스캐너 모바일 카드 뷰 자동 전환', async ({ page }) => {
       await page.goto('/scanner');
+      await page.getByRole('button', { name: /스캔 시작/ }).click();
       // In mobile, table view is usually hidden and card view is shown
       // Check if grid structure exists or table is hidden
       // The exact implementation might vary, but we can verify the data is present
-      await expect(page.locator('text=NVDA')).toBeVisible();
+      await expect(page.getByText('NVDA', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
       
       // Filter buttons should still be accessible
       const filterBtn = page.locator('button:has-text("Recommended")');

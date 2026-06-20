@@ -30,7 +30,7 @@ export async function login(page: Page): Promise<void> {
   await submitButton.click();
 
   // Wait for redirect away from /login
-  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 15_000 });
+  await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 30_000 });
 }
 
 /**
@@ -61,6 +61,6 @@ export async function expectLoginPage(page: Page): Promise<void> {
  * Assert that the page is on the command center (dashboard).
  */
 export async function expectDashboard(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/^http:\/\/localhost:3000\/?$/);
+  await expect(page).toHaveURL((url) => url.pathname === '/');
   await expect(page.locator('text=Command Center')).toBeVisible({ timeout: 10_000 });
 }

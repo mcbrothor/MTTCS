@@ -113,25 +113,22 @@ export function useContestSelection(targetUniverse?: string, options: UseContest
 
   const toggleSelection = useCallback((ticker: string, universeOverride?: string) => {
     const activeUniverse = universeOverride || activeUniverseOf(targetUniverse);
-
-    setSelectedTickers((prev) => {
-      const next = new Set(prev);
-      if (next.has(ticker)) {
-        next.delete(ticker);
-      } else {
-        if (next.size >= MAX_SELECTION) {
-          if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
-          setLimitMessage(`콘테스트 후보는 최대 ${MAX_SELECTION}개까지 선택할 수 있습니다.`);
-          limitTimerRef.current = setTimeout(() => setLimitMessage(null), 3000);
-          return prev;
-        }
-        next.add(ticker);
+    const next = new Set(selectedTickers);
+    if (next.has(ticker)) {
+      next.delete(ticker);
+    } else {
+      if (next.size >= MAX_SELECTION) {
+        if (limitTimerRef.current) clearTimeout(limitTimerRef.current);
+        setLimitMessage(`콘테스트 후보는 최대 ${MAX_SELECTION}개까지 선택할 수 있습니다.`);
+        limitTimerRef.current = setTimeout(() => setLimitMessage(null), 3000);
+        return;
       }
+      next.add(ticker);
+    }
 
-      persistSelection(activeUniverse, Array.from(next));
-      return next;
-    });
-  }, [persistSelection, targetUniverse]);
+    setSelectedTickers(next);
+    persistSelection(activeUniverse, Array.from(next));
+  }, [persistSelection, selectedTickers, targetUniverse]);
 
   useEffect(() => {
     const handleCustomSync = (event: CustomEvent<{ source?: ContestScreenerSource; universe: string; tickers: string[] }>) => {

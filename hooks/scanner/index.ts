@@ -115,6 +115,10 @@ export function useScanner() {
             setMacroTrend(merged.macroTrend);
           });
         });
+      } else {
+        loadScannerMetrics(initial, []).then(({ macroTrend: nextMacroTrend }) => {
+          if (active) setMacroTrend(nextMacroTrend);
+        });
       }
     };
     init();
@@ -138,6 +142,9 @@ export function useScanner() {
       setResults([]);
       setLastScannedAt(null);
       setMacroTrend(null);
+      loadScannerMetrics(newUniverse, []).then(({ macroTrend: nextMacroTrend }) => {
+        setMacroTrend(nextMacroTrend);
+      });
     }
     localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, newUniverse);
   };
