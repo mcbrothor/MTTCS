@@ -16,6 +16,7 @@ interface PerformanceRow {
   entry_date: string | null;
   entry_price: number | null;
   evaluation_date: string | null;
+  evaluation_price: number | null;
   return_pct: number | null;
   benchmark_return_pct: number | null;
   excess_return_pct: number | null;
@@ -42,6 +43,7 @@ interface Pick {
 interface Publication {
   id: string;
   run_date: string;
+  market: Market;
   generated_at: string;
   first_tradable_date: string | null;
   engine_version: string;
@@ -91,6 +93,16 @@ function pct(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
   const numeric = Number(value);
   return `${numeric > 0 ? '+' : ''}${numeric.toFixed(2)}%`;
+}
+
+function price(value: number | null | undefined, market: Market) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
+  return new Intl.NumberFormat(market === 'KR' ? 'ko-KR' : 'en-US', {
+    style: 'currency',
+    currency: market === 'KR' ? 'KRW' : 'USD',
+    minimumFractionDigits: market === 'KR' ? 0 : 2,
+    maximumFractionDigits: market === 'KR' ? 0 : 2,
+  }).format(Number(value));
 }
 
 function performance(pick: Pick, horizon: string) {
@@ -265,8 +277,8 @@ function HistoryView({ publications }: { publications: Publication[] }) {
             </span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1060px] text-left text-xs">
-              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>현재</th><th>D5</th><th>D20</th><th>D60</th><th><MetricHeaderTooltip label="초과수익" ariaLabel="초과수익 계산 기준"><p className="font-semibold text-emerald-300">종목 수익률 - 동일 기간 벤치마크 수익률</p><p className="mt-1">종목과 지수 모두 첫 거래 가능일 시가부터 같은 평가일 종가까지 계산합니다.</p><p className="mt-1 text-slate-400">NASDAQ100: ^NDX · S&amp;P500: ^GSPC<br />KOSPI200: ^KS200 · KOSDAQ150: ^KQ150</p></MetricHeaderTooltip></th><th><MetricHeaderTooltip label="MFE / MAE" ariaLabel="MFE / MAE 계산 기준"><p className="font-semibold text-emerald-300">MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.</p><p className="mt-1">MFE = (평가구간 최고가 ÷ 진입가 - 1) × 100</p><p>MAE = (평가구간 최저가 ÷ 진입가 - 1) × 100</p><p className="mt-1 text-slate-400">현재 표시된 최신 성숙 평가기간과 같은 구간을 사용합니다.</p></MetricHeaderTooltip></th></tr></thead>
+            <table className="w-full min-w-[1280px] text-left text-xs">
+              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>진입 시가</th><th>현재가</th><th>현재 수익</th><th>D5</th><th>D20</th><th>D60</th><th><MetricHeaderTooltip label="초과수익" ariaLabel="초과수익 계산 기준"><p className="font-semibold text-emerald-300">종목 수익률 - 동일 기간 벤치마크 수익률</p><p className="mt-1">종목과 지수 모두 첫 거래 가능일 시가부터 같은 평가일 종가까지 계산합니다.</p><p className="mt-1 text-slate-400">NASDAQ100: ^NDX · S&amp;P500: ^GSPC<br />KOSPI200: ^KS200 · KOSDAQ150: ^KQ150</p></MetricHeaderTooltip></th><th><MetricHeaderTooltip label="MFE / MAE" ariaLabel="MFE / MAE 계산 기준"><p className="font-semibold text-emerald-300">MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.</p><p className="mt-1">MFE = (평가구간 최고가 ÷ 진입가 - 1) × 100</p><p>MAE = (평가구간 최저가 ÷ 진입가 - 1) × 100</p><p className="mt-1 text-slate-400">현재 표시된 최신 성숙 평가기간과 같은 구간을 사용합니다.</p></MetricHeaderTooltip></th></tr></thead>
               <tbody className="divide-y divide-slate-800/70">
                 {publication.recommendation_picks.map((pick) => {
                   const d5 = performance(pick, 'D5');
@@ -280,10 +292,14 @@ function HistoryView({ publications }: { publications: Publication[] }) {
                       : d5?.status === 'MATURED'
                         ? d5
                         : live?.status === 'MATURED' ? live : null;
+                  const entry = [live, d5, d20, d60].find((row) => row?.entry_price !== null && row?.entry_price !== undefined) || null;
+                  const current = live?.evaluation_price !== null && live?.evaluation_price !== undefined ? live : latest;
                   return (
                     <tr key={pick.id} className="align-top text-slate-300">
                       <td className="px-4 py-3"><p className="font-bold text-white">{pick.rank}. {pick.ticker}</p><p className="mt-1 text-slate-500">{pick.name || pick.universe} · {pick.source}</p></td>
                       <td className="max-w-sm py-3 pr-4"><p className="line-clamp-2">{pick.reason}</p>{pick.risk && <p className="mt-1 line-clamp-1 text-rose-300/70">위험: {pick.risk}</p>}</td>
+                      <td className="py-3 pr-4 font-mono"><p className="font-semibold text-slate-200">{price(entry?.entry_price, publication.market)}</p><p className="mt-1 text-[10px] text-slate-500">{entry?.entry_date || '진입 대기'}</p></td>
+                      <td className="py-3 pr-4 font-mono"><p className="font-semibold text-slate-200">{price(current?.evaluation_price, publication.market)}</p><p className="mt-1 text-[10px] text-slate-500">{current?.evaluation_date || '가격 대기'}</p></td>
                       <td className={`py-3 pr-4 font-mono font-semibold ${tone(live?.return_pct)}`}>{live?.status === 'MATURED' ? pct(live.return_pct) : live?.status === 'EXCLUDED' ? '제외' : '대기'}</td>
                       <td className={`py-3 pr-4 font-mono font-semibold ${tone(d5?.return_pct)}`}>{horizonValue(d5, 'D5')}</td>
                       <td className={`py-3 pr-4 font-mono font-semibold ${tone(d20?.return_pct)}`}>{horizonValue(d20, 'D20')}</td>

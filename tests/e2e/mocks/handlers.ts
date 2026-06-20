@@ -58,7 +58,7 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
     } else {
       const performance = (horizon: string, returnPct: number) => ({
         horizon, status: 'MATURED', session_count: Number(horizon.slice(1)), entry_date: '2026-05-20', entry_price: 120,
-        evaluation_date: '2026-06-19', return_pct: returnPct, benchmark_return_pct: 2, excess_return_pct: returnPct - 2,
+        evaluation_date: '2026-06-19', evaluation_price: 125.04, return_pct: returnPct, benchmark_return_pct: 2, excess_return_pct: returnPct - 2,
         mfe_pct: 8.4, mae_pct: -3.1, quality_status: 'FULL',
       });
       const pendingPerformance = (horizon: string) => ({
@@ -67,7 +67,7 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
         mfe_pct: null, mae_pct: null, quality_status: 'FULL',
       });
       data = { publications: [{
-        id: 'pub-1', run_date: '2026-05-19', generated_at: '2026-05-19T22:00:00Z', first_tradable_date: '2026-05-20',
+        id: 'pub-1', run_date: '2026-05-19', market: 'US', generated_at: '2026-05-19T22:00:00Z', first_tradable_date: '2026-05-20',
         engine_version: 'e2e-v1', llm_provider: 'codex-cli', llm_model: 'codex', telegram_status: 'SENT',
         recommendation_picks: [
           { id: 'pick-1', rank: 1, ticker: 'NVDA', name: 'NVIDIA', universe: 'NASDAQ100', source: '통합', score: 92, confidence: 86, reason: 'AI 인프라 주도력', risk: '단기 과열', sector: 'Technology', recommendation_performance: [performance('LIVE', 4.2), performance('D5', 3.5), performance('D20', 6.2)] },

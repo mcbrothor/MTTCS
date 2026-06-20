@@ -13,9 +13,21 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByRole('heading', { name: '추천 성과·원인 분석' })).toBeVisible();
     await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
     await expect(page.getByText('1. NVDA')).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: '현재' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '현재 수익' })).toBeVisible();
     await expect(page.getByText('+4.20%').first()).toBeVisible();
     await expect(page.getByText('+3.50%')).toBeVisible();
+  });
+
+  test('REC-07: 첫 진입 시가와 최신 평가가격 표시', async ({ page }) => {
+    await page.goto('/recommendations');
+    const row = page.getByRole('row').filter({ hasText: '1. NVDA' });
+
+    await expect(page.getByRole('columnheader', { name: '진입 시가' }).first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: '현재가' }).first()).toBeVisible();
+    await expect(row.getByText('$120.00')).toBeVisible();
+    await expect(row.getByText('2026-05-20')).toBeVisible();
+    await expect(row.getByText('$125.04')).toBeVisible();
+    await expect(row.getByText('2026-06-19')).toBeVisible();
   });
 
   test('REC-05: 미성숙 기간은 완료 거래일 수를 표시', async ({ page }) => {
