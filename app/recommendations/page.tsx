@@ -157,6 +157,12 @@ function RecommendationsContent() {
     return () => controller.abort();
   }, [endpoint]);
 
+  useEffect(() => {
+    if (dateInputRef.current && dateInputRef.current.value !== selectedDate) {
+      dateInputRef.current.value = selectedDate;
+    }
+  }, [selectedDate]);
+
   return (
     <div className="space-y-6 pb-12">
       <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
@@ -190,8 +196,7 @@ function RecommendationsContent() {
               id="recommendation-date"
               aria-label="추천일 선택"
               type="date"
-              value={selectedDate}
-              onInput={(event) => update({ date: event.currentTarget.value || null })}
+              defaultValue={selectedDate}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
             />
             <button
