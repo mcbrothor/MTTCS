@@ -18,6 +18,13 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByText('+3.50%')).toBeVisible();
   });
 
+  test('REC-05: 미성숙 기간은 완료 거래일 수를 표시', async ({ page }) => {
+    await page.goto('/recommendations');
+    await expect(page.getByText('대기 4/5')).toBeVisible();
+    await expect(page.getByText('대기 4/20')).toBeVisible();
+    await expect(page.getByText('대기 4/60')).toBeVisible();
+  });
+
   test('REC-04: 추천일을 선택하면 해당 날짜 이력만 조회', async ({ page }) => {
     await page.goto('/recommendations');
     const requestPromise = page.waitForRequest((request) => {
@@ -27,7 +34,11 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
         && url.searchParams.get('to') === '2026-05-19';
     });
 
-    await page.getByLabel('추천일 선택').fill('2026-05-19');
+    await page.getByLabel('추천일 선택').evaluate((element) => {
+      const input = element as HTMLInputElement;
+      input.value = '2026-05-19';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await requestPromise;
 
     await expect(page).toHaveURL(/date=2026-05-19/);

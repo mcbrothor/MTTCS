@@ -61,10 +61,18 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
         evaluation_date: '2026-06-19', return_pct: returnPct, benchmark_return_pct: 2, excess_return_pct: returnPct - 2,
         mfe_pct: 8.4, mae_pct: -3.1, quality_status: 'FULL',
       });
+      const pendingPerformance = (horizon: string) => ({
+        horizon, status: 'PENDING', session_count: 4, entry_date: '2026-05-20', entry_price: 120,
+        evaluation_date: null, return_pct: null, benchmark_return_pct: null, excess_return_pct: null,
+        mfe_pct: null, mae_pct: null, quality_status: 'FULL',
+      });
       data = { publications: [{
         id: 'pub-1', run_date: '2026-05-19', generated_at: '2026-05-19T22:00:00Z', first_tradable_date: '2026-05-20',
         engine_version: 'e2e-v1', llm_provider: 'codex-cli', llm_model: 'codex', telegram_status: 'SENT',
-        recommendation_picks: [{ id: 'pick-1', rank: 1, ticker: 'NVDA', name: 'NVIDIA', universe: 'NASDAQ100', source: '통합', score: 92, confidence: 86, reason: 'AI 인프라 주도력', risk: '단기 과열', sector: 'Technology', recommendation_performance: [performance('LIVE', 4.2), performance('D5', 3.5), performance('D20', 6.2)] }],
+        recommendation_picks: [
+          { id: 'pick-1', rank: 1, ticker: 'NVDA', name: 'NVIDIA', universe: 'NASDAQ100', source: '통합', score: 92, confidence: 86, reason: 'AI 인프라 주도력', risk: '단기 과열', sector: 'Technology', recommendation_performance: [performance('LIVE', 4.2), performance('D5', 3.5), performance('D20', 6.2)] },
+          { id: 'pick-2', rank: 2, ticker: 'AMAT', name: 'Applied Materials', universe: 'NASDAQ100', source: '통합', score: 90, confidence: 84, reason: '장비 투자 모멘텀', risk: '수출 규제', sector: 'Technology', recommendation_performance: [performance('LIVE', 4.8), pendingPerformance('D5'), pendingPerformance('D20'), pendingPerformance('D60')] },
+        ],
       }], nextCursor: null };
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data }) });

@@ -84,6 +84,8 @@ const CAUSE_LABEL: Record<string, string> = {
   DATA_QUALITY: '데이터 품질',
 };
 
+const HORIZON_SESSIONS = { D5: 5, D20: 20, D60: 60 } as const;
+
 function pct(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
   const numeric = Number(value);
@@ -92,6 +94,13 @@ function pct(value: number | null | undefined) {
 
 function performance(pick: Pick, horizon: string) {
   return pick.recommendation_performance?.find((row) => row.horizon === horizon) || null;
+}
+
+function horizonValue(row: PerformanceRow | null, horizon: keyof typeof HORIZON_SESSIONS) {
+  if (row?.status === 'MATURED') return pct(row.return_pct);
+  if (row?.status === 'EXCLUDED') return '제외';
+  const target = HORIZON_SESSIONS[horizon];
+  return `대기 ${Math.min(row?.session_count || 0, target)}/${target}`;
 }
 
 function tone(value: number | null | undefined) {
@@ -165,6 +174,7 @@ function RecommendationsContent() {
 
       <div className="rounded-xl border border-sky-500/25 bg-sky-500/8 px-4 py-3 text-xs leading-5 text-sky-100/80">
         가격수익률 기준이며 배당·세금·수수료·슬리피지는 포함하지 않습니다. 현재 성과는 가장 최근 거래일 종가 기준이며, D5·D20·D60은 진입일 이후 해당 거래일 수가 모두 경과해야 확정됩니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
+        <span className="mt-1 block text-sky-200/70">초과수익 = 종목 수익률 - 같은 진입일·평가일의 벤치마크 수익률입니다. NASDAQ100은 ^NDX, S&amp;P500은 ^GSPC, KOSPI200은 ^KS200, KOSDAQ150은 ^KQ150을 사용합니다.</span>
       </div>
 
       {view === 'history' && (
@@ -179,7 +189,7 @@ function RecommendationsContent() {
               aria-label="추천일 선택"
               type="date"
               value={selectedDate}
-              onChange={(event) => update({ date: event.target.value || null })}
+              onInput={(event) => update({ date: event.currentTarget.value || null })}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
             />
             <button
@@ -246,7 +256,10 @@ function HistoryView({ publications }: { publications: Publication[] }) {
                     <tr key={pick.id} className="align-top text-slate-300">
                       <td className="px-4 py-3"><p className="font-bold text-white">{pick.rank}. {pick.ticker}</p><p className="mt-1 text-slate-500">{pick.name || pick.universe} · {pick.source}</p></td>
                       <td className="max-w-sm py-3 pr-4"><p className="line-clamp-2">{pick.reason}</p>{pick.risk && <p className="mt-1 line-clamp-1 text-rose-300/70">위험: {pick.risk}</p>}</td>
-                      {[live, d5, d20, d60].map((row, index) => <td key={index} className={`py-3 pr-4 font-mono font-semibold ${tone(row?.return_pct)}`}>{row?.status === 'MATURED' ? pct(row.return_pct) : row?.status === 'EXCLUDED' ? '제외' : '대기'}</td>)}
+                      <td className={`py-3 pr-4 font-mono font-semibold ${tone(live?.return_pct)}`}>{live?.status === 'MATURED' ? pct(live.return_pct) : live?.status === 'EXCLUDED' ? '제외' : '대기'}</td>
+                      <td className={`py-3 pr-4 font-mono font-semibold ${tone(d5?.return_pct)}`}>{horizonValue(d5, 'D5')}</td>
+                      <td className={`py-3 pr-4 font-mono font-semibold ${tone(d20?.return_pct)}`}>{horizonValue(d20, 'D20')}</td>
+                      <td className={`py-3 pr-4 font-mono font-semibold ${tone(d60?.return_pct)}`}>{horizonValue(d60, 'D60')}</td>
                       <td className={`py-3 pr-4 font-mono ${tone(latest?.excess_return_pct)}`}>{pct(latest?.excess_return_pct)}</td>
                       <td className="py-3 pr-4 font-mono text-slate-400">{pct(latest?.mfe_pct)} / {pct(latest?.mae_pct)}</td>
                     </tr>
