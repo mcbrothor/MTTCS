@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, BarChart3, CalendarDays, Database, Search } from 'lucide-react';
+import * as Tooltip from '@radix-ui/react-tooltip';
+import { AlertTriangle, BarChart3, CalendarDays, Database, Info, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 type Market = 'US' | 'KR';
@@ -106,6 +107,26 @@ function horizonValue(row: PerformanceRow | null, horizon: keyof typeof HORIZON_
 function tone(value: number | null | undefined) {
   if (value === null || value === undefined) return 'text-slate-500';
   return Number(value) > 0 ? 'text-emerald-300' : Number(value) < 0 ? 'text-rose-300' : 'text-slate-300';
+}
+
+function MetricHeaderTooltip({ label, ariaLabel, children }: { label: string; ariaLabel: string; children: React.ReactNode }) {
+  return (
+    <Tooltip.Provider delayDuration={150}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <button type="button" aria-label={ariaLabel} className="inline-flex cursor-help items-center gap-1 py-2 text-left hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70">
+            {label}<Info className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content sideOffset={6} className="z-[100] max-w-[360px] rounded-xl border border-slate-700 bg-slate-900/95 p-4 text-left text-[11px] leading-5 text-slate-300 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95">
+            {children}
+            <Tooltip.Arrow className="fill-slate-700" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  );
 }
 
 function RecommendationsContent() {
@@ -245,7 +266,7 @@ function HistoryView({ publications }: { publications: Publication[] }) {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1060px] text-left text-xs">
-              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>현재</th><th>D5</th><th>D20</th><th>D60</th><th>초과수익</th><th>MFE / MAE</th></tr></thead>
+              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>현재</th><th>D5</th><th>D20</th><th>D60</th><th><MetricHeaderTooltip label="초과수익" ariaLabel="초과수익 계산 기준"><p className="font-semibold text-emerald-300">종목 수익률 - 동일 기간 벤치마크 수익률</p><p className="mt-1">종목과 지수 모두 첫 거래 가능일 시가부터 같은 평가일 종가까지 계산합니다.</p><p className="mt-1 text-slate-400">NASDAQ100: ^NDX · S&amp;P500: ^GSPC<br />KOSPI200: ^KS200 · KOSDAQ150: ^KQ150</p></MetricHeaderTooltip></th><th><MetricHeaderTooltip label="MFE / MAE" ariaLabel="MFE / MAE 계산 기준"><p className="font-semibold text-emerald-300">MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.</p><p className="mt-1">MFE = (평가구간 최고가 ÷ 진입가 - 1) × 100</p><p>MAE = (평가구간 최저가 ÷ 진입가 - 1) × 100</p><p className="mt-1 text-slate-400">현재 표시된 최신 성숙 평가기간과 같은 구간을 사용합니다.</p></MetricHeaderTooltip></th></tr></thead>
               <tbody className="divide-y divide-slate-800/70">
                 {publication.recommendation_picks.map((pick) => {
                   const d5 = performance(pick, 'D5');

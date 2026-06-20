@@ -25,6 +25,17 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByText('대기 4/60')).toBeVisible();
   });
 
+  test('REC-06: 성과 지표 헤더에 계산 기준 툴팁 표시', async ({ page }) => {
+    await page.goto('/recommendations');
+    const table = page.getByRole('table').first();
+
+    await table.getByRole('button', { name: '초과수익 계산 기준' }).hover();
+    await expect(page.locator('[role="tooltip"]:visible').getByText('종목 수익률 - 동일 기간 벤치마크 수익률')).toBeVisible();
+
+    await table.getByRole('button', { name: 'MFE / MAE 계산 기준' }).hover();
+    await expect(page.locator('[role="tooltip"]:visible').getByText('MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.')).toBeVisible();
+  });
+
   test('REC-04: 추천일을 선택하면 해당 날짜 이력만 조회', async ({ page }) => {
     await page.goto('/recommendations');
     const requestPromise = page.waitForRequest((request) => {
