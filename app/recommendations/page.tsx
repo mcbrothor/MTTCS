@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, BarChart3, CalendarDays, Database, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -112,7 +112,6 @@ function RecommendationsContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const dateInputRef = useRef<HTMLInputElement>(null);
   const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
   const viewParam = searchParams.get('view');
   const view: View = viewParam === 'metrics' || viewParam === 'diagnostics' ? viewParam : 'history';
@@ -157,12 +156,6 @@ function RecommendationsContent() {
     return () => controller.abort();
   }, [endpoint]);
 
-  useEffect(() => {
-    if (dateInputRef.current && dateInputRef.current.value !== selectedDate) {
-      dateInputRef.current.value = selectedDate;
-    }
-  }, [selectedDate]);
-
   return (
     <div className="space-y-6 pb-12">
       <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
@@ -190,18 +183,18 @@ function RecommendationsContent() {
             <label htmlFor="recommendation-date" className="text-xs font-semibold text-slate-300">추천일 선택</label>
             <p className="mt-1 text-xs text-slate-500">특정 발행일의 한국·미국 Top10과 기간별 성과만 확인합니다.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <form method="get" action={pathname} className="flex items-center gap-2">
+            <input type="hidden" name="market" value={market} />
             <input
-              ref={dateInputRef}
               id="recommendation-date"
               aria-label="추천일 선택"
               type="date"
+              name="date"
               defaultValue={selectedDate}
               className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
             />
             <button
-              type="button"
-              onClick={() => update({ date: dateInputRef.current?.value || null })}
+              type="submit"
               className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 hover:border-emerald-400 hover:text-white"
             >
               조회
@@ -214,7 +207,7 @@ function RecommendationsContent() {
             >
               전체 보기
             </button>
-          </div>
+          </form>
         </section>
       )}
 
