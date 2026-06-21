@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Globe, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip } from 'recharts';
+import { Area, AreaChart, ReferenceLine, Tooltip } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import { friendlyMacroComponentLabel, friendlyMacroRegimeLabel } from '@/lib/market-display';
 import type { MacroRegime, MacroScoreBreakdown } from '@/lib/macro/compute';
 
@@ -67,7 +68,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
         </span>
       </div>
       <div className="h-16">
-        <ResponsiveContainer width="100%" height="100%">
+        <StableResponsiveContainer width="100%" height="100%" initialHeight={64}>
           <AreaChart data={history} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
             <defs>
               <linearGradient id="macroSparkGrad" x1="0" y1="0" x2="0" y2="1">
@@ -92,7 +93,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
               labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
-        </ResponsiveContainer>
+        </StableResponsiveContainer>
       </div>
       <div className="flex gap-4 text-[9px] text-slate-600 mt-0.5 justify-center">
         <span className="text-emerald-600">좋음 70 이상</span>

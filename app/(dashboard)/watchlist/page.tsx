@@ -126,7 +126,7 @@ export default function WatchlistPage() {
     }
   };
 
-  const handleUpdateItem = async (id: string, patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags'>>) => {
+  const handleUpdateItem = async (id: string, patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name' | 'sort_order'>>) => {
     try {
       const { data } = await axios.patch('/api/watchlist', { id, ...patch });
       const updated = data.data as WatchlistItem;
@@ -262,6 +262,13 @@ export default function WatchlistPage() {
                       <td className="py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Link
+                            href={`/stock/${item.ticker}?exchange=${item.exchange}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="flex items-center gap-1 rounded-md border border-sky-500/30 px-2.5 py-1.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/10"
+                          >
+                            360
+                          </Link>
+                          <Link
                             href={`/plan?ticker=${item.ticker}&exchange=${item.exchange}`}
                             onClick={(event) => event.stopPropagation()}
                             className="flex items-center gap-1 rounded-md bg-emerald-500/20 px-2.5 py-1.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/30"
@@ -339,6 +346,7 @@ function AddWatchlistForm({
   const [memo, setMemo] = useState('');
   const [tags, setTags] = useState('');
   const [priority, setPriority] = useState<WatchlistPriority>(0);
+  const [groupName, setGroupName] = useState('기본');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -353,6 +361,7 @@ function AddWatchlistForm({
         memo: memo.trim() || null,
         tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         priority,
+        group_name: groupName,
       });
       onAdded(data.data);
       setTicker('');
@@ -369,6 +378,11 @@ function AddWatchlistForm({
     <Card>
       <h3 className="mb-4 text-lg font-bold text-white">종목 추가</h3>
       <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-slate-400">그룹</span>
+          <input value={groupName} onChange={(event) => setGroupName(event.target.value)} maxLength={40} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none" />
+        </label>
+
         <label className="block">
           <span className="mb-1.5 block text-xs font-medium text-slate-400">티커 *</span>
           <input
@@ -448,20 +462,23 @@ function WatchlistDetailModal({
   analysis: MarketAnalysisResponse | null;
   loading: boolean;
   onClose: () => void;
-  onSave: (patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags'>>) => Promise<void>;
+  onSave: (patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name'>>) => Promise<void>;
   onDelete: () => void;
 }) {
   const [exchange, setExchange] = useState(item.exchange);
   const [priority, setPriority] = useState<WatchlistPriority>(item.priority);
   const [memo, setMemo] = useState(item.memo || '');
   const [tags, setTags] = useState(item.tags.join(', '));
+  const [groupName, setGroupName] = useState(item.group_name || '기본');
   const [saving, setSaving] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
 
   useEffect(() => {
     setExchange(item.exchange);
     setPriority(item.priority);
     setMemo(item.memo || '');
     setTags(item.tags.join(', '));
+    setGroupName(item.group_name || '기본');
   }, [item]);
 
   const volumeTier = analysis
@@ -480,10 +497,20 @@ function WatchlistDetailModal({
         priority,
         memo: memo.trim() || null,
         tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+        group_name: groupName,
       });
     } finally {
       setSaving(false);
     }
+  };
+
+  const createPivotAlert = async () => {
+    const targetPrice = analysis?.vcpAnalysis.pivotPrice;
+    if (!targetPrice) return setAlertMessage('확정된 피벗가가 없어 알림을 만들 수 없습니다.');
+    try {
+      await axios.post('/api/alert-rules', { name: `${item.ticker} 피벗 접근`, scope: 'SYMBOL', scope_id: item.ticker, event_type: 'PIVOT_NEAR', params: { targetPrice, thresholdPct: 5 }, channels: ['IN_APP'] });
+      setAlertMessage(`피벗 ${targetPrice.toLocaleString()}의 5% 이내 접근 알림을 만들었습니다.`);
+    } catch (error) { setAlertMessage(apiMessage(error, '알림 생성에 실패했습니다.')); }
   };
 
   return (
@@ -503,6 +530,10 @@ function WatchlistDetailModal({
         <div className="grid gap-5 p-5 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-400">그룹</span>
+                <input value={groupName} onChange={(event) => setGroupName(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+              </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-slate-400">거래소</span>
                 <select value={exchange} onChange={(event) => setExchange(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
@@ -534,11 +565,13 @@ function WatchlistDetailModal({
               <Link href={`/plan?ticker=${item.ticker}&exchange=${exchange}`} className="inline-flex items-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
                 계획으로 이동
               </Link>
+              <button type="button" onClick={createPivotAlert} className="inline-flex items-center rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/10">피벗 알림</button>
               <button type="button" onClick={onDelete} className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10">
                 <Trash2 className="h-4 w-4" />
                 삭제
               </button>
             </div>
+            {alertMessage && <p className="text-xs text-amber-200">{alertMessage}</p>}
           </div>
 
           <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">

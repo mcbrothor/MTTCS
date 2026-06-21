@@ -137,4 +137,18 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
       });
     }
   });
+
+  test('SCAN-12: Momentum 캐시 결과 → 상세 분석 → 매매 계획 연결', async ({ page }) => {
+    await page.goto('/momentum');
+
+    await expect(page.getByTestId('momentum-data-origin')).toContainText('일일 스냅샷');
+    const nvda = page.getByText('NVDA', { exact: true });
+    await expect(nvda).toBeVisible();
+    await nvda.click();
+
+    const dialog = page.getByRole('dialog', { name: 'NVDA 모멘텀 상세 분석' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('실행 기준')).toBeVisible();
+    await expect(dialog.getByRole('link', { name: '매매 계획 생성' })).toHaveAttribute('href', /\/plan\?ticker=NVDA/);
+  });
 });

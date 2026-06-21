@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
 import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
+import GlobalSecuritySearch from '@/components/layout/GlobalSecuritySearch';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -32,6 +33,7 @@ export default function Navbar() {
                 <p className="text-[11px] text-[var(--text-secondary)]">Mantori&apos;s Trading Navigator</p>
               </div>
             </Link>
+            <GlobalSecuritySearch />
           </div>
 
           <div className="flex min-w-0 flex-1 items-center xl:justify-end">

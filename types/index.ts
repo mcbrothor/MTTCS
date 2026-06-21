@@ -668,6 +668,42 @@ export interface WatchlistItem {
   memo: string | null;
   tags: string[];
   priority: WatchlistPriority;
+  group_name: string;
+  sort_order: number;
+}
+
+export interface SavedScreen {
+  id: string;
+  name: string;
+  market: 'KR' | 'US';
+  universe: ScannerUniverse;
+  filters: { filterKey: string; rsMin: number; vcpMin: number; distMax: number };
+  sort_key: string;
+  sort_direction: 'asc' | 'desc';
+  alert_on_enter: boolean;
+  alert_on_exit: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SecuritySearchResult {
+  ticker: string;
+  name: string;
+  exchange: string;
+  market: 'KR' | 'US';
+}
+
+export interface SecurityEvent {
+  id?: string;
+  source: 'DART' | 'SEC';
+  external_id: string;
+  market: 'KR' | 'US';
+  ticker: string;
+  event_type: 'FILING' | 'EARNINGS';
+  title: string;
+  summary?: string | null;
+  source_url?: string | null;
+  occurred_at: string;
 }
 
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY';

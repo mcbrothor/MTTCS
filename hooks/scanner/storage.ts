@@ -5,6 +5,7 @@ import {
   LAST_UNIVERSE_STORAGE_KEY,
   LATEST_SCAN_UNIVERSE_STORAGE_KEY,
   SCANNER_STORAGE_PREFIX,
+  SCANNER_PREVIOUS_STORAGE_PREFIX,
   type ScannerMetricsResponse,
   type StoredScannerSnapshot,
 } from './constants';
@@ -38,7 +39,10 @@ export async function writeScannerSnapshot(universeMeta: ScannerUniverseResponse
     universeMeta,
     results: applyScannerReviewPoolRankings(results.map((item) => withRecommendation(item))),
   };
-  await set(scannerStorageKey(universeMeta.universe, SCANNER_STORAGE_PREFIX), snapshot);
+  const key = scannerStorageKey(universeMeta.universe, SCANNER_STORAGE_PREFIX);
+  const previous = await get(key);
+  if (previous) await set(scannerStorageKey(universeMeta.universe, SCANNER_PREVIOUS_STORAGE_PREFIX), previous);
+  await set(key, snapshot);
   window.localStorage.setItem(LAST_UNIVERSE_STORAGE_KEY, universeMeta.universe);
   window.localStorage.setItem(LATEST_SCAN_UNIVERSE_STORAGE_KEY, universeMeta.universe);
   // 콘테스트 페이지는 localStorage에서 스냅샷을 읽으므로 동기화
@@ -50,6 +54,14 @@ export async function writeScannerSnapshot(universeMeta: ScannerUniverseResponse
   } catch {
     // localStorage 용량 초과 시 무시
   }
+}
+
+export async function readPreviousScannerSnapshot(universe: ScannerUniverse): Promise<StoredScannerSnapshot | null> {
+  try {
+    const raw = await get(scannerStorageKey(universe, SCANNER_PREVIOUS_STORAGE_PREFIX));
+    const snapshot = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return snapshot?.universeMeta?.universe === universe && Array.isArray(snapshot.results) ? snapshot : null;
+  } catch { return null; }
 }
 
 export async function getInitialRestoredUniverse(): Promise<ScannerUniverse> {

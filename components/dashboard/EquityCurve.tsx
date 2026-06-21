@@ -1,5 +1,6 @@
 import Card from '@/components/ui/Card';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 
 interface EquityCurveProps {
   data: { date: string; cumulativePnL: number }[];
@@ -15,7 +16,7 @@ export default function EquityCurve({ data }: EquityCurveProps) {
         </div>
       ) : (
         <div className="min-h-0 w-full flex-1">
-          <ResponsiveContainer width="100%" height="100%">
+          <StableResponsiveContainer width="100%" height="100%" initialHeight={320}>
             <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
@@ -33,7 +34,7 @@ export default function EquityCurve({ data }: EquityCurveProps) {
               />
               <Area type="monotone" dataKey="cumulativePnL" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPnL)" />
             </AreaChart>
-          </ResponsiveContainer>
+          </StableResponsiveContainer>
         </div>
       )}
     </Card>

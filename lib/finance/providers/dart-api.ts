@@ -64,6 +64,21 @@ export interface FundamentalMetrics {
   date: string;
 }
 
+export async function getDartRecentFilings(stockCode: string, days = 30) {
+  const apiKey = process.env.DART_API_KEY;
+  if (!apiKey) return [];
+  const corpCode = await getDartCorpCode(stockCode);
+  if (!corpCode) return [];
+  const end = new Date(); const begin = new Date(end.getTime() - days * 86400000);
+  const ymd = (date: Date) => date.toISOString().slice(0, 10).replaceAll('-', '');
+  const response = await axios.get(`${DART_API_BASE_URL}/list.json`, { params: { crtfc_key: apiKey, corp_code: corpCode, bgn_de: ymd(begin), end_de: ymd(end), page_count: 30 }, timeout: 10000 });
+  if (response.data?.status !== '000' && response.data?.status !== '013') throw new Error(response.data?.message || 'DART disclosure lookup failed');
+  return (response.data?.list || []).map((row: { rcept_no:string; report_nm:string; rcept_dt:string; flr_nm?:string }) => ({
+    source: 'DART' as const, external_id: row.rcept_no, market: 'KR' as const, ticker: stockCode, event_type: /사업보고서|분기보고서|반기보고서/.test(row.report_nm) ? 'EARNINGS' as const : 'FILING' as const,
+    title: row.report_nm, summary: row.flr_nm || null, source_url: `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${row.rcept_no}`, occurred_at: `${row.rcept_dt.slice(0,4)}-${row.rcept_dt.slice(4,6)}-${row.rcept_dt.slice(6,8)}T00:00:00+09:00`,
+  }));
+}
+
 /**
  * 종목코드로 DART 고유번호를 조회합니다. (Supabase DB 사용)
  */

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getServerSession } from '@/lib/auth/session';
 import type { WatchlistPriority } from '@/types';
 
@@ -19,11 +19,23 @@ function apiError(message: string, code: string, status = 400) {
 // GET: 관심 종목 목록 조회
 export async function GET() {
   try {
-    const { data, error } = await supabaseServer
+    const session = await getServerSession();
+    if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
+    const db = getSupabaseAdmin();
+    let { data, error } = await db
       .from('watchlist')
       .select('*')
+      .eq('user_id', session.systemId)
+      .order('group_name')
+      .order('sort_order')
       .order('priority', { ascending: false })
       .order('created_at', { ascending: false });
+
+    if (error?.message?.includes('group_name')) {
+      const legacy = await db.from('watchlist').select('id,user_id,ticker,exchange,memo,tags,priority,created_at,updated_at').eq('user_id', session.systemId).order('priority', { ascending: false }).order('created_at', { ascending: false });
+      data = legacy.data?.map((item) => ({ ...item, group_name: '기본', sort_order: 0 })) || null;
+      error = legacy.error;
+    }
 
     if (error) throw error;
 
@@ -54,23 +66,27 @@ export async function POST(request: Request) {
       : 0;
 
     const session = await getServerSession();
-    const systemId = session?.systemId || null;
+    if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
+    const systemId = session.systemId;
 
     const now = new Date().toISOString();
-    const payload = { ticker, exchange, memo, tags, priority, user_id: systemId, updated_at: now };
+    const group_name = String(body.group_name || '기본').trim().slice(0, 40) || '기본';
+    const payload = { ticker, exchange, memo, tags, priority, group_name, user_id: systemId, updated_at: now };
 
-    const { data: existingRows, error: lookupError } = await supabaseServer
+    const db = getSupabaseAdmin();
+    const { data: existingRows, error: lookupError } = await db
       .from('watchlist')
       .select('id')
       .eq('ticker', ticker)
+      .eq('user_id', systemId)
       .limit(1);
 
     if (lookupError) throw lookupError;
 
     const existingId = existingRows?.[0]?.id;
     const query = existingId
-      ? supabaseServer.from('watchlist').update(payload).eq('id', existingId)
-      : supabaseServer.from('watchlist').insert([{ ...payload, created_at: now }]);
+      ? db.from('watchlist').update(payload).eq('id', existingId).eq('user_id', systemId)
+      : db.from('watchlist').insert([{ ...payload, created_at: now }]);
 
     const { data, error } = await query.select().single();
 
@@ -86,6 +102,8 @@ export async function POST(request: Request) {
 // PATCH: 관심 종목 수정 (메모, 태그, 우선순위)
 export async function PATCH(request: Request) {
   try {
+    const session = await getServerSession();
+    if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
     const body = await request.json();
     const id = String(body.id || '').trim();
 
@@ -109,11 +127,14 @@ export async function PATCH(request: Request) {
     if (body.exchange !== undefined) {
       update.exchange = String(body.exchange).trim().toUpperCase();
     }
+    if (body.group_name !== undefined) update.group_name = String(body.group_name || '기본').trim().slice(0, 40) || '기본';
+    if (body.sort_order !== undefined && Number.isInteger(Number(body.sort_order))) update.sort_order = Number(body.sort_order);
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await getSupabaseAdmin()
       .from('watchlist')
       .update(update)
       .eq('id', id)
+      .eq('user_id', session.systemId)
       .select()
       .single();
 
@@ -136,7 +157,9 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const { error } = await supabaseServer.from('watchlist').delete().eq('id', id);
+    const session = await getServerSession();
+    if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
+    const { error } = await getSupabaseAdmin().from('watchlist').delete().eq('id', id).eq('user_id', session.systemId);
     if (error) throw error;
 
     return NextResponse.json({ data: { id } });

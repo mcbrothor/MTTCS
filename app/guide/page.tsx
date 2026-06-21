@@ -16,14 +16,38 @@ import {
 // ─── 데이터 테이블 ─────────────────────────────────────────────
 
 const processRows = [
-  ['01 대시보드', '커맨드 센터', '시장 상태·포트폴리오 노출도·최근 알림을 한눈에 확인합니다.'],
-  ['02 시장 분석', '진입 조건 확인', '마스터 필터(P3 점수)와 매크로 탭으로 현재 시장이 공격적 진입을 허용하는지 판단합니다.'],
-  ['03 종목 발굴', '미너비니 · 오닐', '미너비니 SEPA + VCP/HTF 스캐너와 오닐 CAN SLIM 스캐너로 주도주 후보를 걸러냅니다.'],
-  ['04 관심 종목', '후보 추적', '스캐너 결과 중 실제로 모니터링할 종목을 워치리스트에 등록합니다.'],
+  ['00 오늘', '커맨드 센터', '시장 상태·포트폴리오 노출도·최근 알림과 다음 행동을 한눈에 확인합니다.'],
+  ['01 시장 분석', '진입 조건 확인', '마스터 필터(P3 점수)와 매크로 탭으로 현재 시장이 공격적 진입을 허용하는지 판단합니다.'],
+  ['02 종목 발굴', '5개 스캐너', '미너비니·CAN SLIM·주도주·모멘텀·쿨라매기 스캐너로 후보를 발굴하고 상세 패널에서 교차 검증합니다.'],
+  ['03 콘테스트', '후보 비교 분석', '최대 10개 후보를 세션으로 묶어 규칙 엔진과 LLM 결과를 비교해 우선순위를 정합니다.'],
+  ['04 관심 종목', '후보 추적', '즉시 매수하지 않을 후보를 워치리스트에 등록하고 이벤트·가격 변화를 추적합니다.'],
   ['05 매매 계획', '리스크 계산', '피벗 진입가·손절가·포지션 크기를 계산하고 R:R 비율을 검토합니다.'],
   ['06 포트폴리오', '노출도 점검', '섹터별 비중과 총 리스크 노출을 관리합니다.'],
-  ['07 콘테스트', 'LLM 비교 분석', '최대 10개 후보를 세션으로 묶어 AI(LLM)와 함께 최종 후보를 선정합니다.'],
-  ['08 성과 복기', '히스토리', '선택 종목의 1주·1개월 수익률을 미선택 후보와 비교해 선정 기준을 개선합니다.'],
+  ['07 성과 복기', '히스토리·추천 성과', '실제 거래와 추천 후보의 결과를 비교해 선정·실행 기준을 개선합니다.'],
+];
+
+const scannerMenuRows = [
+  ['미너비니 스크리닝', 'SEPA 추세 조건과 VCP/HTF 베이스, 피벗·손절 기준을 함께 평가합니다.'],
+  ['윌리엄 오닐 스크리닝', 'CAN SLIM 7개 기둥과 VCP를 교차 검증해 T1/WL/ST 티어를 부여합니다.'],
+  ['주도주 스캐너', '표준 유니버스 상대강도와 추세 품질을 결합해 시장 주도 후보를 순위화합니다.'],
+  ['모멘텀 스캐너', 'RVOL과 당일 ROC로 거래량 폭발을 포착하며, 최신 일일 스냅샷을 먼저 표시합니다.'],
+  ['쿨라매기 스캐너', 'EP·Breakout·Flag 유형의 단기 모멘텀 셋업을 별도 규칙으로 판정합니다.'],
+];
+
+const scannerOperationRows = [
+  ['캐시 우선 표시', '화면 진입 시 daily_screener_candidates의 최신 유효 결과를 즉시 표시합니다. 후속 Top5 분석이 실패해도 종목 후보가 저장되어 있으면 사용할 수 있습니다.'],
+  ['기준시각 확인', '결과 상단의 일일 스냅샷/실시간 재스캔 표시와 기준시각을 확인합니다. 오래된 결과를 실시간 값으로 오인하지 않습니다.'],
+  ['전체 재스캔', '최신 가격이 반드시 필요할 때만 실행합니다. 20종목 배치와 제한된 동시성으로 처리되므로 완료까지 시간이 걸릴 수 있습니다.'],
+  ['단일 종목 재계산', '상세 패널에서 관심 종목 하나만 다시 계산해 외부 API 호출과 대기 시간을 줄입니다.'],
+  ['상세 드릴다운', '결과 행·카드를 누르면 차트, VCP, SEPA, 피벗, 손절, RVOL을 한 화면에서 확인합니다.'],
+  ['매매 계획 연결', '상세 패널의 매매 계획 생성 버튼으로 티커·거래소를 유지한 채 계획 화면으로 이동합니다.'],
+];
+
+const momentumRows = [
+  ['EXPLOSIVE', 'RVOL 3.0배 이상이면서 당일 ROC +5% 이상. 강한 수급 유입이지만 추격 매수 전 피벗 이격을 확인합니다.'],
+  ['BREAKOUT', 'RVOL 2.0배 이상이면서 당일 ROC +3% 이상. 돌파 거래량과 VCP/SEPA 상태를 상세 패널에서 재확인합니다.'],
+  ['WARM', 'RVOL 1.5배 이상. 즉시 진입보다 관심종목 등록과 다음 거래일 추적에 적합합니다.'],
+  ['NONE', '현재 기준에 미달한 종목. 전체 결과에는 남을 수 있으나 매수 후보로 해석하지 않습니다.'],
 ];
 
 const masterFilterRows = [
@@ -204,8 +228,8 @@ export default function GuidePage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 알고리즘 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-          MTN은 미너비니 SEPA·VCP/HTF와 오닐 CAN SLIM 두 가지 스크리닝 방법론을 결합한 주도주 추세 추종 매매 시스템입니다.
-          시장 환경 분석 → 종목 발굴 → 리스크 관리 → 콘테스트 → 성과 복기의 8단계 프로세스로 운영됩니다.
+          MTN은 미너비니 SEPA·VCP/HTF, 오닐 CAN SLIM, 주도주·모멘텀·쿨라매기 규칙을 결합한 추세 추종 의사결정 시스템입니다.
+          오늘 확인 → 시장 분석 → 종목 발굴 → 콘테스트 → 관심종목 → 매매 계획 → 포트폴리오 → 성과 복기의 8단계로 운영됩니다.
         </p>
       </div>
 
@@ -242,7 +266,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<BarChart2 className="h-6 w-6 text-sky-400" />}
-          title="02 · 시장 분석 — 마스터 필터"
+          title="01 · 시장 분석 — 마스터 필터"
           subtitle="시장 환경이 신규 진입에 우호적인지 먼저 판단합니다. 좋은 종목도 나쁜 시장에서는 이기지 못합니다."
         />
         <div className="mt-4 flex gap-2 flex-wrap">
@@ -276,7 +300,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<Crosshair className="h-6 w-6 text-emerald-400" />}
-          title="03-A · 미너비니 SEPA 스캐너"
+          title="02-A · 미너비니 SEPA 스캐너"
           subtitle="Specific Entry Point Analysis. 가격·이동평균·거래대금·52주 위치로 상승 추세의 '건강한 체력'을 가진 종목을 선별합니다."
         />
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -303,7 +327,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<Flame className="h-6 w-6 text-amber-400" />}
-          title="03-A · VCP (변동성 수축 패턴)"
+          title="02-A · VCP (변동성 수축 패턴)"
           subtitle="Volatility Contraction Pattern. SEPA 통과 이후 실제 매매 타이밍을 잡는 패턴 분석입니다."
         />
         <div className="mt-4 flex gap-2 flex-wrap">
@@ -327,7 +351,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<ScanSearch className="h-6 w-6 text-indigo-400" />}
-          title="03-B · 오닐 CAN SLIM 스캐너"
+          title="02-B · 오닐 CAN SLIM 스캐너"
           subtitle="William O'Neil이 정의한 7대 주도주 특성. 펀더멘털 실적과 수급·시장 방향성을 종합 평가합니다."
         />
         <div className="mt-4 grid gap-2 sm:grid-cols-7 text-center">
@@ -352,6 +376,23 @@ export default function GuidePage() {
           CAN SLIM PASS + VCP 없음 → WL 워치리스트 /
           CAN SLIM FAIL + VCP strong/forming → ST 단기 후보 /
           둘 다 FAIL → 제외.
+        </div>
+      </Card>
+
+      <Card>
+        <SectionHeader
+          icon={<Activity className="h-6 w-6 text-rose-400" />}
+          title="02-C · 스캐너 메뉴와 결과 운용"
+          subtitle="스캐너마다 역할은 다르지만 결과 확인·재계산·계획 연결 방식은 동일하게 사용합니다."
+        />
+        <InfoTable rows={scannerMenuRows} cols={['스캐너', '역할']} />
+        <div className="mt-6">
+          <h3 className="font-semibold text-white">캐시·실시간 결과 사용 기준</h3>
+          <InfoTable rows={scannerOperationRows} />
+        </div>
+        <div className="mt-6">
+          <h3 className="font-semibold text-white">Momentum 등급 기준</h3>
+          <InfoTable rows={momentumRows} cols={['등급', '판정과 행동']} />
         </div>
       </Card>
 
@@ -383,7 +424,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<Trophy className="h-6 w-6 text-emerald-400" />}
-          title="07 · 콘테스트 & LLM 비교 분석"
+          title="03 · 콘테스트 & LLM 비교 분석"
           subtitle="최대 10개 후보를 세션으로 묶어 AI의 도움을 받아 최종 순위를 결정합니다."
         />
         <InfoTable rows={contestRows} />
@@ -393,7 +434,7 @@ export default function GuidePage() {
       <Card>
         <SectionHeader
           icon={<BookOpen className="h-6 w-6 text-cyan-400" />}
-          title="08 · 성과 복기"
+          title="07 · 성과 복기"
           subtitle="선정 기준의 장기 유효성을 검증합니다. 선택이 옳았는지 데이터로 증명하세요."
         />
         <InfoTable rows={reviewRows} />

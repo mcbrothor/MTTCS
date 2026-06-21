@@ -2,7 +2,8 @@
 
 import { memo } from 'react';
 import { Info, ShieldAlert, TrendingUp } from 'lucide-react';
-import { Area, AreaChart, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
+import { Area, AreaChart, Line, LineChart, ReferenceLine, Tooltip, YAxis } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import Card from '@/components/ui/Card';
 import HelpButton from '@/components/ui/HelpButton';
 import StatusBadge from '@/components/master-filter/StatusBadge';
@@ -123,7 +124,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
 
       {movingAverageData && !compact && (
         <div className="mt-4 h-24">
-          <ResponsiveContainer width="100%" height="100%">
+          <StableResponsiveContainer width="100%" height="100%" initialHeight={96}>
             <LineChart data={movingAverageData}>
               <Line type="monotone" dataKey="ma50" name="50일선" stroke="#10b981" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
               <Line type="monotone" dataKey="ma200" name="200일선" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
@@ -141,7 +142,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
                 labelStyle={{ color: '#94a3b8', fontSize: 11 }}
               />
             </LineChart>
-          </ResponsiveContainer>
+          </StableResponsiveContainer>
           <div className="mt-1 flex gap-3 text-[10px] text-slate-500">
             <span className="text-emerald-300">50일선</span>
             <span className="text-sky-300">200일선</span>
@@ -151,7 +152,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
 
       {chartData && !movingAverageData && !compact && (
         <div className="mt-4 h-24">
-          <ResponsiveContainer width="100%" height="100%">
+          <StableResponsiveContainer width="100%" height="100%" initialHeight={96}>
             <AreaChart data={chartData}>
               <Area type="monotone" dataKey="close" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} isAnimationActive={false} />
               {!isNaN(Number(detail.threshold)) && (
@@ -164,7 +165,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
               )}
               <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
             </AreaChart>
-          </ResponsiveContainer>
+          </StableResponsiveContainer>
         </div>
       )}
 

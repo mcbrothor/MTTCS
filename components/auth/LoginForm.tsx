@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Shield } from 'lucide-react';
 import Button from '@/components/ui/Button';
@@ -13,6 +13,11 @@ export default function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,7 +47,12 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-5 rounded-lg border border-[var(--border)] bg-white/[0.03] p-6 shadow-2xl">
+    <form
+      onSubmit={handleSubmit}
+      data-testid="login-form"
+      data-hydrated={isHydrated ? 'true' : 'false'}
+      className="w-full max-w-sm space-y-5 rounded-lg border border-[var(--border)] bg-white/[0.03] p-6 shadow-2xl"
+    >
       <div className="space-y-2 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
           <Shield className="h-6 w-6" />

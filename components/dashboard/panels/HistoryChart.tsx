@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import type { OHLCData } from '@/types';
 
@@ -51,7 +52,7 @@ export function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; 
   const maxPrice = Math.max(...data.map(d => d.close)) * 1.05;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <StableResponsiveContainer width="100%" height="100%" initialHeight={250}>
       <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
@@ -101,6 +102,6 @@ export function HistoryChart({ ticker, exchange, stopPrice }: { ticker: string; 
           />
         )}
       </AreaChart>
-    </ResponsiveContainer>
+    </StableResponsiveContainer>
   );
 }

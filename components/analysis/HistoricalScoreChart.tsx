@@ -6,10 +6,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Area,
   AreaChart
 } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import { supabase } from '@/lib/supabase/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -116,7 +116,7 @@ function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
       </div>
 
       <div className="h-32 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+        <StableResponsiveContainer width="100%" height="100%" initialHeight={128}>
           <AreaChart data={data}>
             <defs>
               <linearGradient id="rsGradient" x1="0" y1="0" x2="0" y2="1">
@@ -154,7 +154,7 @@ function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
               animationDuration={1500}
             />
           </AreaChart>
-        </ResponsiveContainer>
+        </StableResponsiveContainer>
       </div>
     </div>
   );

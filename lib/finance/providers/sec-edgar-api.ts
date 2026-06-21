@@ -191,9 +191,23 @@ async function getTickerMap() {
   return map;
 }
 
-async function getCikForTicker(ticker: string) {
+export async function getCikForTicker(ticker: string) {
   const map = await getTickerMap();
   return map.get(ticker.toUpperCase()) || null;
+}
+
+export async function getSecRecentFilings(ticker: string) {
+  const cik = await getCikForTicker(ticker);
+  if (!cik) return [];
+  const response = await axios.get(`https://data.sec.gov/submissions/CIK${cik}.json`, { headers: secHeaders(), timeout: 10000 });
+  const recent = response.data?.filings?.recent || {};
+  const forms: string[] = recent.form || [];
+  return forms.map((form, index) => ({ form, index })).filter(({form}) => ['10-K','10-Q','8-K','6-K','20-F'].includes(form)).slice(0,30).map(({form,index}) => {
+    const accession = recent.accessionNumber[index]; const accessionPath = String(accession).replaceAll('-','');
+    return { source:'SEC' as const, external_id:accession, market:'US' as const, ticker:ticker.toUpperCase(), event_type: ['10-K','10-Q','20-F'].includes(form)?'EARNINGS' as const:'FILING' as const,
+      title:`${form} · ${recent.primaryDocDescription?.[index] || recent.primaryDocument?.[index] || 'SEC filing'}`, summary:recent.items?.[index]||null,
+      source_url:`https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accessionPath}/${recent.primaryDocument[index]}`, occurred_at:`${recent.filingDate[index]}T00:00:00-04:00` };
+  });
 }
 
 function latestValue(companyFacts: SecCompanyFacts, tags: string[], units: string[]) {

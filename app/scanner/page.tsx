@@ -14,6 +14,7 @@ import ScannerCardView from '@/components/scanner/ScannerCardView';
 import MarketBanner from '@/components/ui/MarketBanner';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import { useIsMobile } from '@/lib/hooks/useViewport';
+import SavedScreensPanel from '@/components/scanner/SavedScreensPanel';
 
 const MACRO_TONE = {
   HALT: 'border-rose-400/24 bg-rose-500/10 text-rose-50',
@@ -377,6 +378,21 @@ export default function ScannerPage() {
           </div>
         )}
       </section>
+
+      <SavedScreensPanel
+        universe={universe}
+        filterKey={filterKey}
+        sortKey={sortKey}
+        customFilters={customFilters}
+        results={results}
+        onApply={(screen) => {
+          handleUniverseChange(screen.universe);
+          setFilterKey((screen.filters.filterKey || 'all') as typeof filterKey);
+          setSortKey(screen.sort_key as SortKey);
+          setCustomFilters({ rsMin: screen.filters.rsMin || 0, vcpMin: screen.filters.vcpMin || 0, distMax: screen.filters.distMax ?? 999 });
+          setShowCustomFilter(Boolean(screen.filters.rsMin || screen.filters.vcpMin || screen.filters.distMax < 999));
+        }}
+      />
 
       {macroTrend && (
         <div className={`rounded-[22px] border px-4 py-4 shadow-[var(--panel-shadow)] ${macroTone}`}>

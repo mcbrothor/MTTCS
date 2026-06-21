@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { supabaseServer } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { validateCronRequest } from '@/lib/contest-cron';
+import { evaluatePriceAlert } from '@/lib/alerts/evaluate';
 
 interface OHLCData {
   date: string;
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    const supabaseServer = getSupabaseAdmin();
     const alerts: string[] = [];
 
     // 1. PLANNED / ACTIVE 종목 가져오기
@@ -84,6 +86,22 @@ export async function GET(request: Request) {
           }
         }
       }
+    }
+
+    const { data: rules, error: ruleError } = await supabaseServer.from('alert_rules').select('*').eq('enabled', true).eq('scope', 'SYMBOL');
+    if (ruleError) throw ruleError;
+    for (const rule of rules || []) {
+      if (['FILING','EARNINGS','SCREEN_ENTER','SCREEN_EXIT'].includes(rule.event_type)) continue;
+      const market = /^\d{6}$/.test(rule.scope_id) ? 'KR' : 'US';
+      const price = await fetchLatestPrice(rule.scope_id, market);
+      if (!price) continue;
+      const signal = evaluatePriceAlert(rule, price, null);
+      if (!signal) continue;
+      const bucket = Math.floor(Date.now() / (Math.max(1, rule.cooldown_minutes) * 60000));
+      const eventKey = `${rule.id}:${bucket}`;
+      const { error: eventError } = await supabaseServer.from('alert_events').insert({ user_id: rule.user_id, rule_id: rule.id, event_key: eventKey, event_type: rule.event_type, title: `${rule.scope_id} ${rule.name}`, message: signal.message, ticker: rule.scope_id, severity: signal.severity, payload: { price } });
+      if (eventError?.code !== '23505') { if (eventError) throw eventError; alerts.push(`*[${rule.event_type}] ${rule.scope_id}*\n${signal.message}`); }
+      await supabaseServer.from('alert_rules').update({ last_triggered_at: new Date().toISOString() }).eq('id', rule.id);
     }
 
     // 2. 매크로 DD 카운트 체크

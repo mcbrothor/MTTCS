@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Play,
@@ -8,11 +9,16 @@ import {
   Activity,
   Flame,
   AlertTriangle,
+  History,
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import type { ScannerUniverse } from '@/types';
+import type { DataSourceMeta, ScannerUniverse } from '@/types';
 import type { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
+import type { DailyScannerSnapshot, DailyScannerSnapshotCandidate } from '@/lib/scanner/daily-snapshot';
+import type { MomentumDrilldownResult } from '@/components/scanner/MomentumDrilldownModal';
+
+const MomentumDrilldownModal = dynamic(() => import('@/components/scanner/MomentumDrilldownModal'), { ssr: false });
 
 type FilterKey = 'all' | 'explosive' | 'breakout' | 'warm';
 type SortKey = 'rvol' | 'roc';
@@ -43,6 +49,13 @@ interface MomentumScanError {
   error: string;
 }
 
+type ResultOrigin = {
+  kind: 'snapshot' | 'live';
+  label: string;
+  asOf: string;
+  warning?: string | null;
+};
+
 const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   NASDAQ100: { label: 'NASDAQ 100', desc: 'Nasdaq 100 대형 기술주 대상 급등/거래량 폭발 포착.' },
   SP500: { label: 'S&P 500', desc: 'S&P 500 기관 수급 쏠림 및 돌파 종목 포착.' },
@@ -61,6 +74,36 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: 'rvol', label: '거래량 폭발순 (RVOL)' },
   { key: 'roc', label: '당일 등락률순 (ROC)' },
 ];
+
+function numberValue(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function surgeGrade(value: unknown): SurgeGrade {
+  return value === 'EXPLOSIVE' || value === 'BREAKOUT' || value === 'WARM' ? value : 'NONE';
+}
+
+function snapshotToResult(candidate: DailyScannerSnapshotCandidate): SurgeResult {
+  const raw = candidate.raw;
+  const metrics = candidate.metrics;
+  const currentVolume = numberValue(raw.currentVolume);
+  return {
+    ticker: candidate.ticker,
+    exchange: candidate.exchange,
+    currentPrice: candidate.price,
+    metrics: {
+      grade: surgeGrade(metrics.grade ?? candidate.grade),
+      rvol: numberValue(metrics.rvol),
+      rawRvol: numberValue(raw.rawRvol ?? metrics.raw_rvol ?? metrics.rvol),
+      roc: numberValue(metrics.roc),
+      avgVolume20d: numberValue(raw.avgVolume20d),
+      currentVolume,
+      estimatedVolume: numberValue(raw.estimatedVolume ?? metrics.estimated_volume, currentVolume),
+      isIntraday: Boolean(raw.isIntraday ?? metrics.is_intraday),
+    },
+  };
+}
 
 function gradeLabel(grade: SurgeGrade) {
   if (grade === 'EXPLOSIVE') return { emoji: '🌋', label: 'Explosive', styles: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', fill: 'bg-rose-500', groupHover: 'hover:border-rose-500/50' } };
@@ -81,8 +124,41 @@ export default function MomentumScannerPage() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('rvol');
   const [viewType, setViewType] = useState<ViewType>('card');
+  const [selectedResult, setSelectedResult] = useState<SurgeResult | null>(null);
+  const [resultOrigin, setResultOrigin] = useState<ResultOrigin | null>(null);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
   
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setIsLoadingSnapshot(true);
+
+    fetch(`/api/scanner/snapshots?source=momentum&universe=${universe}`, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json() as { data?: DailyScannerSnapshot; meta?: DataSourceMeta; message?: string };
+        if (!response.ok) throw new Error(payload.message || `캐시 로딩 실패 (${response.status})`);
+        const snapshot = payload.data;
+        if (!snapshot?.candidates.length || !snapshot.run) return;
+        setResults(snapshot.candidates.map(snapshotToResult));
+        setResultOrigin({
+          kind: 'snapshot',
+          label: `${snapshot.run.runDate} 일일 스냅샷`,
+          asOf: payload.meta?.asOf || snapshot.run.updatedAt,
+          warning: snapshot.run.warning,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          setResultOrigin(null);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingSnapshot(false);
+      });
+
+    return () => controller.abort();
+  }, [universe]);
 
   const startScan = async () => {
     if (isScanning) return;
@@ -170,6 +246,7 @@ export default function MomentumScannerPage() {
       }
 
       setResults(allResults);
+      setResultOrigin({ kind: 'live', label: '실시간 재스캔', asOf: new Date().toISOString() });
       setScanStage(allErrors.length > 0 ? `완료 · 실패 ${allErrors.length}건` : '완료');
     } catch (err: unknown) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -190,6 +267,41 @@ export default function MomentumScannerPage() {
     setScanStage('중단됨');
   };
 
+  const recalculateResult = async (target: MomentumDrilldownResult) => {
+    try {
+      const response = await fetch('/api/scanner/momentum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ ticker: target.ticker, exchange: target.exchange }] }),
+      });
+      const payload = await response.json() as { results?: MomentumApiResult[]; message?: string };
+      const row = payload.results?.[0];
+      if (!response.ok || !row?.success || !row.data) {
+        throw new Error(row?.error || payload.message || '단일 종목 재계산에 실패했습니다.');
+      }
+      const updated: SurgeResult = {
+        ticker: row.ticker,
+        exchange: target.exchange,
+        currentPrice: row.data.currentPrice ?? null,
+        metrics: {
+          rvol: row.data.rvol,
+          rawRvol: row.data.rawRvol,
+          roc: row.data.roc,
+          avgVolume20d: row.data.avgVolume20d,
+          currentVolume: row.data.currentVolume,
+          estimatedVolume: row.data.estimatedVolume,
+          grade: row.data.grade,
+          isIntraday: row.data.isIntraday,
+        },
+      };
+      setResults((current) => current.map((item) => item.ticker === updated.ticker ? updated : item));
+      setSelectedResult(updated);
+      setResultOrigin({ kind: 'live', label: `${updated.ticker} 단일 재계산`, asOf: new Date().toISOString() });
+    } catch (error) {
+      setScanFatalError(error instanceof Error ? error.message : '단일 종목 재계산에 실패했습니다.');
+    }
+  };
+
   const filteredAndSorted = useMemo(() => {
     let filtered = results;
     if (filter === 'explosive') filtered = results.filter((r) => r.metrics.grade === 'EXPLOSIVE');
@@ -207,6 +319,19 @@ export default function MomentumScannerPage() {
 
   return (
     <div className="space-y-6">
+      {(isLoadingSnapshot || resultOrigin) && (
+        <section
+          data-testid="momentum-data-origin"
+          className="flex flex-col gap-2 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-sky-300" />
+            <span>{isLoadingSnapshot ? '최신 일일 스냅샷 확인 중' : `${resultOrigin?.label} · ${resultOrigin ? new Date(resultOrigin.asOf).toLocaleString('ko-KR') : ''}`}</span>
+          </div>
+          {resultOrigin?.kind === 'snapshot' && <span className="text-xs text-sky-200/70">전체 재스캔 없이 즉시 표시</span>}
+          {resultOrigin?.warning && <span className="text-xs text-amber-200">후속 Top5 분석 경고 · 후보 데이터는 정상</span>}
+        </section>
+      )}
       {hasIntraday && (
         <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 flex items-center gap-3 text-sm text-indigo-300">
           <Activity className="w-5 h-5 flex-shrink-0" />
@@ -394,6 +519,10 @@ export default function MomentumScannerPage() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                       className={`relative p-5 rounded-2xl border bg-slate-900 overflow-hidden group transition-colors border-slate-800 ${gl.styles.groupHover}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedResult(item)}
+                      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedResult(item); }}
                     >
                       <div className="flex justify-between items-start mb-4">
                         <div>
@@ -453,7 +582,7 @@ export default function MomentumScannerPage() {
                     {filteredAndSorted.map((item) => {
                       const gl = gradeLabel(item.metrics.grade);
                       return (
-                        <tr key={item.ticker} className="hover:bg-slate-800/50 transition-colors">
+                        <tr key={item.ticker} className="cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setSelectedResult(item)}>
                           <td className="px-6 py-4 font-bold text-white">{item.ticker}</td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${gl.styles.bg} ${gl.styles.text} border ${gl.styles.border}`}>
@@ -481,6 +610,13 @@ export default function MomentumScannerPage() {
             )
           )}
         </>
+      )}
+      {selectedResult && (
+        <MomentumDrilldownModal
+          result={selectedResult}
+          onClose={() => setSelectedResult(null)}
+          onRecalculate={recalculateResult}
+        />
       )}
     </div>
   );

@@ -9,11 +9,11 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import { buildReviewStatsSummary, filterTradesByPeriod, buildEquityCurveData, type EquityCurvePeriod } from '@/lib/review-stats';
 import EquityCurve from './EquityCurve';
 
@@ -115,7 +115,7 @@ export default function ReviewStatsDashboard({
         {stats.mistakeTags.length > 0 ? (
           <div className="flex flex-1 flex-col gap-5">
             <div className="h-[290px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <StableResponsiveContainer width="100%" height="100%" initialHeight={290}>
                 <BarChart data={chartData} margin={{ top: 10, right: 8, left: -22, bottom: 18 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis
@@ -147,7 +147,7 @@ export default function ReviewStatsDashboard({
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
+              </StableResponsiveContainer>
             </div>
 
             <div className="flex flex-wrap gap-2">

@@ -12,6 +12,7 @@ import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/ma
 import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
 import { normalizeRiskStrategy } from '@/lib/finance/core/risk-policy';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
+import { buildFreshnessMeta } from '@/lib/data/freshness';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
@@ -111,6 +112,13 @@ function getYahooFormattedTicker(ticker: string, exchange: string) {
 
 function marketForExchange(exchange: string) {
   return exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KR' as const : 'US' as const;
+}
+
+function priceDateToIso(value: string | undefined) {
+  if (!value) return new Date().toISOString();
+  if (/^\d{8}$/.test(value)) return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00Z`;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
 function isKoreanExchange(exchange: string) {
@@ -360,15 +368,15 @@ export async function GET(request: Request) {
       return NextResponse.json({
         ...mergedCached,
         data: mergedCached,
-        meta: {
-          asOf: new Date().toISOString(),
+        meta: buildFreshnessMeta({
+          observedAt: priceDateToIso(mergedCached.priceData.at(-1)?.date),
           source: mergedCached.providerUsed,
           provider: mergedCached.providerUsed,
           delay: 'EOD',
           fallbackUsed: mergedCached.warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS') || warning.includes('Toss')),
           warnings: mergedCached.warnings,
-          providerAttempts: mergedCached.providerAttempts || [],
-        },
+          modelVersion: 'market-analysis-v1',
+        }),
       });
     }
 
@@ -476,15 +484,15 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ...response,
       data: response,
-      meta: {
-        asOf: new Date().toISOString(),
+      meta: buildFreshnessMeta({
+        observedAt: priceDateToIso(data.at(-1)?.date),
         source: providerUsed,
         provider: providerUsed,
         delay: 'EOD',
         fallbackUsed: warnings.some((warning) => warning.includes('fallback') || warning.includes('Yahoo') || warning.includes('KIS') || warning.includes('Toss')),
         warnings,
-        providerAttempts,
-      },
+        modelVersion: 'market-analysis-v1',
+      }),
     });
   } catch (error: unknown) {
     const providerAttempts = (error as { providerAttempts?: ProviderAttempt[] }).providerAttempts || [];

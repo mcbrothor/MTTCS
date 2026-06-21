@@ -188,6 +188,48 @@ export async function setupScannerMock(page: Page): Promise<void> {
     const url = new URL(request.url());
     const pathname = url.pathname;
 
+    if (pathname === '/api/scanner/snapshots' && request.method() === 'GET') {
+      const universe = url.searchParams.get('universe') || 'NASDAQ100';
+      const candidates = [
+        { ticker: 'NVDA', grade: 'EXPLOSIVE', score: 94, price: 130.25, rvol: 3.8, roc: 6.2 },
+        { ticker: 'META', grade: 'BREAKOUT', score: 82, price: 510.5, rvol: 2.4, roc: 3.7 },
+      ].map((item, index) => ({
+        source: 'momentum', universe, ticker: item.ticker, exchange: 'NAS', name: `${item.ticker} Corp`,
+        score: item.score, grade: item.grade, rank: index + 1, price: item.price, priceAsOf: '2026-06-20',
+        reason: `${item.grade} momentum`,
+        metrics: { grade: item.grade, rvol: item.rvol, roc: item.roc, raw_rvol: item.rvol, estimated_volume: 4_000_000, is_intraday: false },
+        raw: { grade: item.grade, rvol: item.rvol, rawRvol: item.rvol, roc: item.roc, avgVolume20d: 1_000_000, currentVolume: 4_000_000, estimatedVolume: 4_000_000, isIntraday: false },
+      }));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            run: { id: 'run-e2e', runDate: '2026-06-20', status: 'completed', completedAt: '2026-06-20T00:00:00Z', updatedAt: '2026-06-20T00:00:00Z', warning: null },
+            candidates,
+          },
+          meta: { source: 'daily_screener_candidates', provider: 'Supabase', delay: 'EOD', asOf: '2026-06-20T00:00:00Z', warnings: [], fallbackUsed: false },
+        }),
+      });
+      return;
+    }
+
+    if (pathname === '/api/scanner/momentum' && request.method() === 'POST') {
+      const body = request.postDataJSON() as { items?: { ticker: string }[] };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          results: (body.items || []).map((item) => ({
+            ticker: item.ticker,
+            success: true,
+            data: { rvol: 3.9, rawRvol: 3.9, roc: 6.4, avgVolume20d: 1_000_000, currentVolume: 4_100_000, estimatedVolume: 4_100_000, grade: 'EXPLOSIVE', isIntraday: false, currentPrice: 131 },
+          })),
+        }),
+      });
+      return;
+    }
+
     if (pathname === '/api/scanner/universe') {
       const universe = url.searchParams.get('universe') || 'NASDAQ100';
       await route.fulfill({

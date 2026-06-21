@@ -38,6 +38,7 @@ try {
 export default defineConfig({
   testDir: path.join(__dirname, 'tests', 'e2e'),
   testMatch: '**/*.spec.ts',
+  globalSetup: path.join(__dirname, 'tests', 'e2e', 'global-setup.ts'),
 
   /* Maximum time one test can run */
   timeout: 60_000,
@@ -61,6 +62,7 @@ export default defineConfig({
   /* Shared settings for all projects */
   use: {
     baseURL: e2eBaseUrl,
+    storageState: path.join(__dirname, 'playwright', '.auth', 'user.json'),
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

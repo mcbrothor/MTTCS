@@ -1,5 +1,6 @@
 import Card from '@/components/ui/Card';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
+import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 
 interface DisciplineChartProps {
   highDiscipline: { winRate: number; avgPnL: number; count: number };
@@ -37,7 +38,7 @@ export default function DisciplineChart({ highDiscipline, lowDiscipline }: Disci
     <Card className="flex h-[400px] flex-col">
       <h3 className="mb-6 text-lg font-bold text-white">규율 점수별 승률</h3>
       <div className="min-h-0 w-full flex-1">
-        <ResponsiveContainer width="100%" height="100%">
+        <StableResponsiveContainer width="100%" height="100%" initialHeight={320}>
           <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
             <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
@@ -53,7 +54,7 @@ export default function DisciplineChart({ highDiscipline, lowDiscipline }: Disci
               ))}
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </StableResponsiveContainer>
       </div>
     </Card>
   );

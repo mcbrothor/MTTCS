@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const tests = [
+  'tests/immediate-features.test.mjs',
   'tests/calculations.test.mjs',
   'tests/macro-reliability.test.mjs',
   'tests/model-governance.test.mjs',
@@ -24,6 +25,7 @@ const tests = [
   'tests/scanner-presentation.test.mjs',
   'tests/scanner-telegram.test.mjs',
   'tests/daily-screeners.test.mjs',
+  'tests/daily-scanner-snapshot.test.mjs',
   'tests/daily-screener-cron.test.mjs',
   'tests/recommendation-performance.test.mjs',
   'tests/recommendation-weekly-report.test.mjs',

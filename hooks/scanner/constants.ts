@@ -3,6 +3,7 @@ import type { MacroTrend, ScannerResult, ScannerUniverse, ScannerUniverseRespons
 export const TOTAL_EQUITY_FOR_SCAN = '50000';
 export const RISK_PERCENT_FOR_SCAN = '1';
 export const SCANNER_STORAGE_PREFIX = 'mtn:scanner-snapshot:v3:';
+export const SCANNER_PREVIOUS_STORAGE_PREFIX = 'mtn:scanner-previous:v1:';
 export const LAST_UNIVERSE_STORAGE_KEY = 'mtn:scanner:last-universe:v1';
 export const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
 

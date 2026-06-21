@@ -15,8 +15,15 @@ const TEST_PASSWORD = 'TestPassword123!';
  * After successful login, waits for redirect to the command center.
  */
 export async function login(page: Page): Promise<void> {
+  const sessionResponse = await page.request.get('/api/auth/session');
+  const session = await sessionResponse.json().catch(() => null) as { authenticated?: boolean } | null;
+  if (session?.authenticated) {
+    await page.goto('/');
+    return;
+  }
+
   await page.goto('/login');
-  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByTestId('login-form')).toHaveAttribute('data-hydrated', 'true');
 
   // Fill credentials
   const usernameInput = page.locator('input[autoComplete="username"], input').first();
@@ -24,6 +31,8 @@ export async function login(page: Page): Promise<void> {
 
   await usernameInput.fill(TEST_USERNAME);
   await passwordInput.fill(TEST_PASSWORD);
+  await expect(usernameInput).toHaveValue(TEST_USERNAME);
+  await expect(passwordInput).toHaveValue(TEST_PASSWORD);
 
   // Submit
   const submitButton = page.locator('button[type="submit"], button:has-text("로그인"), button:has-text("Login")').first();
@@ -38,7 +47,7 @@ export async function login(page: Page): Promise<void> {
  */
 export async function loginWith(page: Page, username: string, password: string): Promise<void> {
   await page.goto('/login');
-  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByTestId('login-form')).toHaveAttribute('data-hydrated', 'true');
 
   const usernameInput = page.locator('input[autoComplete="username"], input').first();
   const passwordInput = page.locator('input[autoComplete="current-password"], input[type="password"]').first();
