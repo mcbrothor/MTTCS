@@ -12,7 +12,7 @@ const client = createClient(url, key, { auth: { persistSession: false } });
 
 const { data: runs, error } = await client
   .from('daily_screener_runs')
-  .select('id, run_date, created_at, completed_at, status, top5_result')
+  .select('id, run_date, created_at, completed_at, status, telegram_sent_at, top5_result')
   .eq('status', 'completed')
   .order('run_date', { ascending: true });
 if (error) throw error;
@@ -63,6 +63,7 @@ for (const run of runs || []) {
         model: result.model || 'unknown',
         result: { markets: result.markets, reportMarkdown: result.report_markdown || '', rawResponse: result.raw_response || '' },
         candidates,
+        telegramSentAt: run.telegram_sent_at,
       });
       report.publications += publications.length;
     }

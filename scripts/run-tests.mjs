@@ -27,6 +27,7 @@ const tests = [
   'tests/daily-screeners.test.mjs',
   'tests/daily-scanner-snapshot.test.mjs',
   'tests/daily-screener-cron.test.mjs',
+  'tests/recommendation-persistence.test.mjs',
   'tests/recommendation-performance.test.mjs',
   'tests/recommendation-summary.test.mjs',
   'tests/recommendation-weekly-report.test.mjs',

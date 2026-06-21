@@ -11,8 +11,15 @@ interface PersistRecommendationInput {
   model: string;
   result: DailyMarketTop10Result;
   candidates: DailyScreenerCandidate[];
+  telegramSentAt?: string | null;
   marketContext?: Record<string, unknown>;
   marketContextByMarket?: Partial<Record<'US' | 'KR', Record<string, unknown>>>;
+}
+
+export function initialTelegramDelivery(sentAt?: string | null) {
+  return sentAt
+    ? { telegram_status: 'SENT' as const, telegram_sent_at: sentAt }
+    : { telegram_status: 'PENDING' as const, telegram_sent_at: null };
 }
 
 function validateMarketRows(result: DailyMarketTop10Result, market: 'US' | 'KR') {
@@ -80,6 +87,7 @@ export async function persistRecommendationPublications(input: PersistRecommenda
         prompt_version: 'daily-market-top10-2026.06-v1',
         llm_provider: input.provider,
         llm_model: input.model,
+        ...initialTelegramDelivery(input.telegramSentAt),
         market_context: input.marketContextByMarket?.[market] || input.marketContext || {},
       })
       .select('*')
