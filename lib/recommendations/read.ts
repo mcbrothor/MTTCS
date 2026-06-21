@@ -17,6 +17,66 @@ function median(values: number[]) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+export interface FrequentRecommendationPickInput {
+  ticker: string;
+  name: string | null;
+  rank: number;
+  runDate: string;
+}
+
+export function summarizeFrequentRecommendationPicks(rows: FrequentRecommendationPickInput[], limit = 5) {
+  const grouped = new Map<string, FrequentRecommendationPickInput[]>();
+  for (const row of rows) {
+    const ticker = row.ticker.trim().toUpperCase();
+    if (!ticker) continue;
+    grouped.set(ticker, [...(grouped.get(ticker) || []), { ...row, ticker }]);
+  }
+
+  return [...grouped.entries()]
+    .map(([ticker, picks]) => ({
+      ticker,
+      name: [...picks].sort((a, b) => b.runDate.localeCompare(a.runDate)).find((pick) => pick.name)?.name || null,
+      recommendationCount: picks.length,
+      averageRank: round(picks.reduce((sum, pick) => sum + Number(pick.rank), 0) / picks.length, 1),
+      latestRunDate: picks.map((pick) => pick.runDate).sort().at(-1) as string,
+    }))
+    .sort((a, b) => b.recommendationCount - a.recommendationCount
+      || a.averageRank - b.averageRank
+      || b.latestRunDate.localeCompare(a.latestRunDate)
+      || a.ticker.localeCompare(b.ticker))
+    .slice(0, Math.max(0, limit));
+}
+
+export async function readFrequentRecommendationPicks(input: {
+  client: SupabaseClient;
+  market: RecommendationMarket;
+  asOf?: string;
+  days?: number;
+  limit?: number;
+}) {
+  const days = Math.max(1, Math.min(90, input.days || 14));
+  const to = input.asOf || new Date().toISOString().slice(0, 10);
+  const fromDate = new Date(`${to}T00:00:00.000Z`);
+  fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
+  const from = fromDate.toISOString().slice(0, 10);
+  const { data, error } = await input.client
+    .from('recommendation_picks')
+    .select('ticker, name, rank, recommendation_publications!inner(run_date, market, is_official, status)')
+    .eq('recommendation_publications.market', input.market)
+    .eq('recommendation_publications.is_official', true)
+    .eq('recommendation_publications.status', 'PUBLISHED')
+    .gte('recommendation_publications.run_date', from)
+    .lte('recommendation_publications.run_date', to)
+    .limit(1000);
+  if (error) throw error;
+
+  const rows = (data || []).map((row) => {
+    const publication = row.recommendation_publications as unknown as { run_date: string };
+    return { ticker: row.ticker, name: row.name, rank: row.rank, runDate: publication.run_date };
+  });
+  return { from, to, picks: summarizeFrequentRecommendationPicks(rows, input.limit || 5) };
+}
+
 interface PerformanceReadRow {
   id: string;
   horizon: RecommendationHorizon;

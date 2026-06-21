@@ -18,6 +18,17 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByText('+3.50%')).toBeVisible();
   });
 
+  test('REC-09: 최근 2주 추천 빈도 상위 5종목 표시', async ({ page }) => {
+    await page.goto('/recommendations');
+    const summary = page.getByRole('region', { name: '최근 2주 추천 빈도 Top 5' });
+
+    await expect(summary).toBeVisible();
+    await expect(summary.getByText('2026-06-08 ~ 2026-06-21 공식 추천 기준')).toBeVisible();
+    await expect(summary.getByRole('row')).toHaveCount(6);
+    await expect(summary.getByRole('row').nth(1)).toContainText('NVDA');
+    await expect(summary.getByRole('row').nth(1)).toContainText('5회');
+  });
+
   test('REC-07: 첫 진입 시가와 최신 평가가격 표시', async ({ page }) => {
     await page.goto('/recommendations');
     const row = page.getByRole('row').filter({ hasText: '1. NVDA' });
@@ -53,7 +64,9 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
 
   test('REC-06: 성과 지표 헤더에 계산 기준 툴팁 표시', async ({ page }) => {
     await page.goto('/recommendations');
-    const table = page.getByRole('table').first();
+    const table = page.getByRole('table').filter({
+      has: page.getByRole('button', { name: 'MFE / MAE 계산 기준' }),
+    });
 
     await table.getByRole('button', { name: '초과수익 계산 기준' }).hover();
     await expect(page.locator('[role="tooltip"]:visible').getByText('종목 수익률 - 동일 기간 벤치마크 수익률')).toBeVisible();

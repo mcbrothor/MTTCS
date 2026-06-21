@@ -35,7 +35,18 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
   await page.route(/\/api\/recommendations(?:\/|\?|$)/, async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     let data: Record<string, unknown>;
-    if (pathname.endsWith('/metrics')) {
+    if (pathname.endsWith('/summary')) {
+      data = {
+        from: '2026-06-08', to: '2026-06-21',
+        picks: [
+          { ticker: 'NVDA', name: 'NVIDIA', recommendationCount: 5, averageRank: 2.4, latestRunDate: '2026-06-19' },
+          { ticker: 'AMAT', name: 'Applied Materials', recommendationCount: 4, averageRank: 3.5, latestRunDate: '2026-06-19' },
+          { ticker: 'MRVL', name: 'Marvell Technology', recommendationCount: 3, averageRank: 1.7, latestRunDate: '2026-06-18' },
+          { ticker: 'AVGO', name: 'Broadcom', recommendationCount: 3, averageRank: 4.3, latestRunDate: '2026-06-17' },
+          { ticker: 'META', name: 'Meta Platforms', recommendationCount: 2, averageRank: 2.0, latestRunDate: '2026-06-16' },
+        ],
+      };
+    } else if (pathname.endsWith('/metrics')) {
       data = {
         horizons: [
           { horizon: 'D5', sampleSize: 40, positiveHitRate: 62.5, benchmarkWinRate: 57.5, averageReturnPct: 2.4, medianReturnPct: 1.8, averageExcessReturnPct: 0.9, averageMfePct: 5.2, averageMaePct: -2.1 },

@@ -78,6 +78,14 @@ interface DiagnosticFinding {
   analyzed_at: string;
 }
 
+interface FrequentPick {
+  ticker: string;
+  name: string | null;
+  recommendationCount: number;
+  averageRank: number;
+  latestRunDate: string;
+}
+
 const CAUSE_LABEL: Record<string, string> = {
   MARKET_REGIME: '시장 환경',
   SELECTION: '종목 선택',
@@ -153,6 +161,7 @@ function RecommendationsContent() {
   const endpoint = view === 'history'
     ? `/api/recommendations?market=${market}&limit=30${dateRange}`
     : `/api/recommendations/${view}?market=${market}${view === 'metrics' ? dateRange : ''}`;
+  const summaryEndpoint = `/api/recommendations/summary?market=${market}`;
   const [requestState, setRequestState] = useState<{ endpoint: string | null; data: unknown; error: string | null }>({
     endpoint: null,
     data: null,
@@ -161,6 +170,12 @@ function RecommendationsContent() {
   const loading = requestState.endpoint !== endpoint;
   const data = loading ? null : requestState.data;
   const error = loading ? null : requestState.error;
+  const [summaryState, setSummaryState] = useState<{ endpoint: string | null; data: unknown; error: string | null }>({
+    endpoint: null,
+    data: null,
+    error: null,
+  });
+  const summaryLoading = summaryState.endpoint !== summaryEndpoint;
 
   const hrefFor = (next: { market?: Market; view?: View; date?: string | null }) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -188,6 +203,21 @@ function RecommendationsContent() {
     return () => controller.abort();
   }, [endpoint]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(summaryEndpoint, { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(payload?.message || '추천 빈도 요약을 불러오지 못했습니다.');
+        setSummaryState({ endpoint: summaryEndpoint, data: payload?.data || null, error: null });
+      })
+      .catch((requestError) => {
+        if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+        setSummaryState({ endpoint: summaryEndpoint, data: null, error: requestError instanceof Error ? requestError.message : '추천 빈도 요약을 불러오지 못했습니다.' });
+      });
+    return () => controller.abort();
+  }, [summaryEndpoint]);
+
   return (
     <div className="space-y-6 pb-12">
       <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
@@ -208,6 +238,12 @@ function RecommendationsContent() {
         가격수익률 기준이며 배당·세금·수수료·슬리피지는 포함하지 않습니다. 현재 성과는 가장 최근 거래일 종가 기준이며, D5·D20·D60은 진입일 이후 해당 거래일 수가 모두 경과해야 확정됩니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
         <span className="mt-1 block text-sky-200/70">초과수익 = 종목 수익률 - 같은 진입일·평가일의 벤치마크 수익률입니다. NASDAQ100은 ^NDX, S&amp;P500은 ^GSPC, KOSPI200은 ^KS200, KOSDAQ150은 ^KQ150을 사용합니다.</span>
       </div>
+
+      <FrequentPicksSummary
+        data={summaryLoading ? null : summaryState.data as { from?: string; to?: string; picks?: FrequentPick[] } | null}
+        loading={summaryLoading}
+        error={summaryLoading ? null : summaryState.error}
+      />
 
       {view === 'history' && (
         <section aria-label="추천일 필터" className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:flex-row sm:items-end sm:justify-between">
@@ -250,6 +286,38 @@ function RecommendationsContent() {
         <DiagnosticsView data={data as { findings?: DiagnosticFinding[]; causeSummary?: Array<{ causeCode: string; count: number; critical: number; confirmed: number }> } | null} />
       )}
     </div>
+  );
+}
+
+function FrequentPicksSummary({ data, loading, error }: {
+  data: { from?: string; to?: string; picks?: FrequentPick[] } | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const picks = data?.picks || [];
+  return (
+    <section aria-labelledby="frequent-picks-title" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
+      <div className="border-b border-slate-800 px-4 py-3">
+        <h2 id="frequent-picks-title" className="font-bold text-white">최근 2주 추천 빈도 Top 5</h2>
+        <p className="mt-1 text-xs text-slate-500">{data?.from && data?.to ? `${data.from} ~ ${data.to} 공식 추천 기준` : '시장별 공식 추천 기준'}</p>
+      </div>
+      {loading ? (
+        <div className="flex min-h-28 items-center justify-center"><LoadingSpinner size="sm" /></div>
+      ) : error ? (
+        <p role="alert" className="px-4 py-5 text-sm text-rose-300">{error}</p>
+      ) : picks.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위</th><th>종목</th><th>추천 횟수</th><th>평균 추천 순위</th><th>최근 추천일</th></tr></thead>
+            <tbody className="divide-y divide-slate-800/70">
+              {picks.map((pick, index) => <tr key={pick.ticker} className="text-slate-300"><td className="px-4 py-3 font-mono text-slate-500">{index + 1}</td><td className="py-3"><span className="font-bold text-white">{pick.ticker}</span><span className="ml-2 text-slate-500">{pick.name || '-'}</span></td><td className="py-3 font-mono font-semibold text-emerald-300">{pick.recommendationCount}회</td><td className="py-3 font-mono">{pick.averageRank.toFixed(1)}위</td><td className="py-3 font-mono text-slate-400">{pick.latestRunDate}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="px-4 py-5 text-sm text-slate-500">최근 2주간 저장된 공식 추천이 없습니다.</p>
+      )}
+    </section>
   );
 }
 
