@@ -348,6 +348,7 @@ function normalizeQullamaggieCandidate(universe: ScannerUniverse, item: ScannerC
     return_3m_pct: numberOrNull(data.return3mPct),
     distance_to_pivot_pct: numberOrNull(data.distanceToPivotPct),
     rvol20: numberOrNull(data.rvol20),
+    dollar_volume_20d: numberOrNull(data.dollarVolume20d),
     stop_pct: numberOrNull(data.stopPct),
     pivot_price: numberOrNull(data.pivotPrice),
   };
