@@ -1,5 +1,5 @@
 import { getKisKospiMarketCapRanking } from '../providers/kis-api';
-import { rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
+import { rankEligibleKoreaCommonStocks, rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
 import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '../../../types/index.ts';
 
 type KoreaMarket = 'KOSPI' | 'KOSDAQ';
@@ -361,7 +361,7 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
   let ranking: KoreaRankingItem[] = [];
 
   try {
-    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 200);
+    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 260);
   } catch (error) {
     warnings.push(error instanceof Error ? `Naver Finance market-cap ranking failed: ${error.message}` : 'Naver Finance market-cap ranking failed.');
   }
@@ -383,7 +383,7 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
     }
   }
 
-  const ranked = rankKoreaMarketCapItems(ranking, 200);
+  const ranked = rankEligibleKoreaCommonStocks(ranking, 200);
   const items = toKoreaConstituents(ranked, 'KOSPI');
 
   if (items.length === 0) {
@@ -404,8 +404,8 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
 }
 
 async function fetchKosdaq150(): Promise<ScannerUniverseResponse> {
-  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 150);
-  const ranked = rankKoreaMarketCapItems(ranking, 150);
+  const ranking = await fetchNaverKoreaMarketCapRanking('KOSDAQ', 200);
+  const ranked = rankEligibleKoreaCommonStocks(ranking, 150);
   const items = toKoreaConstituents(ranked, 'KOSDAQ');
 
   if (items.length === 0) {
@@ -425,8 +425,8 @@ async function fetchKosdaq150(): Promise<ScannerUniverseResponse> {
 
 
 export async function getKoreaMarketCapConstituents(market: KoreaMarket, limit: number): Promise<ScannerConstituent[]> {
-  const ranking = await fetchNaverKoreaMarketCapRanking(market, limit);
-  const ranked = rankKoreaMarketCapItems(ranking, limit);
+  const ranking = await fetchNaverKoreaMarketCapRanking(market, Math.ceil(limit * 1.35));
+  const ranked = rankEligibleKoreaCommonStocks(ranking, limit);
   return toKoreaConstituents(ranked, market);
 }
 

@@ -14,6 +14,7 @@ interface PersistRecommendationInput {
   telegramSentAt?: string | null;
   marketContext?: Record<string, unknown>;
   marketContextByMarket?: Partial<Record<'US' | 'KR', Record<string, unknown>>>;
+  markets?: ('US' | 'KR')[];
 }
 
 export function initialTelegramDelivery(sentAt?: string | null) {
@@ -60,7 +61,7 @@ function pickCandidateSnapshot(pick: DailyMarketTop10Result['markets']['US'][num
 
 export async function persistRecommendationPublications(input: PersistRecommendationInput) {
   const publications = [];
-  for (const market of ['US', 'KR'] as const) {
+  for (const market of input.markets || (['US', 'KR'] as const)) {
     const picks = validateMarketRows(input.result, market);
     const { data: existing, error: existingError } = await input.client
       .from('recommendation_publications')

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { normalizeNasdaqRows } from '../lib/finance/market/scanner-normalizers.ts';
-import { rankKoreaMarketCapItems } from '../lib/finance/market/korea-market-cap-ranking.ts';
+import { isEligibleKoreaCommonStock, rankEligibleKoreaCommonStocks, rankKoreaMarketCapItems } from '../lib/finance/market/korea-market-cap-ranking.ts';
 import {
   applyScannerReviewPoolRankings,
   evaluateScannerRecommendation,
@@ -42,6 +42,19 @@ console.log('=== Scanner Universe Tests ===\n');
   assert.equal(items[0].priceAsOf, 'Apr 14, 2026 12:58 PM', 'keeps quote timestamp');
   assert.equal(items[0].priceSource, 'Nasdaq delayed quote', 'keeps price source');
   console.log('OK Nasdaq 100 rows normalize and sort correctly');
+}
+
+{
+  const rows = [
+    { ticker: '005930', name: '삼성전자', marketCap: 500, currentPrice: 1, source: 'test' },
+    { ticker: '005935', name: '삼성전자우', marketCap: 100, currentPrice: 1, source: 'test' },
+    { ticker: '069500', name: 'KODEX 200', marketCap: 90, currentPrice: 1, source: 'test' },
+    { ticker: '123456', name: '테스트제1호스팩', marketCap: 80, currentPrice: 1, source: 'test' },
+    { ticker: '000660', name: 'SK하이닉스', marketCap: 400, currentPrice: 1, source: 'test' },
+  ];
+  assert.equal(isEligibleKoreaCommonStock(rows[0]), true);
+  assert.deepEqual(rankEligibleKoreaCommonStocks(rows).map((item) => item.ticker), ['005930', '000660']);
+  console.log('OK Korea fund, SPAC, and preferred share rows are excluded');
 }
 
 {

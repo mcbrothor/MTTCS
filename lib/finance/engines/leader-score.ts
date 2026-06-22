@@ -310,6 +310,7 @@ export interface LeaderAnalysisResult {
   regressionR2: number;
   regressionSlope: number;
   dollarVolume20d: number;
+  return5dPct: number | null;
   liquidityVelocity: number;
   trendIntensityIndex: number;
   // 구형 호환용 RS 지표
@@ -357,6 +358,10 @@ export function analyzeLeaderScore(input: LeaderAnalysisInput): LeaderAnalysisRe
   const recent20 = data.slice(-Math.min(len, 20));
   const sumVol20 = recent20.reduce((sum, d) => sum + d.close * d.volume, 0);
   const dollarVolume20d = recent20.length > 0 ? round(sumVol20 / recent20.length, 0) : 0;
+  const return5dBase = data.at(-6)?.close;
+  const return5dPct = return5dBase && return5dBase > 0 && data.at(-1)?.close
+    ? round(((data.at(-1)!.close / return5dBase) - 1) * 100, 2)
+    : null;
 
   // 유동성 가속도 산출 (최근 5일 대금 평균 / 60일 대금 평균)
   const recent5 = data.slice(-Math.min(len, 5));
@@ -419,6 +424,7 @@ export function analyzeLeaderScore(input: LeaderAnalysisInput): LeaderAnalysisRe
     regressionR2,
     regressionSlope,
     dollarVolume20d,
+    return5dPct,
     liquidityVelocity,
     trendIntensityIndex,
     // 구형 호환용 데이터

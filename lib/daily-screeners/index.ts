@@ -267,14 +267,21 @@ function normalizeCanslimCandidate(universe: ScannerUniverse, result: CanslimSca
 }
 
 function normalizeLeaderCandidate(universe: ScannerUniverse, item: ScannerConstituent, data: Record<string, unknown>): DailyScreenerCandidate {
-  const score = round(clamp(numberOrNull(data.leaderScore) ?? 0));
+  let score = round(clamp(numberOrNull(data.leaderScore) ?? 0));
   const grade = String(data.leaderGrade ?? 'LAGGARD');
+  // 추세 반전 감지: 최근 5일 수익률이 -5% 미만이면 점수 50% 감산
+  // 한국 시장에서 과거 모멘텀 잔상으로 하락 종목이 반복 추천되는 문제 방지
+  const recentReturn = numberOrNull(data.return5dPct);
+  if (recentReturn !== null && recentReturn < -5) {
+    score = round(score * 0.5);
+  }
   const metrics = {
     leader_score: score,
     leader_grade: grade,
     rs_rating: numberOrNull(data.rsRating),
     regression_r2: numberOrNull(data.regressionR2),
     dollar_volume_20d: numberOrNull(data.dollarVolume20d),
+    return_5d_pct: recentReturn,
     trend_intensity_index: numberOrNull(data.trendIntensityIndex),
     benchmark_relative_score: numberOrNull(data.benchmarkRelativeScore),
   };
@@ -300,7 +307,11 @@ function normalizeMomentumCandidate(universe: ScannerUniverse, item: ScannerCons
   const gradeBase = grade === 'EXPLOSIVE' ? 70 : grade === 'BREAKOUT' ? 55 : grade === 'WARM' ? 35 : 0;
   const rvol = numberOrNull(data.rvol) ?? 0;
   const roc = numberOrNull(data.roc) ?? 0;
-  const score = round(clamp(gradeBase + Math.min(18, rvol * 4) + Math.min(12, Math.max(0, roc) * 1.2)));
+  const isKr = universe === 'KOSPI200' || universe === 'KOSDAQ150';
+  // KR momentum: 당일 ROC가 높을수록 고점 추격 리스크 증가 → 페널티 적용
+  const krOverheatPenalty = isKr && roc > 5 ? Math.min(25, (roc - 5) * 3) : 0;
+  const baseScore = gradeBase + Math.min(18, rvol * 4) + Math.min(12, Math.max(0, roc) * 1.2);
+  const score = round(clamp(baseScore - krOverheatPenalty));
   const metrics = {
     grade,
     rvol,
@@ -574,15 +585,25 @@ export function ruleBasedDailyTop5(candidates: DailyScreenerCandidate[]): DailyT
 function aggregateDailyCandidates(candidates: DailyScreenerCandidate[]) {
   const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number }>();
   for (const candidate of candidates) {
-    const key = `${marketForDailyCandidate(candidate)}:${candidate.ticker}`;
+    const market = marketForDailyCandidate(candidate);
+    const key = `${market}:${candidate.ticker}`;
+    // KR momentum 소스: 급등 고점 추격 후 되돌림 리스크가 높아 aggregate 가중치 60% 감산
+    // 성과 분석 결과 KR momentum 적중률 14.3%, 평균수익 -7.24%로 치명적 부진
+    const effectiveScore = market === 'KR' && candidate.source === 'momentum'
+      ? Math.round(candidate.score * 0.4)
+      : candidate.score;
     const current = grouped.get(key);
     if (!current) {
-      grouped.set(key, { best: candidate, sources: new Set([candidate.source]), aggregate: candidate.score });
+      grouped.set(key, { best: candidate, sources: new Set([candidate.source]), aggregate: effectiveScore });
       continue;
     }
     current.sources.add(candidate.source);
-    current.aggregate = Math.max(current.aggregate, candidate.score) + Math.min(16, current.sources.size * 4);
-    if (candidate.score > current.best.score) current.best = candidate;
+    current.aggregate = Math.max(current.aggregate, effectiveScore) + Math.min(16, current.sources.size * 4);
+    if (effectiveScore > (market === 'KR' && current.best.source === 'momentum'
+      ? Math.round(current.best.score * 0.4)
+      : current.best.score)) {
+      current.best = candidate;
+    }
   }
   return grouped;
 }
@@ -655,7 +676,11 @@ export function buildDailyTop5Prompt(input: { runDate: string; candidates: Daily
   ].join('\n');
 }
 
-export function buildDailyMarketTop10Prompt(input: { runDate: string; candidates: DailyScreenerCandidate[] }) {
+export function buildDailyMarketTop10Prompt(input: {
+  runDate: string;
+  candidates: DailyScreenerCandidate[];
+  marketContext?: Partial<Record<DailyScreenerMarket, unknown>>;
+}) {
   const candidateRows = input.candidates.map((candidate) => {
     const metricBits = Object.entries(candidate.metrics)
       .filter(([, value]) => value !== null && value !== undefined && value !== '')
@@ -682,12 +707,14 @@ export function buildDailyMarketTop10Prompt(input: { runDate: string; candidates
     '입력 후보는 스크리너별 Top10 후보 풀입니다. MTN 점수만 재정렬하지 말고, 외부 LLM이 보유하거나 접근 가능한 공개 시장 정보, 최근 뉴스 흐름, 업종/테마 사이클, 실적·밸류에이션 맥락, 유동성/수급 판단을 활용해 후보 간 상대 우위를 고도화하세요.',
     '최신 뉴스, 실시간 가격, 재무 수치, 업종 이벤트를 알고 있거나 확인 가능한 경우 적극 반영하세요. 다만 입력 데이터와 외부 맥락이 충돌하면 그 충돌을 리스크나 confidence에 반영하고, 불확실한 정보는 단정하지 말고 "확인 필요"로 표시하세요.',
     '평가 프레임: 1) 다중 스크리너 교차 포착, 2) 리스크 조정 모멘텀과 추세 지속성, 3) 피벗/진입 위치와 실패 리스크, 4) 거래대금·변동성·과열도, 5) 최신 뉴스/실적/가이던스/섹터 로테이션의 순풍 또는 역풍, 6) 시장별 특성(미국 성장/반도체/AI/대형주, 한국 수급/테마 쏠림/유동성), 7) 단일 섹터·단일 스크리너 집중 완화, 8) 상승 여력 대비 손실 비대칭성.',
+    '한국 시장 특화 주의사항: 1) momentum/RVOL 급등 종목은 고점 추격 후 되돌림 리스크가 매우 높으므로 신중하게 평가하세요. 2) 최근 3일 이상 하락 추세인 종목의 반복 추천을 피하세요. 3) 외국인/기관 수급 방향이 가격과 괴리될 수 있으니 주의하세요. 4) KOSDAQ 소형주는 테마 순환 주기가 짧아 진입 타이밍이 더 중요합니다. ETF·ETN·스팩·우선주는 후보 풀에서 이미 제외됐습니다.',
     '각 종목 reason에는 MTN 내부 근거와 외부 LLM 판단 맥락을 함께 녹여 1문장으로 쓰세요. 단순 score 인용이 아니라 왜 오늘의 같은 시장 후보군 안에서 더 우선인지 설명하세요. risk에는 외부 뉴스/실적/가격 맥락까지 고려한 탈락·하향 트리거를 구체적으로 쓰세요.',
     '투자 조언이 아니라 MTN 스크리너 후보 우선순위 판별입니다.',
     '',
     '필수 JSON shape: {"markets":{"US":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KR":[{"rank":1,"ticker":"005930","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}]},"report_markdown":""}',
     '',
     `run_date: ${input.runDate}`,
+    `market_context: ${JSON.stringify(input.marketContext || {})}`,
     'columns: market, ticker, name, source, universe, score, grade, reason, metrics',
     candidateRows.join('\n'),
   ].join('\n');

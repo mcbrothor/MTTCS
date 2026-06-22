@@ -78,7 +78,9 @@ export function calculateRecommendationPerformance(input: {
   benchmarkBars: RecommendationBar[];
 }): RecommendationPerformanceResult {
   const bars = [...input.bars].sort((a, b) => a.date.localeCompare(b.date));
-  const benchmarkByDate = new Map(input.benchmarkBars.map((bar) => [bar.date, bar]));
+  const benchmarkBars = [...input.benchmarkBars].sort((a, b) => a.date.localeCompare(b.date));
+  const benchmarkByDate = new Map(benchmarkBars.map((bar) => [bar.date, bar]));
+  const barByDate = new Map(bars.map((bar) => [bar.date, bar]));
   const entryIndex = resolveFirstTradableIndex(input.generatedAt, input.market, bars);
   const empty = (status: RecommendationPerformanceResult['status'], message: string | null): RecommendationPerformanceResult => ({
     horizon: input.horizon,
@@ -106,12 +108,19 @@ export function calculateRecommendationPerformance(input: {
     return empty('EXCLUDED', 'Entry or benchmark open price is unavailable.');
   }
 
+  const benchmarkEntryIndex = benchmarkBars.findIndex((bar) => bar.date === entry.date);
+  if (benchmarkEntryIndex < 0) {
+    return empty('EXCLUDED', 'Entry date is not a benchmark trading session.');
+  }
+
   const requestedSessions = HORIZON_SESSIONS[input.horizon];
-  const targetIndex = requestedSessions === null ? bars.length - 1 : entryIndex + requestedSessions;
-  if (targetIndex >= bars.length) {
+  const benchmarkTargetIndex = requestedSessions === null
+    ? benchmarkBars.length - 1
+    : benchmarkEntryIndex + requestedSessions;
+  if (benchmarkTargetIndex >= benchmarkBars.length) {
     return {
       ...empty('PENDING', null),
-      sessionCount: Math.max(0, bars.length - entryIndex - 1),
+      sessionCount: Math.max(0, benchmarkBars.length - benchmarkEntryIndex - 1),
       entryDate: entry.date,
       entryPrice: entry.open,
       benchmarkEntryPrice: benchmarkEntry.open,
@@ -119,13 +128,25 @@ export function calculateRecommendationPerformance(input: {
     };
   }
 
-  const evaluation = bars[targetIndex];
-  const benchmarkEvaluation = benchmarkByDate.get(evaluation.date);
+  const benchmarkEvaluation = benchmarkBars[benchmarkTargetIndex];
+  const evaluation = barByDate.get(benchmarkEvaluation.date);
+  if (!evaluation) {
+    return {
+      ...empty('EXCLUDED', 'Security price is unavailable on the benchmark evaluation date.'),
+      sessionCount: benchmarkTargetIndex - benchmarkEntryIndex,
+      entryDate: entry.date,
+      entryPrice: entry.open,
+      evaluationDate: benchmarkEvaluation.date,
+      benchmarkEntryPrice: benchmarkEntry.open,
+      benchmarkEvaluationPrice: validPrice(benchmarkEvaluation.close) ? benchmarkEvaluation.close : null,
+      qualityStatus: worstQuality(entry.qualityStatus, benchmarkEntry.qualityStatus, benchmarkEvaluation.qualityStatus),
+    };
+  }
   if (!benchmarkEvaluation || !validPrice(evaluation.close) || !validPrice(benchmarkEvaluation.close)) {
     return empty('EXCLUDED', 'Evaluation or benchmark close price is unavailable.');
   }
 
-  const window = bars.slice(entryIndex, targetIndex + 1);
+  const window = bars.filter((bar) => bar.date >= entry.date && bar.date <= evaluation.date);
   const quality = worstQuality(
     ...window.map((bar) => bar.qualityStatus),
     benchmarkEntry.qualityStatus,
@@ -134,7 +155,7 @@ export function calculateRecommendationPerformance(input: {
   if (quality === 'ANOMALY' || quality === 'MISSING') {
     return {
       ...empty('EXCLUDED', 'Price data failed quality validation.'),
-      sessionCount: targetIndex - entryIndex,
+      sessionCount: benchmarkTargetIndex - benchmarkEntryIndex,
       entryDate: entry.date,
       entryPrice: entry.open,
       evaluationDate: evaluation.date,
@@ -148,7 +169,7 @@ export function calculateRecommendationPerformance(input: {
   return {
     horizon: input.horizon,
     status: 'MATURED',
-    sessionCount: targetIndex - entryIndex,
+    sessionCount: benchmarkTargetIndex - benchmarkEntryIndex,
     entryDate: entry.date,
     entryPrice: round(entry.open, 6),
     evaluationDate: evaluation.date,

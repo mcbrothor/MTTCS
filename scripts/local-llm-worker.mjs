@@ -39,6 +39,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
 const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
+const recommendationPrices = jiti('../lib/recommendations/prices.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
 const CODEX_OUTPUT_SCHEMA = process.env.CODEX_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'ib-validation-result.schema.json');
 const DAILY_TOP5_OUTPUT_SCHEMA = process.env.DAILY_TOP5_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'daily-screener-top5.schema.json');
@@ -489,6 +490,11 @@ async function insertDailyCandidates(run, candidates, topBySource) {
 }
 
 async function loadRecommendationMarketContext(runDate) {
+  const isFresh = (calcDate) => {
+    if (!calcDate) return false;
+    const ageDays = Math.floor((Date.parse(`${runDate}T00:00:00Z`) - Date.parse(`${calcDate}T00:00:00Z`)) / 86_400_000);
+    return ageDays >= 0 && ageDays <= 3;
+  };
   const macroQuery = await supabase
     .from('macro_snapshot')
     .select('calc_date, macro_score, regime, vix_level')
@@ -510,8 +516,10 @@ async function loadRecommendationMarketContext(runDate) {
       .maybeSingle();
     if (marketQuery.error) throw marketQuery.error;
     contexts[market] = {
-      market_state: marketQuery.data || null,
-      macro: macroQuery.data || null,
+      market_state: isFresh(marketQuery.data?.calc_date) ? marketQuery.data : null,
+      market_state_quality: marketQuery.data ? (isFresh(marketQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
+      macro: isFresh(macroQuery.data?.calc_date) ? macroQuery.data : null,
+      macro_quality: macroQuery.data ? (isFresh(macroQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
     };
   }
   return contexts;
@@ -556,7 +564,7 @@ async function processDailyScreenerRun(run) {
           errors: Array.isArray(run.scan_summary?.errors) ? run.scan_summary.errors : [],
           maxPerUniverse: run.scan_summary?.max_per_universe ?? maxPerUniverse,
         };
-        topCandidates = dailyScreeners.flattenTopCandidates(topBySource);
+        topCandidates = dailyScreeners.flattenTopCandidatesBySourceMarket(topBySourceMarket);
         resumedFromCandidates = true;
         console.log(`[Worker] ↩️ Resuming Daily Screener run from ${persisted.length} persisted candidates.`);
       }
@@ -569,8 +577,8 @@ async function processDailyScreenerRun(run) {
         universes,
         maxPerUniverse,
       });
-      await insertDailyCandidates(run, scan.candidates, scan.topBySource);
-      topCandidates = dailyScreeners.flattenTopCandidates(scan.topBySource);
+      await insertDailyCandidates(run, scan.candidates, scan.topBySourceMarket);
+      topCandidates = dailyScreeners.flattenTopCandidatesBySourceMarket(scan.topBySourceMarket);
     }
 
     const usTopCandidateCount = topCandidates.filter((candidate) => dailyScreeners.marketForDailyCandidate(candidate) === 'US').length;
@@ -600,7 +608,30 @@ async function processDailyScreenerRun(run) {
       console.log('[Worker] Persisted candidates found; rebuilding market Top10 from saved screener candidates.');
     }
 
-    const prompt = dailyScreeners.buildDailyMarketTop10Prompt({ runDate: run.run_date, candidates: topCandidates });
+    const marketContextByMarket = await loadRecommendationMarketContext(run.run_date);
+    let krSessionOpen = false;
+    try {
+      const krBenchmark = await recommendationPrices.fetchRecommendationBenchmarkBars('^KS200');
+      const latestTradeDate = krBenchmark.bars.at(-1)?.date || null;
+      krSessionOpen = latestTradeDate === run.run_date;
+      marketContextByMarket.KR = {
+        ...marketContextByMarket.KR,
+        benchmark_latest_trade_date: latestTradeDate,
+        publication_eligible: krSessionOpen,
+      };
+    } catch (error) {
+      marketContextByMarket.KR = {
+        ...marketContextByMarket.KR,
+        benchmark_latest_trade_date: null,
+        publication_eligible: false,
+        benchmark_error: compactError(error),
+      };
+    }
+    const prompt = dailyScreeners.buildDailyMarketTop10Prompt({
+      runDate: run.run_date,
+      candidates: topCandidates,
+      marketContext: marketContextByMarket,
+    });
     const top5Attempt = await runDailyTop5Chain(prompt, topCandidates);
     const top5Result = {
       provider: top5Attempt.provider,
@@ -611,7 +642,6 @@ async function processDailyScreenerRun(run) {
       generated_at: new Date().toISOString(),
     };
 
-    const marketContextByMarket = await loadRecommendationMarketContext(run.run_date);
     const recommendationPublications = await recommendationPersistence.persistRecommendationPublications({
       client: supabase,
       runId: run.id,
@@ -630,10 +660,11 @@ async function processDailyScreenerRun(run) {
         scan_summary: scanSummary,
         provider_chain: top5Attempt.chain,
       }])),
+      markets: krSessionOpen ? ['US', 'KR'] : ['US'],
     });
     const publicationByMarket = new Map(recommendationPublications.map((publication) => [publication.market, publication]));
 
-    for (const market of ['US', 'KR']) {
+    for (const market of krSessionOpen ? ['US', 'KR'] : ['US']) {
       const publication = publicationByMarket.get(market);
       try {
         await sendTelegramMessage(dailyScreeners.formatDailyMarketTop10TelegramMessage({

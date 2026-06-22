@@ -71,6 +71,36 @@ assert.equal(prices.normalizeRecommendationBarDate('2026-06-19'), '2026-06-19');
 }
 
 {
+  const benchmark = bars('2026-06-19', 8, 200);
+  const stock = bars('2026-06-19', 8, 100).filter((bar) => bar.date !== '2026-06-26');
+  const result = core.calculateRecommendationPerformance({
+    generatedAt: '2026-06-19T12:00:00.000Z',
+    market: 'US',
+    horizon: 'D5',
+    bars: stock,
+    benchmarkBars: benchmark,
+  });
+  assert.equal(result.status, 'EXCLUDED');
+  assert.equal(result.evaluationDate, '2026-06-26');
+  assert.equal(result.sessionCount, 5);
+  assert.match(result.errorMessage, /benchmark evaluation date/);
+}
+
+{
+  const benchmark = bars('2026-06-19', 5, 200);
+  const stock = bars('2026-06-19', 8, 100);
+  const result = core.calculateRecommendationPerformance({
+    generatedAt: '2026-06-19T12:00:00.000Z',
+    market: 'US',
+    horizon: 'D5',
+    bars: stock,
+    benchmarkBars: benchmark,
+  });
+  assert.equal(result.status, 'PENDING');
+  assert.equal(result.sessionCount, 4);
+}
+
+{
   const stock = bars('2026-06-12', 5, 100);
   const benchmark = bars('2026-06-12', 5, 200);
   const input = {
