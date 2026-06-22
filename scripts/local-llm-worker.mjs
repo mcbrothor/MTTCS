@@ -40,6 +40,9 @@ const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': P
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
 const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
 const recommendationPrices = jiti('../lib/recommendations/prices.ts');
+const krInvestorFlow = jiti('../lib/recommendations/kr-investor-flow.ts');
+const krRiskRanking = jiti('../lib/recommendations/kr-risk-ranking.ts');
+const recommendationConfig = jiti('../lib/recommendations/config.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
 const CODEX_OUTPUT_SCHEMA = process.env.CODEX_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'ib-validation-result.schema.json');
 const DAILY_TOP5_OUTPUT_SCHEMA = process.env.DAILY_TOP5_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'daily-screener-top5.schema.json');
@@ -525,6 +528,26 @@ async function loadRecommendationMarketContext(runDate) {
   return contexts;
 }
 
+async function loadRecentKrRecommendations(runDate) {
+  const from = new Date(`${runDate}T00:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 30);
+  const { data, error } = await supabase
+    .from('recommendation_picks')
+    .select('ticker, signal_price, recommendation_publications!inner(run_date, market, is_official, status)')
+    .eq('recommendation_publications.market', 'KR')
+    .eq('recommendation_publications.is_official', true)
+    .eq('recommendation_publications.status', 'PUBLISHED')
+    .gte('recommendation_publications.run_date', from.toISOString().slice(0, 10))
+    .lt('recommendation_publications.run_date', runDate)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).map((row) => ({
+    ticker: row.ticker,
+    signalPrice: row.signal_price === null ? null : Number(row.signal_price),
+    runDate: row.recommendation_publications.run_date,
+  }));
+}
+
 async function processDailyScreenerRun(run) {
   console.log(`\n[Worker] 🚀 Found pending Daily Screener run ${run.id} (${run.run_date})`);
   const now = new Date().toISOString();
@@ -610,8 +633,9 @@ async function processDailyScreenerRun(run) {
 
     const marketContextByMarket = await loadRecommendationMarketContext(run.run_date);
     let krSessionOpen = false;
+    let krBenchmark = null;
     try {
-      const krBenchmark = await recommendationPrices.fetchRecommendationBenchmarkBars('^KS200');
+      krBenchmark = await recommendationPrices.fetchRecommendationBenchmarkBars('^KS200');
       const latestTradeDate = krBenchmark.bars.at(-1)?.date || null;
       krSessionOpen = latestTradeDate === run.run_date;
       marketContextByMarket.KR = {
@@ -625,6 +649,47 @@ async function processDailyScreenerRun(run) {
         benchmark_latest_trade_date: null,
         publication_eligible: false,
         benchmark_error: compactError(error),
+      };
+    }
+    const krTopTickers = [...new Set(topCandidates
+      .filter((candidate) => dailyScreeners.marketForDailyCandidate(candidate) === 'KR')
+      .map((candidate) => candidate.ticker))].slice(0, 40);
+    const flowFeatures = new Map();
+    const flowSnapshotByTicker = {};
+    if (krSessionOpen) {
+      const flowCollection = await krInvestorFlow.collectKrInvestorFlows({ tickers: krTopTickers, asOfDate: run.run_date });
+      const flowRows = [...flowCollection.results.values()].flat();
+      await krInvestorFlow.upsertKrInvestorFlowDaily(supabase, flowRows);
+      const flowFeatureCutoff = new Date().toISOString();
+      for (const ticker of krTopTickers) {
+        const rows = flowCollection.results.get(ticker) || [];
+        const feature = krInvestorFlow.buildKrInvestorFlowFeatures({
+          ticker,
+          asOfDate: run.run_date,
+          recommendationAt: flowFeatureCutoff,
+          rows,
+          benchmarkTradeDates: krBenchmark?.bars.map((bar) => bar.date) || [],
+        });
+        flowFeatures.set(ticker, feature);
+        flowSnapshotByTicker[ticker] = {
+          investor_flow: {
+            as_of_date: run.run_date,
+            recommendation_at: flowFeatureCutoff,
+            provider: feature.provider,
+            quality: feature.quality,
+            feature,
+            daily: rows.filter((row) => row.tradeDate <= run.run_date).slice(-5),
+            error: flowCollection.errors.get(ticker) || null,
+          },
+        };
+      }
+      marketContextByMarket.KR = {
+        ...marketContextByMarket.KR,
+        investor_flow_provider: flowCollection.provider,
+        investor_flow_coverage: krTopTickers.length
+          ? [...flowFeatures.values()].filter((feature) => feature.quality !== 'MISSING').length / krTopTickers.length
+          : 0,
+        investor_flow_errors: flowCollection.errors.size,
       };
     }
     const prompt = dailyScreeners.buildDailyMarketTop10Prompt({
@@ -660,9 +725,73 @@ async function processDailyScreenerRun(run) {
         scan_summary: scanSummary,
         provider_chain: top5Attempt.chain,
       }])),
-      markets: krSessionOpen ? ['US', 'KR'] : ['US'],
+      markets: ['US'],
+      candidateSnapshotByTicker: flowSnapshotByTicker,
     });
-    const publicationByMarket = new Map(recommendationPublications.map((publication) => [publication.market, publication]));
+    const officialResultByMarket = { US: top5Attempt.result.markets.US };
+    if (krSessionOpen) {
+      const recentRecommendations = await loadRecentKrRecommendations(run.run_date);
+      const marketState = marketContextByMarket.KR?.market_state || 'YELLOW';
+      const riskRanked = krRiskRanking.selectKrRiskAdjustedTop10({
+        candidates: topCandidates,
+        recentRecommendations,
+        marketState,
+        useFlow: false,
+      });
+      const flowRanked = krRiskRanking.selectKrRiskAdjustedTop10({
+        candidates: topCandidates,
+        recentRecommendations,
+        marketState,
+        flowFeatures,
+        useFlow: true,
+      });
+      const allowedPolicies = [
+        recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
+        recommendationConfig.KR_RISK_ENGINE_VERSION,
+        recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION,
+      ];
+      const activePolicy = allowedPolicies.includes(recommendationConfig.KR_RECOMMENDATION_POLICY)
+        ? recommendationConfig.KR_RECOMMENDATION_POLICY
+        : recommendationConfig.RECOMMENDATION_ENGINE_VERSION;
+      const policies = [
+        { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: top5Attempt.result.markets.KR, ranked: null },
+        { engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION, picks: riskRanked.map((row) => row.pick), ranked: riskRanked },
+        { engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION, picks: flowRanked.map((row) => row.pick), ranked: flowRanked },
+      ];
+      for (const policy of policies) {
+        const publication = await recommendationPersistence.persistRecommendationPolicy({
+          client: supabase,
+          runId: run.id,
+          runDate: run.run_date,
+          generatedAt: top5Result.generated_at,
+          provider: top5Attempt.provider,
+          model: top5Attempt.model,
+          result: { ...top5Attempt.result, markets: { ...top5Attempt.result.markets, KR: policy.picks } },
+          candidates: scan.candidates,
+          market: 'KR',
+          engineVersion: policy.engineVersion,
+          isOfficial: policy.engineVersion === activePolicy,
+          marketContextByMarket: { KR: { ...marketContextByMarket.KR, scan_summary: scanSummary } },
+          candidateSnapshotByTicker: policy.ranked
+            ? Object.fromEntries(policy.ranked.map((row) => [row.pick.ticker, {
+              ...flowSnapshotByTicker[row.pick.ticker],
+              deterministic_ranking: {
+                aggregate_score: row.aggregateScore,
+                source_score: row.sourceScore,
+                flow_score: row.flowScore,
+                sources: row.sources,
+                risk_flags: row.riskFlags,
+              },
+            }]))
+            : flowSnapshotByTicker,
+        });
+        recommendationPublications.push(publication);
+        if (policy.engineVersion === activePolicy) officialResultByMarket.KR = policy.picks;
+      }
+    }
+    const publicationByMarket = new Map(recommendationPublications
+      .filter((publication) => publication.is_official)
+      .map((publication) => [publication.market, publication]));
 
     for (const market of krSessionOpen ? ['US', 'KR'] : ['US']) {
       const publication = publicationByMarket.get(market);
@@ -670,7 +799,7 @@ async function processDailyScreenerRun(run) {
         await sendTelegramMessage(dailyScreeners.formatDailyMarketTop10TelegramMessage({
           runDate: run.run_date,
           market,
-          top10: top5Attempt.result.markets[market],
+          top10: officialResultByMarket[market],
           provider: `${top5Attempt.provider} (${top5Attempt.model})`,
         }));
         if (publication) {

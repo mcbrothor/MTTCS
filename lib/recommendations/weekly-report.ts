@@ -4,6 +4,9 @@ interface HorizonSummary {
   positiveHitRate: number | null;
   benchmarkWinRate: number | null;
   averageExcessReturnPct: number | null;
+  averageMaePct?: number | null;
+  lowerDecileReturnPct?: number | null;
+  flowCoveragePct?: number | null;
 }
 function value(value: number | null, suffix = '%') {
   if (value === null || !Number.isFinite(value)) return '-';
@@ -16,6 +19,7 @@ export function formatRecommendationWeeklyReport(input: {
     market: 'US' | 'KR';
     horizons: HorizonSummary[];
     causes: Array<{ causeCode: string; count: number; critical: number; confirmed: number }>;
+    policies?: Array<{ engineVersion: string; d5: HorizonSummary | null }>;
   }>;
   dashboardUrl?: string | null;
 }) {
@@ -27,6 +31,12 @@ export function formatRecommendationWeeklyReport(input: {
     lines.push('', `*${market.market === 'US' ? '미국' : '한국'}*`);
     for (const row of market.horizons) {
       lines.push(`- ${row.horizon}: n=${row.sampleSize} | 플러스 ${value(row.positiveHitRate)} | 시장초과 ${value(row.benchmarkWinRate)} | 평균알파 ${value(row.averageExcessReturnPct)}`);
+    }
+    for (const policy of market.policies || []) {
+      const row = policy.d5;
+      lines.push(row
+        ? `- ${policy.engineVersion}: D5 n=${row.sampleSize} | 알파 ${value(row.averageExcessReturnPct)} | MAE ${value(row.averageMaePct ?? null)} | 하위10% ${value(row.lowerDecileReturnPct ?? null)} | 수급커버 ${value(row.flowCoveragePct ?? null)}`
+        : `- ${policy.engineVersion}: D5 표본 없음`);
     }
     const cause = market.causes.find((item) => item.confirmed > 0 || item.critical > 0) || market.causes[0];
     lines.push(cause

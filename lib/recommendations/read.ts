@@ -94,7 +94,8 @@ interface PerformanceReadRow {
     rank: number;
     confidence: number | string;
     universe: string;
-    recommendation_publications: { id: string; run_date: string; market: RecommendationMarket; engine_version: string };
+    candidate_snapshot: Record<string, unknown>;
+    recommendation_publications: { id: string; run_date: string; market: RecommendationMarket; engine_version: string; is_official: boolean };
   };
 }
 
@@ -135,15 +136,18 @@ async function readPerformanceRows(input: {
   from?: string | null;
   to?: string | null;
   horizon?: RecommendationHorizon | null;
+  official?: boolean;
+  engineVersion?: string | null;
 }) {
   let query = input.client
     .from('recommendation_performance')
-    .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, source, rank, confidence, universe, recommendation_publications!inner(id, run_date, market, engine_version))')
+    .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, source, rank, confidence, universe, candidate_snapshot, recommendation_publications!inner(id, run_date, market, engine_version, is_official))')
     .eq('status', 'MATURED')
     .in('quality_status', ['FULL', 'FALLBACK'])
     .eq('recommendation_picks.recommendation_publications.market', input.market)
-    .eq('recommendation_picks.recommendation_publications.is_official', true)
     .limit(10000);
+  if (input.official !== undefined) query = query.eq('recommendation_picks.recommendation_publications.is_official', input.official);
+  if (input.engineVersion) query = query.eq('recommendation_picks.recommendation_publications.engine_version', input.engineVersion);
   if (input.horizon) query = query.eq('horizon', input.horizon);
   if (input.from) query = query.gte('recommendation_picks.recommendation_publications.run_date', input.from);
   if (input.to) query = query.lte('recommendation_picks.recommendation_publications.run_date', input.to);
@@ -158,6 +162,12 @@ function summarize(rows: PerformanceReadRow[]) {
   const mfe = rows.map((row) => numberOrNull(row.mfe_pct)).filter((value): value is number => value !== null);
   const mae = rows.map((row) => numberOrNull(row.mae_pct)).filter((value): value is number => value !== null);
   const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+  const lowerDecileCount = Math.max(1, Math.ceil(returns.length * 0.1));
+  const lowerDecile = [...returns].sort((a, b) => a - b).slice(0, lowerDecileCount);
+  const flowCovered = rows.filter((row) => {
+    const flow = row.recommendation_picks.candidate_snapshot?.investor_flow as { quality?: unknown } | undefined;
+    return flow?.quality === 'FULL' || flow?.quality === 'STALE';
+  }).length;
   return {
     sampleSize: rows.length,
     positiveHitRate: rows.length ? round((returns.filter((value) => value > 0).length / rows.length) * 100) : null,
@@ -167,6 +177,8 @@ function summarize(rows: PerformanceReadRow[]) {
     averageExcessReturnPct: excess.length ? round(sum(excess) / excess.length) : null,
     averageMfePct: mfe.length ? round(sum(mfe) / mfe.length) : null,
     averageMaePct: mae.length ? round(sum(mae) / mae.length) : null,
+    lowerDecileReturnPct: lowerDecile.length ? round(sum(lowerDecile) / lowerDecile.length) : null,
+    flowCoveragePct: rows.length ? round((flowCovered / rows.length) * 100) : null,
   };
 }
 
@@ -175,8 +187,10 @@ export async function readRecommendationMetrics(input: {
   market: RecommendationMarket;
   from?: string | null;
   to?: string | null;
+  official?: boolean;
+  engineVersion?: string | null;
 }) {
-  const rows = await readPerformanceRows(input);
+  const rows = await readPerformanceRows({ ...input, official: input.official ?? (input.engineVersion ? undefined : true) });
   const horizons = (['D5', 'D20', 'D60'] as RecommendationHorizon[]).map((horizon) => ({
     horizon,
     ...summarize(rows.filter((row) => row.horizon === horizon)),
@@ -201,7 +215,13 @@ export async function readRecommendationMetrics(input: {
     const [runDate, horizon] = key.split(':');
     return { runDate, horizon, ...summarize(group) };
   }).sort((a, b) => a.runDate.localeCompare(b.runDate));
-  return { horizons, segments, cohorts, dataAsOf: rows.map((row) => row.evaluation_date).filter(Boolean).sort().at(-1) || null };
+  return {
+    engineVersion: input.engineVersion || null,
+    horizons,
+    segments,
+    cohorts,
+    dataAsOf: rows.map((row) => row.evaluation_date).filter(Boolean).sort().at(-1) || null,
+  };
 }
 
 export async function readRecommendationDiagnostics(input: {

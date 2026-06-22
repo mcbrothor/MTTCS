@@ -35,9 +35,9 @@ async function loadActivePicks(client: SupabaseClient, market: RecommendationMar
   for (let from = 0; ; from += 1000) {
     const { data, error } = await client
       .from('recommendation_picks')
-      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, recommendation_publications!inner(run_date, market, generated_at)')
+      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, recommendation_publications!inner(run_date, market, generated_at, status)')
       .eq('recommendation_publications.market', market)
-      .eq('recommendation_publications.is_official', true)
+      .in('recommendation_publications.status', ['PUBLISHED', 'SHADOW'])
       .gte('recommendation_publications.run_date', cutoff)
       .order('created_at', { ascending: false })
       .range(from, from + 999);

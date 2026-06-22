@@ -4,6 +4,7 @@ import { readRecommendationDiagnostics, readRecommendationMetrics } from '@/lib/
 import { formatRecommendationWeeklyReport } from '@/lib/recommendations/weekly-report';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { sendTelegramMessage } from '@/lib/telegram';
+import { KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION, RECOMMENDATION_ENGINE_VERSION } from '@/lib/recommendations/config';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -14,11 +15,21 @@ export async function GET(request: Request) {
     const client = getSupabaseAdmin();
     const markets = [];
     for (const market of ['US', 'KR'] as const) {
-      const [metrics, diagnostics] = await Promise.all([
+      const [metrics, diagnostics, ...policyMetrics] = await Promise.all([
         readRecommendationMetrics({ client, market }),
         readRecommendationDiagnostics({ client, market }),
+        ...(market === 'KR' ? [RECOMMENDATION_ENGINE_VERSION, KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION]
+          .map((engineVersion) => readRecommendationMetrics({ client, market, engineVersion })) : []),
       ]);
-      markets.push({ market, horizons: metrics.horizons, causes: diagnostics.causeSummary });
+      markets.push({
+        market,
+        horizons: metrics.horizons,
+        causes: diagnostics.causeSummary,
+        policies: policyMetrics.map((policy) => ({
+          engineVersion: policy.engineVersion as string,
+          d5: policy.horizons.find((row) => row.horizon === 'D5') || null,
+        })),
+      });
     }
     const origin = process.env.NEXT_PUBLIC_APP_URL || null;
     const message = formatRecommendationWeeklyReport({
