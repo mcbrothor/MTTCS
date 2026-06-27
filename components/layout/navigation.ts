@@ -41,8 +41,8 @@ export const FLOW_STEPS: FlowStep[] = [
     href: '/master-filter',
     matchers: ['/master-filter', '/macro'],
     tabs: [
-      { href: '/master-filter', label: '오늘 시장 신호판' },
-      { href: '/macro', label: '큰 흐름 점검' },
+      { href: '/master-filter', label: '오늘의 결론' },
+      { href: '/macro', label: '시장 밖 위험 점검' },
     ],
   },
   {

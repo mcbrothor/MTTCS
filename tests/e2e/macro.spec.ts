@@ -2,17 +2,17 @@ import { test, expect } from '@playwright/test';
 import { login } from './helpers/auth';
 import { setupAllMocks, setupErrorMocks } from './mocks/handlers';
 
-test.describe('TC-MACRO: 큰 흐름 점검', () => {
+test.describe('TC-MACRO: 시장 밖 위험 점검', () => {
   test.describe('정상 플로우', () => {
     test.beforeEach(async ({ page }) => {
       await setupAllMocks(page); // default is RISK_ON score 78
       await login(page);
     });
 
-    test('MACRO-01: 큰 흐름 카드가 쉬운 용어로 표시', async ({ page }) => {
+    test('MACRO-01: 시장 밖 위험 카드가 쉬운 용어로 표시', async ({ page }) => {
       await page.goto('/macro');
 
-      await expect(page.getByRole('heading', { name: '큰 흐름 점검' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '시장 밖 위험 점검' })).toBeVisible();
       await expect(page.getByText('투자하기 좋은 흐름').first()).toBeVisible();
       await expect(page.locator('text=78').first()).toBeVisible();
     });
@@ -31,7 +31,7 @@ test.describe('TC-MACRO: 큰 흐름 점검', () => {
       await expect(page.getByText('Bitcoin', { exact: true })).toBeVisible();
     });
 
-    test('MACRO-07: 오늘 시장 신호판 CTA 클릭', async ({ page }) => {
+    test('MACRO-07: 오늘의 결론 CTA 클릭', async ({ page }) => {
       await page.goto('/macro');
 
       const mfButton = page.locator('a[href="/master-filter"]').first();

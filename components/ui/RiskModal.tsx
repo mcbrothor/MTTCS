@@ -21,7 +21,7 @@ export default function RiskModal() {
             <h2 className="text-2xl font-bold text-white">신규 매수 금지 구간</h2>
             
             <p className="text-slate-300">
-              현재 진입 가능 신호가 강한 시장 위험 상태를 감지했습니다.<br/>
+              현재 시장 내부 건강도가 강한 위험 상태를 가리키고 있습니다.<br/>
               무분별한 강제 매수 및 뇌동매매를 방지하기 위해 스캐너와 종목 상세 정보 접근을 일시적으로 제한합니다.
             </p>
 

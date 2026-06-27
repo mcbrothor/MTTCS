@@ -79,10 +79,10 @@ export default function NavigatorWarningSystem() {
                 
                 <div className="space-y-3">
                   <h2 className="text-2xl font-black text-rose-500 uppercase tracking-tight">
-                    항해 불가능 구간 (BEAR)
+                    방어 우선 구간
                   </h2>
                   <p className="text-sm text-slate-300 leading-relaxed font-medium">
-                    진입 가능 신호가 강한 위험 구간을 가리키고 있습니다.<br />
+                    시장 내부 건강도가 강한 위험 구간을 가리키고 있습니다.<br />
                     이 구간에서의 돌파 시도는 <strong className="text-rose-400">대부분 실패로 끝납니다.</strong> 모든 신규 매수를 중단하고 현금을 확보하십시오.
                   </p>
                 </div>

@@ -94,7 +94,7 @@ const UniverseSelectionSection: React.FC<UniverseSelectionSectionProps> = ({
             </span>
             {marketContext && (
               <span className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1.5 text-indigo-300">
-                시장 국면: {marketContext.state} (P3: {marketContext.metrics.p3Score ?? '-'})
+                시장 국면: {marketContext.state} (종합 점수: {marketContext.metrics.p3Score ?? '-'})
               </span>
             )}
           </div>

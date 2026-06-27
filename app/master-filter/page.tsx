@@ -3,6 +3,7 @@
 import InsightLog from '@/components/master-filter/InsightLog';
 import MetricsGrid from '@/components/master-filter/MetricsGrid';
 import DecisionBox from '@/components/master-filter/DecisionBox';
+import EarlyWarningPanel from '@/components/master-filter/EarlyWarningPanel';
 import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import { useMarket } from '@/contexts/MarketContext';
@@ -16,13 +17,13 @@ export default function MasterFilterPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-            STEP 01 · 시장 분석 / 오늘 시장 신호판
+            STEP 01 · 시장 분석
           </p>
           <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
-            오늘 시장 신호판
+            오늘의 결론과 위험 조기경보
           </h1>
           <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
-            지금 새로 사도 되는 시장인지, 산다면 어느 정도 비중이 적절한지 한 화면에서 확인합니다.
+            지금 새로 사도 되는지, 위험이 커지는지, 돈이 시장 안에 남아 있는지 순서대로 확인합니다.
           </p>
         </div>
 
@@ -56,28 +57,29 @@ export default function MasterFilterPage() {
       </header>
 
       <DecisionBox />
+      <EarlyWarningPanel />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <section className="space-y-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">진입 가능 신호</p>
-            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">사도 되는 시장인가</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">시장 내부 건강도</p>
+            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">지금 새로 사도 되는지</h2>
           </div>
           <MetricsGrid />
         </section>
 
         <aside className="space-y-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">큰 흐름 점검</p>
-            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">산다면 얼마나 조심할까</h2>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">시장 밖 위험</p>
+            <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">위험이 커지는지</h2>
           </div>
           <MacroCompactWidget />
           <LLMBriefing />
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)]">
             <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>
             <div className="space-y-2 text-xs leading-5 text-[var(--text-secondary)]">
-              <p><span className="font-semibold text-emerald-300">진입 가능:</span> 후보 종목을 검토하되 큰 흐름에 따라 권장 비중을 조절합니다.</p>
-              <p><span className="font-semibold text-amber-300">신규 매수 보류:</span> 기존 포지션 손절선과 함께 오르는 종목 비율 회복 여부를 확인합니다.</p>
+              <p><span className="font-semibold text-emerald-300">진입 가능:</span> 후보 종목을 검토하되 시장 밖 위험에 따라 새 매수 비중을 조절합니다.</p>
+              <p><span className="font-semibold text-amber-300">신규 매수 보류:</span> 기존 포지션 손절선과 시장 폭 회복 여부를 확인합니다.</p>
               <p><span className="font-semibold text-rose-300">신규 매수 금지:</span> 현금 비중 확대와 기존 포지션 방어가 우선입니다.</p>
             </div>
           </div>
@@ -86,7 +88,7 @@ export default function MasterFilterPage() {
 
       <section className="space-y-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">왜 이런 결론인가</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">데이터 신뢰도</p>
           <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">브리핑과 데이터 신뢰도</h2>
         </div>
         <InsightLog />

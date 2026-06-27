@@ -10,27 +10,27 @@ import StatusBadge from '@/components/master-filter/StatusBadge';
 import { useMarket } from '@/contexts/MarketContext';
 import { formatDelay, formatTimestamp } from '@/lib/format';
 import { ADVANCE_DECLINE_RATIO_BANDS, getAverageDailyRangeGuidance } from '@/lib/master-filter/adr-presentation';
-import { friendlyMetricLabel, friendlyMetricStatus } from '@/lib/market-display';
+import { friendlyMetricDescription, friendlyMetricLabel, friendlyMetricStatus } from '@/lib/market-display';
 import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
 const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: string; formula?: string; accordion?: string }> = {
   '추세': {
-    alias: '추세',
+    alias: '지수 평균선 위치',
     tooltip: '시장이 중장기 이동평균선 위에 있는지 확인합니다. 쉽게 말해 시장이 위로 가는 힘을 유지하는지 보는 항목입니다.',
     accordion: '정의: 50일선 > 150일선 > 200일선 순서일 때 추세 배열 완성. 지수가 200일선 위에 있을 때만 공격적 진입 허용.',
   },
   '시장 폭': {
-    alias: '함께 오르는 종목 비율',
+    alias: '시장 폭',
     tooltip: '전체 종목 중 200일 이동평균선 위에 있는 비율. 시장 전반의 건강도를 나타냅니다.',
     accordion: '50% 이상이면 과반 종목이 상승 추세. 30% 이하면 약세장 경계.',
   },
   'FTD': {
-    alias: '반등 확인일',
+    alias: '강한 반등 확인 여부',
     tooltip: '최근 하락 후 랠리 4일째 이후 +1.5% 이상 거래량 급증 상승이 있었는지. 바닥 반전 신호입니다.',
-    accordion: '윌리엄 오닐의 FTD 개념. FTD가 발생하지 않으면 본격 반등이 아닐 수 있습니다.',
+    accordion: '큰 하락 뒤에 거래량을 동반한 강한 상승일이 나타났는지 확인합니다. 아직 없으면 본격 반등이 아닐 수 있습니다.',
   },
   '분산일': {
-    alias: '큰손 매도 흔적',
+    alias: '분산일',
     tooltip: '최근 25거래일 기준 기관이 대량 매도한 날의 수. 5개 이상이면 시장 약화 신호.',
     accordion: '지수가 전일 대비 -0.2% 이상 하락하고 거래량이 전일보다 늘어난 날입니다. 이런 날이 많아지면 위험 신호로 봅니다.',
   },
@@ -43,7 +43,7 @@ const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: stri
     alias: '20일 평균 하루 변동폭',
     tooltip: '최근 20거래일 동안 하루의 고가와 저가가 평균적으로 얼마나 벌어졌는지 보여줍니다. 높을수록 가격 흔들림이 큽니다.',
     formula: '평균(고가 - 저가) ÷ 평균((고가 + 저가) ÷ 2) × 100',
-    accordion: '현재 카드는 Average Daily Range입니다. 상승 종목 수와 하락 종목 수를 비교하는 Advance/Decline Ratio와 약어만 같고 계산법과 기준은 다릅니다.',
+    accordion: '하루 중 가격이 크게 흔들리는 시장에서는 같은 종목을 사더라도 손절선에 빨리 닿을 수 있어 수량을 줄이는 편이 안전합니다.',
   },
 };
 
@@ -81,6 +81,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
   const help = getMetricHelp(detail.label);
   const friendlyLabel = friendlyMetricLabel(detail.label);
   const originalLabel = friendlyLabel === detail.label ? null : detail.label;
+  const friendlyDescription = friendlyMetricDescription(detail.label, detail.description);
   return (
     <Card className={`border-2 ${tone} ${compact ? 'min-h-[190px]' : 'min-h-[260px]'}`}>
       <div className="flex items-start justify-between gap-3">
@@ -89,12 +90,9 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
               {help?.alias ?? friendlyLabel}
             </p>
-            {originalLabel && (
-              <span className="text-[10px] text-slate-600">기존 용어: {originalLabel}</span>
-            )}
             {help && (
               <HelpButton
-                label={detail.label}
+                label={help.alias ?? friendlyLabel}
                 tooltip={help.tooltip}
                 formula={help.formula}
                 accordion={help.accordion ? <span>{help.accordion}</span> : undefined}
@@ -172,11 +170,15 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
       <div className="mt-4 border-t border-slate-800 pt-3">
         <div className="flex items-start gap-2 text-xs leading-5 text-slate-400">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
-          <span>{detail.description}</span>
+          <span>{friendlyDescription}</span>
         </div>
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-slate-600">
-          {originalLabel ? `기존 용어: ${originalLabel} · ` : ''}{detail.source}
-        </p>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-slate-600">{detail.source}</p>
+        {originalLabel && (
+          <details className="mt-2 text-[10px] text-slate-600">
+            <summary className="cursor-pointer">계산명 보기</summary>
+            <p className="mt-1 font-mono uppercase tracking-wide">{originalLabel}</p>
+          </details>
+        )}
       </div>
     </Card>
   );
@@ -252,7 +254,7 @@ function DistributionTable({ details }: { details: NonNullable<MasterFilterMetri
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2 text-slate-300">
           <ShieldAlert className="h-4 w-4 text-rose-400" />
-          <p className="text-sm font-bold">큰손 매도 흔적 상세 내역</p>
+          <p className="text-sm font-bold">분산일 상세 내역</p>
         </div>
         <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">최근 25거래일 기준</span>
       </div>
@@ -308,7 +310,7 @@ function DataQualityPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">
-            {market === 'KR' ? 'KOSPI 200' : 'SPY'} 진입 가능 신호
+            {market === 'KR' ? 'KOSPI 200' : 'SPY'} 기준 내부 건강도
           </p>
           <h2 className="mt-1 text-lg font-black text-white">데이터 확인 필요</h2>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
@@ -316,7 +318,7 @@ function DataQualityPanel({
           </p>
         </div>
         <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-left md:text-right">
-          <p className="text-[10px] font-semibold uppercase text-sky-300">시장 건강 점수</p>
+          <p className="text-[10px] font-semibold uppercase text-sky-300">종합 점수</p>
           <p className="font-mono text-xl font-black text-white">확인 필요</p>
         </div>
       </div>
@@ -359,7 +361,7 @@ function DataQualityPanel({
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
           <p className="font-semibold text-sky-200">3. 재채점</p>
-          <p className="mt-1 text-slate-400">데이터 정상화 후 시장 건강 점수, 반등 확인일, 함께 오르는 종목 비율, 강한 업종을 다시 평가합니다.</p>
+          <p className="mt-1 text-slate-400">데이터 정상화 후 종합 점수, 강한 반등 확인 여부, 시장 폭, 강한 업종을 다시 평가합니다.</p>
         </div>
       </div>
     </section>
@@ -374,7 +376,7 @@ function AdrEducationPanel({ detail }: { detail: MasterFilterMetricDetail }) {
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
         <div>
-          <h3 id="adr-guide-title" className="text-sm font-bold text-slate-200">ADR 바로 읽기</h3>
+          <h3 id="adr-guide-title" className="text-sm font-bold text-slate-200">하루 변동폭 바로 읽기</h3>
           <p className="mt-1 text-sm leading-6 text-slate-400">
             현재 값 <strong className="text-white">{detail.value}{detail.unit}</strong>은 <strong className="text-amber-200">{guidance.label}</strong>입니다. {guidance.action}
           </p>
@@ -383,13 +385,13 @@ function AdrEducationPanel({ detail }: { detail: MasterFilterMetricDetail }) {
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
-          <p className="text-xs font-bold text-sky-200">현재 화면: Average Daily Range</p>
+          <p className="text-xs font-bold text-sky-200">현재 화면: 20일 평균 하루 변동폭</p>
           <p className="mt-1 text-xs leading-5 text-slate-400">
             지수의 <strong className="text-slate-200">하루 가격 변동폭</strong>을 20일 평균으로 계산합니다. 기준은 <span className="font-mono text-slate-300">{detail.threshold}</span>이며 시장별로 다릅니다.
           </p>
         </div>
         <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
-          <p className="text-xs font-bold text-violet-200">같은 약어, 다른 지표: Advance/Decline Ratio</p>
+          <p className="text-xs font-bold text-violet-200">별도 참고: 상승/하락 종목 비율</p>
           <p className="mt-1 text-xs leading-5 text-slate-400">
             <strong className="text-slate-200">상승 종목 수 ÷ 하락 종목 수 × 100</strong>으로 시장 참여 폭을 봅니다. 아래 75·120 기준은 이 등락비율에만 적용되며 현재 카드 값에는 적용하지 않습니다.
           </p>
@@ -398,7 +400,7 @@ function AdrEducationPanel({ detail }: { detail: MasterFilterMetricDetail }) {
 
       <div className="mt-3 overflow-hidden rounded-lg border border-slate-800">
         <div className="grid grid-cols-2 bg-slate-900/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          <span>등락비율 ADR</span>
+          <span>상승/하락 종목 비율</span>
           <span>일반적 해석</span>
         </div>
         {ADVANCE_DECLINE_RATIO_BANDS.map((band) => (
@@ -457,16 +459,16 @@ export default function MetricsGrid() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-              {data.market === 'KR' ? 'KOSPI 200' : 'SPY'} 진입 가능 신호
+              {data.market === 'KR' ? 'KOSPI 200' : 'SPY'} 기준 내부 건강도
             </p>
-            <h2 className="mt-1 text-xl font-bold text-white">시장 건강 점수</h2>
+            <h2 className="mt-1 text-xl font-bold text-white">종합 점수</h2>
             <p className="mt-1 font-mono text-[10px] text-slate-500">
               {formatDelay(metrics.meta)} · {metrics.meta.provider} · {formatTimestamp(metrics.meta.asOf)}
             </p>
           </div>
           <div className="text-right">
             <p className="font-mono text-3xl font-black text-white">{metrics.p3Score ?? 0}/100</p>
-            <p className="text-[10px] font-bold uppercase text-slate-500">종합 시장 건강 점수</p>
+            <p className="text-[10px] font-bold uppercase text-slate-500">지금 새로 사도 되는지</p>
           </div>
         </div>
 
@@ -516,7 +518,7 @@ export default function MetricsGrid() {
         </div>
         <div className="grid gap-3 text-sm leading-6 text-slate-400 md:grid-cols-3">
           <p><strong className="text-emerald-300">진입 가능</strong>: 후보 종목을 검토하되 매수 지점 근처 거래량과 손절선을 확인합니다.</p>
-          <p><strong className="text-amber-300">신규 매수 보류</strong>: 기존 포지션만 유지합니다. 진입 가능 신호가 회복될 때까지 기다립니다.</p>
+          <p><strong className="text-amber-300">신규 매수 보류</strong>: 기존 포지션만 유지합니다. 시장 내부 건강도가 회복될 때까지 기다립니다.</p>
           <p><strong className="text-rose-300">신규 매수 금지</strong>: 현금 비중과 기존 포지션 방어를 우선합니다.</p>
         </div>
       </section>

@@ -158,21 +158,21 @@ export default function MacroPage() {
   const isMacroScored = Boolean(macroData && !hasError);
   const nextStepText =
     !isMacroScored
-      ? '큰 흐름 미확인 — 시장이 나쁘다는 뜻이 아닙니다. 데이터/API 상태를 먼저 정상화한 뒤 권장 비중을 판단하세요.'
+      ? '시장 밖 위험 미확인 — 시장이 나쁘다는 뜻이 아닙니다. 데이터/API 상태를 먼저 정상화한 뒤 새 매수 비중을 판단하세요.'
       : score >= 70
-      ? `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 진입 가능 신호가 좋으면 후보를 적극 검토하세요.`
+      ? `시장 밖 위험 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 시장 내부 건강도가 좋으면 후보를 적극 검토하세요.`
       : score >= 45
-        ? `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 후보를 신중하게 검토하고 비중을 줄이세요.`
-        : `큰 흐름 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 새 매수보다 현금 확보와 방어가 우선입니다.`;
+        ? `시장 밖 위험 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 후보를 신중하게 검토하고 비중을 줄이세요.`
+        : `시장 밖 위험 ${score}점 — ${friendlyMacroRegimeLabel(regime)}. 새 매수보다 현금 확보와 방어가 우선입니다.`;
 
   return (
     <div className="space-y-4 pb-12">
       <header className="border-b border-[var(--border)] pb-4">
         <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-          STEP 01 · 시장 분석 / 큰 흐름 점검
+          STEP 01 · 시장 분석 / 시장 밖 위험 점검
         </p>
         <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
-          큰 흐름 점검
+          시장 밖 위험 점검
         </h1>
         <p className="mt-2 hidden max-w-[620px] text-xs leading-[1.6] text-[var(--text-secondary)] sm:block">
           금리, 달러, 신용 시장, 시장 불안도처럼 큰 자금 흐름을 보고 권장 투자 비중을 조절합니다.
@@ -183,16 +183,16 @@ export default function MacroPage() {
 
       <LLMBriefing regime={macroData?.regime ?? null} />
 
-      {/* 위계 안내 배너 — 큰 흐름은 비중 조절용, 진입 가능 신호가 우선 */}
+      {/* 위계 안내 배너 — 시장 밖 위험은 비중 조절용, 시장 내부 건강도가 우선 */}
       <div className="flex items-start gap-3 rounded-xl border border-sky-700/40 bg-sky-900/15 px-4 py-3">
         <AlertTriangle className="h-4 w-4 shrink-0 text-sky-400 mt-0.5" aria-hidden="true" />
         <p className="text-xs text-sky-300 leading-relaxed">
           <strong className="text-sky-200">이 화면은 권장 투자 비중 조절용입니다.</strong>{' '}
           신규 진입 가능 여부는 반드시{' '}
           <Link href="/master-filter" className="underline underline-offset-2 hover:text-sky-100">
-            오늘 시장 신호판
+            오늘의 결론
           </Link>
-          에서 먼저 확인하세요. 진입 가능 신호가 좋지 않으면 큰 흐름 점수와 관계없이 새 매수는 보류합니다.
+          에서 먼저 확인하세요. 시장 내부 건강도가 좋지 않으면 시장 밖 위험 점수와 관계없이 새 매수는 보류합니다.
         </p>
       </div>
 
@@ -200,7 +200,7 @@ export default function MacroPage() {
         <div className="flex h-40 items-center justify-center rounded-lg border border-slate-800/50 bg-slate-900/50 backdrop-blur-md">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
-            <p className="text-xs font-medium uppercase tracking-widest text-slate-500">큰 흐름 데이터 확인 중</p>
+            <p className="text-xs font-medium uppercase tracking-widest text-slate-500">시장 밖 위험 데이터 확인 중</p>
           </div>
         </div>
       )}
@@ -210,7 +210,7 @@ export default function MacroPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
             <div>
-              <p className="text-sm font-bold text-sky-200">큰 흐름 데이터 확인 필요</p>
+              <p className="text-sm font-bold text-sky-200">시장 밖 위험 데이터 확인 필요</p>
               <p className="mt-1 text-sm leading-6 text-sky-100/85">
                 {userFacingMacroError(macroError)} 현재 0점 또는 나쁜 시장으로 해석하지 말고,
                 API 인증과 데이터 소스가 정상화된 뒤 다시 판단하세요.
@@ -248,13 +248,13 @@ export default function MacroPage() {
 
             {/* Run-of-play guide — mirrors master-filter's "운용 가이드라인" */}
             <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-strong)] p-6 shadow-[var(--panel-shadow)]">
-              <h3 className="mb-4 text-[13px] font-semibold text-[var(--text-primary)]">큰 흐름 운용 원칙</h3>
+              <h3 className="mb-4 text-[13px] font-semibold text-[var(--text-primary)]">시장 밖 위험 운용 원칙</h3>
               <ul className="space-y-3 text-xs text-[var(--text-secondary)]">
                 <li className="flex gap-2">
                   <span className="flex items-center gap-1 font-semibold text-emerald-300 shrink-0">
                     <TrendingUp className="h-3 w-3" /> 투자하기 좋은 흐름:
                   </span>
-                  권장 비중을 높일 수 있습니다. 진입 가능 신호가 좋을 때 후보를 적극 검토합니다.
+                  새 매수 비중을 높일 수 있습니다. 시장 내부 건강도가 좋을 때 후보를 적극 검토합니다.
                 </li>
                 <li className="flex gap-2">
                   <span className="flex items-center gap-1 font-semibold text-amber-300 shrink-0">
@@ -292,7 +292,7 @@ export default function MacroPage() {
             {/* Commentary Card */}
             {commentary && (
               <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-strong)] p-5 shadow-[var(--panel-shadow)]">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">큰 흐름 해석</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">시장 밖 위험 해석</p>
                 <p className="text-[13px] font-semibold text-[var(--text-primary)] mb-3">{commentary.headline}</p>
                 <ul className="space-y-1.5">
                   {commentary.points.map((pt) => (
@@ -383,7 +383,7 @@ export default function MacroPage() {
         </div>
       )}
 
-      {/* Next Step CTA — 큰 흐름은 비중 조절용. 진입 결정은 오늘 시장 신호판에서 */}
+      {/* Next Step CTA — 시장 밖 위험은 비중 조절용. 진입 결정은 오늘의 결론에서 */}
       {!isLoading && (
         <div className="flex items-center justify-between gap-4 rounded-[16px] border border-sky-700/30 bg-sky-900/10 px-5 py-4">
           <div>
@@ -394,7 +394,7 @@ export default function MacroPage() {
             href="/master-filter"
             className="flex items-center gap-1.5 shrink-0 rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
           >
-            오늘 시장 신호판
+            오늘의 결론
             <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>

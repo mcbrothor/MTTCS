@@ -126,6 +126,12 @@ function formatPercent(value: unknown) {
   return `${Math.round(n * 100)}%`;
 }
 
+function compactSentence(value: string, maxLength: number) {
+  const cleaned = value.replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 function exchangeFor(item: ScannerConstituent, universe: ScannerUniverse) {
   if (item.exchange) return item.exchange;
   if (universe === 'KOSPI200') return 'KOSPI';
@@ -609,6 +615,57 @@ function aggregateDailyCandidates(candidates: DailyScreenerCandidate[]) {
   return grouped;
 }
 
+function metricLabel(metrics: Record<string, unknown>, key: string, label: string, digits = 1) {
+  const value = numberOrNull(metrics[key]);
+  if (value === null) return null;
+  return `${label} ${formatNumber(value, digits)}`;
+}
+
+function ruleBasedReason(
+  item: { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number },
+  market: DailyScreenerMarket,
+) {
+  const sourceBits = Array.from(item.sources).map(sourceLabel).join('+');
+  const metrics = [
+    metricLabel(item.best.metrics, 'rs_rating', 'RS', 0),
+    metricLabel(item.best.metrics, 'rvol', 'RVOL', 1),
+    metricLabel(item.best.metrics, 'roc', 'ROC', 1),
+    metricLabel(item.best.metrics, 'return_5d_pct', '5일 수익률', 1),
+  ].filter(Boolean);
+  const marketContext = market === 'KR'
+    ? '한국 후보군 안에서 수급·테마 순환과 단기 과열을 함께 보는 우선순위 후보입니다.'
+    : '미국 후보군 안에서 추세 지속성, 섹터 주도권, 유동성을 함께 보는 우선순위 후보입니다.';
+  const metricText = metrics.length ? ` 보조 지표는 ${metrics.join(', ')}로 확인됩니다.` : '';
+
+  return compactSentence(
+    `${sourceBits} 신호 ${item.sources.size}개가 겹치고 ${item.best.grade} 등급, MTN ${formatNumber(item.best.score, 0)}점으로 같은 시장 후보군 내 상대 우위가 있습니다. ${item.best.reason}${metricText} ${marketContext}`,
+    720,
+  );
+}
+
+function ruleBasedRisk(
+  item: { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number },
+  market: DailyScreenerMarket,
+) {
+  const stop = metricLabel(item.best.metrics, 'stop_pct', '손절폭', 1);
+  const roc = numberOrNull(item.best.metrics.roc);
+  const return5d = numberOrNull(item.best.metrics.return_5d_pct);
+  const riskBits = [
+    stop,
+    roc !== null && roc >= 8 ? `ROC ${formatNumber(roc, 1)}로 단기 과열 확인` : null,
+    return5d !== null && return5d <= -2 ? `최근 5일 흐름 약화(${formatNumber(return5d, 1)}%)` : null,
+    item.sources.size === 1 ? '단일 스크리너 신호라 확인 강도가 낮음' : null,
+  ].filter(Boolean);
+  const marketRisk = market === 'KR'
+    ? '외국인·기관 수급 이탈, 테마 거래대금 축소, 지수 급락이 겹치면 우선순위를 낮춰야 합니다.'
+    : '금리·달러·VIX 상승이나 섹터 로테이션 이탈이 나오면 추세 실패 리스크를 다시 봐야 합니다.';
+
+  return compactSentence(
+    `${riskBits.length ? `${riskBits.join(', ')}. ` : ''}${marketRisk}`,
+    420,
+  );
+}
+
 export function ruleBasedDailyMarketTop10(candidates: DailyScreenerCandidate[]): DailyMarketTop10Result {
   const grouped = aggregateDailyCandidates(candidates);
   const markets = { US: [], KR: [] } as Record<DailyScreenerMarket, DailyMarketTop10Pick[]>;
@@ -627,9 +684,9 @@ export function ruleBasedDailyMarketTop10(candidates: DailyScreenerCandidate[]):
         score: item.best.score,
         grade: item.best.grade,
         source: item.sources.size > 1 ? ('mixed' as const) : item.best.source,
-        reason: `${item.best.reason}; ${item.sources.size}개 스크리너에서 포착`,
+        reason: ruleBasedReason(item, market),
         confidence: round(Math.min(0.94, 0.46 + item.aggregate / 210), 2),
-        risk: item.best.metrics.stop_pct ? `손절폭 ${formatNumber(item.best.metrics.stop_pct)}%` : null,
+        risk: ruleBasedRisk(item, market),
       }));
   }
 
@@ -709,7 +766,8 @@ export function buildDailyMarketTop10Prompt(input: {
     '최신 뉴스, 실시간 가격, 재무 수치, 업종 이벤트를 알고 있거나 확인 가능한 경우 적극 반영하세요. 다만 입력 데이터와 외부 맥락이 충돌하면 그 충돌을 리스크나 confidence에 반영하고, 불확실한 정보는 단정하지 말고 "확인 필요"로 표시하세요.',
     '평가 프레임: 1) 다중 스크리너 교차 포착, 2) 리스크 조정 모멘텀과 추세 지속성, 3) 피벗/진입 위치와 실패 리스크, 4) 거래대금·변동성·과열도, 5) 최신 뉴스/실적/가이던스/섹터 로테이션의 순풍 또는 역풍, 6) 시장별 특성(미국 성장/반도체/AI/대형주, 한국 수급/테마 쏠림/유동성), 7) 단일 섹터·단일 스크리너 집중 완화, 8) 상승 여력 대비 손실 비대칭성.',
     '한국 시장 특화 주의사항: 1) momentum/RVOL 급등 종목은 고점 추격 후 되돌림 리스크가 매우 높으므로 신중하게 평가하세요. 2) 최근 3일 이상 하락 추세인 종목의 반복 추천을 피하세요. 3) 외국인/기관 수급 방향이 가격과 괴리될 수 있으니 주의하세요. 4) KOSDAQ 소형주는 테마 순환 주기가 짧아 진입 타이밍이 더 중요합니다. ETF·ETN·스팩·우선주는 후보 풀에서 이미 제외됐습니다.',
-    '각 종목 reason에는 MTN 내부 근거와 외부 LLM 판단 맥락을 함께 녹여 1문장으로 쓰세요. 단순 score 인용이 아니라 왜 오늘의 같은 시장 후보군 안에서 더 우선인지 설명하세요. risk에는 외부 뉴스/실적/가격 맥락까지 고려한 탈락·하향 트리거를 구체적으로 쓰세요.',
+    '각 종목 reason은 2문장 안팎으로 쓰세요. 첫 문장은 MTN 내부 근거(스크리너 교차 포착, 등급, RS/RVOL/ROC/피벗/거래대금 등)를, 두 번째 문장은 외부 LLM 판단 맥락(업종 사이클, 뉴스·실적·수급·밸류에이션·시장 레짐)을 담아 오늘 같은 시장 후보군 안에서 왜 더 우선인지 설명하세요.',
+    '각 종목 risk도 1~2문장으로 쓰세요. 단순한 "변동성" 표현을 피하고, 어떤 조건이 발생하면 탈락·하향해야 하는지 가격/수급/뉴스/실적/매크로 트리거를 구체적으로 적으세요.',
     '투자 조언이 아니라 MTN 스크리너 후보 우선순위 판별입니다.',
     '',
     '필수 JSON shape: {"markets":{"US":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KR":[{"rank":1,"ticker":"005930","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}]},"report_markdown":""}',
@@ -938,8 +996,8 @@ export function formatDailyMarketTop10TelegramMessage(input: {
   const body = rows.map((pick) => [
     `${pick.rank}. *${md(pick.ticker)}* — ${md(pick.name || pick.ticker)}`,
     `   ${md(sourceLabel(pick.source))} | 신뢰도 ${formatPercent(pick.confidence)} | MTN ${formatNumber(pick.score, 0)} | ${md(pick.universe)}`,
-    `   근거: ${md(pick.reason).slice(0, 230)}`,
-    pick.risk ? `   리스크: ${md(pick.risk).slice(0, 150)}` : null,
+    `   근거: ${md(compactSentence(pick.reason, 620))}`,
+    pick.risk ? `   리스크: ${md(compactSentence(pick.risk, 360))}` : null,
   ].filter(Boolean).join('\n')).join('\n\n');
 
   return [

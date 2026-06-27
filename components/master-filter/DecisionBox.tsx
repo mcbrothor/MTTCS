@@ -104,16 +104,16 @@ export default function DecisionBox() {
               시장 데이터 확인 중
             </p>
             <p className="mt-1.5 text-sm leading-6 text-slate-400">
-              진입 가능 신호와 큰 흐름 점검 데이터를 함께 확인하고 있습니다.
+              지금 새로 사도 되는지와 시장 밖 위험을 함께 확인하고 있습니다.
             </p>
           </div>
           <div className="grid min-w-[220px] grid-cols-2 gap-2">
             <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase text-slate-500">시장 건강 점수</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-500">종합 점수</p>
               <p className="mt-1 font-mono text-lg font-black text-white">확인 중</p>
             </div>
             <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase text-slate-500">권장 투자 비중</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-500">새 매수 비중</p>
               <p className="mt-1 text-sm font-black text-white">보류</p>
             </div>
           </div>
@@ -135,6 +135,9 @@ export default function DecisionBox() {
   const Icon = cfg.icon;
   const isUnscored = data.state === 'GREY' || isStale;
   const { pass, weak } = strongestDrivers(metrics);
+  const warningSignals = data.metrics.earlyWarnings?.signals
+    .filter((signal) => signal.status !== 'OK')
+    .slice(0, 2) ?? [];
   const updatedAt = data.metrics.updatedAt || data.metrics.meta.asOf;
   const headline = friendlyDecisionHeadline(result.decision, isUnscored);
   const reasonText = friendlyDecisionReason(data.state, macroRegime, isUnscored);
@@ -179,13 +182,13 @@ export default function DecisionBox() {
 
             <div className="grid min-w-[220px] grid-cols-2 gap-2">
               <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">시장 건강 점수</p>
+                <p className="text-[10px] font-semibold uppercase text-slate-500">종합 점수</p>
                 <p className="mt-1 font-mono text-lg font-black text-white">
                   {formatScore(data.metrics.p3Score ?? data.metrics.score ?? 0, isUnscored)}
                 </p>
               </div>
               <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">권장 투자 비중</p>
+                <p className="text-[10px] font-semibold uppercase text-slate-500">새 매수 비중</p>
                 <p className="mt-1 text-sm font-black text-white">
                   {exposureLabel(result.sizeMultiplier, isUnscored)}
                 </p>
@@ -226,10 +229,16 @@ export default function DecisionBox() {
             <div className="space-y-1 text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
               {isUnscored ? (
                 <p>데이터 응답과 기준 시각 확인 후 다시 판단</p>
+              ) : warningSignals.length > 0 ? (
+                warningSignals.map((signal) => (
+                  <p key={signal.id} className="text-slate-300">
+                    {signal.title}: {signal.action}
+                  </p>
+                ))
               ) : data.state === 'GREEN' ? (
-                <p>큰손 매도 흔적 증가, 시장 불안도 급등, 함께 오르는 종목 감소 시 비중 축소</p>
+                <p>분산일 증가, 시장 불안도 급등, 시장 폭 악화 시 비중 축소</p>
               ) : (
-                <p>진입 가능 신호 회복, 함께 오르는 종목 증가, 강한 업종 확산 확인</p>
+                <p>시장 폭 회복, 강한 반등 확인, 강한 업종 확산 확인</p>
               )}
               {weak.slice(0, 2).map((item) => (
                 <p key={item.label} className="text-slate-400">

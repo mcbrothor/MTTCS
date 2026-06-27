@@ -13,9 +13,9 @@ test('CHART-01: 핵심 화면에서 Recharts 초기 크기 경고가 발생하�
   await setupAllMocks(page);
   await login(page);
   await page.goto('/master-filter');
-  await expect(page.getByRole('heading', { name: '오늘 시장 신호판' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '오늘의 결론과 위험 조기경보' })).toBeVisible();
   await page.goto('/macro');
-  await expect(page.getByRole('heading', { name: '큰 흐름 점검' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '시장 밖 위험 점검' })).toBeVisible();
 
   expect(chartWarnings).toEqual([]);
 });

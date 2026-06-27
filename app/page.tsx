@@ -92,8 +92,8 @@ export default function CommandCenterPage() {
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <StatusCard icon={<Activity className="h-4 w-4" />} label="진입 가능 신호" value={summary.marketState ? friendlyMarketStateLabel(summary.marketState) : '--'} tone={STATE_TONE[marketState]} loading={summary.loading} />
-            <StatusCard icon={<BarChart3 className="h-4 w-4" />} label="큰 흐름" value={summary.macroRegime ? friendlyMacroRegimeLabel(summary.macroRegime) : '--'} loading={summary.loading} />
+            <StatusCard icon={<Activity className="h-4 w-4" />} label="지금 새로 사도 되는지" value={summary.marketState ? friendlyMarketStateLabel(summary.marketState) : '--'} tone={STATE_TONE[marketState]} loading={summary.loading} />
+            <StatusCard icon={<BarChart3 className="h-4 w-4" />} label="시장 밖 위험" value={summary.macroRegime ? friendlyMacroRegimeLabel(summary.macroRegime) : '--'} loading={summary.loading} />
             <StatusCard icon={<ShieldAlert className="h-4 w-4" />} label="오픈 리스크" value={money(summary.activeRisk, market)} loading={summary.loading} />
           </div>
         </div>

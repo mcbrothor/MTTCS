@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { AiFallbackAttempt, AiInsightProvider, AiModelInsight, MasterFilterMetricDetail } from '@/types';
+import type { AiFallbackAttempt, AiInsightProvider, AiModelInsight, EarlyWarningMatrix, MasterFilterMetricDetail } from '@/types';
+import { friendlyMetricLabel } from '../market-display.ts';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -29,6 +30,9 @@ export interface MarketAnalysisInput {
     newHighLow: MasterFilterMetricDetail;
     sectorRotation: MasterFilterMetricDetail;
     totalScore: number;
+    displayScoreLabel?: string;
+    displaySections?: string[];
+    earlyWarnings?: EarlyWarningMatrix;
   };
   macroData: Record<string, unknown>;
 }
@@ -183,21 +187,30 @@ function isRateLimit(error: unknown) {
 }
 
 function buildPrompt(input: MarketAnalysisInput) {
+  const warningSummary = input.metrics.earlyWarnings
+    ? [
+        `조기경보 상태: ${input.metrics.earlyWarnings.summary}`,
+        `조기경보 행동: ${input.metrics.earlyWarnings.action}`,
+        ...input.metrics.earlyWarnings.signals.map((signal) => `${signal.title}: ${signal.status} - ${signal.action}`),
+      ]
+    : [];
   return [
-    'You are MTN Centaur, a concise market-regime analyst for a Mark Minervini SEPA/VCP trader.',
+    'You are MTN Centaur, a concise market risk analyst.',
     'Write in Korean. Do not invent live data. Use only the supplied metrics and macro context.',
+    'Use plain language. Avoid abbreviations and internal model names unless a ticker itself is required.',
     '',
-    `Market State: ${input.marketState} (Score: ${input.metrics.totalScore})`,
-    `Trend: ${input.metrics.trend.value} (${input.metrics.trend.status}) - ${input.metrics.trend.description}`,
-    `Breadth: ${input.metrics.breadth.value} / threshold ${input.metrics.breadth.threshold}`,
-    `Distribution: ${input.metrics.distribution.value} days / threshold ${input.metrics.distribution.threshold}`,
-    `Volatility: ${input.metrics.volatility.value} (${input.metrics.volatility.status})`,
-    input.metrics.adr ? `ADR: ${input.metrics.adr.value}${input.metrics.adr.unit} (${input.metrics.adr.status}) - ${input.metrics.adr.description}` : null,
-    `FTD: ${input.metrics.ftd.value}`,
-    `NH/NL Proxy: ${input.metrics.newHighLow.value}`,
-    `Sector Leadership: ${input.metrics.sectorRotation.value}`,
+    `시장 상태: ${input.marketState} (${input.metrics.displayScoreLabel ?? '종합 점수'}: ${input.metrics.totalScore})`,
+    `${friendlyMetricLabel(input.metrics.trend.label)}: ${input.metrics.trend.value} (${input.metrics.trend.status}) - ${input.metrics.trend.description}`,
+    `${friendlyMetricLabel(input.metrics.breadth.label)}: ${input.metrics.breadth.value} / 기준 ${input.metrics.breadth.threshold}`,
+    `${friendlyMetricLabel(input.metrics.distribution.label)}: ${input.metrics.distribution.value}일 / 기준 ${input.metrics.distribution.threshold}`,
+    `${friendlyMetricLabel(input.metrics.volatility.label)}: ${input.metrics.volatility.value} (${input.metrics.volatility.status})`,
+    input.metrics.adr ? `${friendlyMetricLabel(input.metrics.adr.label)}: ${input.metrics.adr.value}${input.metrics.adr.unit} (${input.metrics.adr.status}) - ${input.metrics.adr.description}` : null,
+    `${friendlyMetricLabel(input.metrics.ftd.label)}: ${input.metrics.ftd.value}`,
+    `${friendlyMetricLabel(input.metrics.newHighLow.label)}: ${input.metrics.newHighLow.value}`,
+    `${friendlyMetricLabel(input.metrics.sectorRotation.label)}: ${input.metrics.sectorRotation.value}`,
+    ...warningSummary,
     '',
-    'Macro context:',
+    '시장 밖 위험과 원천 데이터:',
     JSON.stringify(input.macroData, null, 2),
     '',
     'Respond ONLY with a JSON object (no markdown fences) in this exact shape:',

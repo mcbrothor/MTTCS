@@ -23,22 +23,24 @@ export function formatDetailedMarketReport(res: MasterFilterResponse) {
     `"${config.guide}"`,
     '',
     `✅ *현재 상태*: \`${config.text}\``,
-    `📊 *P3 점수*: \`${metrics.p3Score}/100\``,
+    `📊 *종합 점수*: \`${metrics.p3Score}/100\``,
+    metrics.earlyWarnings ? `⚠️ *위험 조기경보*: \`${metrics.earlyWarnings.summary}\`` : null,
+    metrics.earlyWarnings ? `🧭 *돈의 이동*: \`${metrics.earlyWarnings.rotation.label}\`` : null,
     '',
     '🤖 *MTN Centaur AI 분석 인사이트*',
     res.insightLog || '분석 데이터를 수집하는 중입니다...',
     '',
     '🔍 *상세 지표 분석*',
-    `• *지수 추세*: ${metrics.trend.status === 'PASS' ? '📈' : '📉'} ${metrics.trend.value} (${metrics.trend.status})`,
-    `• *참여 폭*: ${metrics.breadth.status === 'PASS' ? '✅' : '⚠️'} ${metrics.breadth.value}% (${metrics.breadth.status})`,
-    `• *변동성(VIX)*: ${metrics.volatility.status === 'PASS' ? '💎' : '🔥'} ${metrics.volatility.value} (${metrics.volatility.status})`,
-    `• *내부 강도(NH/NL)*: ${metrics.newHighLow?.status === 'PASS' ? '💪' : '🩹'} ${metrics.newHighLow?.value} (${metrics.newHighLow?.status})`,
-    `• *섹터 순환*: ${metrics.sectorRotation?.status === 'PASS' ? '🧭' : '🌫️'} ${metrics.sectorRotation?.status}`,
+    `• *지수 평균선 위치*: ${metrics.trend.status === 'PASS' ? '📈' : '📉'} ${metrics.trend.value} (${metrics.trend.status})`,
+    `• *시장 폭*: ${metrics.breadth.status === 'PASS' ? '✅' : '⚠️'} ${metrics.breadth.value}% (${metrics.breadth.status})`,
+    `• *시장 불안도*: ${metrics.volatility.status === 'PASS' ? '💎' : '🔥'} ${metrics.volatility.value} (${metrics.volatility.status})`,
+    `• *새 고점/새 저점 힘겨루기*: ${metrics.newHighLow?.status === 'PASS' ? '💪' : '🩹'} ${metrics.newHighLow?.value} (${metrics.newHighLow?.status})`,
+    `• *강한 업종*: ${metrics.sectorRotation?.status === 'PASS' ? '🧭' : '🌫️'} ${metrics.sectorRotation?.status}`,
     '',
     `📅 *기준 일자*: \`${updatedAt}\``,
     `[MTN 대시보드 바로가기](https://mttcs.vercel.app/master-filter)`,
     `_Powered by ${isAiGenerated ? `${aiProviderUsed} (${aiModelUsed})` : 'Rule-based Engine'}_`,
   ];
 
-  return sections.join('\n');
+  return sections.filter(Boolean).join('\n');
 }

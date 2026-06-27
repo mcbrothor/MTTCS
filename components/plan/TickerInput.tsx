@@ -213,6 +213,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
             <option value="HIGH_TIGHT_FLAG">HTF 공격형</option>
             <option value="ATR_VOLATILITY">ATR 변동성</option>
             <option value="CONSERVATIVE">보수적 절반 리스크</option>
+            <option value="ONL_PYRAMID">ONL 피라미딩</option>
           </select>
         </label>
 

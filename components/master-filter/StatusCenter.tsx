@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Globe, ShieldAlert, TrendingDown, Trending
 import { Area, AreaChart, ReferenceLine, Tooltip } from 'recharts';
 import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
 import { useMarket } from '@/contexts/MarketContext';
+import { friendlyMetricLabel } from '@/lib/market-display';
 
 interface HistoryPoint {
   date: string;
@@ -23,7 +24,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
   return (
     <div className="w-full mt-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">P3 Score 30일 추세</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">종합 점수 30일 추세</span>
         <span className={`flex items-center gap-1 text-xs font-bold ${isImproving ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
           {isImproving ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : null}
           {isImproving ? '+' : ''}{delta}pt ({first} → {currentScore})
@@ -51,7 +52,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
-              formatter={(value) => [`P3: ${value ?? '-'}`, ''] as [string, string]}
+              formatter={(value) => [`종합 점수: ${value ?? '-'}`, ''] as [string, string]}
               labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
@@ -172,7 +173,7 @@ export default function StatusCenter() {
           aria-valuenow={p3Score}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`P3 종합 점수 ${p3Score}점 만점 100점, 상태 ${data.state}`}
+          aria-label={`종합 점수 ${p3Score}점 만점 100점, 상태 ${data.state}`}
         >
           <div
             className="h-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 rounded-full transition-all duration-1000"
@@ -205,11 +206,11 @@ export default function StatusCenter() {
             className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase
               ${m.status === 'PASS' ? 'border-emerald-500/40 text-emerald-300' : m.status === 'WARNING' ? 'border-amber-500/40 text-amber-300' : 'border-rose-500/40 text-rose-300'}`}
           >
-            {m.label} · {m.status}
+            {friendlyMetricLabel(m.label)} · {m.status}
           </span>
         ))}
         <span className="rounded-full border border-slate-700 bg-slate-900/50 px-3 py-1 text-[10px] font-bold text-slate-300">
-          P3 {p3Score}/100
+          종합 점수 {p3Score}/100
         </span>
         {macroRegime && (
           <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase

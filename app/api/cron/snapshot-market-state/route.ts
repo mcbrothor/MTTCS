@@ -149,7 +149,7 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
   } catch (aiErr) {
     console.error('Snapshot Telegram/AI error:', aiErr);
     // AI 에러 시엔 기본 리포트라도 발송 시도
-    await sendTelegramMessage(`[MTN Snapshot] ${market} P3 Score: ${result.p3Score} (${result.state})`);
+    await sendTelegramMessage(`[MTN Snapshot] ${market} 종합 점수: ${result.p3Score}/100 (${result.state})`);
   }
 
   return { p3Score: result.p3Score, state: result.state };

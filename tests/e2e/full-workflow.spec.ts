@@ -18,7 +18,7 @@ test.describe('TC-E2E: 전체 워크플로우 통합 시나리오', () => {
       await expect(page.locator('text=오늘의 의사결정')).toBeVisible();
 
       // Market state card should show something
-      await expect(page.getByText('진입 가능 신호', { exact: true }).first()).toBeVisible();
+      await expect(page.getByText('지금 새로 사도 되는지', { exact: true }).first()).toBeVisible();
     });
 
     test('E2E-A02: 대시보드 → 마스터 필터 → 스캐너 내비게이션', async ({ page }) => {

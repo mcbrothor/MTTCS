@@ -3,6 +3,7 @@ import { analyzeSepa } from '../lib/finance/core/sepa.ts';
 import { calculateATR, calculateEntryPrice } from '../lib/finance/core/moving-average.ts';
 import {
   calculateMinerviniRiskPlan,
+  calculateManualRiskPlan,
   calculatePositionSize,
 } from '../lib/finance/core/position-sizing.ts';
 
@@ -98,6 +99,37 @@ run('supports conservative half-risk strategy selection', () => {
   assert.equal(plan.stopLossPrice, 97);
   assert.equal(plan.totalShares, 166);
   assert.equal(plan.riskPolicy?.profile, 'CONSERVATIVE');
+});
+
+run('builds manual LONG fixed-risk plan from user entry stop and target', () => {
+  const plan = calculateManualRiskPlan(50_000, 100, 95, 115, 0.01, { direction: 'LONG' });
+  assert.equal(plan.strategy, 'MANUAL_FIXED_RISK');
+  assert.equal(plan.riskModel, 'USER_DEFINED_STOP_TARGET');
+  assert.equal(plan.stopSource, 'USER_DEFINED');
+  assert.equal(plan.totalShares, 100);
+  assert.equal(plan.riskPerShare, 5);
+  assert.equal(plan.maxRisk, 500);
+  assert.equal(plan.rewardRiskRatio, 3);
+});
+
+run('builds manual SHORT fixed-risk plan from user entry stop and target', () => {
+  const plan = calculateManualRiskPlan(50_000, 100, 105, 85, 0.01, { direction: 'SHORT' });
+  assert.equal(plan.strategy, 'MANUAL_FIXED_RISK');
+  assert.equal(plan.totalShares, 100);
+  assert.equal(plan.riskPerShare, 5);
+  assert.equal(plan.maxRisk, 500);
+  assert.equal(plan.rewardRiskRatio, 3);
+});
+
+run('rejects manual plan with invalid stop direction', () => {
+  const longPlan = calculateManualRiskPlan(50_000, 100, 101, 115, 0.01, { direction: 'LONG' });
+  const shortPlan = calculateManualRiskPlan(50_000, 100, 99, 85, 0.01, { direction: 'SHORT' });
+  assert.equal(longPlan.totalShares, 0);
+  assert.equal(longPlan.riskPerShare, 0);
+  assert.equal(longPlan.stopQuality, 'INVALID');
+  assert.equal(shortPlan.totalShares, 0);
+  assert.equal(shortPlan.riskPerShare, 0);
+  assert.equal(shortPlan.stopQuality, 'INVALID');
 });
 
 run('uses benchmark RS proxy and marks missing fundamentals as info', () => {

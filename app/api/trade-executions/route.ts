@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
+import {
+  buildTradePerformanceRecord,
+  calculateAccountBalanceDelta,
+  inferTradeMarket,
+} from '@/lib/finance/core/account-performance';
 import { calculateTradeMetrics, deriveTradeStatus } from '@/lib/finance/core/trade-metrics';
-import type { Trade, TradeExecution, TradeExecutionSide, TradeLegLabel } from '@/types';
+import type { Trade, TradeExecution, TradeExecutionSide, TradeLegLabel, TradeMetrics } from '@/types';
 
 const VALID_SIDES: TradeExecutionSide[] = ['ENTRY', 'EXIT'];
 const VALID_LEGS: TradeLegLabel[] = ['E1', 'E2', 'E3', 'MANUAL'];
@@ -88,6 +93,53 @@ function ensureExitSharesAreValid(trade: Trade, nextExecutions: TradeExecution[]
   }
 }
 
+async function syncCompletedTradePerformance(trade: Trade, metrics: TradeMetrics) {
+  if (!metrics.isFullyClosed || metrics.realizedPnL === null) return;
+
+  const market = inferTradeMarket(trade.ticker);
+  const completedAt = new Date().toISOString();
+  const performanceRecord = buildTradePerformanceRecord(trade, metrics, completedAt);
+  const [{ data: existingRecord }, { data: settings }] = await Promise.all([
+    supabaseServer
+      .from('trade_performance_records')
+      .select('realized_pnl')
+      .eq('trade_id', trade.id)
+      .maybeSingle(),
+    supabaseServer
+      .from('portfolio_settings')
+      .select('*')
+      .eq('market', market)
+      .maybeSingle(),
+  ]);
+  const delta = calculateAccountBalanceDelta({
+    market,
+    realizedPnl: performanceRecord.realized_pnl,
+    previousRecordedPnl: existingRecord?.realized_pnl,
+    currentSettings: settings,
+    fallbackEquity: trade.total_equity,
+  });
+
+  if (delta.realizedPnLDelta !== 0 && delta.equityAfter > 0) {
+    const { error: settingsError } = await supabaseServer
+      .from('portfolio_settings')
+      .upsert({
+        market,
+        total_equity: delta.equityAfter,
+        cash: delta.cashAfter,
+        updated_at: completedAt,
+      }, { onConflict: 'market' });
+    if (settingsError) throw settingsError;
+  }
+
+  const { error: performanceError } = await supabaseServer
+    .from('trade_performance_records')
+    .upsert({
+      ...performanceRecord,
+      updated_at: completedAt,
+    }, { onConflict: 'trade_id' });
+  if (performanceError) throw performanceError;
+}
+
 async function syncTrade(tradeId: string) {
   const trade = await getTradeWithExecutions(tradeId);
   const metrics = calculateTradeMetrics(trade, trade.executions || []);
@@ -117,9 +169,12 @@ async function syncTrade(tradeId: string) {
   const rest = { ...synced, executions } as Trade;
   delete (rest as unknown as { trade_executions?: unknown }).trade_executions;
 
+  const nextMetrics = calculateTradeMetrics(rest, executions);
+  await syncCompletedTradePerformance(rest, nextMetrics);
+
   return {
     ...rest,
-    metrics: calculateTradeMetrics(rest, executions),
+    metrics: nextMetrics,
   };
 }
 

@@ -30,6 +30,8 @@ interface AnalysisChartContainerProps {
   exchange: string;
   pivotPrice?: number | null;
   stopLossPrice?: number | null;
+  targetPrice?: number | null;
+  pivotLabel?: string;
   initialSource?: ChartSource;
 }
 
@@ -38,6 +40,8 @@ export default function AnalysisChartContainer({
   exchange,
   pivotPrice,
   stopLossPrice,
+  targetPrice,
+  pivotLabel,
   initialSource = 'tradingview'
 }: AnalysisChartContainerProps) {
   const isMobile = useIsMobile();
@@ -168,6 +172,8 @@ export default function AnalysisChartContainer({
                 data={priceData} 
                 pivotPrice={pivotPrice} 
                 stopLossPrice={stopLossPrice} 
+                targetPrice={targetPrice}
+                pivotLabel={pivotLabel}
                 height={500} 
               />
             )}

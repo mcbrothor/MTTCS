@@ -14,9 +14,10 @@ interface ChecklistFormProps {
     chk_psychology: boolean;
   }) => void;
   sepaStatus: AssessmentStatus;
+  variant?: 'system' | 'manual';
 }
 
-const STEPS = [
+const SYSTEM_STEPS = [
   {
     id: 'sepa',
     title: 'SEPA',
@@ -55,23 +56,63 @@ const STEPS = [
   },
 ];
 
-export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormProps) {
+const MANUAL_STEPS = [
+  {
+    id: 'plan',
+    title: 'Plan',
+    label: '1. 수동 계획 기준 확인',
+    desc: '내가 입력한 진입가, 손절가, 목표가가 현재 차트 기준과 일치하며, 감정적 추격이 아닌 사전 정의된 시나리오입니다.',
+  },
+  {
+    id: 'risk',
+    title: 'Risk',
+    label: '2. 리스크 동의',
+    desc: '내가 입력한 허용 손실 한도 안에서만 수량을 산출하며, 계산된 수량을 초과하지 않습니다.',
+  },
+  {
+    id: 'entry',
+    title: 'Entry',
+    label: '3. 진입 규율',
+    desc: '계획한 진입 조건이 충족되기 전에는 예측 진입하지 않습니다.',
+  },
+  {
+    id: 'stoploss',
+    title: 'Stop',
+    label: '4. 손절 규율',
+    desc: '정해진 손절가에 도달하면 즉시 청산하고 손실을 확대하지 않습니다.',
+  },
+  {
+    id: 'exit',
+    title: 'Exit',
+    label: '5. 청산 규율',
+    desc: '목표가, 추적 손절, 무효화 조건 중 사전에 정한 기준을 따릅니다.',
+  },
+  {
+    id: 'psychology',
+    title: 'Mind',
+    label: '6. 심리 점검',
+    desc: '복수심, 조급함, 손실 만회 욕구가 아닌 차분한 상태에서만 실행합니다.',
+  },
+];
+
+export default function ChecklistForm({ onComplete, sepaStatus, variant = 'system' }: ChecklistFormProps) {
+  const steps = variant === 'manual' ? MANUAL_STEPS : SYSTEM_STEPS;
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, boolean>>({});
-  const isSepaBlocked = sepaStatus === 'fail';
-  const isSepaWarning = sepaStatus === 'warning';
+  const isSepaBlocked = variant === 'system' && sepaStatus === 'fail';
+  const isSepaWarning = variant === 'system' && sepaStatus === 'warning';
 
   const handleAgree = () => {
-    if (isSepaBlocked && STEPS[currentStep].id === 'sepa') return;
+    if (isSepaBlocked && steps[currentStep].id === 'sepa') return;
 
-    const newAnswers = { ...answers, [STEPS[currentStep].id]: true };
+    const newAnswers = { ...answers, [steps[currentStep].id]: true };
     setAnswers(newAnswers);
 
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
       onComplete({
-        chk_sepa: !!newAnswers.sepa,
+        chk_sepa: variant === 'manual' ? false : !!newAnswers.sepa,
         chk_risk: !!newAnswers.risk,
         chk_entry: !!newAnswers.entry,
         chk_stoploss: !!newAnswers.stoploss,
@@ -91,7 +132,9 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
         <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">4. Centaur 체크리스트</p>
         <h2 className="mt-1 text-xl font-bold text-white">기계적 실행을 위한 최종 확인</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          SEPA가 Fail(4개 이상 실패)이면 차단됩니다. 3개 이하 실패 시 경고와 함께 진행할 수 있습니다.
+          {variant === 'manual'
+            ? '수동 입력 계획도 리스크, 진입, 손절, 청산, 심리 규율을 확인한 뒤 저장합니다.'
+            : 'SEPA가 Fail(4개 이상 실패)이면 차단됩니다. 3개 이하 실패 시 경고와 함께 진행할 수 있습니다.'}
         </p>
       </div>
 
@@ -112,9 +155,9 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
         <div className="absolute left-0 top-1/2 -z-10 h-1 w-full -translate-y-1/2 bg-slate-700" />
         <div
           className="absolute left-0 top-1/2 -z-10 h-1 -translate-y-1/2 bg-emerald-500 transition-all duration-300"
-          style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
+          style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
         />
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const isCompleted = answers[step.id];
           const isCurrent = index === currentStep;
           return (
@@ -131,10 +174,10 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
       </div>
 
       <div className="mb-6 flex min-h-[140px] flex-col justify-center rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-        <h4 className="mb-2 text-base font-semibold text-white">{STEPS[currentStep].label}</h4>
-        <p className="mb-4 text-sm leading-6 text-slate-300">{STEPS[currentStep].desc}</p>
+        <h4 className="mb-2 text-base font-semibold text-white">{steps[currentStep].label}</h4>
+        <p className="mb-4 text-sm leading-6 text-slate-300">{steps[currentStep].desc}</p>
 
-        {answers[STEPS[currentStep].id] && (
+        {answers[steps[currentStep].id] && (
           <div className="flex items-center gap-1 text-sm font-bold text-emerald-400">
             <Check className="h-4 w-4" /> 확인 완료
           </div>
@@ -148,10 +191,10 @@ export default function ChecklistForm({ onComplete, sepaStatus }: ChecklistFormP
         <Button
           variant="primary"
           onClick={handleAgree}
-          disabled={isSepaBlocked && STEPS[currentStep].id === 'sepa'}
-          className={currentStep === STEPS.length - 1 ? 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500' : ''}
+          disabled={isSepaBlocked && steps[currentStep].id === 'sepa'}
+          className={currentStep === steps.length - 1 ? 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500' : ''}
         >
-          {currentStep === STEPS.length - 1 ? '동의하고 완료' : '동의하고 다음'}
+          {currentStep === steps.length - 1 ? '동의하고 완료' : '동의하고 다음'}
         </Button>
       </div>
     </Card>

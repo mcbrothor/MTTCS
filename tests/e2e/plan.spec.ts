@@ -63,6 +63,32 @@ test.describe('TC-PLAN: 매매 계획', () => {
     await expect(page.locator('text=계획 저장 완료')).toBeVisible({ timeout: 10_000 });
   });
 
+  test('PLAN-12: 수동 전략 산출 → entry stop target 입력 후 저장', async ({ page }) => {
+    await planPage.goto();
+
+    await page.getByRole('button', { name: /수동 전략 산출/ }).click();
+    await page.getByLabel('티커').fill('NVDA');
+    await page.getByLabel('진입가 Entry').fill('100');
+    await page.getByLabel('손절가 Stop').fill('95');
+    await page.getByLabel('목표가 Target').fill('115');
+
+    await expect(page.getByText('수동 고정 리스크')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/R\/R 3\.00R/)).toBeVisible();
+    await expect(page.getByText('Entry: 100')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Stop: 95')).toBeVisible();
+    await expect(page.getByText('Target: 115')).toBeVisible();
+
+    for (let step = 0; step < 5; step += 1) {
+      await page.getByRole('button', { name: '동의하고 다음' }).click();
+    }
+    await page.getByRole('button', { name: '동의하고 완료' }).click();
+
+    const saveButton = page.locator('button:has-text("계획 저장")');
+    await expect(saveButton).toBeEnabled();
+    await saveButton.click();
+    await expect(page.locator('text=계획 저장 완료')).toBeVisible({ timeout: 10_000 });
+  });
+
   test('PLAN-11: 미국 ↔ 한국 시장 전환', async ({ page }) => {
     await planPage.goto();
 

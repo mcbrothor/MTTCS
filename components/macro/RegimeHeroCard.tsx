@@ -29,7 +29,7 @@ const REGIME_CONFIG = {
     accent: 'bg-emerald-500/30',
     icon: <TrendingUp className="h-5 w-5 text-emerald-400" />,
     label: friendlyMacroRegimeLabel('RISK_ON'),
-    description: '주식 같은 위험자산에 우호적인 큰 흐름입니다. 그래도 진입 가능 신호를 함께 확인하세요.',
+    description: '주식 같은 위험자산에 우호적인 시장 밖 흐름입니다. 그래도 시장 내부 건강도를 함께 확인하세요.',
   },
   NEUTRAL: {
     color: 'text-amber-400',
@@ -38,7 +38,7 @@ const REGIME_CONFIG = {
     accent: 'bg-amber-500/30',
     icon: <Minus className="h-5 w-5 text-amber-400" />,
     label: friendlyMacroRegimeLabel('NEUTRAL'),
-    description: '큰 흐름 신호가 섞여 있습니다. 새 매수 비중을 줄이고 리스크 관리를 우선하세요.',
+    description: '시장 밖 신호가 섞여 있습니다. 새 매수 비중을 줄이고 리스크 관리를 우선하세요.',
   },
   RISK_OFF: {
     color: 'text-rose-400',
@@ -61,7 +61,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
   return (
     <div className="w-full mt-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">큰 흐름 점수 7일 변화</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">시장 밖 위험 점수 7일 변화</span>
         <span className={`flex items-center gap-1 text-xs font-bold ${isImproving ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
           {isImproving ? <TrendingUp className="h-3 w-3" /> : delta < 0 ? <TrendingDown className="h-3 w-3" /> : null}
           {isImproving ? '+' : ''}{delta}pt ({first} → {currentScore})
@@ -89,7 +89,7 @@ function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; cu
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '6px', fontSize: 10 }}
-              formatter={(value) => [`큰 흐름: ${value ?? '-'}`, ''] as [string, string]}
+              formatter={(value) => [`시장 밖 위험: ${value ?? '-'}`, ''] as [string, string]}
               labelFormatter={(label) => String(label ?? '')}
             />
           </AreaChart>
@@ -164,7 +164,7 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
       <div className={`absolute -left-12 -top-12 h-32 w-32 rounded-full opacity-20 blur-3xl ${config.accent}`} />
 
       <div className="relative z-10 flex flex-col items-center text-center gap-3">
-        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">큰 흐름 점수</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400">시장 밖 위험 점수</p>
 
         {/* Score + Regime Label */}
         <div className="flex flex-col items-center gap-1">
@@ -193,7 +193,7 @@ export default function RegimeHeroCard({ score, regime, breakdown, history, asOf
             aria-valuenow={score}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label={`큰 흐름 점수 ${score}/100, 상태 ${config.label}`}
+            aria-label={`시장 밖 위험 점수 ${score}/100, 상태 ${config.label}`}
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 transition-all duration-1000"

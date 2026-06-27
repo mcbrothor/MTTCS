@@ -1,7 +1,7 @@
 import type { MarketState, MasterFilterMetricDetail } from '@/types';
 import type { OHLCData } from '@/types';
-import { MACRO_CRITERIA } from '@/lib/finance/engines/canslim-criteria';
-import { calculateAdrPct } from '@/lib/finance/core/price-metrics';
+import { MACRO_CRITERIA } from '../finance/engines/canslim-criteria';
+import { calculateAdrPct } from '../finance/core/price-metrics';
 
 export function average(values: number[]) {
   return values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
@@ -34,6 +34,12 @@ export function statusFromScore(score: number): 'PASS' | 'WARNING' | 'FAIL' {
   if (score >= 16) return 'PASS';
   if (score >= 10) return 'WARNING';
   return 'FAIL';
+}
+
+function stricterMarketState(left: MarketState | null, right: MarketState): MarketState {
+  const rank: Record<MarketState, number> = { GREEN: 0, YELLOW: 1, RED: 2, GREY: 3 };
+  if (left === null) return right;
+  return rank[right] > rank[left] ? right : left;
 }
 
 // O'Neil 분산일 기준: 0.2% 이상 하락 + 전일 대비 거래량 증가
@@ -132,6 +138,16 @@ export interface P3ComputeInput {
   sectorRows: { symbol: string; return20: number; riskOn: boolean }[];
 }
 
+export interface IntradayShockInput {
+  mainChangePct?: number | null;
+  techChangePct?: number | null;
+  semiconductorChangePct?: number | null;
+  kospiChangePct?: number | null;
+  kosdaqChangePct?: number | null;
+  vixChangePct?: number | null;
+  staleDailyData?: boolean;
+}
+
 export interface P3ComputeResult {
   p3Score: number;
   state: MarketState;
@@ -161,10 +177,13 @@ export interface P3ComputeResult {
   ftd: { found: boolean; daysAgo: number | null; reason: string };
   foreignNetBuy5d: number | null;
   foreignNetBuyScore: number;
+  shockStateCap: MarketState | null;
+  shockWarnings: string[];
   metrics: {
     trend: MasterFilterMetricDetail;
     breadth: MasterFilterMetricDetail;
     volatility: MasterFilterMetricDetail;
+    intradayShock?: MasterFilterMetricDetail;
     adr: MasterFilterMetricDetail;
     distribution: MasterFilterMetricDetail;
     ftd: MasterFilterMetricDetail;
@@ -191,7 +210,8 @@ export function computeP3(
   mainSymbol: string,
   breadthEtfs: string[],
   vix3mData?: OHLCData[],
-  foreignNetBuy5d?: number
+  foreignNetBuy5d?: number,
+  intradayShock: IntradayShockInput = {}
 ): P3ComputeResult {
   const lastClose = mainData.at(-1)!.close;
   const ma50 = movingAverage(mainData, 50) ?? 0;
@@ -297,6 +317,55 @@ export function computeP3(
     state = 'YELLOW';
   }
 
+  const shockWarnings: string[] = [];
+  let shockStateCap: MarketState | null = null;
+  const mainChange = intradayShock.mainChangePct;
+  const techChange = intradayShock.techChangePct;
+  const semiChange = intradayShock.semiconductorChangePct;
+  const kospiChange = intradayShock.kospiChangePct;
+  const kosdaqChange = intradayShock.kosdaqChangePct;
+  const vixChange = intradayShock.vixChangePct;
+  const hasValueAtOrBelow = (value: number | null | undefined, threshold: number) =>
+    typeof value === 'number' && Number.isFinite(value) && value <= threshold;
+  const hasValueAtOrAbove = (value: number | null | undefined, threshold: number) =>
+    typeof value === 'number' && Number.isFinite(value) && value >= threshold;
+
+  if (intradayShock.staleDailyData) {
+    shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
+    shockWarnings.push('Daily history is stale versus live market quotes.');
+  }
+
+  if (isKoreaSymbol) {
+    if (hasValueAtOrBelow(kospiChange, -5) || hasValueAtOrBelow(kosdaqChange, -5) || hasValueAtOrBelow(mainChange, -5)) {
+      shockStateCap = stricterMarketState(shockStateCap, 'RED');
+      shockWarnings.push('Korea index shock is beyond -5%; new entries are halted regardless of moving-average trend.');
+    } else if (hasValueAtOrBelow(kospiChange, -3) || hasValueAtOrBelow(kosdaqChange, -3) || hasValueAtOrBelow(mainChange, -3)) {
+      shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
+      shockWarnings.push('Korea index shock is beyond -3%; GREEN is not allowed intraday.');
+    }
+  } else if (
+    hasValueAtOrBelow(mainChange, -1.5) ||
+    hasValueAtOrBelow(techChange, -3) ||
+    hasValueAtOrBelow(semiChange, -5)
+  ) {
+    shockStateCap = stricterMarketState(shockStateCap, 'RED');
+    shockWarnings.push('US intraday risk shock is severe; new entries are halted.');
+  } else if (
+    hasValueAtOrBelow(mainChange, -0.8) ||
+    hasValueAtOrBelow(techChange, -2) ||
+    hasValueAtOrBelow(semiChange, -3.5) ||
+    (hasValueAtOrAbove(vixChange, 8) && currentVix >= 18)
+  ) {
+    shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
+    shockWarnings.push('US intraday risk shock detected; GREEN is not allowed.');
+  }
+
+  if (shockStateCap === 'RED' && state !== 'RED') {
+    state = 'RED';
+  } else if (shockStateCap === 'YELLOW' && state === 'GREEN') {
+    state = 'YELLOW';
+  }
+
   const metrics = {
     trend: {
       label: 'Trend Alignment',
@@ -329,6 +398,17 @@ export function computeP3(
       description: 'VIX 20 미만은 정상 변동성, 20~25는 주의, 25 이상은 위험 구간으로 해석합니다.',
       source: 'CBOE via Yahoo',
       score: volatilityScoreScaled,
+      weight: 20,
+    },
+    intradayShock: {
+      label: 'Intraday Shock Guard',
+      value: shockWarnings.length ? shockWarnings.length : 0,
+      threshold: isKoreaSymbol ? 'KR -3% warning / -5% halt' : 'SPY -0.8%, QQQ -2%, semis -3.5%',
+      status: (shockStateCap === 'RED' ? 'FAIL' : shockStateCap === 'YELLOW' ? 'WARNING' : 'PASS') as 'PASS' | 'WARNING' | 'FAIL',
+      unit: 'signals',
+      description: shockWarnings.length ? shockWarnings.join(' ') : 'Live quote shock did not cap the market state.',
+      source: 'Live quote guard',
+      score: shockStateCap === 'RED' ? 0 : shockStateCap === 'YELLOW' ? 8 : 20,
       weight: 20,
     },
     adr: {
@@ -400,6 +480,7 @@ export function computeP3(
     legacyScore, lastClose, ma50, ma150, ma200, currentVix, currentVix3m, vixTermRatio, adrPct, above200Pct, newHighLowProxy,
     distributionDays, distributionWeighted, distributionDetails: distributionInfo.details, ftd,
     foreignNetBuy5d: foreignNetBuy5d ?? null, foreignNetBuyScore,
+    shockStateCap, shockWarnings,
     metrics, mainHistory, vixHistory, movingAverageHistory,
   };
 }

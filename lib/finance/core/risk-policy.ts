@@ -57,6 +57,28 @@ const STRATEGY_CONFIGS: Record<AppliedRiskStrategy, RiskStrategyConfig> = {
     preferAtrStop: true,
     portfolioHeatPct: 0.03,
   },
+  ONL_PYRAMID: {
+    strategy: 'ONL_PYRAMID',
+    label: 'ONL 50/30/20 Pyramid',
+    profile: 'STANDARD',
+    riskMultiplier: 1,
+    maxLossPct: 0.05,
+    atrStopMultiple: 2,
+    pyramidSpacingAtr: 0.5,
+    preferAtrStop: false,
+    portfolioHeatPct: 0.06,
+  },
+  MANUAL_FIXED_RISK: {
+    strategy: 'MANUAL_FIXED_RISK',
+    label: 'Manual Fixed Risk',
+    profile: 'STANDARD',
+    riskMultiplier: 1,
+    maxLossPct: 1,
+    atrStopMultiple: 2,
+    pyramidSpacingAtr: 0.5,
+    preferAtrStop: false,
+    portfolioHeatPct: 0.06,
+  },
 };
 
 export function normalizeRiskStrategy(value: unknown): RiskStrategy {
@@ -66,7 +88,9 @@ export function normalizeRiskStrategy(value: unknown): RiskStrategy {
     normalized === 'MINERVINI_VCP' ||
     normalized === 'HIGH_TIGHT_FLAG' ||
     normalized === 'ATR_VOLATILITY' ||
-    normalized === 'CONSERVATIVE'
+    normalized === 'CONSERVATIVE' ||
+    normalized === 'ONL_PYRAMID' ||
+    normalized === 'MANUAL_FIXED_RISK'
   ) {
     return normalized;
   }

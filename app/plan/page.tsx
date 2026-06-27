@@ -11,11 +11,12 @@ const VcpAnalysisPanel = dynamic(() => import('@/components/plan/VcpAnalysisPane
 import RiskCalculator from '@/components/plan/RiskCalculator';
 import ChecklistForm from '@/components/plan/ChecklistForm';
 import ScannerContextBanner from '@/components/plan/ScannerContextBanner';
+import ManualStrategyForm, { type ManualStrategyDraft } from '@/components/plan/ManualStrategyForm';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
-import type { ApiSuccess, PortfolioRiskSummary, RiskStrategy } from '@/types';
+import type { ApiSuccess, PlanMode, PortfolioRiskSummary, RiskStrategy } from '@/types';
 
 const DEFAULT_PLAN_TOTAL_EQUITY = 50000;
 
@@ -34,6 +35,7 @@ function PlanPageContent() {
   const initialTicker = searchParams.get('ticker') || '';
   const initialExchange = searchParams.get('exchange') || 'NAS';
   const shouldAutoAnalyze = searchParams.get('autoAnalyze') === '1';
+  const [planMode, setPlanMode] = useState<PlanMode>('SYSTEM_ANALYSIS');
   const [planMarket, setPlanMarket] = useState<'US' | 'KR'>(
     (initialExchange === 'KOSPI' || initialExchange === 'KOSDAQ') ? 'KR' : 'US'
   );
@@ -65,6 +67,7 @@ function PlanPageContent() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [manualDraft, setManualDraft] = useState<ManualStrategyDraft | null>(null);
   // C-6: alert() 대신 인라인 에러 상태
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -73,6 +76,17 @@ function PlanPageContent() {
     setSaveError(null);
     fetchMarketData(ticker, exchange, totalEquity, riskPercent, riskStrategy);
   }, [fetchMarketData]);
+
+  const handleModeChange = (mode: PlanMode) => {
+    setPlanMode(mode);
+    setChecklist(null);
+    setSaveError(null);
+    setSaveSuccess(false);
+  };
+
+  const handleManualDraftChange = useCallback((draft: ManualStrategyDraft) => {
+    setManualDraft(draft);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -115,37 +129,81 @@ function PlanPageContent() {
   useEffect(() => {
     if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker || defaultTotalEquity <= 0) return;
     autoAnalyzeStarted.current = true;
+    setPlanMode('SYSTEM_ANALYSIS');
     handleAnalyze(initialTicker, initialExchange, defaultTotalEquity, 1);
   }, [handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, defaultTotalEquity]);
 
   const handleSavePlan = async () => {
-    if (!analysis || !checklist) return;
+    if (!checklist) return;
 
     setSaving(true);
     setSaveError(null);
     try {
-      await axios.post('/api/trades', {
-        ticker: analysis.ticker,
-        direction: 'LONG',
-        ...checklist,
-        chk_market: checklist.chk_sepa,
-        sepa_evidence: analysis.sepaEvidence,
-        vcp_analysis: analysis.vcpAnalysis,
-        total_equity: analysis.riskPlan.totalEquity,
-        planned_risk: analysis.riskPlan.maxRisk,
-        risk_percent: analysis.riskPlan.riskPercent,
-        atr_value: analysis.riskPlan.atr,
-        entry_price: analysis.riskPlan.entryPrice,
-        stoploss_price: analysis.riskPlan.stopLossPrice,
-        position_size: analysis.riskPlan.totalShares,
-        total_shares: analysis.riskPlan.totalShares,
-        entry_targets: analysis.riskPlan.entryTargets,
-        trailing_stops: analysis.riskPlan.trailingStops,
-        risk_strategy: analysis.riskPlan.strategy,
-        requested_risk_strategy: analysis.riskPlan.requestedStrategy,
-        risk_gate: analysis.riskPlan.riskGate,
-        risk_policy_snapshot: analysis.riskPlan.riskPolicy,
-      });
+      if (planMode === 'MANUAL_STRATEGY') {
+        if (!manualDraft) return;
+        const riskPlan = manualDraft.riskPlan;
+        await axios.post('/api/trades', {
+          ticker: manualDraft.ticker,
+          direction: manualDraft.direction,
+          plan_mode: 'MANUAL_STRATEGY',
+          ...checklist,
+          chk_market: false,
+          sepa_evidence: null,
+          vcp_analysis: null,
+          total_equity: riskPlan.totalEquity,
+          planned_risk: riskPlan.maxRisk,
+          risk_percent: riskPlan.riskPercent,
+          atr_value: null,
+          entry_price: riskPlan.entryPrice,
+          stoploss_price: riskPlan.stopLossPrice,
+          position_size: riskPlan.totalShares,
+          total_shares: riskPlan.totalShares,
+          entry_targets: riskPlan.entryTargets,
+          trailing_stops: riskPlan.trailingStops,
+          risk_strategy: 'MANUAL_FIXED_RISK',
+          requested_risk_strategy: 'MANUAL_FIXED_RISK',
+          risk_gate: riskPlan.riskGate,
+          risk_policy_snapshot: riskPlan.riskPolicy,
+          setup_tags: manualDraft.setupTags,
+          plan_note: manualDraft.planNote,
+          chart_plan: {
+            entryPrice: riskPlan.entryPrice,
+            stopPrice: riskPlan.stopLossPrice,
+            targetPrice: riskPlan.targetPrice,
+            direction: manualDraft.direction,
+            rewardRiskRatio: riskPlan.rewardRiskRatio,
+            riskPerShare: riskPlan.riskPerShare,
+          },
+          plan_answers: { checklist },
+        });
+      } else {
+        if (!analysis) return;
+        await axios.post('/api/trades', {
+          ticker: analysis.ticker,
+          direction: 'LONG',
+          plan_mode: 'SYSTEM_ANALYSIS',
+          ...checklist,
+          chk_market: checklist.chk_sepa,
+          sepa_evidence: analysis.sepaEvidence,
+          vcp_analysis: analysis.vcpAnalysis,
+          total_equity: analysis.riskPlan.totalEquity,
+          planned_risk: analysis.riskPlan.maxRisk,
+          risk_percent: analysis.riskPlan.riskPercent,
+          atr_value: analysis.riskPlan.atr,
+          entry_price: analysis.riskPlan.entryPrice,
+          stoploss_price: analysis.riskPlan.stopLossPrice,
+          position_size: analysis.riskPlan.totalShares,
+          total_shares: analysis.riskPlan.totalShares,
+          entry_targets: analysis.riskPlan.entryTargets,
+          trailing_stops: analysis.riskPlan.trailingStops,
+          risk_strategy: analysis.riskPlan.strategy,
+          requested_risk_strategy: analysis.riskPlan.requestedStrategy,
+          risk_gate: analysis.riskPlan.riskGate,
+          risk_policy_snapshot: analysis.riskPlan.riskPolicy
+            ? { ...analysis.riskPlan.riskPolicy, pyramidPlan: analysis.riskPlan.pyramidPlan ?? null }
+            : null,
+        });
+      }
       setSaveSuccess(true);
     } catch (err: unknown) {
       // C-6: alert() 대신 인라인 에러 메시지로 교체
@@ -160,13 +218,25 @@ function PlanPageContent() {
     }
   };
 
-  const saveBlocked =
-    !analysis ||
-    !checklist ||
-    analysis.sepaEvidence.status === 'fail' ||
-    analysis.riskPlan.totalShares <= 0 ||
-    analysis.riskPlan.riskGate?.status === 'BLOCK' ||
-    saving;
+  const manualRiskPlan = manualDraft?.riskPlan ?? null;
+  const saveBlocked = planMode === 'MANUAL_STRATEGY'
+    ? !manualDraft ||
+      !manualDraft.ticker ||
+      !checklist ||
+      (manualRiskPlan?.totalShares ?? 0) <= 0 ||
+      (manualRiskPlan?.riskPerShare ?? 0) <= 0 ||
+      manualRiskPlan?.rewardRiskRatio === null ||
+      manualRiskPlan?.riskGate?.status === 'BLOCK' ||
+      saving
+    : !analysis ||
+      !checklist ||
+      analysis.sepaEvidence.status === 'fail' ||
+      analysis.riskPlan.totalShares <= 0 ||
+      analysis.riskPlan.riskGate?.status === 'BLOCK' ||
+      saving;
+  const canShowSavePanel = planMode === 'MANUAL_STRATEGY'
+    ? Boolean(manualDraft && manualRiskPlan && manualRiskPlan.totalShares > 0 && manualRiskPlan.riskPerShare > 0 && manualRiskPlan.rewardRiskRatio !== null)
+    : Boolean(analysis);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 pb-12">
@@ -200,6 +270,25 @@ function PlanPageContent() {
         {planMarket === 'US' ? '🇺🇸 미국 계좌 — 통화: USD ($)' : '🇰🇷 한국 계좌 — 통화: KRW (₩)'}
       </div>
 
+      <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-800 bg-slate-950/70 p-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => handleModeChange('SYSTEM_ANALYSIS')}
+          className={`rounded-md border px-4 py-3 text-left transition-colors ${planMode === 'SYSTEM_ANALYSIS' ? 'border-emerald-500/50 bg-emerald-500/10 text-white' : 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
+        >
+          <span className="block text-sm font-bold">자동 분석</span>
+          <span className="mt-1 block text-xs">SEPA/VCP 기반으로 피벗, 손절, 수량을 자동 계산합니다.</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => handleModeChange('MANUAL_STRATEGY')}
+          className={`rounded-md border px-4 py-3 text-left transition-colors ${planMode === 'MANUAL_STRATEGY' ? 'border-sky-500/50 bg-sky-500/10 text-white' : 'border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
+        >
+          <span className="block text-sm font-bold">수동 전략 산출</span>
+          <span className="mt-1 block text-xs">내가 정한 entry, stop, target으로 R/R과 수량만 계산합니다.</span>
+        </button>
+      </div>
+
       {equityLoadError && (
         <div className="rounded-lg border-2 border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
           <span className="mr-2">⚠️</span>
@@ -209,7 +298,7 @@ function PlanPageContent() {
         </div>
       )}
 
-      {contestQueue.length > 0 && (
+      {planMode === 'SYSTEM_ANALYSIS' && contestQueue.length > 0 && (
         <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/10 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -234,34 +323,45 @@ function PlanPageContent() {
         </div>
       )}
 
-      <TickerInput
-        key={planMarket}
-        onAnalyze={handleAnalyze}
-        loading={loading}
-        initialTicker={initialTicker}
-        initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
-        initialTotalEquity={defaultTotalEquity}
-      />
+      {planMode === 'SYSTEM_ANALYSIS' ? (
+        <TickerInput
+          key={planMarket}
+          onAnalyze={handleAnalyze}
+          loading={loading}
+          initialTicker={initialTicker}
+          initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
+          initialTotalEquity={defaultTotalEquity}
+        />
+      ) : (
+        <ManualStrategyForm
+          key={planMarket}
+          initialTicker={initialTicker}
+          initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
+          initialTotalEquity={defaultTotalEquity}
+          market={planMarket}
+          onChange={handleManualDraftChange}
+        />
+      )}
 
       {/* 스캐너에서 넘어온 경우 컨텍스트 데이터 배너 표시 */}
-      {(scannerContext.pivot || scannerContext.rs) && (
+      {planMode === 'SYSTEM_ANALYSIS' && (scannerContext.pivot || scannerContext.rs) && (
         <ScannerContextBanner {...scannerContext} />
       )}
 
-      {loading && (
+      {planMode === 'SYSTEM_ANALYSIS' && loading && (
         <div className="flex items-center justify-center gap-3 rounded-lg border border-slate-800 bg-slate-950/60 p-6 text-slate-300">
           <LoadingSpinner />
           KIS 일봉과 Yahoo 보조 데이터를 모아 SEPA + VCP 조건을 분석하는 중입니다.
         </div>
       )}
 
-      {error && (
+      {planMode === 'SYSTEM_ANALYSIS' && error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
           {error}
         </div>
       )}
 
-      {analysis && (
+      {planMode === 'SYSTEM_ANALYSIS' && analysis && (
         <>
           <SepaAnalysis analysis={analysis} />
 
@@ -270,8 +370,19 @@ function PlanPageContent() {
 
           <RiskCalculator riskPlan={analysis.riskPlan} />
           <ChecklistForm sepaStatus={analysis.sepaEvidence.status} onComplete={setChecklist} />
+        </>
+      )}
 
-          {/* C-6: 저장 에러 인라인 표시 */}
+      {planMode === 'MANUAL_STRATEGY' && manualRiskPlan && manualRiskPlan.totalShares > 0 && manualRiskPlan.riskPerShare > 0 && manualRiskPlan.rewardRiskRatio !== null && (
+        <>
+          <RiskCalculator riskPlan={manualRiskPlan} />
+          <ChecklistForm sepaStatus="pass" variant="manual" onComplete={setChecklist} />
+        </>
+      )}
+
+      {canShowSavePanel && (
+        <>
+          {/* C-6: alert() 대신 인라인 에러 메시지로 교체 */}
           {saveError && (
             <div className="flex items-center justify-between rounded-lg border border-red-500/30 bg-red-500/10 p-4">
               <p className="text-sm text-red-100">{saveError}</p>
@@ -310,7 +421,9 @@ function PlanPageContent() {
           ) : (
             <div className="flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-400">
-                저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.
+                {planMode === 'MANUAL_STRATEGY'
+                  ? '저장 시 수동 entry/stop/target, R/R, 허용 손실 비율과 체크리스트가 함께 기록됩니다.'
+                  : '저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.'}
               </p>
               <Button className="px-8 py-3" onClick={handleSavePlan} disabled={saveBlocked}>
                 {saving ? '저장 중...' : '계획 저장'}

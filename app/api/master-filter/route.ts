@@ -3,8 +3,9 @@ import { generateMarketInsight } from '@/lib/ai/gemini';
 import type { AiInsightProvider, AiFallbackAttempt, AiModelInsight } from '@/types';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
-import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
+import { getKisIndexQuotes, getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
+import { buildEarlyWarningMatrix } from '@/lib/master-filter/early-warning';
 import type { MasterFilterResponse, OHLCData, MasterFilterMetricDetail } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -28,14 +29,16 @@ const INSIGHT_RESPONSE_TIMEOUT_MS = process.env.VERCEL === '1'
 
 const US_MACRO_SYMBOLS = [
   '^VIX', 'UUP', 'DX-Y.NYB', 'KRW=X', '^TNX', '^IRX', 'SHY', 'TLT', 'HYG', 'IEF',
-  'QQQ', 'SPY', 'DIA', 'IWM', 'RSP', 'XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV',
-  'XLE', 'XLP', 'XLU', 'XLB', 'GLD', 'CPER', 'USO', 'UNG', 'BTC-USD',
+  'QQQ', 'SPY', '^GSPC', '^IXIC', 'DIA', 'IWM', 'MDY', 'RSP', 'MAGS', 'AUDJPY=X',
+  'XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB', 'XLRE',
+  'IYR', 'SMH', 'SOXX', 'GLD', 'CPER', 'USO', 'UNG', 'BTC-USD',
 ];
 
 const KR_MACRO_SYMBOLS = [
   '^KS200', '^KQ150', '^KS11', '^KQ11', 'KRW=X', '069500.KS', '233740.KS',
   '139230.KS', '455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS',
   '117680.KS', '117700.KS', '139260.KS', '139280.KS',
+  'SPY', 'QQQ', 'IWM', 'MDY', 'RSP', 'MAGS', 'AUDJPY=X', 'XLI', 'XLRE', 'IYR', 'SHY', 'TLT', 'GLD', 'UUP',
 ];
 
 const US_SECTOR_ETFS = ['XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB'];
@@ -129,6 +132,58 @@ async function generateInsightWithTimeout(input: Parameters<typeof generateMarke
   return Promise.race([generated, timeout]).finally(() => clearTimeout(timer));
 }
 
+function quoteMap(quotes: YahooQuote[], overrides: Record<string, { symbol: string; regularMarketPrice: number; regularMarketChangePercent: number }> = {}) {
+  const map = quotes.reduce<Record<string, YahooQuote>>((acc, quote) => {
+    acc[quote.symbol] = quote;
+    return acc;
+  }, {});
+  for (const [symbol, quote] of Object.entries(overrides)) {
+    const existing = map[symbol];
+    map[symbol] = {
+      symbol,
+      regularMarketPrice: quote.regularMarketPrice,
+      regularMarketChangePercent: quote.regularMarketChangePercent,
+      fiftyDayAverage: existing?.fiftyDayAverage ?? quote.regularMarketPrice,
+    };
+  }
+  if (map['USDKRW=X'] && !map['KRW=X']) map['KRW=X'] = map['USDKRW=X'];
+  if (map['KRW=X'] && !map['USDKRW=X']) map['USDKRW=X'] = map['KRW=X'];
+  return map;
+}
+
+function daysBetweenIso(left: string, right: string) {
+  const leftTime = new Date(`${left}T00:00:00.000Z`).getTime();
+  const rightTime = new Date(`${right}T00:00:00.000Z`).getTime();
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return 0;
+  return Math.floor((rightTime - leftTime) / 86_400_000);
+}
+
+function patchLatestBarWithQuote(data: OHLCData[], quote?: YahooQuote | null) {
+  if (!quote || !Number.isFinite(quote.regularMarketPrice) || quote.regularMarketPrice <= 0 || data.length === 0) {
+    return { data, patched: false, staleDailyData: false };
+  }
+  const last = data.at(-1)!;
+  const quotePrice = quote.regularMarketPrice;
+  const changeFromDailyPct = last.close > 0 ? Math.abs((quotePrice - last.close) / last.close) * 100 : 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const staleDailyData = daysBetweenIso(last.date, today) >= 2 && changeFromDailyPct >= 0.5;
+  if (changeFromDailyPct < 0.05) return { data, patched: false, staleDailyData };
+
+  return {
+    data: [
+      ...data.slice(0, -1),
+      {
+        ...last,
+        close: quotePrice,
+        high: Math.max(last.high, quotePrice),
+        low: Math.min(last.low, quotePrice),
+      },
+    ],
+    patched: true,
+    staleDailyData,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -147,16 +202,21 @@ export async function GET(request: Request) {
     const vixSymbol = '^VIX';
 
     const kisMarket = isKosdaq ? 'KOSDAQ' : 'KOSPI';
-    const [mainData, vixData, vix3mData, macroQuotes, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
+    const [mainDataRaw, vixData, vix3mData, macroQuotes, kisIndexQuotes, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
       safeDaily(mainSymbol),
       safeDaily(vixSymbol),
       safeDaily('^VIX3M'),
       getYahooQuotes(symbols).catch(() => []),
+      isKR ? getKisIndexQuotes().catch(() => ({})) : Promise.resolve({}),
       Promise.all(breadthEtfs.map(async (sym) => [sym, await safeDaily(sym)] as const)),
       Promise.all(sectorEtfs.map(async (sym) => [sym, await safeDaily(sym)] as const)),
       // KR 시장에서만 외국인 순매수 조회, US는 빈 배열
       isKR ? getKisMarketForeignNetBuy(kisMarket, 20).catch(() => []) : Promise.resolve([]),
     ]);
+    const macroMap = quoteMap(macroQuotes, kisIndexQuotes);
+    const mainQuote = macroMap[mainSymbol];
+    const patchedMain = patchLatestBarWithQuote(mainDataRaw, mainQuote);
+    const mainData = patchedMain.data;
 
     if (mainData.length < 200) {
       console.warn(`${mainSymbol} 200일 가격 데이터를 충분히 확보하지 못했습니다. GREY 상태를 반환합니다.`);
@@ -178,7 +238,7 @@ export async function GET(request: Request) {
           trend: emptyMetric('장기 추세'),
           breadth: emptyMetric('시장 폭'),
           volatility: emptyMetric('변동성'),
-          adr: emptyMetric('ADR 변동폭'),
+          adr: emptyMetric('20일 평균 하루 변동폭'),
           ftd: emptyMetric('팔로스루데이'),
           distribution: emptyMetric('분배일'),
           newHighLow: emptyMetric('신고가/신저가'),
@@ -257,13 +317,31 @@ export async function GET(request: Request) {
       .sort((a, b) => b.return20 - a.return20)
       .map((row, idx) => ({ ...row, rank: idx + 1 }));
 
-    const res = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs, vix3mData, foreignNetBuy5d);
-
-    // 2. 외부 연동을 위한 매핑 (AI 인사이트용)
-    const macroMap = macroQuotes.reduce<Record<string, YahooQuote>>((acc, quote) => {
-      acc[quote.symbol] = quote;
-      return acc;
-    }, {});
+    const semiChangeValues = [macroMap.SMH?.regularMarketChangePercent, macroMap.SOXX?.regularMarketChangePercent]
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const semiconductorChangePct = semiChangeValues.length ? Math.min(...semiChangeValues) : null;
+    const res = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs, vix3mData, foreignNetBuy5d, {
+      mainChangePct: mainQuote?.regularMarketChangePercent,
+      techChangePct: macroMap.QQQ?.regularMarketChangePercent,
+      semiconductorChangePct,
+      kospiChangePct: macroMap['^KS11']?.regularMarketChangePercent,
+      kosdaqChangePct: macroMap['^KQ11']?.regularMarketChangePercent,
+      vixChangePct: macroMap['^VIX']?.regularMarketChangePercent,
+      staleDailyData: patchedMain.staleDailyData,
+    });
+    const calculatedAt = new Date().toISOString();
+    const earlyWarnings = buildEarlyWarningMatrix({
+      market,
+      mainSymbol,
+      mainPrice: res.lastClose,
+      mainMa50: res.ma50,
+      above200Pct: res.above200Pct,
+      currentVix: res.currentVix,
+      macroQuotes: macroMap,
+      breadthRows,
+      sectorRows,
+      asOf: calculatedAt,
+    });
 
     const insightInput = {
       marketState: res.state,
@@ -271,10 +349,15 @@ export async function GET(request: Request) {
       metrics: {
         ...res.metrics,
         totalScore: res.p3Score,
+        displayScoreLabel: '종합 점수',
+        displaySections: ['오늘의 결론', '위험 조기경보', '시장 내부 건강도', '돈의 이동', '데이터 신뢰도'],
+        earlyWarnings,
       },
       macroData: {
         ...macroMap,
         p3Score: res.p3Score,
+        totalScore: res.p3Score,
+        totalScoreLabel: '종합 점수',
         leadingSectors: sectorRows.slice(0, 3),
         sectorRows,
         breadthRows,
@@ -316,25 +399,31 @@ export async function GET(request: Request) {
         sectorRows,
         ftdReason: res.ftd.reason,
         distributionDetails: res.distributionDetails,
+        earlyWarnings,
         macroData: {
           ...macroMap,
+          totalScore: res.p3Score,
           leadingSectors: sectorRows.slice(0, 3),
           sectorRows,
           breadthRows,
           ftdReason: res.ftd.reason,
+          earlyWarnings,
         },
         regimeHistory: [
-          { date: new Date().toISOString(), state: res.state, score: res.p3Score, reason: `P3 score ${res.p3Score}/100` },
+          { date: calculatedAt, state: res.state, score: res.p3Score, reason: `종합 점수 ${res.p3Score}/100` },
         ],
         meta: {
-          asOf: new Date().toISOString(),
+          asOf: calculatedAt,
           source: 'Market Analysis Engine',
           provider: 'MTN Aggregator',
           delay: 'EOD',
           fallbackUsed: false,
-          warnings: [],
+          warnings: [
+            ...(patchedMain.patched ? [`${mainSymbol} latest daily bar was patched with live quote.`] : []),
+            ...res.shockWarnings,
+          ],
         },
-        updatedAt: new Date().toISOString(),
+        updatedAt: calculatedAt,
       },
       insightLog: insight.text,
       isAiGenerated: insight.isAiGenerated,

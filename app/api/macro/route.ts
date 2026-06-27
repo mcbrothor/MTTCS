@@ -62,6 +62,8 @@ export async function GET(request: Request) {
       };
       return acc;
     }, {} as Record<string, YahooQuote & { source?: string }>);
+    if (macroData['USDKRW=X'] && !macroData['KRW=X']) macroData['KRW=X'] = macroData['USDKRW=X'];
+    if (macroData['KRW=X'] && !macroData['USDKRW=X']) macroData['USDKRW=X'] = macroData['KRW=X'];
 
     // KIS API에서 최우선으로 지수 정보를 가져와 덮어씌움 (Yahoo 데이터 오류 방지)
     const kisIndexQuotes = await import('@/lib/finance/providers/kis-api').then((m) => m.getKisIndexQuotes()).catch(() => ({}));

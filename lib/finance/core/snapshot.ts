@@ -2,6 +2,8 @@ import type {
   BeautyContestSession,
   ContestCandidate,
   Direction,
+  ChartPlan,
+  PlanMode,
   SepaEvidence,
   AppliedRiskStrategy,
   RiskGateResult,
@@ -16,6 +18,7 @@ import type {
 interface BuildEntrySnapshotInput {
   ticker: string;
   direction: Direction;
+  planMode?: PlanMode | null;
   checklist: {
     chk_sepa?: boolean;
     chk_market?: boolean;
@@ -36,6 +39,7 @@ interface BuildEntrySnapshotInput {
   totalShares?: number | null;
   entryTargets?: TradeEntrySnapshot['plan']['entry_targets'];
   trailingStops?: TradeEntrySnapshot['plan']['trailing_stops'];
+  chartPlan?: ChartPlan | null;
   appliedRiskStrategy?: AppliedRiskStrategy | null;
   requestedRiskStrategy?: RiskStrategy | null;
   riskGate?: RiskGateResult | null;
@@ -55,6 +59,7 @@ export function buildEntrySnapshot(input: BuildEntrySnapshotInput): TradeEntrySn
     captured_at: capturedAt,
     ticker: input.ticker.toUpperCase(),
     direction: input.direction,
+    plan_mode: input.planMode ?? 'SYSTEM_ANALYSIS',
     checklist: {
       sepa: Boolean(input.checklist.chk_sepa),
       market: input.checklist.chk_market === undefined ? Boolean(input.checklist.chk_sepa) : Boolean(input.checklist.chk_market),
@@ -74,6 +79,7 @@ export function buildEntrySnapshot(input: BuildEntrySnapshotInput): TradeEntrySn
       total_shares: input.totalShares ?? null,
       entry_targets: input.entryTargets ?? null,
       trailing_stops: input.trailingStops ?? null,
+      chart_plan: input.chartPlan ?? null,
     },
     sepa: {
       status: input.sepaEvidence?.status ?? null,

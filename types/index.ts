@@ -5,7 +5,8 @@ export type TradeExecutionSide = 'ENTRY' | 'EXIT';
 export type TradeLegLabel = 'E1' | 'E2' | 'E3' | 'MANUAL';
 export type SetupTag = 'VCP' | 'SEPA' | '돌파' | '실적' | '추세' | '관심종목';
 export type MistakeTag = '추격매수' | '손절지연' | '비중초과' | '조기매도' | '계획미준수' | '진입지연';
-export type RiskStrategy = 'AUTO' | 'MINERVINI_VCP' | 'HIGH_TIGHT_FLAG' | 'ATR_VOLATILITY' | 'CONSERVATIVE';
+export type PlanMode = 'SYSTEM_ANALYSIS' | 'MANUAL_STRATEGY';
+export type RiskStrategy = 'AUTO' | 'MINERVINI_VCP' | 'HIGH_TIGHT_FLAG' | 'ATR_VOLATILITY' | 'CONSERVATIVE' | 'ONL_PYRAMID' | 'MANUAL_FIXED_RISK';
 export type AppliedRiskStrategy = Exclude<RiskStrategy, 'AUTO'>;
 export type RiskPolicyProfile = 'CONSERVATIVE' | 'STANDARD' | 'AGGRESSIVE';
 export type StopQuality = 'VALID' | 'TOO_TIGHT' | 'TOO_WIDE' | 'INVALID' | 'UNKNOWN';
@@ -30,6 +31,7 @@ export interface Trade {
   ticker: string;
   direction: Direction;
   status: TradeStatus;
+  plan_mode?: PlanMode | null;
 
   chk_sepa?: boolean;
   chk_market?: boolean;
@@ -54,6 +56,9 @@ export interface Trade {
   requested_risk_strategy?: RiskStrategy | null;
   risk_gate?: RiskGateResult | null;
   risk_policy_snapshot?: RiskPolicy | null;
+  chart_plan?: ChartPlan | null;
+  plan_answers?: Record<string, unknown> | null;
+  strategy_template_id?: string | null;
 
   exit_price: number | null;
   exit_reason: ExitReason | null; // 청산 사유 태그 — 복기 집계용
@@ -80,6 +85,7 @@ export interface TradeEntrySnapshot {
   captured_at: string;
   ticker: string;
   direction: Direction;
+  plan_mode?: PlanMode | null;
   checklist: {
     sepa: boolean;
     market: boolean;
@@ -99,6 +105,7 @@ export interface TradeEntrySnapshot {
     total_shares: number | null;
     entry_targets: EntryTargets | null;
     trailing_stops: TrailingStops | null;
+    chart_plan?: ChartPlan | null;
   };
   sepa: {
     status: AssessmentStatus | null;
@@ -133,6 +140,15 @@ export interface TradeEntrySnapshot {
     policy: RiskPolicy | null;
     gate: RiskGateResult | null;
   };
+}
+
+export interface ChartPlan {
+  entryPrice: number;
+  stopPrice: number;
+  targetPrice: number;
+  direction: Direction;
+  rewardRiskRatio: number | null;
+  riskPerShare: number;
 }
 
 export interface TradeContestSnapshot {
@@ -329,6 +345,12 @@ export interface EntryLeg {
   label: string;
   price: number;
   shares: number;
+  amount?: number;
+  weightPct?: number;
+  cumulativeAmount?: number;
+  averagePrice?: number;
+  stopPrice?: number;
+  openRisk?: number;
 }
 
 export interface EntryTargets {
@@ -341,6 +363,56 @@ export interface TrailingStops {
   initial: number;
   afterEntry2: number;
   afterEntry3: number;
+}
+
+export interface PyramidPolicy {
+  model: 'ONL_PYRAMID';
+  accountEquity: number;
+  riskPct: number;
+  maxRiskAmount: number;
+  initialStopLossPct: number;
+  completedPositionAmount: number;
+  legWeights: [number, number, number];
+  addOnTriggerPct: number;
+  maxConcurrentPositions: number;
+  maxCompletedExposurePct: number;
+}
+
+export interface PyramidLeg {
+  leg: 'E1' | 'E2' | 'E3';
+  label: string;
+  trigger: string;
+  price: number;
+  weightPct: number;
+  plannedAmount: number;
+  shares: number;
+  cumulativeShares: number;
+  cumulativeAmount: number;
+  averagePrice: number;
+  stopPrice: number;
+  openRisk: number;
+  openRiskPct: number;
+  requiresStopRaise: boolean;
+}
+
+export interface PyramidPlan {
+  policy: PyramidPolicy;
+  legs: PyramidLeg[];
+  initialStopPrice: number;
+  stopAfterEntry2: number;
+  minimumStopAfterEntry3: number;
+  recommendedStopAfterEntry3: number;
+  completedAveragePrice: number;
+  completedShares: number;
+  completedAmount: number;
+  completedExposurePct: number;
+  maxTheoreticalLoss: number;
+  maxTheoreticalLossPct: number;
+  ruleChecks: {
+    noAveragingDown: boolean;
+    requiresVolumeConfirmation: boolean;
+    requiresStopRaiseOnE3: boolean;
+  };
 }
 
 export interface RiskPolicy {
@@ -359,6 +431,7 @@ export interface RiskPolicy {
   drawdownHardLimitPct: number;
   dailyLossLimitPct: number;
   weeklyLossLimitPct: number;
+  pyramidPlan?: PyramidPlan | null;
 }
 
 export interface RiskGateReason {
@@ -404,13 +477,14 @@ export interface RiskPlan {
   entryTargets: EntryTargets;
   trailingStops: TrailingStops;
   strategy?: AppliedRiskStrategy;
-  riskModel?: 'PATTERN_INVALIDATION' | 'HIGH_TIGHT_FLAG_TIGHT_STOP' | 'ATR_VOLATILITY_STOP' | 'CONSERVATIVE_TIGHT_STOP';
-  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK' | 'HTF_BASE_LOW' | 'HTF_MAX_LOSS_CAP' | 'ATR_STOP';
+  riskModel?: 'PATTERN_INVALIDATION' | 'HIGH_TIGHT_FLAG_TIGHT_STOP' | 'ATR_VOLATILITY_STOP' | 'CONSERVATIVE_TIGHT_STOP' | 'USER_DEFINED_STOP_TARGET';
+  stopSource?: 'VCP_INVALIDATION' | 'MAX_LOSS_CAP' | 'RECENT_LOW_FALLBACK' | 'HTF_BASE_LOW' | 'HTF_MAX_LOSS_CAP' | 'ATR_STOP' | 'USER_DEFINED';
   maxLossPct?: number;
   invalidationPrice?: number | null;
   riskPolicy?: RiskPolicy;
   riskGate?: RiskGateResult;
   riskNotes?: string[];
+  pyramidPlan?: PyramidPlan | null;
 }
 
 // --- VCP (Volatility Contraction Pattern) ---
@@ -743,10 +817,54 @@ export interface MasterFilterMetricDetail {
   weight?: number;
 }
 
+export type EarlyWarningSeverity = 'OK' | 'WATCH' | 'REDUCE' | 'HALT';
+
+export type EarlyWarningSignalId =
+  | 'index_ma50'
+  | 'big_tech_line'
+  | 'aud_jpy'
+  | 'market_breadth'
+  | 'money_flow';
+
+export type RotationDiagnosis =
+  | 'HEALTHY_ROTATION'
+  | 'BROAD_DE_RISKING'
+  | 'BIG_TECH_LEADERSHIP'
+  | 'UNCONFIRMED';
+
+export interface EarlyWarningSignal {
+  id: EarlyWarningSignalId;
+  title: string;
+  what: string;
+  why: string;
+  status: EarlyWarningSeverity;
+  value: string;
+  threshold: string;
+  action: string;
+  source: string;
+  detail?: string;
+}
+
+export interface EarlyWarningMatrix {
+  status: EarlyWarningSeverity;
+  summary: string;
+  action: string;
+  rotation: {
+    diagnosis: RotationDiagnosis;
+    label: string;
+    detail: string;
+    receivers: string[];
+    defensives: string[];
+  };
+  signals: EarlyWarningSignal[];
+  updatedAt: string;
+}
+
 export interface MasterFilterMetrics {
   trend: MasterFilterMetricDetail;
   breadth: MasterFilterMetricDetail;
   volatility: MasterFilterMetricDetail;
+  intradayShock?: MasterFilterMetricDetail;
   adr?: MasterFilterMetricDetail;
   ftd: MasterFilterMetricDetail;
   distribution: MasterFilterMetricDetail;
@@ -767,6 +885,7 @@ export interface MasterFilterMetrics {
   ftdReason?: string | null;
   distributionDetails?: { date: string, close: number, volume: number, pctChange: number }[];
   macroData?: Record<string, unknown>;
+  earlyWarnings?: EarlyWarningMatrix;
   updatedAt: string;
 }
 

@@ -90,6 +90,56 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
   });
 }
 
+function mockEarlyWarnings(status: 'OK' | 'HALT' = 'OK') {
+  return {
+    status,
+    summary: status === 'OK' ? '중요 조기경보가 안정 구간입니다.' : '시장 밖으로 돈이 빠지는 위험 신호가 강합니다.',
+    action: status === 'OK' ? '계획한 종목만 정상 비중 안에서 검토합니다.' : '신규 매수는 중단하고 현금과 손절선을 우선 점검합니다.',
+    rotation: {
+      diagnosis: status === 'OK' ? 'BIG_TECH_LEADERSHIP' : 'BROAD_DE_RISKING',
+      label: status === 'OK' ? '빅테크 주도 유지' : '시장 밖으로 회피',
+      detail: status === 'OK' ? '시장은 아직 대형 기술주 중심으로 버티고 있습니다.' : '방어 자산이 상대적으로 강합니다.',
+      receivers: status === 'OK' ? ['QQQ', 'MAGS'] : [],
+      defensives: status === 'OK' ? [] : ['SHY', 'TLT', 'GLD'],
+    },
+    signals: [
+      {
+        id: 'index_ma50',
+        title: '지수가 50일 평균선 위에 있는가',
+        what: '대표 지수가 최근 50거래일 평균 가격 위에 있는지 봅니다.',
+        why: '강한 시장은 중요한 평균선 위에서 버팁니다.',
+        status,
+        value: status === 'OK' ? 'SPY +2.5%' : 'SPY -3.0%',
+        threshold: '대표 지수가 50일 평균선 위',
+        action: status === 'OK' ? '새 매수 검토 가능' : '신규 매수 중단',
+        source: 'e2e fixture',
+      },
+      {
+        id: 'money_flow',
+        title: '빠진 돈이 시장 안에 남아 있는가',
+        what: '위험자산 안에서 순환하는지 봅니다.',
+        why: '시장 밖 회피는 전체 위험을 키웁니다.',
+        status,
+        value: status === 'OK' ? '빅테크 주도 유지' : '시장 밖으로 회피',
+        threshold: '시장 안 순환',
+        action: status === 'OK' ? '계획 유지' : '신규 매수 중단',
+        source: 'e2e fixture',
+      },
+    ],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function withEarlyWarnings<T extends { metrics?: Record<string, unknown> }>(payload: T, status: 'OK' | 'HALT' = 'OK') {
+  return {
+    ...payload,
+    metrics: {
+      ...payload.metrics,
+      earlyWarnings: mockEarlyWarnings(status),
+    },
+  };
+}
+
 // ─── Auth ───
 
 export async function setupAuthMock(page: Page): Promise<void> {
@@ -127,7 +177,7 @@ export async function setupMasterFilterMock(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(marketData.master_filter),
+      body: JSON.stringify(withEarlyWarnings(marketData.master_filter)),
     });
   });
 }
@@ -656,7 +706,15 @@ export async function setupMarketDataMock(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: { candles: [], ticker: 'NVDA' } }),
+      body: JSON.stringify({
+        data: [
+          { date: '2026-05-18', open: 96, high: 101, low: 94, close: 100 },
+          { date: '2026-05-19', open: 100, high: 104, low: 98, close: 103 },
+          { date: '2026-05-20', open: 103, high: 108, low: 101, close: 106 },
+          { date: '2026-05-21', open: 106, high: 111, low: 104, close: 109 },
+          { date: '2026-05-22', open: 109, high: 116, low: 107, close: 114 },
+        ],
+      }),
     });
   });
 
@@ -708,9 +766,9 @@ export async function setupHaltMocks(page: Page): Promise<void> {
   // Override master filter to RED
   await page.route('**/api/master-filter*', async (route) => {
     const redMasterFilter = {
-      ...marketData.master_filter,
+      ...withEarlyWarnings(marketData.master_filter, 'HALT'),
       state: 'RED',
-      insightLog: '진입 가능 신호가 위험 구간입니다. 새 매수보다 현금 확보와 보유 종목 방어가 먼저입니다.',
+      insightLog: '지금 새로 사기에는 위험 구간입니다. 새 매수보다 현금 확보와 보유 종목 방어가 먼저입니다.',
       metrics: {
         ...marketData.master_filter.metrics,
         score: 28,
@@ -727,14 +785,14 @@ export async function setupHaltMocks(page: Page): Promise<void> {
           status: 'FAIL',
           value: 28,
           score: 5,
-          description: '함께 오르는 종목 비율이 낮습니다.',
+          description: '시장 폭이 낮습니다.',
         },
         distribution: {
           ...marketData.master_filter.metrics.distribution,
           status: 'FAIL',
           value: 7,
           score: 4,
-          description: '큰손 매도 흔적이 많이 쌓였습니다.',
+          description: '분산일이 많이 쌓였습니다.',
         },
       },
     };

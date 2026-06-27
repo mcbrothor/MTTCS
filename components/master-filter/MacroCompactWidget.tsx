@@ -42,11 +42,11 @@ export default function MacroCompactWidget() {
     <Link
       href="/macro"
       className="block rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 transition-colors hover:bg-[var(--surface-strong)]"
-      aria-label="큰 흐름 상세 점검으로 이동"
+      aria-label="시장 밖 위험 상세 점검으로 이동"
     >
       <div className="flex items-center justify-between mb-3">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">큰 흐름 점검</p>
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">시장 밖 위험</p>
           {cfg ? (
             <span
               className={`inline-block rounded border px-2 py-0.5 text-xs font-bold ${cfg.color} ${cfg.border} ${cfg.bg}`}

@@ -11,6 +11,7 @@ const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCEL
 const SNAPSHOT_RELEVANT_FIELDS = new Set([
   'ticker',
   'direction',
+  'plan_mode',
   'chk_sepa',
   'chk_market',
   'chk_risk',
@@ -31,6 +32,9 @@ const SNAPSHOT_RELEVANT_FIELDS = new Set([
   'requested_risk_strategy',
   'risk_gate',
   'risk_policy_snapshot',
+  'chart_plan',
+  'plan_answers',
+  'strategy_template_id',
   'sepa_evidence',
   'vcp_analysis',
   'plan_note',
@@ -41,6 +45,7 @@ type TradeRecordForSnapshot = Pick<
   Trade,
   | 'ticker'
   | 'direction'
+  | 'plan_mode'
   | 'chk_sepa'
   | 'chk_market'
   | 'chk_risk'
@@ -62,6 +67,9 @@ type TradeRecordForSnapshot = Pick<
   | 'requested_risk_strategy'
   | 'risk_gate'
   | 'risk_policy_snapshot'
+  | 'chart_plan'
+  | 'plan_answers'
+  | 'strategy_template_id'
   | 'plan_note'
   | 'invalidation_note'
 > & {
@@ -159,6 +167,8 @@ function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
     requestedRiskStrategy: trade.requested_risk_strategy ?? null,
     riskGate: trade.risk_gate ?? null,
     riskPolicy: trade.risk_policy_snapshot ?? null,
+    planMode: trade.plan_mode ?? 'SYSTEM_ANALYSIS',
+    chartPlan: trade.chart_plan ?? null,
     planNote: trade.plan_note,
     invalidationNote: trade.invalidation_note,
   });
@@ -172,11 +182,13 @@ export async function POST(request: Request) {
     const plannedRisk = Number(body.planned_risk ?? 0);
     const riskPercent = normalizeRiskPercent(body.risk_percent ?? 0.03);
     const direction = body.direction === 'SHORT' ? 'SHORT' : 'LONG';
+    const planMode = body.plan_mode === 'MANUAL_STRATEGY' ? 'MANUAL_STRATEGY' : 'SYSTEM_ANALYSIS';
+    const isManualStrategy = planMode === 'MANUAL_STRATEGY';
 
     if (!ticker) {
       return apiError('Ticker is required.', 'MISSING_TICKER');
     }
-    if (body.sepa_evidence?.status === 'fail' || body.chk_sepa === false) {
+    if (!isManualStrategy && (body.sepa_evidence?.status === 'fail' || body.chk_sepa === false)) {
       return apiError('SEPA conditions failed.', 'SEPA_FAILED');
     }
     if (!Number.isFinite(totalShares) || totalShares <= 0) {
@@ -188,8 +200,25 @@ export async function POST(request: Request) {
     if (!riskPercent || riskPercent > 0.1) {
       return apiError('Risk percent must be greater than 0 and at most 10%.', 'INVALID_RISK_PERCENT');
     }
-    if (!body.entry_targets || !body.trailing_stops || !body.sepa_evidence) {
+    if (!isManualStrategy && (!body.entry_targets || !body.trailing_stops || !body.sepa_evidence)) {
       return apiError('SEPA evidence and entry plan fields are required.', 'MISSING_STRATEGY_FIELDS');
+    }
+    if (isManualStrategy) {
+      const chartPlan = body.chart_plan;
+      const targetPrice = Number(chartPlan?.targetPrice ?? body.target_price ?? body.targetPrice);
+      if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+        return apiError('Manual strategy target price is required.', 'MISSING_TARGET_PRICE');
+      }
+      const entryPrice = Number(body.entry_price);
+      if (direction === 'LONG' && targetPrice <= entryPrice) {
+        return apiError('LONG 수동 계획에서는 목표가가 진입가보다 높아야 합니다.', 'INVALID_TARGET_PRICE');
+      }
+      if (direction === 'SHORT' && targetPrice >= entryPrice) {
+        return apiError('SHORT 수동 계획에서는 목표가가 진입가보다 낮아야 합니다.', 'INVALID_TARGET_PRICE');
+      }
+      if (body.risk_gate?.status === 'BLOCK') {
+        return apiError('Risk gate blocked this manual strategy plan.', 'RISK_GATE_BLOCKED');
+      }
     }
 
     const entryPrice = Number(body.entry_price);
@@ -206,6 +235,7 @@ export async function POST(request: Request) {
     const record: Record<string, unknown> & TradeRecordForSnapshot = {
       ticker,
       direction,
+      plan_mode: planMode,
       status: 'PLANNED',
       chk_sepa: Boolean(body.chk_sepa),
       chk_market: body.chk_market ?? body.chk_sepa,
@@ -214,7 +244,7 @@ export async function POST(request: Request) {
       chk_stoploss: Boolean(body.chk_stoploss),
       chk_exit: Boolean(body.chk_exit),
       chk_psychology: Boolean(body.chk_psychology),
-      sepa_evidence: body.sepa_evidence,
+      sepa_evidence: body.sepa_evidence ?? null,
       vcp_analysis: body.vcp_analysis ?? null,
       total_equity: Number(body.total_equity) || null,
       planned_risk: plannedRisk,
@@ -224,12 +254,15 @@ export async function POST(request: Request) {
       stoploss_price: Number(body.stoploss_price) || null,
       position_size: totalShares,
       total_shares: totalShares,
-      entry_targets: body.entry_targets,
-      trailing_stops: body.trailing_stops,
+      entry_targets: body.entry_targets ?? null,
+      trailing_stops: body.trailing_stops ?? null,
       risk_strategy: body.risk_strategy ?? null,
       requested_risk_strategy: body.requested_risk_strategy ?? null,
       risk_gate: body.risk_gate ?? null,
       risk_policy_snapshot: body.risk_policy_snapshot ?? null,
+      chart_plan: body.chart_plan ?? null,
+      plan_answers: body.plan_answers ?? null,
+      strategy_template_id: nullableText(body.strategy_template_id, 120),
       setup_tags: normalizeStringArray(body.setup_tags) ?? [],
       mistake_tags: normalizeStringArray(body.mistake_tags) ?? [],
       plan_note: nullableText(body.plan_note),
