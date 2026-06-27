@@ -11,6 +11,24 @@ jobs:
   test:
     timeout-minutes: 20
     runs-on: ubuntu-latest
+    env:
+      # Dummy values satisfy build-time guards and E2E auth in CI.
+      # Playwright tests use mocked routes for market/external data.
+      NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: dummy-service-key
+      MTN_AUTH_ENABLED: true
+      MTN_AUTH_SECRET: ci-dummy-secret-at-least-32-characters
+      MTN_ADMIN_USERNAME: testadmin
+      MTN_ADMIN_PASSWORD: TestPassword123!
+      CRON_SECRET: dummy-cron-secret
+      MTN_BASE_URL: http://localhost:3000
+      KIS_APP_KEY: dummy
+      KIS_APP_SECRET: dummy
+      TELEGRAM_BOT_TOKEN: dummy
+      TELEGRAM_ALLOWED_CHAT_IDS: 123
+      TELEGRAM_WEBHOOK_SECRET: dummy
+      GEMINI_API_KEY: dummy
 
     steps:
     - uses: actions/checkout@v4
@@ -29,24 +47,6 @@ jobs:
       
     - name: Build Next.js
       run: npm run build
-      env:
-        # These are dummy values to satisfy the build process
-        # Actual E2E tests use the mock server and .env.test
-        NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
-        SUPABASE_SERVICE_ROLE_KEY: dummy-service-key
-        MTN_AUTH_ENABLED: true
-        MTN_AUTH_SECRET: ci-dummy-secret-at-least-32-characters
-        MTN_ADMIN_USERNAME: testadmin
-        MTN_ADMIN_PASSWORD: TestPassword123!
-        CRON_SECRET: dummy-cron-secret
-        MTN_BASE_URL: http://localhost:3000
-        KIS_APP_KEY: dummy
-        KIS_APP_SECRET: dummy
-        TELEGRAM_BOT_TOKEN: dummy
-        TELEGRAM_ALLOWED_CHAT_IDS: 123
-        TELEGRAM_WEBHOOK_SECRET: dummy
-        GEMINI_API_KEY: dummy
       
     - name: Run Playwright tests
       run: npx playwright test
