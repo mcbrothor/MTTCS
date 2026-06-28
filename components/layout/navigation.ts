@@ -117,6 +117,7 @@ export const UTILITY_LINKS = [
   { href: '/guide', label: '사용 가이드' },
   { href: '/links', label: '링크 허브' },
   { href: '/admin', label: '관리' },
+  { href: '/admin/local-analysis', label: '분석 큐' },
 ];
 
 function matchesPath(pathname: string, matcher: string) {

@@ -30,6 +30,7 @@ const UTILITY_ICON_MAP: Record<string, React.ElementType> = {
   '/guide': HelpCircle,
   '/links': ArrowUpRight,
   '/admin': Database,
+  '/admin/local-analysis': Database,
 };
 
 export default function NavbarMobile() {

@@ -11,6 +11,7 @@
     "codex:worker": "node --env-file=.env.local scripts/local-llm-worker.mjs",
     "local:worker": "scripts/run-local-analysis-worker.sh",
     "local:worker:once": "scripts/run-local-analysis-worker.sh --once",
+    "local:analysis:enqueue": "node --env-file=.env.local scripts/enqueue-local-analysis-jobs.mjs",
     "local:postgres:health": "scripts/local-postgres-health.sh",
     "local:postgres:backup": "scripts/backup-local-postgres.sh",
     "rs:metrics": "node scripts/run-rs-metrics.mjs",

@@ -192,6 +192,37 @@ Other supported payloads:
 - `NEWS_PULSE`: `ticker`, `news`.
 - `RECOMMENDATION_BACKTEST`: `strategy_key`, `trades` or `picks`.
 
+Operator dashboard:
+
+- `/admin/local-analysis`
+- shows Supabase queue counts, recent jobs, worker heartbeat, local evidence counts, and recent worker logs.
+- supports `retry`, `requeue`, and `cancel` actions for existing jobs.
+- can create smoke jobs from built-in payload templates.
+
+Automatic queue collector:
+
+```bash
+DRY_RUN=true npm run local:analysis:enqueue -- --market=US --limit=12
+npm run local:analysis:enqueue -- --market=US --limit=12
+npm run local:analysis:enqueue -- --market=KR --limit=12
+```
+
+Collector sources:
+
+- `recommendation_publications` / `recommendation_picks` → `COMMITTEE_REVIEW`
+- `security_events` → `NEWS_PULSE`
+- `fundamental_cache` → `FINANCIAL_AUDIT`
+- `investment_theses` / `thesis_assumptions` → `THESIS_CHECK`
+- `recommendation_performance` → `RECOMMENDATION_BACKTEST`
+
+Daily collector launchd:
+
+```bash
+cp infra/launchd/com.mantori.mtn-local-analysis-enqueue.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mantori.mtn-local-analysis-enqueue.plist
+launchctl enable "gui/$(id -u)/com.mantori.mtn-local-analysis-enqueue"
+```
+
 Persistent launchd worker:
 
 ```bash
