@@ -3,14 +3,17 @@ import axios from 'axios';
 import { Search } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
-import type { RiskStrategy } from '@/types';
+import CapitalBasisSelector from './CapitalBasisSelector';
+import type { CapitalBasisKind, CapitalSnapshot, PortfolioRiskSummary, RiskStrategy } from '@/types';
 
 interface TickerInputProps {
-  onAnalyze: (ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy) => void;
+  onAnalyze: (ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy, capitalSnapshot: CapitalSnapshot) => void;
   loading: boolean;
   initialTicker?: string;
   initialExchange?: string;
   initialTotalEquity?: number;
+  portfolioRisk: PortfolioRiskSummary | null;
+  capitalCapturedAt: string;
 }
 
 interface TickerLookupState {
@@ -25,11 +28,22 @@ interface SecurityLookupResponse {
   symbol: string | null;
 }
 
-export default function TickerInput({ onAnalyze, loading, initialTicker = '', initialExchange = 'NAS', initialTotalEquity = 50000 }: TickerInputProps) {
+export default function TickerInput({
+  onAnalyze,
+  loading,
+  initialTicker = '',
+  initialExchange = 'NAS',
+  initialTotalEquity = 50000,
+  portfolioRisk,
+  capitalCapturedAt,
+}: TickerInputProps) {
   const previousInitialTotalEquity = useRef(initialTotalEquity);
   const [ticker, setTicker] = useState(initialTicker.toUpperCase());
   const [exchange, setExchange] = useState(initialExchange);
-  const [totalEquity, setTotalEquity] = useState(initialTotalEquity);
+  const [capitalBasis, setCapitalBasis] = useState<CapitalBasisKind>('CURRENT_ACCOUNT');
+  const [manualCapital, setManualCapital] = useState(initialTotalEquity);
+  const [scenarioPct, setScenarioPct] = useState(-10);
+  const [capitalSnapshot, setCapitalSnapshot] = useState<CapitalSnapshot | null>(null);
   const [riskPercent, setRiskPercent] = useState(1);
   const [riskStrategy, setRiskStrategy] = useState<RiskStrategy>('AUTO');
   const [lookup, setLookup] = useState<TickerLookupState>({
@@ -43,7 +57,7 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
 
   useEffect(() => {
     if (initialTotalEquity <= 0) return;
-    setTotalEquity((current) => (
+    setManualCapital((current) => (
       current <= 0 || current === previousInitialTotalEquity.current
         ? initialTotalEquity
         : current
@@ -91,8 +105,9 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!ticker.trim() || totalEquity <= 0 || riskPercent <= 0) return;
-    onAnalyze(ticker.trim().toUpperCase(), exchange, totalEquity, riskPercent, riskStrategy);
+    const selectedCapital = capitalSnapshot?.amount ?? 0;
+    if (!ticker.trim() || selectedCapital <= 0 || riskPercent <= 0 || !capitalSnapshot) return;
+    onAnalyze(ticker.trim().toUpperCase(), exchange, selectedCapital, riskPercent, riskStrategy, capitalSnapshot);
   };
 
   const handleTickerChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,11 +136,12 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
         <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400">1. 종목 입력</p>
         <h2 className="mt-1 text-xl font-bold text-white">분석할 종목과 리스크 한도를 입력하세요</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
-          기본 허용 손실은 총 자본의 1%입니다. 입력한 비율에 따라 피벗 진입가, 무효화선, 총 수량을 다시 계산합니다.
+          기본 허용 손실은 선택한 자본 기준의 1%입니다. 현재 계좌, 보수적 기준, 현금 기준, 직접 입력, 가상 시나리오 중 하나로 수량을 계산합니다.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_120px_150px_130px_170px_auto]">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_120px_130px_170px_auto]">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-300">티커</span>
           <div className="relative">
@@ -175,18 +191,6 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
         </label>
 
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-300">총 자본</span>
-          <input
-            type="number"
-            min="1"
-            value={totalEquity}
-            onChange={(event) => setTotalEquity(Number(event.target.value))}
-            disabled={loading}
-            className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
-          />
-        </label>
-
-        <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-300">허용 손실 %</span>
           <input
             type="number"
@@ -218,10 +222,27 @@ export default function TickerInput({ onAnalyze, loading, initialTicker = '', in
         </label>
 
         <div className="flex items-end">
-          <Button type="submit" disabled={loading || !ticker.trim() || totalEquity <= 0 || riskPercent <= 0} className="w-full py-2.5">
+          <Button type="submit" disabled={loading || !ticker.trim() || !capitalSnapshot || capitalSnapshot.amount <= 0 || riskPercent <= 0} className="w-full py-2.5">
             {loading ? '분석 중...' : '분석 실행'}
           </Button>
         </div>
+        </div>
+
+        <CapitalBasisSelector
+          market={exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KR' : 'US'}
+          basis={capitalBasis}
+          onBasisChange={setCapitalBasis}
+          manualAmount={manualCapital}
+          onManualAmountChange={setManualCapital}
+          scenarioPct={scenarioPct}
+          onScenarioPctChange={setScenarioPct}
+          fallbackEquity={initialTotalEquity}
+          portfolioRisk={portfolioRisk}
+          riskPercent={riskPercent}
+          capturedAt={capitalCapturedAt}
+          disabled={loading}
+          onSnapshotChange={setCapitalSnapshot}
+        />
       </form>
     </Card>
   );

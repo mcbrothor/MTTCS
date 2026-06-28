@@ -5,7 +5,7 @@ import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { buildEntrySnapshot } from '@/lib/finance/core/snapshot';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
 import { supabaseServer } from '@/lib/supabase/server';
-import type { Trade, TradeStatus } from '@/types';
+import type { CapitalSnapshot, Trade, TradeStatus } from '@/types';
 
 const VALID_STATUSES: TradeStatus[] = ['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
 const SNAPSHOT_RELEVANT_FIELDS = new Set([
@@ -139,6 +139,9 @@ function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
       : typeof trade.position_size === 'number'
         ? trade.position_size
         : null;
+  const capitalSnapshot = typeof trade.plan_answers?.capitalSnapshot === 'object'
+    ? trade.plan_answers.capitalSnapshot as CapitalSnapshot
+    : null;
 
   return buildEntrySnapshot({
     ticker: trade.ticker,
@@ -169,6 +172,7 @@ function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
     riskPolicy: trade.risk_policy_snapshot ?? null,
     planMode: trade.plan_mode ?? 'SYSTEM_ANALYSIS',
     chartPlan: trade.chart_plan ?? null,
+    capitalSnapshot,
     planNote: trade.plan_note,
     invalidationNote: trade.invalidation_note,
   });

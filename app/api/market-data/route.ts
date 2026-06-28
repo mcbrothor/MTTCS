@@ -347,7 +347,7 @@ export async function GET(request: Request) {
   }
 
   if (!Number.isFinite(totalEquity) || totalEquity < 0) {
-    return apiError('총 자본은 0 이상의 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
+    return apiError('계산 기준 자본은 0 이상의 숫자여야 합니다.', 'INVALID_TOTAL_EQUITY', 400);
   }
 
   if (!Number.isFinite(riskPercentInput) || riskPercentInput <= 0 || riskPercentInput > 10) {

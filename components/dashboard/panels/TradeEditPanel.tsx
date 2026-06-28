@@ -55,7 +55,7 @@ export function EditPanel({
           </select>
         </label>
         <TextInput label="허용 손실 %" type="number" min="0.1" max="10" step="0.1" value={draft.risk_percent} onChange={(value) => onChange('risk_percent', value)} />
-        <TextInput label="총 자본" type="number" value={draft.total_equity} onChange={(value) => onChange('total_equity', value)} />
+        <TextInput label="계산 기준 자본" type="number" value={draft.total_equity} onChange={(value) => onChange('total_equity', value)} />
         <TextInput label="계획 리스크" type="number" value={draft.planned_risk} onChange={(value) => onChange('planned_risk', value)} />
         <TextInput label="총 수량" type="number" value={draft.total_shares} onChange={(value) => onChange('total_shares', value)} />
         <TextInput label="진입가" type="number" value={draft.entry_price} onChange={(value) => onChange('entry_price', value)} />

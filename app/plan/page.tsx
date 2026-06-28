@@ -16,7 +16,8 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useMarketData } from '@/hooks/useMarketData';
 import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
-import type { ApiSuccess, PlanMode, PortfolioRiskSummary, RiskStrategy } from '@/types';
+import { buildCapitalSnapshot } from '@/lib/finance/core/capital-basis';
+import type { ApiSuccess, CapitalSnapshot, PlanMode, PortfolioRiskSummary, RiskStrategy } from '@/types';
 
 const DEFAULT_PLAN_TOTAL_EQUITY = 50000;
 
@@ -42,6 +43,8 @@ function PlanPageContent() {
   const autoAnalyzeStarted = useRef(false);
   const [contestQueue, setContestQueue] = useState<ContestPlanQueueItem[]>([]);
   const [defaultTotalEquity, setDefaultTotalEquity] = useState(DEFAULT_PLAN_TOTAL_EQUITY);
+  const [portfolioRisk, setPortfolioRisk] = useState<PortfolioRiskSummary | null>(null);
+  const [capitalCapturedAt, setCapitalCapturedAt] = useState('');
   const [equityLoadError, setEquityLoadError] = useState<string | null>(null);
 
   // 스캐너에서 전달받은 컨텍스트 데이터 — 계획서 수립 시 참고용
@@ -68,12 +71,14 @@ function PlanPageContent() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [manualDraft, setManualDraft] = useState<ManualStrategyDraft | null>(null);
+  const [analysisCapitalSnapshot, setAnalysisCapitalSnapshot] = useState<CapitalSnapshot | null>(null);
   // C-6: alert() 대신 인라인 에러 상태
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy = 'AUTO') => {
+  const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy = 'AUTO', capitalSnapshot?: CapitalSnapshot) => {
     setChecklist(null);
     setSaveError(null);
+    setAnalysisCapitalSnapshot(capitalSnapshot ?? null);
     fetchMarketData(ticker, exchange, totalEquity, riskPercent, riskStrategy);
   }, [fetchMarketData]);
 
@@ -104,6 +109,8 @@ function PlanPageContent() {
   useEffect(() => {
     const controller = new AbortController();
     setDefaultTotalEquity(DEFAULT_PLAN_TOTAL_EQUITY);
+    setPortfolioRisk(null);
+    setCapitalCapturedAt(new Date().toISOString());
     setEquityLoadError(null);
 
     const loadPortfolioEquity = async () => {
@@ -116,9 +123,11 @@ function PlanPageContent() {
         const result = body as ApiSuccess<PortfolioRiskSummary>;
         const totalEquity = Number(result.data.totalEquity);
         if (Number.isFinite(totalEquity) && totalEquity > 0) setDefaultTotalEquity(totalEquity);
+        setPortfolioRisk(result.data);
+        setCapitalCapturedAt(new Date().toISOString());
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        setEquityLoadError(err instanceof Error ? err.message : '포트폴리오 총자본을 불러오지 못했습니다.');
+        setEquityLoadError(err instanceof Error ? err.message : '포트폴리오 자본 기준을 불러오지 못했습니다.');
       }
     };
 
@@ -130,8 +139,17 @@ function PlanPageContent() {
     if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker || defaultTotalEquity <= 0) return;
     autoAnalyzeStarted.current = true;
     setPlanMode('SYSTEM_ANALYSIS');
-    handleAnalyze(initialTicker, initialExchange, defaultTotalEquity, 1);
-  }, [handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, defaultTotalEquity]);
+    const snapshot = buildCapitalSnapshot({
+      basis: 'CURRENT_ACCOUNT',
+      market: planMarket,
+      portfolio: portfolioRisk,
+      fallbackEquity: defaultTotalEquity,
+      manualAmount: defaultTotalEquity,
+      scenarioPct: -10,
+      capturedAt: capitalCapturedAt,
+    });
+    handleAnalyze(initialTicker, initialExchange, snapshot.amount, 1, 'AUTO', snapshot);
+  }, [capitalCapturedAt, defaultTotalEquity, handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, planMarket, portfolioRisk]);
 
   const handleSavePlan = async () => {
     if (!checklist) return;
@@ -174,7 +192,7 @@ function PlanPageContent() {
             rewardRiskRatio: riskPlan.rewardRiskRatio,
             riskPerShare: riskPlan.riskPerShare,
           },
-          plan_answers: { checklist },
+          plan_answers: { checklist, capitalSnapshot: manualDraft.capitalSnapshot },
         });
       } else {
         if (!analysis) return;
@@ -202,6 +220,7 @@ function PlanPageContent() {
           risk_policy_snapshot: analysis.riskPlan.riskPolicy
             ? { ...analysis.riskPlan.riskPolicy, pyramidPlan: analysis.riskPlan.pyramidPlan ?? null }
             : null,
+          plan_answers: { checklist, capitalSnapshot: analysisCapitalSnapshot },
         });
       }
       setSaveSuccess(true);
@@ -292,7 +311,7 @@ function PlanPageContent() {
       {equityLoadError && (
         <div className="rounded-lg border-2 border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
           <span className="mr-2">⚠️</span>
-          포트폴리오 총자본 조회 실패 — 기본값 <span className="font-mono font-bold text-rose-200">${DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}</span>로 포지션 사이징이 계산됩니다.
+          포트폴리오 자본 기준 조회 실패 — 기본값 <span className="font-mono font-bold text-rose-200">${DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}</span>로 포지션 사이징이 계산됩니다.
           실제 투자금과 다르면 수량 산출이 부정확해질 수 있습니다.
           <p className="mt-1 text-xs text-rose-300/80">원인: {equityLoadError}</p>
         </div>
@@ -331,6 +350,8 @@ function PlanPageContent() {
           initialTicker={initialTicker}
           initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
           initialTotalEquity={defaultTotalEquity}
+          portfolioRisk={portfolioRisk}
+          capitalCapturedAt={capitalCapturedAt}
         />
       ) : (
         <ManualStrategyForm
@@ -339,6 +360,8 @@ function PlanPageContent() {
           initialExchange={planMarket === 'KR' ? 'KOSPI' : initialExchange}
           initialTotalEquity={defaultTotalEquity}
           market={planMarket}
+          portfolioRisk={portfolioRisk}
+          capitalCapturedAt={capitalCapturedAt}
           onChange={handleManualDraftChange}
         />
       )}
@@ -422,8 +445,8 @@ function PlanPageContent() {
             <div className="flex flex-col gap-3 border-t border-slate-800 pt-5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-400">
                 {planMode === 'MANUAL_STRATEGY'
-                  ? '저장 시 수동 entry/stop/target, R/R, 허용 손실 비율과 체크리스트가 함께 기록됩니다.'
-                  : '저장 시 SEPA 판정 근거, VCP 피벗, 허용 손실 비율, 무효화선과 진입 계획이 함께 기록됩니다.'}
+                  ? '저장 시 수동 entry/stop/target, R/R, 선택한 자본 기준과 체크리스트가 함께 기록됩니다.'
+                  : '저장 시 SEPA 판정 근거, VCP 피벗, 선택한 자본 기준, 무효화선과 진입 계획이 함께 기록됩니다.'}
               </p>
               <Button className="px-8 py-3" onClick={handleSavePlan} disabled={saveBlocked}>
                 {saving ? '저장 중...' : '계획 저장'}

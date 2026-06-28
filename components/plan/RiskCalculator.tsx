@@ -45,17 +45,18 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
           <h2 className="mt-1 text-xl font-bold text-white">{isManual ? '수동 입력값 기반 진입 계획' : 'Minervini식 손실 제한 기반 진입 계획'}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">
             {isManual
-              ? '사용자가 입력한 진입가, 손절가, 목표가를 기준으로 최대 손실, 총 수량, R/R을 계산합니다.'
-              : 'VCP 피벗 진입가와 패턴 무효화선을 기준으로 최대 손실, 총 수량, 선택적 추가매수 후보가를 계산합니다.'}
+              ? '사용자가 입력한 진입가, 손절가, 목표가와 선택한 자본 기준으로 최대 손실, 총 수량, R/R을 계산합니다.'
+              : 'VCP 피벗 진입가, 패턴 무효화선, 선택한 자본 기준으로 최대 손실, 총 수량, 선택적 추가매수 후보가를 계산합니다.'}
           </p>
         </div>
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-right">
-          <p className="text-xs text-emerald-300">최대 허용 손실</p>
+          <p className="text-xs text-emerald-300">이번 거래 최대 손실</p>
           <p className="font-mono text-xl font-bold text-white">{currency(riskPlan.maxRisk, market)}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+        <Metric label="계산 기준 자본" value={currency(riskPlan.totalEquity, market)} />
         <Metric label="허용 손실" value={`${riskPct}%`} />
         <Metric label="ATR 참고값" value={riskPlan.atr.toFixed(2)} />
         <Metric label="피벗 진입가" value={currency(riskPlan.entryPrice, market)} />
@@ -139,9 +140,9 @@ export default function RiskCalculator({ riskPlan }: RiskCalculatorProps) {
       <details className="mt-5 rounded-lg border border-slate-700 bg-slate-950/50 p-4">
         <summary className="cursor-pointer text-sm font-semibold text-slate-200">계산식 보기</summary>
         <div className="mt-3 space-y-2 text-sm leading-6 text-slate-400">
-          <p>최대 허용 손실 = 총 자본 x 허용 손실 비율</p>
+          <p>이번 거래 최대 손실 = 선택한 자본 기준 x 허용 손실 비율</p>
           <p>초기 손절가 = {isManual ? '사용자가 입력한 stop 가격' : '선택한 리스크 전략의 패턴 무효화선, 최대 손실 캡, ATR 스탑 중 정책상 허용되는 가격'}</p>
-          <p>총 수량 = 최대 허용 손실 / 주당 위험금액</p>
+          <p>총 수량 = 이번 거래 최대 손실 / 주당 위험금액</p>
           {pyramidPlan && <p>ONL 피라미딩 = 완성 포지션을 50%/30%/20%로 나누고, E3 이후 손절을 최소 리스크 보존선 이상으로 올립니다.</p>}
           <p>추가매수 후보가는 전략에 따라 고정 퍼센트 또는 ATR 간격으로 계산됩니다.</p>
         </div>

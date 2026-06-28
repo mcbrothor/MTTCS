@@ -146,6 +146,92 @@ Expected behavior:
 - Codex failure falls back to `pending-local-llm`.
 - Telegram report is sent to every id in `TELEGRAM_ALLOWED_CHAT_IDS`.
 
+## 6A. Local Analysis Infra
+
+The local analysis server keeps heavy data in Local Postgres while Supabase stores queue state and UI summaries.
+
+Local Postgres:
+
+- DB: `mtn_local`
+- user: `mtn_worker`
+- secret file: `~/.config/mtn/local-postgres-url`
+- local schema: `local-postgres/migrations/001_local_analysis_infra.sql`
+
+Apply local schema:
+
+```bash
+psql "$LOCAL_POSTGRES_URL" -f local-postgres/migrations/001_local_analysis_infra.sql
+```
+
+Supabase schema:
+
+- migration: `supabase/migrations/20260628000000_local_analysis_queue.sql`
+- queue table: `analysis_jobs`
+- supported jobs: `FINANCIAL_AUDIT`, `THESIS_CHECK`, `COMMITTEE_REVIEW`, `NEWS_PULSE`, `RECOMMENDATION_BACKTEST`
+- summary table: `financial_audit_summaries`
+- default worker claim set: all supported job types
+
+Run a one-shot worker:
+
+```bash
+npm run local:worker:once
+```
+
+Create a job through the MTN API after logging in:
+
+```bash
+curl -X POST http://localhost:3000/api/local-analysis/jobs \
+  -H 'content-type: application/json' \
+  --data '{"job_type":"FINANCIAL_AUDIT","payload":{"ticker":"NVDA","market":"US","financials":[]}}'
+```
+
+Other supported payloads:
+
+- `THESIS_CHECK`: `ticker` or `thesis_id`, plus `assumptions`, `events`, `evidence`.
+- `COMMITTEE_REVIEW`: `ticker`, optional `agent_votes`.
+- `NEWS_PULSE`: `ticker`, `news`.
+- `RECOMMENDATION_BACKTEST`: `strategy_key`, `trades` or `picks`.
+
+Persistent launchd worker:
+
+```bash
+cp infra/launchd/com.mantori.mtn-local-analysis-worker.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mantori.mtn-local-analysis-worker.plist
+launchctl enable "gui/$(id -u)/com.mantori.mtn-local-analysis-worker"
+launchctl kickstart -k "gui/$(id -u)/com.mantori.mtn-local-analysis-worker"
+```
+
+Daily local backup:
+
+```bash
+cp infra/launchd/com.mantori.mtn-local-postgres-backup.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mantori.mtn-local-postgres-backup.plist
+launchctl enable "gui/$(id -u)/com.mantori.mtn-local-postgres-backup"
+```
+
+Health and backup commands:
+
+```bash
+npm run local:postgres:health
+DRY_RUN=true npm run local:postgres:backup
+npm run local:postgres:backup
+```
+
+Logs:
+
+- `/tmp/mtn-local-worker.out.log`
+- `/tmp/mtn-local-worker.err.log`
+- `/tmp/mtn-local-postgres-backup.out.log`
+- `/tmp/mtn-local-postgres-backup.err.log`
+
+Expected behavior:
+
+- MTN writes `analysis_jobs.status = queued`.
+- Local worker claims one job with `claim_analysis_job(...)`.
+- Full evidence is written to Local Postgres.
+- Supabase gets `financial_audit_summaries` and `analysis_jobs.result_summary`.
+- Stale `running` jobs are claimable again after `MTN_LOCAL_WORKER_STALE_AFTER_SECONDS`.
+
 ## 7. Verification Commands
 
 Before deployment:

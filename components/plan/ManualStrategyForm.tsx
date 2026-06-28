@@ -3,13 +3,15 @@ import { Target } from 'lucide-react';
 import AnalysisChartContainer from '@/components/analysis/AnalysisChartContainer';
 import Card from '@/components/ui/Card';
 import { calculateManualRiskPlan } from '@/lib/finance/core/position-sizing';
-import type { Direction, RiskPlan } from '@/types';
+import CapitalBasisSelector from './CapitalBasisSelector';
+import type { CapitalBasisKind, CapitalSnapshot, Direction, PortfolioRiskSummary, RiskPlan } from '@/types';
 
 export interface ManualStrategyDraft {
   ticker: string;
   exchange: string;
   direction: Direction;
   totalEquity: number;
+  capitalSnapshot: CapitalSnapshot;
   riskPercent: number;
   entryPrice: number;
   stopPrice: number;
@@ -24,6 +26,8 @@ interface ManualStrategyFormProps {
   initialExchange?: string;
   initialTotalEquity: number;
   market: 'US' | 'KR';
+  portfolioRisk: PortfolioRiskSummary | null;
+  capitalCapturedAt: string;
   onChange: (draft: ManualStrategyDraft) => void;
 }
 
@@ -32,13 +36,18 @@ export default function ManualStrategyForm({
   initialExchange = 'NAS',
   initialTotalEquity,
   market,
+  portfolioRisk,
+  capitalCapturedAt,
   onChange,
 }: ManualStrategyFormProps) {
   const previousInitialTotalEquity = useRef(initialTotalEquity);
   const [ticker, setTicker] = useState(initialTicker.toUpperCase());
   const [exchange, setExchange] = useState(initialExchange);
   const [direction, setDirection] = useState<Direction>('LONG');
-  const [totalEquity, setTotalEquity] = useState(initialTotalEquity);
+  const [capitalBasis, setCapitalBasis] = useState<CapitalBasisKind>('CURRENT_ACCOUNT');
+  const [manualCapital, setManualCapital] = useState(initialTotalEquity);
+  const [scenarioPct, setScenarioPct] = useState(-10);
+  const [capitalSnapshot, setCapitalSnapshot] = useState<CapitalSnapshot | null>(null);
   const [riskPercent, setRiskPercent] = useState(1);
   const [entryPrice, setEntryPrice] = useState(0);
   const [stopPrice, setStopPrice] = useState(0);
@@ -48,7 +57,7 @@ export default function ManualStrategyForm({
 
   useEffect(() => {
     if (initialTotalEquity <= 0) return;
-    setTotalEquity((current) => (
+    setManualCapital((current) => (
       current <= 0 || current === previousInitialTotalEquity.current
         ? initialTotalEquity
         : current
@@ -56,6 +65,7 @@ export default function ManualStrategyForm({
     previousInitialTotalEquity.current = initialTotalEquity;
   }, [initialTotalEquity]);
 
+  const totalEquity = capitalSnapshot?.amount ?? 0;
   const riskPlan = useMemo(() => calculateManualRiskPlan(
     totalEquity,
     entryPrice,
@@ -85,11 +95,13 @@ export default function ManualStrategyForm({
             : null;
 
   useEffect(() => {
+    if (!capitalSnapshot) return;
     onChange({
       ticker: ticker.trim().toUpperCase(),
       exchange,
       direction,
       totalEquity,
+      capitalSnapshot,
       riskPercent,
       entryPrice,
       stopPrice,
@@ -98,7 +110,7 @@ export default function ManualStrategyForm({
       setupTags,
       riskPlan,
     });
-  }, [direction, entryPrice, exchange, onChange, planNote, riskPercent, riskPlan, setupTags, stopPrice, targetPrice, ticker, totalEquity]);
+  }, [capitalSnapshot, direction, entryPrice, exchange, onChange, planNote, riskPercent, riskPlan, setupTags, stopPrice, targetPrice, ticker, totalEquity]);
 
   return (
     <div className="space-y-6">
@@ -107,11 +119,11 @@ export default function ManualStrategyForm({
           <p className="text-xs font-semibold uppercase tracking-wide text-sky-400">Manual Strategy</p>
           <h2 className="mt-1 text-xl font-bold text-white">수동 전략 산출</h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            사용자가 정한 진입가, 손절가, 목표가로 포지션 수량과 R/R을 계산합니다.
+            사용자가 정한 진입가, 손절가, 목표가와 선택한 자본 기준으로 포지션 수량과 R/R을 계산합니다.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
           <label className="block lg:col-span-2">
             <span className="mb-2 block text-sm font-medium text-slate-300">티커</span>
             <input
@@ -152,17 +164,6 @@ export default function ManualStrategyForm({
           </label>
 
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-slate-300">총 자본</span>
-            <input
-              type="number"
-              min="1"
-              value={totalEquity}
-              onChange={(event) => setTotalEquity(Number(event.target.value))}
-              className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
-            />
-          </label>
-
-          <label className="block">
             <span className="mb-2 block text-sm font-medium text-slate-300">허용 손실 %</span>
             <input
               type="number"
@@ -174,6 +175,23 @@ export default function ManualStrategyForm({
               className="block w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-sm text-white outline-none transition-colors focus:border-sky-400 focus:ring-1 focus:ring-sky-400"
             />
           </label>
+        </div>
+
+        <div className="mt-5">
+          <CapitalBasisSelector
+            market={market}
+            basis={capitalBasis}
+            onBasisChange={setCapitalBasis}
+            manualAmount={manualCapital}
+            onManualAmountChange={setManualCapital}
+            scenarioPct={scenarioPct}
+            onScenarioPctChange={setScenarioPct}
+            fallbackEquity={initialTotalEquity}
+            portfolioRisk={portfolioRisk}
+            riskPercent={riskPercent}
+            capturedAt={capitalCapturedAt}
+            onSnapshotChange={setCapitalSnapshot}
+          />
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">

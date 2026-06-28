@@ -35,7 +35,7 @@ export function StrategyDetail({ trade }: { trade: Trade }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <DetailMetric label="총 자본" value={currency(trade.total_equity, trade.ticker)} />
+        <DetailMetric label="계산 기준 자본" value={currency(trade.total_equity, trade.ticker)} />
         <DetailMetric label="허용 손실" value={`${riskPct}%`} />
         <DetailMetric label="ATR 참고" value={numberText(trade.atr_value)} />
         <DetailMetric label="진입가" value={currency(metrics?.avgEntryPrice ?? trade.entry_price, trade.ticker)} />

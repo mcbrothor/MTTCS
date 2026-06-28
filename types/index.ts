@@ -11,6 +11,7 @@ export type AppliedRiskStrategy = Exclude<RiskStrategy, 'AUTO'>;
 export type RiskPolicyProfile = 'CONSERVATIVE' | 'STANDARD' | 'AGGRESSIVE';
 export type StopQuality = 'VALID' | 'TOO_TIGHT' | 'TOO_WIDE' | 'INVALID' | 'UNKNOWN';
 export type RiskGateStatus = 'PASS' | 'REDUCE' | 'BLOCK';
+export type CapitalBasisKind = 'CURRENT_ACCOUNT' | 'CONSERVATIVE' | 'AVAILABLE_CASH' | 'MANUAL' | 'SCENARIO';
 
 /**
  * 청산 사유 태그 — 복기 통계에서 유형별 집계에 사용
@@ -107,6 +108,7 @@ export interface TradeEntrySnapshot {
     trailing_stops: TrailingStops | null;
     chart_plan?: ChartPlan | null;
   };
+  capital_snapshot?: CapitalSnapshot | null;
   sepa: {
     status: AssessmentStatus | null;
     passed: number | null;
@@ -149,6 +151,28 @@ export interface ChartPlan {
   direction: Direction;
   rewardRiskRatio: number | null;
   riskPerShare: number;
+}
+
+export interface CapitalSnapshot {
+  version: 'mtn-capital-snapshot-v1';
+  basis: CapitalBasisKind;
+  basisLabel: string;
+  amount: number;
+  market: 'US' | 'KR';
+  currency: 'USD' | 'KRW';
+  capturedAt: string;
+  source: 'PORTFOLIO_RISK' | 'USER_INPUT' | 'SCENARIO';
+  fallbackUsed: boolean;
+  scenarioPct?: number | null;
+  portfolio: {
+    totalEquity: number | null;
+    cash: number | null;
+    marketValue: number | null;
+    totalOpenRisk: number | null;
+    riskBudgetRemaining: number | null;
+    activePositions: number | null;
+    unknownRiskPositions: number | null;
+  };
 }
 
 export interface TradeContestSnapshot {

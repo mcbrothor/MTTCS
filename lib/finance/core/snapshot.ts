@@ -6,6 +6,7 @@ import type {
   PlanMode,
   SepaEvidence,
   AppliedRiskStrategy,
+  CapitalSnapshot,
   RiskGateResult,
   RiskPolicy,
   RiskStrategy,
@@ -40,6 +41,7 @@ interface BuildEntrySnapshotInput {
   entryTargets?: TradeEntrySnapshot['plan']['entry_targets'];
   trailingStops?: TradeEntrySnapshot['plan']['trailing_stops'];
   chartPlan?: ChartPlan | null;
+  capitalSnapshot?: CapitalSnapshot | null;
   appliedRiskStrategy?: AppliedRiskStrategy | null;
   requestedRiskStrategy?: RiskStrategy | null;
   riskGate?: RiskGateResult | null;
@@ -81,6 +83,7 @@ export function buildEntrySnapshot(input: BuildEntrySnapshotInput): TradeEntrySn
       trailing_stops: input.trailingStops ?? null,
       chart_plan: input.chartPlan ?? null,
     },
+    capital_snapshot: input.capitalSnapshot ?? null,
     sepa: {
       status: input.sepaEvidence?.status ?? null,
       passed: summary?.passed ?? null,

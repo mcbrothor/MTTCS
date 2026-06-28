@@ -5,6 +5,13 @@ import { useMarket } from '@/contexts/MarketContext';
 import { friendlyEarlyWarningStatus } from '@/lib/market-display';
 import type { EarlyWarningSeverity } from '@/types';
 
+const SEVERITY_ICON: Record<EarlyWarningSeverity, typeof CheckCircle2> = {
+  OK: CheckCircle2,
+  WATCH: AlertTriangle,
+  REDUCE: ShieldAlert,
+  HALT: ShieldAlert,
+};
+
 function severityClass(status: EarlyWarningSeverity) {
   if (status === 'OK') return 'border-emerald-500/35 bg-emerald-500/8 text-emerald-200';
   if (status === 'WATCH') return 'border-amber-500/35 bg-amber-500/8 text-amber-200';
@@ -12,10 +19,9 @@ function severityClass(status: EarlyWarningSeverity) {
   return 'border-rose-500/40 bg-rose-500/10 text-rose-200';
 }
 
-function severityIcon(status: EarlyWarningSeverity) {
-  if (status === 'OK') return CheckCircle2;
-  if (status === 'WATCH') return AlertTriangle;
-  return ShieldAlert;
+function SeverityStatusIcon({ status, className }: { status: EarlyWarningSeverity; className: string }) {
+  const Icon = SEVERITY_ICON[status];
+  return <Icon className={className} />;
 }
 
 export default function EarlyWarningPanel() {
@@ -42,8 +48,6 @@ export default function EarlyWarningPanel() {
     );
   }
 
-  const StatusIcon = severityIcon(earlyWarnings.status);
-
   return (
     <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 shadow-[var(--panel-shadow)]" aria-labelledby="early-warning-title">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -54,7 +58,7 @@ export default function EarlyWarningPanel() {
         </div>
         <div className={`shrink-0 rounded-lg border px-3 py-2 ${severityClass(earlyWarnings.status)}`}>
           <div className="flex items-center gap-2">
-            <StatusIcon className="h-4 w-4" />
+            <SeverityStatusIcon status={earlyWarnings.status} className="h-4 w-4" />
             <span className="text-sm font-black">{friendlyEarlyWarningStatus(earlyWarnings.status)}</span>
           </div>
           <p className="mt-1 text-xs leading-5 opacity-90">{earlyWarnings.action}</p>
@@ -97,7 +101,6 @@ export default function EarlyWarningPanel() {
           </div>
           <div className="divide-y divide-slate-800/80">
             {earlyWarnings.signals.map((signal) => {
-              const Icon = severityIcon(signal.status);
               return (
                 <div key={signal.id} className="grid gap-2 px-3 py-3 text-sm md:grid-cols-[1.05fr_1.35fr_0.62fr_1fr] md:gap-3">
                   <div>
@@ -108,7 +111,7 @@ export default function EarlyWarningPanel() {
                   <p className="text-xs leading-5 text-slate-400">{signal.why}</p>
                   <div>
                     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold ${severityClass(signal.status)}`}>
-                      <Icon className="h-3.5 w-3.5" />
+                      <SeverityStatusIcon status={signal.status} className="h-3.5 w-3.5" />
                       {friendlyEarlyWarningStatus(signal.status)}
                     </span>
                     <p className="mt-1 text-[10px] leading-4 text-slate-500">기준: {signal.threshold}</p>
