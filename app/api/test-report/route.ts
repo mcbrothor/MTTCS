@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
-import { sendTelegramMessage } from '@/lib/telegram';
 import { formatDetailedMarketReport } from '@/lib/telegram/format';
 import { MasterFilterResponse, MasterFilterMetrics } from '@/types';
 
@@ -60,11 +59,10 @@ export async function GET() {
       };
 
       const report = formatDetailedMarketReport(reportData);
-      await sendTelegramMessage(report);
-      results.push({ market, success: true });
+      results.push({ market, success: true, telegramSkipped: true, preview: report });
     }
 
-    return NextResponse.json({ success: true, results, message: '미국 및 한국 시장 상세 리포트가 모두 발송되었습니다.' });
+    return NextResponse.json({ success: true, results, message: '미국 및 한국 시장 상세 리포트 미리보기를 생성했습니다. 텔레그램 발송은 생략됩니다.' });
   } catch (error: unknown) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Unknown test report error' },

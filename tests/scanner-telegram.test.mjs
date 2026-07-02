@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { formatScannerTelegramMessage } from '../lib/scanner-telegram.ts';
-import { chunkTelegramMessage, normalizeTelegramPhotos } from '../lib/telegram.ts';
+import { chunkTelegramMessage, isSuppressedTelegramMessage, normalizeTelegramPhotos } from '../lib/telegram.ts';
 
 {
   const message = formatScannerTelegramMessage({
@@ -56,6 +56,13 @@ import { chunkTelegramMessage, normalizeTelegramPhotos } from '../lib/telegram.t
     { url: 'https://example.com/chart-a.png', caption: null },
     { url: 'https://example.com/chart-b.png', caption: 'ETF 구성 Top 15' },
   ]);
+}
+
+{
+  assert.equal(isSuppressedTelegramMessage('🔴 *[MTN 시장 리포트: US]*'), true);
+  assert.equal(isSuppressedTelegramMessage('🟢 [MTN 시장 리포트: KR]\nPowered by groq (openai/gpt-oss-120b)'), true);
+  assert.equal(isSuppressedTelegramMessage('🛡️ *MTN 매크로 레짐 리포트*'), true);
+  assert.equal(isSuppressedTelegramMessage('[MTN Scanner] 후보 요약'), false);
 }
 
 console.log('scanner telegram tests passed');

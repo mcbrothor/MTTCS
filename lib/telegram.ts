@@ -5,6 +5,10 @@ const allowedChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS?.split(',').map((id
 const TELEGRAM_MESSAGE_LIMIT = 4096;
 const TELEGRAM_CHUNK_TARGET = 3900;
 const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
+const SUPPRESSED_MESSAGE_MARKERS = [
+  'MTN 시장 리포트:',
+  'MTN 매크로 레짐 리포트',
+];
 
 export interface TelegramPhoto {
   url: string;
@@ -41,7 +45,16 @@ export function chunkTelegramMessage(text: string, maxLength = TELEGRAM_CHUNK_TA
   return chunks.filter((chunk) => chunk.length > 0 && chunk.length <= TELEGRAM_MESSAGE_LIMIT);
 }
 
+export function isSuppressedTelegramMessage(text: string) {
+  return SUPPRESSED_MESSAGE_MARKERS.some((marker) => text.includes(marker));
+}
+
 export async function sendTelegramMessage(text: string) {
+  if (isSuppressedTelegramMessage(text)) {
+    console.log('[Telegram] Suppressed deprecated MTN market/macro report delivery.');
+    return { sent: 0, skipped: true, suppressed: true };
+  }
+
   if (!token || allowedChatIds.length === 0) {
     return { sent: 0, skipped: true };
   }

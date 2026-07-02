@@ -1,5 +1,4 @@
 import { generateMarketInsight } from './lib/ai/gemini.ts';
-import { sendTelegramMessage } from './lib/telegram.ts';
 import { formatDetailedMarketReport } from './lib/telegram/format.ts';
 import dotenv from 'dotenv';
 
@@ -51,9 +50,9 @@ async function test() {
       aiModelUsed: aiRes.modelUsed,
     });
 
-    console.log('3. 텔레그램 발송 중...');
-    await sendTelegramMessage(report);
-    console.log('✅ 테스트 완료! 텔레그램을 확인하세요.');
+    console.log('3. 텔레그램 발송 생략됨. 리포트 미리보기:');
+    console.log(report);
+    console.log('✅ 테스트 완료!');
   } catch (err) {
     console.error('❌ 테스트 실패:', err);
   }

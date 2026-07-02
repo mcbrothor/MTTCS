@@ -5,10 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { computeMacroScore } from '@/lib/macro/compute';
-import { generateMarketInsight } from '@/lib/ai/gemini';
-import { sendTelegramMessage } from '@/lib/telegram';
-import { formatDetailedMarketReport } from '@/lib/telegram/format';
-import type { OHLCData, MasterFilterResponse, MasterFilterMetrics } from '@/types';
+import type { OHLCData } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -111,47 +108,6 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
 
   if (error) throw new Error(`master_filter_snapshot upsert error: ${error.message}`);
 
-  // AI 인사이트 생성 및 텔레그램 리포트 발송
-  try {
-    // AI 분석용 입력 데이터 구성
-    const insightInput = {
-      marketState: result.state,
-      market,
-      metrics: {
-        ...result.metrics,
-        totalScore: result.p3Score,
-      },
-      macroData: {
-        mainPrice: result.lastClose,
-        vix: result.currentVix,
-      }
-    };
-
-    const aiRes = await generateMarketInsight(insightInput);
-    
-    // 리포트 포맷팅용 가상 응답 객체 생성
-    const reportData: MasterFilterResponse = {
-      state: result.state,
-      market,
-      metrics: {
-        ...result,
-        ...result.metrics,
-        updatedAt: new Date().toISOString(),
-      } as unknown as MasterFilterMetrics,
-      insightLog: aiRes.text,
-      isAiGenerated: aiRes.isAiGenerated,
-      aiProviderUsed: aiRes.providerUsed,
-      aiModelUsed: aiRes.modelUsed,
-    };
-
-    const report = formatDetailedMarketReport(reportData);
-    await sendTelegramMessage(report);
-  } catch (aiErr) {
-    console.error('Snapshot Telegram/AI error:', aiErr);
-    // AI 에러 시엔 기본 리포트라도 발송 시도
-    await sendTelegramMessage(`[MTN Snapshot] ${market} 종합 점수: ${result.p3Score}/100 (${result.state})`);
-  }
-
   return { p3Score: result.p3Score, state: result.state };
 }
 
@@ -182,24 +138,6 @@ async function snapshotMacro(calcDate: string) {
   }, { onConflict: 'calc_date' });
 
   if (error) throw new Error(`macro_snapshot upsert error: ${error.message}`);
-
-  // 텔레그램 리포트 발송
-  const emoji = result.regime === 'RISK_ON' ? '🚀' : result.regime === 'RISK_OFF' ? '🛡️' : '⚖️';
-  const report = `
-${emoji} *MTN 매크로 레짐 리포트*
----------------------------------------
-• *Macro Score*: \`${result.macroScore}/100\`
-• *Regime*: \`${result.regime}\`
-• *기준 일자*: \`${calcDate}\`
-
-• 추세: ${result.componentScores.trendScore}pt
-• 신용: ${result.componentScores.creditScore}pt
-• 변동성: ${result.componentScores.volatilityScore}pt
----------------------------------------
-[차트 확인](https://mttcs.vercel.app/macro)
-  `.trim();
-
-  await sendTelegramMessage(report).catch(console.error);
 
   return { macroScore: result.macroScore, regime: result.regime };
 }
