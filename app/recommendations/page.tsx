@@ -7,6 +7,7 @@ import { AlertTriangle, BarChart3, CalendarDays, Database, Info, Search } from '
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 type Market = 'US' | 'KR';
+type Category = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
 type View = 'history' | 'metrics' | 'diagnostics';
 
 interface PerformanceRow {
@@ -44,6 +45,7 @@ interface Publication {
   id: string;
   run_date: string;
   market: Market;
+  category: Category | null;
   generated_at: string;
   first_tradable_date: string | null;
   engine_version: string;
@@ -96,6 +98,13 @@ const CAUSE_LABEL: Record<string, string> = {
 };
 
 const HORIZON_SESSIONS = { D5: 5, D20: 20, D60: 60 } as const;
+const CATEGORY_ITEMS: [Category, string][] = [
+  ['NASDAQ100', '나스닥'],
+  ['SP500', 'S&P500'],
+  ['KOSPI200', '코스피'],
+  ['KOSDAQ150', '코스닥'],
+];
+const CATEGORY_LABEL = Object.fromEntries(CATEGORY_ITEMS) as Record<Category, string>;
 
 function pct(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '-';
@@ -152,16 +161,20 @@ function MetricHeaderTooltip({ label, ariaLabel, children }: { label: string; ar
 function RecommendationsContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const market = searchParams.get('market') === 'KR' ? 'KR' : 'US';
+  const categoryParam = (searchParams.get('category') || '').toUpperCase();
+  const legacyMarket = searchParams.get('market') === 'KR' ? 'KR' : 'US';
+  const category: Category = CATEGORY_ITEMS.some(([key]) => key === categoryParam)
+    ? categoryParam as Category
+    : legacyMarket === 'KR' ? 'KOSPI200' : 'NASDAQ100';
   const viewParam = searchParams.get('view');
   const view: View = viewParam === 'metrics' || viewParam === 'diagnostics' ? viewParam : 'history';
   const dateParam = searchParams.get('date') || '';
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : '';
   const dateRange = selectedDate ? `&from=${selectedDate}&to=${selectedDate}` : '';
   const endpoint = view === 'history'
-    ? `/api/recommendations?market=${market}&limit=30${dateRange}`
-    : `/api/recommendations/${view}?market=${market}${view === 'metrics' ? dateRange : ''}`;
-  const summaryEndpoint = `/api/recommendations/summary?market=${market}`;
+    ? `/api/recommendations?category=${category}&limit=30${dateRange}`
+    : `/api/recommendations/${view}?category=${category}${view === 'metrics' ? dateRange : ''}`;
+  const summaryEndpoint = `/api/recommendations/summary?category=${category}`;
   const [requestState, setRequestState] = useState<{ endpoint: string | null; data: unknown; error: string | null }>({
     endpoint: null,
     data: null,
@@ -177,9 +190,10 @@ function RecommendationsContent() {
   });
   const summaryLoading = summaryState.endpoint !== summaryEndpoint;
 
-  const hrefFor = (next: { market?: Market; view?: View; date?: string | null }) => {
+  const hrefFor = (next: { category?: Category; view?: View; date?: string | null }) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set('market', next.market || market);
+    params.set('category', next.category || category);
+    params.delete('market');
     const nextView = next.view || view;
     if (nextView === 'history') params.delete('view');
     else params.set('view', nextView);
@@ -229,7 +243,7 @@ function RecommendationsContent() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Segmented items={[['US', '미국'], ['KR', '한국']]} active={market} getHref={(key) => hrefFor({ market: key as Market })} />
+          <Segmented items={CATEGORY_ITEMS} active={category} getHref={(key) => hrefFor({ category: key as Category })} />
           <Segmented items={[['history', '추천 이력'], ['metrics', '성과 분석'], ['diagnostics', '원인 분석']]} active={view} getHref={(key) => hrefFor({ view: key as View })} />
         </div>
       </header>
@@ -249,10 +263,10 @@ function RecommendationsContent() {
         <section aria-label="추천일 필터" className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <label htmlFor="recommendation-date" className="text-xs font-semibold text-slate-300">추천일 선택</label>
-            <p className="mt-1 text-xs text-slate-500">특정 발행일의 한국·미국 Top10과 기간별 성과만 확인합니다.</p>
+            <p className="mt-1 text-xs text-slate-500">특정 발행일의 {CATEGORY_LABEL[category]} Top10과 기간별 성과만 확인합니다.</p>
           </div>
           <form method="get" action={pathname} className="flex items-center gap-2">
-            <input type="hidden" name="market" value={market} />
+            <input type="hidden" name="category" value={category} />
             <input
               id="recommendation-date"
               aria-label="추천일 선택"
@@ -299,7 +313,7 @@ function FrequentPicksSummary({ data, loading, error }: {
     <section aria-labelledby="frequent-picks-title" className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
       <div className="border-b border-slate-800 px-4 py-3">
         <h2 id="frequent-picks-title" className="font-bold text-white">최근 2주 추천 빈도 Top 5</h2>
-        <p className="mt-1 text-xs text-slate-500">{data?.from && data?.to ? `${data.from} ~ ${data.to} 공식 추천 기준` : '시장별 공식 추천 기준'}</p>
+        <p className="mt-1 text-xs text-slate-500">{data?.from && data?.to ? `${data.from} ~ ${data.to} 공식 추천 기준` : '카테고리별 공식 추천 기준'}</p>
       </div>
       {loading ? (
         <div className="flex min-h-28 items-center justify-center"><LoadingSpinner size="sm" /></div>
@@ -329,7 +343,7 @@ function HistoryView({ publications }: { publications: Publication[] }) {
         <section key={publication.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
             <div>
-              <h2 className="font-bold text-white">{publication.run_date} Top10</h2>
+              <h2 className="font-bold text-white">{publication.run_date} {publication.category ? CATEGORY_LABEL[publication.category] : publication.market} Top10</h2>
               <p className="mt-1 text-xs text-slate-500">{publication.llm_provider || 'MTN'} · {publication.llm_model || publication.engine_version} · 진입일 {publication.first_tradable_date || '대기'}</p>
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${publication.telegram_status === 'SENT' ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/30 text-amber-300'}`}>

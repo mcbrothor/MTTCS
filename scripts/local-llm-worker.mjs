@@ -28,6 +28,7 @@ const CODEX_CLI_BIN = process.env.CODEX_CLI_BIN || 'codex';
 const CODEX_CLI_MODEL = process.env.CODEX_CLI_MODEL || '';
 const CODEX_CLI_TIMEOUT_MS = Number(process.env.CODEX_CLI_TIMEOUT_MS || 15 * 60 * 1000);
 const DAILY_TOP5_TIMEOUT_MS = Number(process.env.DAILY_TOP5_TIMEOUT_MS || 10 * 60 * 1000);
+const DAILY_TOP5_MAX_TOKENS = Number(process.env.DAILY_TOP5_MAX_TOKENS || 8000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
@@ -46,6 +47,10 @@ const recommendationConfig = jiti('../lib/recommendations/config.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
 const CODEX_OUTPUT_SCHEMA = process.env.CODEX_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'ib-validation-result.schema.json');
 const DAILY_TOP5_OUTPUT_SCHEMA = process.env.DAILY_TOP5_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'daily-screener-top5.schema.json');
+const SUPPRESSED_TELEGRAM_MARKERS = [
+  'MTN 시장 리포트:',
+  'MTN 매크로 레짐 리포트',
+];
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('[Worker] Missing Supabase environment variables. Exiting.');
@@ -75,9 +80,13 @@ async function postTelegramPayload(url, payload) {
 }
 
 async function sendTelegramMessage(text) {
+  if (SUPPRESSED_TELEGRAM_MARKERS.some((marker) => text.includes(marker))) {
+    console.log('[Worker] Suppressed Telegram report by marker.');
+    return { skipped: true, suppressed: true };
+  }
   if (!telegramBotToken || telegramChatIds.length === 0) {
     console.log('[Worker] Telegram credentials missing, skipping telegram notification.');
-    return;
+    return { skipped: true };
   }
   const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
   
@@ -113,6 +122,7 @@ async function sendTelegramMessage(text) {
       }
     }
   }
+  return { skipped: false };
 }
 
 function runProcess(command, args, input, timeoutMs) {
@@ -301,11 +311,11 @@ async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prom
   const response = await axios.post(url, {
     model,
     messages: [
-      { role: 'system', content: 'You are MTN Daily Screener Top5 analyst. Return JSON only.' },
+      { role: 'system', content: 'You are MTN Daily Screener category Top10 analyst. Return JSON only.' },
       { role: 'user', content: prompt },
     ],
     temperature: 0.2,
-    max_tokens: 2200,
+    max_tokens: DAILY_TOP5_MAX_TOKENS,
   }, {
     timeout: DAILY_TOP5_TIMEOUT_MS,
     headers: {
@@ -325,7 +335,7 @@ async function callGeminiDailyTop5(prompt) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    generationConfig: { maxOutputTokens: 2200, temperature: 0.2 },
+    generationConfig: { maxOutputTokens: DAILY_TOP5_MAX_TOKENS, temperature: 0.2 },
   });
   const result = await model.generateContent(prompt);
   const text = result.response.text().trim();
@@ -342,7 +352,7 @@ async function callDailyTop5Provider(provider, prompt, candidates) {
       timeoutMs: DAILY_TOP5_TIMEOUT_MS,
       parseOutput: (raw) => ({ payload: parseCodexCliJsonOutput(raw), rawResponse: raw }),
     });
-    const result = dailyScreeners.parseDailyMarketTop10Response(JSON.stringify(payload), candidates);
+    const result = dailyScreeners.parseDailyCategoryTop10Response(JSON.stringify(payload), candidates);
     return { ...result, rawResponse };
   }
 
@@ -354,12 +364,12 @@ async function callDailyTop5Provider(provider, prompt, candidates) {
       model: LOCAL_LLM_MODEL,
       prompt,
     });
-    return dailyScreeners.parseDailyMarketTop10Response(raw, candidates);
+    return dailyScreeners.parseDailyCategoryTop10Response(raw, candidates);
   }
 
   if (provider === 'gemini') {
     const raw = await callGeminiDailyTop5(prompt);
-    return dailyScreeners.parseDailyMarketTop10Response(raw, candidates);
+    return dailyScreeners.parseDailyCategoryTop10Response(raw, candidates);
   }
 
   if (provider === 'groq') {
@@ -371,7 +381,7 @@ async function callDailyTop5Provider(provider, prompt, candidates) {
       model: GROQ_MODEL,
       prompt,
     });
-    return dailyScreeners.parseDailyMarketTop10Response(raw, candidates);
+    return dailyScreeners.parseDailyCategoryTop10Response(raw, candidates);
   }
 
   if (provider === 'cerebras') {
@@ -383,10 +393,10 @@ async function callDailyTop5Provider(provider, prompt, candidates) {
       model: CEREBRAS_MODEL,
       prompt,
     });
-    return dailyScreeners.parseDailyMarketTop10Response(raw, candidates);
+    return dailyScreeners.parseDailyCategoryTop10Response(raw, candidates);
   }
 
-  return dailyScreeners.ruleBasedDailyMarketTop10(candidates);
+  return dailyScreeners.ruleBasedDailyCategoryTop10(candidates);
 }
 
 async function runDailyTop5Chain(prompt, candidates) {
@@ -397,8 +407,9 @@ async function runDailyTop5Chain(prompt, candidates) {
     try {
       console.log(`[Worker] ⏳ Daily Top5 provider: ${provider} (${model})`);
       const result = await callDailyTop5Provider(provider, prompt, candidates);
-      if (!Array.isArray(result.markets?.US) || !Array.isArray(result.markets?.KR) || result.markets.US.length !== 10 || result.markets.KR.length !== 10) {
-        throw new Error(`Provider returned invalid market Top10 counts: US=${result.markets?.US?.length ?? 0}, KR=${result.markets?.KR?.length ?? 0}.`);
+      const counts = Object.fromEntries(dailyScreeners.DAILY_SCREENER_CATEGORIES.map((category) => [category, result.categories?.[category]?.length ?? 0]));
+      if (dailyScreeners.DAILY_SCREENER_CATEGORIES.some((category) => counts[category] !== 10)) {
+        throw new Error(`Provider returned invalid category Top10 counts: ${JSON.stringify(counts)}.`);
       }
       chain.push({ provider, model, status: 'success' });
       return { provider, model, result, chain };
@@ -436,6 +447,19 @@ function rankLookupBySourceMarket(topGroups) {
   return ranks;
 }
 
+function rankLookupBySourceCategory(topGroups) {
+  const ranks = new Map();
+  for (const source of dailyScreeners.DAILY_SCREENER_SOURCES) {
+    for (const category of dailyScreeners.DAILY_SCREENER_CATEGORIES) {
+      const sourceRows = !Array.isArray(topGroups[source]) ? topGroups[source]?.[category] || [] : [];
+      for (const candidate of sourceRows) {
+        ranks.set(`${candidate.source}:${candidate.universe}:${candidate.ticker}`, candidate.rank ?? null);
+      }
+    }
+  }
+  return ranks;
+}
+
 async function loadPersistedDailyCandidates(runId) {
   const { data, error } = await supabase
     .from('daily_screener_candidates')
@@ -463,7 +487,8 @@ async function loadPersistedDailyCandidates(runId) {
 }
 
 async function insertDailyCandidates(run, candidates, topBySource) {
-  const marketRanks = rankLookupBySourceMarket(topBySource);
+  const categoryRanks = rankLookupBySourceCategory(topBySource);
+  const marketRanks = categoryRanks.size > 0 ? categoryRanks : rankLookupBySourceMarket(topBySource);
   const ranks = marketRanks.size > 0 ? marketRanks : rankLookup(topBySource);
   const rows = candidates.map((candidate) => ({
     run_id: run.id,
@@ -528,18 +553,20 @@ async function loadRecommendationMarketContext(runDate) {
   return contexts;
 }
 
-async function loadRecentKrRecommendations(runDate) {
+async function loadRecentKrRecommendations(runDate, category) {
   const from = new Date(`${runDate}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - 30);
-  const { data, error } = await supabase
+  let query = supabase
     .from('recommendation_picks')
-    .select('ticker, signal_price, recommendation_publications!inner(run_date, market, is_official, status)')
+    .select('ticker, signal_price, recommendation_publications!inner(run_date, market, category, is_official, status)')
     .eq('recommendation_publications.market', 'KR')
     .eq('recommendation_publications.is_official', true)
     .eq('recommendation_publications.status', 'PUBLISHED')
     .gte('recommendation_publications.run_date', from.toISOString().slice(0, 10))
     .lt('recommendation_publications.run_date', runDate)
     .limit(500);
+  if (category) query = query.eq('recommendation_publications.category', category);
+  const { data, error } = await query;
   if (error) throw error;
   return (data || []).map((row) => ({
     ticker: row.ticker,
@@ -579,15 +606,17 @@ async function processDailyScreenerRun(run) {
       if (persisted.length > 0) {
         const topBySource = dailyScreeners.groupTopCandidatesBySource(persisted, 10);
         const topBySourceMarket = dailyScreeners.groupTopCandidatesBySourceMarket(persisted, 10);
+        const topBySourceCategory = dailyScreeners.groupTopCandidatesBySourceCategory(persisted, 10);
         scan = {
           runDate: run.run_date,
           candidates: persisted,
           topBySource,
           topBySourceMarket,
+          topBySourceCategory,
           errors: Array.isArray(run.scan_summary?.errors) ? run.scan_summary.errors : [],
           maxPerUniverse: run.scan_summary?.max_per_universe ?? maxPerUniverse,
         };
-        topCandidates = dailyScreeners.flattenTopCandidatesBySourceMarket(topBySourceMarket);
+        topCandidates = dailyScreeners.flattenTopCandidatesBySourceCategory(topBySourceCategory);
         resumedFromCandidates = true;
         console.log(`[Worker] ↩️ Resuming Daily Screener run from ${persisted.length} persisted candidates.`);
       }
@@ -600,14 +629,16 @@ async function processDailyScreenerRun(run) {
         universes,
         maxPerUniverse,
       });
-      await insertDailyCandidates(run, scan.candidates, scan.topBySourceMarket);
-      topCandidates = dailyScreeners.flattenTopCandidatesBySourceMarket(scan.topBySourceMarket);
+      await insertDailyCandidates(run, scan.candidates, scan.topBySourceCategory);
+      topCandidates = dailyScreeners.flattenTopCandidatesBySourceCategory(scan.topBySourceCategory);
     }
 
-    const usTopCandidateCount = topCandidates.filter((candidate) => dailyScreeners.marketForDailyCandidate(candidate) === 'US').length;
-    const krTopCandidateCount = topCandidates.filter((candidate) => dailyScreeners.marketForDailyCandidate(candidate) === 'KR').length;
-    if (usTopCandidateCount < 10 || krTopCandidateCount < 10) {
-      throw new Error(`Daily screener produced fewer than 10 top candidates for a market (US=${usTopCandidateCount}, KR=${krTopCandidateCount}).`);
+    const categoryTopCandidateCount = Object.fromEntries(dailyScreeners.DAILY_SCREENER_CATEGORIES.map((category) => [
+      category,
+      topCandidates.filter((candidate) => dailyScreeners.categoryForDailyCandidate(candidate) === category).length,
+    ]));
+    if (dailyScreeners.DAILY_SCREENER_CATEGORIES.some((category) => categoryTopCandidateCount[category] < 10)) {
+      throw new Error(`Daily screener produced fewer than 10 top candidates for a category: ${JSON.stringify(categoryTopCandidateCount)}.`);
     }
 
     const scanSummary = {
@@ -617,7 +648,7 @@ async function processDailyScreenerRun(run) {
       max_per_universe: scan.maxPerUniverse,
       candidate_count: scan.candidates.length,
       top_candidate_count: topCandidates.length,
-      market_top_candidate_count: { US: usTopCandidateCount, KR: krTopCandidateCount },
+      category_top_candidate_count: categoryTopCandidateCount,
       errors: scan.errors,
       generated_at: new Date().toISOString(),
     };
@@ -628,7 +659,7 @@ async function processDailyScreenerRun(run) {
       .eq('id', run.id);
 
     if (resumedFromCandidates) {
-      console.log('[Worker] Persisted candidates found; rebuilding market Top10 from saved screener candidates.');
+      console.log('[Worker] Persisted candidates found; rebuilding category Top10 from saved screener candidates.');
     }
 
     const marketContextByMarket = await loadRecommendationMarketContext(run.run_date);
@@ -671,7 +702,7 @@ async function processDailyScreenerRun(run) {
           benchmarkTradeDates: krBenchmark?.bars.map((bar) => bar.date) || [],
         });
         flowFeatures.set(ticker, feature);
-        flowSnapshotByTicker[ticker] = {
+        const snapshot = {
           investor_flow: {
             as_of_date: run.run_date,
             recommendation_at: flowFeatureCutoff,
@@ -682,6 +713,12 @@ async function processDailyScreenerRun(run) {
             error: flowCollection.errors.get(ticker) || null,
           },
         };
+        flowSnapshotByTicker[ticker] = snapshot;
+        for (const category of [...new Set(topCandidates
+          .filter((candidate) => candidate.ticker === ticker && dailyScreeners.marketForDailyCandidate(candidate) === 'KR')
+          .map((candidate) => dailyScreeners.categoryForDailyCandidate(candidate)))]) {
+          flowSnapshotByTicker[`${category}:${ticker}`] = snapshot;
+        }
       }
       marketContextByMarket.KR = {
         ...marketContextByMarket.KR,
@@ -692,21 +729,37 @@ async function processDailyScreenerRun(run) {
         investor_flow_errors: flowCollection.errors.size,
       };
     }
-    const prompt = dailyScreeners.buildDailyMarketTop10Prompt({
+    const marketContextByCategory = Object.fromEntries(dailyScreeners.DAILY_SCREENER_CATEGORIES.map((category) => {
+      const market = dailyScreeners.marketForDailyCategory(category);
+      return [category, {
+        ...marketContextByMarket[market],
+        category,
+        category_label: dailyScreeners.categoryLabel(category),
+        scan_summary: scanSummary,
+      }];
+    }));
+    const prompt = dailyScreeners.buildDailyCategoryTop10Prompt({
       runDate: run.run_date,
       candidates: topCandidates,
-      marketContext: marketContextByMarket,
+      marketContext: {
+        ...marketContextByMarket,
+        ...marketContextByCategory,
+      },
     });
     const top5Attempt = await runDailyTop5Chain(prompt, topCandidates);
     const top5Result = {
       provider: top5Attempt.provider,
       model: top5Attempt.model,
-      markets: top5Attempt.result.markets,
+      categories: top5Attempt.result.categories,
       report_markdown: top5Attempt.result.reportMarkdown,
       raw_response: top5Attempt.result.rawResponse,
       generated_at: new Date().toISOString(),
     };
 
+    const usCategories = recommendationConfig.RECOMMENDATION_CATEGORIES
+      .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category] === 'US');
+    const krCategories = recommendationConfig.RECOMMENDATION_CATEGORIES
+      .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category] === 'KR');
     const recommendationPublications = await recommendationPersistence.persistRecommendationPublications({
       client: supabase,
       runId: run.id,
@@ -725,26 +778,16 @@ async function processDailyScreenerRun(run) {
         scan_summary: scanSummary,
         provider_chain: top5Attempt.chain,
       }])),
-      markets: ['US'],
+      marketContextByCategory: Object.fromEntries(Object.entries(marketContextByCategory).map(([category, context]) => [category, {
+        ...context,
+        provider_chain: top5Attempt.chain,
+      }])),
+      categories: usCategories,
       candidateSnapshotByTicker: flowSnapshotByTicker,
     });
-    const officialResultByMarket = { US: top5Attempt.result.markets.US };
+    const officialResultByCategory = Object.fromEntries(usCategories.map((category) => [category, top5Attempt.result.categories[category]]));
     if (krSessionOpen) {
-      const recentRecommendations = await loadRecentKrRecommendations(run.run_date);
       const marketState = marketContextByMarket.KR?.market_state || 'YELLOW';
-      const riskRanked = krRiskRanking.selectKrRiskAdjustedTop10({
-        candidates: topCandidates,
-        recentRecommendations,
-        marketState,
-        useFlow: false,
-      });
-      const flowRanked = krRiskRanking.selectKrRiskAdjustedTop10({
-        candidates: topCandidates,
-        recentRecommendations,
-        marketState,
-        flowFeatures,
-        useFlow: true,
-      });
       const allowedPolicies = [
         recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
         recommendationConfig.KR_RISK_ENGINE_VERSION,
@@ -753,61 +796,89 @@ async function processDailyScreenerRun(run) {
       const activePolicy = allowedPolicies.includes(recommendationConfig.KR_RECOMMENDATION_POLICY)
         ? recommendationConfig.KR_RECOMMENDATION_POLICY
         : recommendationConfig.RECOMMENDATION_ENGINE_VERSION;
-      const policies = [
-        { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: top5Attempt.result.markets.KR, ranked: null },
-        { engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION, picks: riskRanked.map((row) => row.pick), ranked: riskRanked },
-        { engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION, picks: flowRanked.map((row) => row.pick), ranked: flowRanked },
-      ];
-      for (const policy of policies) {
-        const publication = await recommendationPersistence.persistRecommendationPolicy({
-          client: supabase,
-          runId: run.id,
-          runDate: run.run_date,
-          generatedAt: top5Result.generated_at,
-          provider: top5Attempt.provider,
-          model: top5Attempt.model,
-          result: { ...top5Attempt.result, markets: { ...top5Attempt.result.markets, KR: policy.picks } },
-          candidates: scan.candidates,
-          market: 'KR',
-          engineVersion: policy.engineVersion,
-          isOfficial: policy.engineVersion === activePolicy,
-          marketContextByMarket: { KR: { ...marketContextByMarket.KR, scan_summary: scanSummary } },
-          candidateSnapshotByTicker: policy.ranked
-            ? Object.fromEntries(policy.ranked.map((row) => [row.pick.ticker, {
-              ...flowSnapshotByTicker[row.pick.ticker],
-              deterministic_ranking: {
-                aggregate_score: row.aggregateScore,
-                source_score: row.sourceScore,
-                flow_score: row.flowScore,
-                sources: row.sources,
-                risk_flags: row.riskFlags,
-              },
-            }]))
-            : flowSnapshotByTicker,
+      for (const category of krCategories) {
+        const recentRecommendations = await loadRecentKrRecommendations(run.run_date, category);
+        const riskRanked = krRiskRanking.selectKrRiskAdjustedTop10({
+          candidates: topCandidates,
+          category,
+          recentRecommendations,
+          marketState,
+          useFlow: false,
         });
-        recommendationPublications.push(publication);
-        if (policy.engineVersion === activePolicy) officialResultByMarket.KR = policy.picks;
+        const flowRanked = krRiskRanking.selectKrRiskAdjustedTop10({
+          candidates: topCandidates,
+          category,
+          recentRecommendations,
+          marketState,
+          flowFeatures,
+          useFlow: true,
+        });
+        const policies = [
+          { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: top5Attempt.result.categories[category], ranked: null },
+          { engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION, picks: riskRanked.map((row) => row.pick), ranked: riskRanked },
+          { engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION, picks: flowRanked.map((row) => row.pick), ranked: flowRanked },
+        ];
+        for (const policy of policies) {
+          const deterministicSnapshots = policy.ranked
+            ? Object.fromEntries(policy.ranked.flatMap((row) => {
+              const snapshot = {
+                ...flowSnapshotByTicker[`${category}:${row.pick.ticker}`],
+                deterministic_ranking: {
+                  aggregate_score: row.aggregateScore,
+                  source_score: row.sourceScore,
+                  flow_score: row.flowScore,
+                  sources: row.sources,
+                  risk_flags: row.riskFlags,
+                },
+              };
+              return [[row.pick.ticker, snapshot], [`${category}:${row.pick.ticker}`, snapshot]];
+            }))
+            : flowSnapshotByTicker;
+          const publication = await recommendationPersistence.persistRecommendationPolicy({
+            client: supabase,
+            runId: run.id,
+            runDate: run.run_date,
+            generatedAt: top5Result.generated_at,
+            provider: top5Attempt.provider,
+            model: top5Attempt.model,
+            result: { ...top5Attempt.result, categories: { ...top5Attempt.result.categories, [category]: policy.picks } },
+            candidates: scan.candidates,
+            category,
+            engineVersion: policy.engineVersion,
+            isOfficial: policy.engineVersion === activePolicy,
+            marketContextByCategory: {
+              [category]: {
+                ...marketContextByCategory[category],
+                scan_summary: scanSummary,
+                provider_chain: top5Attempt.chain,
+              },
+            },
+            candidateSnapshotByTicker: deterministicSnapshots,
+          });
+          recommendationPublications.push(publication);
+          if (policy.engineVersion === activePolicy) officialResultByCategory[category] = policy.picks;
+        }
       }
     }
-    const publicationByMarket = new Map(recommendationPublications
+    const publicationByCategory = new Map(recommendationPublications
       .filter((publication) => publication.is_official)
-      .map((publication) => [publication.market, publication]));
+      .map((publication) => [publication.category, publication]));
 
-    for (const market of krSessionOpen ? ['US', 'KR'] : ['US']) {
-      const publication = publicationByMarket.get(market);
+    for (const category of krSessionOpen ? recommendationConfig.RECOMMENDATION_CATEGORIES : usCategories) {
+      const publication = publicationByCategory.get(category);
       try {
-        await sendTelegramMessage(dailyScreeners.formatDailyMarketTop10TelegramMessage({
+        const delivery = await sendTelegramMessage(dailyScreeners.formatDailyCategoryTop10TelegramMessage({
           runDate: run.run_date,
-          market,
-          top10: officialResultByMarket[market],
+          category,
+          top10: officialResultByCategory[category],
           provider: `${top5Attempt.provider} (${top5Attempt.model})`,
         }));
         if (publication) {
           await recommendationPersistence.markRecommendationTelegramStatus(
             supabase,
             publication.id,
-            'SENT',
-            new Date().toISOString(),
+            delivery?.skipped ? 'SKIPPED' : 'SENT',
+            delivery?.skipped ? null : new Date().toISOString(),
           );
         }
       } catch (error) {

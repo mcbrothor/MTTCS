@@ -29,8 +29,9 @@ function candidate(overrides) {
     candidate({ ticker: 'AAA', score: 80, universe: 'NASDAQ100' }),
     candidate({ ticker: 'BBB', score: 70 }),
   ]);
-  assert.equal(rows.length, 2);
-  assert.equal(rows.find((row) => row.ticker === 'AAA').score, 80);
+  assert.equal(rows.length, 3);
+  assert.equal(rows.find((row) => row.ticker === 'AAA' && row.universe === 'NASDAQ100').score, 80);
+  assert.equal(rows.find((row) => row.ticker === 'AAA' && row.universe === 'SP500').score, 40);
 }
 
 {
@@ -143,82 +144,94 @@ function candidate(overrides) {
 }
 
 {
-  const us = Array.from({ length: 10 }, (_, index) => candidate({
-    ticker: `US${index + 1}`,
-    name: `US Company ${index + 1}`,
-    universe: index % 2 === 0 ? 'NASDAQ100' : 'SP500',
-    exchange: 'US',
-    source: index % 2 === 0 ? 'minervini' : 'leader',
-    score: 95 - index,
-  }));
-  const kr = Array.from({ length: 10 }, (_, index) => candidate({
-    ticker: `KR${index + 1}`,
-    name: `한국기업 ${index + 1}`,
-    universe: index % 2 === 0 ? 'KOSPI200' : 'KOSDAQ150',
-    exchange: index % 2 === 0 ? 'KOSPI' : 'KOSDAQ',
-    source: index % 2 === 0 ? 'momentum' : 'canslim',
-    score: 94 - index,
-  }));
-  const parsed = daily.parseDailyMarketTop10Response(JSON.stringify({
-    markets: {
-      US: us.map((row, index) => ({
-        rank: index + 1,
-        ticker: row.ticker,
-        source: row.source,
-        reason: `${row.name} 선정 사유`,
-        confidence: 0.8,
-        risk: '변동성',
-      })),
-      KR: kr.map((row, index) => ({
-        rank: index + 1,
-        ticker: row.ticker,
-        source: row.source,
-        reason: `${row.name} 선정 사유`,
-        confidence: 0.78,
-        risk: '거래대금 둔화',
-      })),
-    },
-    report_markdown: '# Market Top10',
-  }), [...us, ...kr]);
-  assert.equal(parsed.markets.US.length, 10);
-  assert.equal(parsed.markets.KR.length, 10);
-  assert.equal(parsed.markets.US[0].name, 'US Company 1');
-  assert.equal(parsed.markets.KR[0].name, '한국기업 1');
-  assert.equal(parsed.reportMarkdown, '# Market Top10');
+  const byCategory = {
+    NASDAQ100: Array.from({ length: 10 }, (_, index) => candidate({
+      ticker: `NDX${index + 1}`,
+      name: `Nasdaq Company ${index + 1}`,
+      universe: 'NASDAQ100',
+      exchange: 'US',
+      source: index % 2 === 0 ? 'minervini' : 'leader',
+      score: 95 - index,
+    })),
+    SP500: Array.from({ length: 10 }, (_, index) => candidate({
+      ticker: `SP${index + 1}`,
+      name: `S&P Company ${index + 1}`,
+      universe: 'SP500',
+      exchange: 'US',
+      source: index % 2 === 0 ? 'leader' : 'canslim',
+      score: 94 - index,
+    })),
+    KOSPI200: Array.from({ length: 10 }, (_, index) => candidate({
+      ticker: `KP${index + 1}`,
+      name: `코스피기업 ${index + 1}`,
+      universe: 'KOSPI200',
+      exchange: 'KOSPI',
+      source: index % 2 === 0 ? 'momentum' : 'canslim',
+      score: 93 - index,
+    })),
+    KOSDAQ150: Array.from({ length: 10 }, (_, index) => candidate({
+      ticker: `KQ${index + 1}`,
+      name: `코스닥기업 ${index + 1}`,
+      universe: 'KOSDAQ150',
+      exchange: 'KOSDAQ',
+      source: index % 2 === 0 ? 'qullamaggie' : 'leader',
+      score: 92 - index,
+    })),
+  };
+  const parsed = daily.parseDailyCategoryTop10Response(JSON.stringify({
+    categories: Object.fromEntries(Object.entries(byCategory).map(([category, rows]) => [category, rows.map((row, index) => ({
+      rank: index + 1,
+      ticker: row.ticker,
+      source: row.source,
+      reason: `${row.name} 선정 사유`,
+      confidence: 0.8,
+      risk: '변동성',
+    }))])),
+    report_markdown: '# Category Top10',
+  }), Object.values(byCategory).flat());
+  assert.equal(parsed.categories.NASDAQ100.length, 10);
+  assert.equal(parsed.categories.SP500.length, 10);
+  assert.equal(parsed.categories.KOSPI200.length, 10);
+  assert.equal(parsed.categories.KOSDAQ150.length, 10);
+  assert.equal(parsed.categories.NASDAQ100[0].name, 'Nasdaq Company 1');
+  assert.equal(parsed.categories.KOSDAQ150[0].name, '코스닥기업 1');
+  assert.equal(parsed.categories.KOSPI200[0].market, 'KR');
+  assert.equal(parsed.reportMarkdown, '# Category Top10');
 }
 
 {
-  const us = Array.from({ length: 10 }, (_, index) => candidate({ ticker: `US${index + 1}`, universe: 'NASDAQ100' }));
-  const kr = Array.from({ length: 10 }, (_, index) => candidate({ ticker: `KR${index + 1}`, universe: 'KOSPI200', exchange: 'KOSPI' }));
+  const categories = {
+    NASDAQ100: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `NDX${index + 1}`, universe: 'NASDAQ100' })),
+    SP500: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `SP${index + 1}`, universe: 'SP500' })),
+    KOSPI200: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `KP${index + 1}`, universe: 'KOSPI200', exchange: 'KOSPI' })),
+    KOSDAQ150: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `KQ${index + 1}`, universe: 'KOSDAQ150', exchange: 'KOSDAQ' })),
+  };
+  const rowsFor = (override = {}) => Object.fromEntries(Object.entries(categories).map(([category, rows]) => [category, rows.map((row, index) => ({
+    rank: index + 1,
+    ticker: row.ticker,
+    ...override,
+  }))]));
+  const allCandidates = Object.values(categories).flat();
   assert.throws(
-    () => daily.parseDailyMarketTop10Response(JSON.stringify({
-      markets: {
-        US: us.slice(0, 9).map((row, index) => ({ rank: index + 1, ticker: row.ticker })),
-        KR: kr.map((row, index) => ({ rank: index + 1, ticker: row.ticker })),
-      },
+    () => daily.parseDailyCategoryTop10Response(JSON.stringify({
+      categories: { ...rowsFor(), NASDAQ100: categories.NASDAQ100.slice(0, 9).map((row, index) => ({ rank: index + 1, ticker: row.ticker })) },
       report_markdown: '',
-    }), [...us, ...kr]),
-    /US daily Top10 response must include exactly 10/
+    }), allCandidates),
+    /NASDAQ100 daily Top10 response must include exactly 10/
   );
   assert.throws(
-    () => daily.parseDailyMarketTop10Response(JSON.stringify({
-      markets: {
-        US: us.map((row, index) => ({ rank: index + 1, ticker: index === 9 ? 'US1' : row.ticker })),
-        KR: kr.map((row, index) => ({ rank: index + 1, ticker: row.ticker })),
-      },
+    () => daily.parseDailyCategoryTop10Response(JSON.stringify({
+      categories: { ...rowsFor(), NASDAQ100: categories.NASDAQ100.map((row, index) => ({ rank: index + 1, ticker: index === 9 ? 'NDX1' : row.ticker })) },
       report_markdown: '',
-    }), [...us, ...kr]),
-    /Duplicate ticker in US/
+    }), allCandidates),
+    /Duplicate ticker in NASDAQ100/
   );
   assert.throws(
-    () => daily.parseDailyMarketTop10Response(JSON.stringify({
-      markets: {
-        US: us.map((row, index) => ({ rank: index + 1, ticker: index === 9 ? 'KR1' : row.ticker })),
-        KR: kr.map((row, index) => ({ rank: index + 1, ticker: row.ticker })),
-      },
+    () => daily.parseDailyCategoryTop10Response(JSON.stringify({
+      categories: { ...rowsFor(), NASDAQ100: categories.NASDAQ100.map((row, index) => ({ rank: index + 1, ticker: index === 9 ? 'KP1' : row.ticker })) },
       report_markdown: '',
-    }), [...us, ...kr]),
-    /Unexpected ticker in US/
+    }), allCandidates),
+    /Unexpected ticker in NASDAQ100/
   );
 }
 
@@ -230,11 +243,12 @@ function candidate(overrides) {
     source: 'leader',
     score: 90 - index,
   }));
-  const message = daily.formatDailyMarketTop10TelegramMessage({
+  const message = daily.formatDailyCategoryTop10TelegramMessage({
     runDate: '2026-06-12',
-    market: 'US',
+    category: 'NASDAQ100',
     top10: us.map((row, index) => ({
       rank: index + 1,
+      category: 'NASDAQ100',
       market: 'US',
       ticker: row.ticker,
       name: row.name,
@@ -248,7 +262,7 @@ function candidate(overrides) {
     })),
     provider: 'codex-cli',
   });
-  assert.match(message, /미국 추천 Top10/);
+  assert.match(message, /나스닥 추천 Top10/);
   assert.match(message, /US1/);
   assert.match(message, /US Company 1/);
   assert.match(message, /신뢰도 82%/);
@@ -258,7 +272,7 @@ function candidate(overrides) {
 }
 
 {
-  const prompt = daily.buildDailyMarketTop10Prompt({
+  const prompt = daily.buildDailyCategoryTop10Prompt({
     runDate: '2026-06-12',
     candidates: [
       candidate({ ticker: 'AAA', source: 'minervini', score: 91 }),
@@ -270,6 +284,7 @@ function candidate(overrides) {
   assert.match(prompt, /최신 뉴스, 실시간 가격, 재무 수치/);
   assert.match(prompt, /리스크 조정 모멘텀/);
   assert.match(prompt, /확인 필요/);
+  assert.match(prompt, /categories/);
 }
 
 {

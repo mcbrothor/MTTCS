@@ -19,6 +19,7 @@ if (!validDate(fromDate) || !validDate(toDate) || (fromDate && toDate && fromDat
 }
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': path.resolve('.') } });
 const { persistRecommendationPublications } = jiti('../lib/recommendations/persistence.ts');
+const { RECOMMENDATION_CATEGORIES } = jiti('../lib/recommendations/config.ts');
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
@@ -37,29 +38,30 @@ if (error) throw error;
 const report = { mode: apply ? 'apply' : 'dry-run', from: fromDate, to: toDate, missingOnly, eligible: [], skipped: [], publications: 0 };
 for (const run of runs || []) {
   try {
-    const allMarkets = ['US', 'KR'];
-    let markets = allMarkets;
+    const allCategories = RECOMMENDATION_CATEGORIES;
+    let categories = allCategories;
     if (missingOnly) {
       const { data: existingPublications, error: existingError } = await client
         .from('recommendation_publications')
-        .select('market')
+        .select('category')
         .eq('run_date', run.run_date)
         .eq('is_official', true);
       if (existingError) throw existingError;
-      const existingMarkets = new Set((existingPublications || []).map((row) => row.market));
-      markets = allMarkets.filter((market) => !existingMarkets.has(market));
-      if (markets.length === 0) {
-        report.skipped.push({ runDate: run.run_date, reason: 'official publications already exist', markets: allMarkets });
+      const existingCategories = new Set((existingPublications || []).map((row) => row.category).filter(Boolean));
+      categories = allCategories.filter((category) => !existingCategories.has(category));
+      if (categories.length === 0) {
+        report.skipped.push({ runDate: run.run_date, reason: 'official publications already exist', categories: allCategories });
         continue;
       }
     }
     const result = run.top5_result;
     const generatedAt = result?.generated_at || run.completed_at || run.created_at;
     if (!generatedAt) throw new Error('missing generated_at');
-    for (const market of markets) {
-      const rows = result?.markets?.[market];
+    if (!result?.categories) throw new Error('top5_result.categories is missing; legacy market result cannot be category-backfilled');
+    for (const category of categories) {
+      const rows = result?.categories?.[category];
       if (!Array.isArray(rows) || rows.length !== 10 || new Set(rows.map((row) => row.ticker)).size !== 10) {
-        throw new Error(`${market} does not contain 10 unique picks`);
+        throw new Error(`${category} does not contain 10 unique picks`);
       }
     }
     const { data: candidateRows, error: candidateError } = await client
@@ -83,9 +85,9 @@ for (const run of runs || []) {
       raw: row.raw || {},
     }));
     const tickers = new Set(candidates.map((candidate) => candidate.ticker.toUpperCase()));
-    const missing = markets.flatMap((market) => result.markets[market]).filter((pick) => !tickers.has(pick.ticker.toUpperCase()));
+    const missing = categories.flatMap((category) => result.categories[category]).filter((pick) => !tickers.has(pick.ticker.toUpperCase()));
     if (missing.length) throw new Error(`missing candidate snapshots: ${missing.map((pick) => pick.ticker).join(',')}`);
-    report.eligible.push({ runDate: run.run_date, generatedAt, markets, candidates: candidates.length });
+    report.eligible.push({ runDate: run.run_date, generatedAt, categories, candidates: candidates.length });
     if (apply) {
       const publications = await persistRecommendationPublications({
         client,
@@ -94,10 +96,10 @@ for (const run of runs || []) {
         generatedAt,
         provider: result.provider || 'backfill',
         model: result.model || 'unknown',
-        result: { markets: result.markets, reportMarkdown: result.report_markdown || '', rawResponse: result.raw_response || '' },
+        result: { categories: result.categories, reportMarkdown: result.report_markdown || '', rawResponse: result.raw_response || '' },
         candidates,
         telegramSentAt: run.telegram_sent_at,
-        markets,
+        categories,
       });
       report.publications += publications.length;
     }

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { calculateRecommendationPerformance, buildDiagnosticFindings } from './core';
 import { RECOMMENDATION_ANALYZER_VERSION } from './config';
 import { fetchRecommendationBenchmarkBars, fetchRecommendationSecurityBars, recommendationPriceRows } from './prices';
-import type { DiagnosticInput, RecommendationHorizon, RecommendationMarket } from './types';
+import type { DiagnosticInput, RecommendationCategory, RecommendationHorizon, RecommendationMarket } from './types';
 
 interface PickRow {
   id: string;
@@ -19,6 +19,7 @@ interface PickRow {
   recommendation_publications: {
     run_date: string;
     market: RecommendationMarket;
+    category: RecommendationCategory | null;
     generated_at: string;
   };
 }
@@ -35,7 +36,7 @@ async function loadActivePicks(client: SupabaseClient, market: RecommendationMar
   for (let from = 0; ; from += 1000) {
     const { data, error } = await client
       .from('recommendation_picks')
-      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, recommendation_publications!inner(run_date, market, generated_at, status)')
+      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, recommendation_publications!inner(run_date, market, category, generated_at, status)')
       .eq('recommendation_publications.market', market)
       .in('recommendation_publications.status', ['PUBLISHED', 'SHADOW'])
       .gte('recommendation_publications.run_date', cutoff)
@@ -154,7 +155,7 @@ export async function runRecommendationPerformanceBatch(input: {
 export async function refreshRecommendationDiagnostics(client: SupabaseClient, market: RecommendationMarket) {
   const { data, error } = await client
     .from('recommendation_performance')
-    .select('horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, entry_price, recommendation_picks!inner(id, publication_id, source, sector, rank, confidence, signal_price, recommendation_publications!inner(run_date, market, is_official))')
+    .select('horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, entry_price, recommendation_picks!inner(id, publication_id, source, sector, rank, confidence, signal_price, recommendation_publications!inner(run_date, market, category, is_official))')
     .eq('recommendation_picks.recommendation_publications.market', market)
     .eq('recommendation_picks.recommendation_publications.is_official', true)
     .limit(10000);
@@ -169,7 +170,7 @@ export async function refreshRecommendationDiagnostics(client: SupabaseClient, m
       rank: number;
       confidence: number;
       signal_price: number | null;
-      recommendation_publications: { run_date: string };
+      recommendation_publications: { run_date: string; category: RecommendationCategory | null };
     };
     const entryPrice = Number(row.entry_price);
     const signalPrice = Number(pick.signal_price);
@@ -177,6 +178,7 @@ export async function refreshRecommendationDiagnostics(client: SupabaseClient, m
       pickId: pick.id,
       publicationId: pick.publication_id,
       market,
+      category: pick.recommendation_publications.category ?? null,
       horizon: row.horizon as RecommendationHorizon,
       source: pick.source,
       sector: pick.sector,
@@ -207,6 +209,7 @@ export async function refreshRecommendationDiagnostics(client: SupabaseClient, m
     analysis_batch_id: batchId,
     analyzer_version: RECOMMENDATION_ANALYZER_VERSION,
     market: finding.market,
+    category: finding.category ?? null,
     horizon: finding.horizon,
     publication_id: finding.publicationId,
     pick_id: finding.pickId,

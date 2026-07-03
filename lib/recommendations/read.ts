@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { RecommendationHorizon, RecommendationMarket } from './types';
+import type { RecommendationCategory, RecommendationHorizon, RecommendationMarket } from './types';
 
 function numberOrNull(value: unknown) {
   const parsed = Number(value);
@@ -50,6 +50,7 @@ export function summarizeFrequentRecommendationPicks(rows: FrequentRecommendatio
 export async function readFrequentRecommendationPicks(input: {
   client: SupabaseClient;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   asOf?: string;
   days?: number;
   limit?: number;
@@ -59,15 +60,17 @@ export async function readFrequentRecommendationPicks(input: {
   const fromDate = new Date(`${to}T00:00:00.000Z`);
   fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
   const from = fromDate.toISOString().slice(0, 10);
-  const { data, error } = await input.client
+  let query = input.client
     .from('recommendation_picks')
-    .select('ticker, name, rank, recommendation_publications!inner(run_date, market, is_official, status)')
+    .select('ticker, name, rank, recommendation_publications!inner(run_date, market, category, is_official, status)')
     .eq('recommendation_publications.market', input.market)
     .eq('recommendation_publications.is_official', true)
     .eq('recommendation_publications.status', 'PUBLISHED')
     .gte('recommendation_publications.run_date', from)
     .lte('recommendation_publications.run_date', to)
     .limit(1000);
+  if (input.category) query = query.eq('recommendation_publications.category', input.category);
+  const { data, error } = await query;
   if (error) throw error;
 
   const rows = (data || []).map((row) => {
@@ -95,13 +98,14 @@ interface PerformanceReadRow {
     confidence: number | string;
     universe: string;
     candidate_snapshot: Record<string, unknown>;
-    recommendation_publications: { id: string; run_date: string; market: RecommendationMarket; engine_version: string; is_official: boolean };
+    recommendation_publications: { id: string; run_date: string; market: RecommendationMarket; category: RecommendationCategory | null; engine_version: string; is_official: boolean };
   };
 }
 
 export async function readRecommendationPublications(input: {
   client: SupabaseClient;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   from?: string | null;
   to?: string | null;
   cursor?: string | null;
@@ -109,12 +113,13 @@ export async function readRecommendationPublications(input: {
 }) {
   let query = input.client
     .from('recommendation_publications')
-    .select('id, run_date, market, version, status, generated_at, first_tradable_date, entry_status, engine_version, llm_provider, llm_model, market_context, telegram_status, telegram_sent_at, recommendation_picks(id, rank, ticker, exchange, name, universe, source, score, grade, confidence, reason, risk, sector, benchmark_symbol, signal_price, signal_price_as_of, recommendation_performance(horizon, status, session_count, entry_date, entry_price, evaluation_date, evaluation_price, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, error_message))')
+    .select('id, run_date, market, category, version, status, generated_at, first_tradable_date, entry_status, engine_version, llm_provider, llm_model, market_context, telegram_status, telegram_sent_at, recommendation_picks(id, rank, ticker, exchange, name, universe, source, score, grade, confidence, reason, risk, sector, benchmark_symbol, signal_price, signal_price_as_of, recommendation_performance(horizon, status, session_count, entry_date, entry_price, evaluation_date, evaluation_price, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, error_message))')
     .eq('market', input.market)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED')
     .order('run_date', { ascending: false })
     .limit(Math.max(1, Math.min(100, input.limit || 20)));
+  if (input.category) query = query.eq('category', input.category);
   if (input.from) query = query.gte('run_date', input.from);
   if (input.to) query = query.lte('run_date', input.to);
   if (input.cursor) query = query.lt('run_date', input.cursor);
@@ -133,6 +138,7 @@ export async function readRecommendationPublications(input: {
 async function readPerformanceRows(input: {
   client: SupabaseClient;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   from?: string | null;
   to?: string | null;
   horizon?: RecommendationHorizon | null;
@@ -141,11 +147,12 @@ async function readPerformanceRows(input: {
 }) {
   let query = input.client
     .from('recommendation_performance')
-    .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, source, rank, confidence, universe, candidate_snapshot, recommendation_publications!inner(id, run_date, market, engine_version, is_official))')
+    .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, source, rank, confidence, universe, candidate_snapshot, recommendation_publications!inner(id, run_date, market, category, engine_version, is_official))')
     .eq('status', 'MATURED')
     .in('quality_status', ['FULL', 'FALLBACK'])
     .eq('recommendation_picks.recommendation_publications.market', input.market)
     .limit(10000);
+  if (input.category) query = query.eq('recommendation_picks.recommendation_publications.category', input.category);
   if (input.official !== undefined) query = query.eq('recommendation_picks.recommendation_publications.is_official', input.official);
   if (input.engineVersion) query = query.eq('recommendation_picks.recommendation_publications.engine_version', input.engineVersion);
   if (input.horizon) query = query.eq('horizon', input.horizon);
@@ -185,6 +192,7 @@ function summarize(rows: PerformanceReadRow[]) {
 export async function readRecommendationMetrics(input: {
   client: SupabaseClient;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   from?: string | null;
   to?: string | null;
   official?: boolean;
@@ -227,6 +235,7 @@ export async function readRecommendationMetrics(input: {
 export async function readRecommendationDiagnostics(input: {
   client: SupabaseClient;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   horizon?: RecommendationHorizon | null;
   cause?: string | null;
   status?: string | null;
@@ -237,6 +246,7 @@ export async function readRecommendationDiagnostics(input: {
     .eq('market', input.market)
     .order('analyzed_at', { ascending: false })
     .limit(500);
+  if (input.category) query = query.eq('category', input.category);
   if (input.horizon) query = query.eq('horizon', input.horizon);
   if (input.cause) query = query.eq('cause_code', input.cause);
   if (input.status) query = query.eq('finding_status', input.status);
@@ -244,7 +254,7 @@ export async function readRecommendationDiagnostics(input: {
   if (error) throw error;
   const latestByScope = new Map<string, (typeof data)[number]>();
   for (const row of data || []) {
-    const key = `${row.horizon}:${row.scope_type}:${row.scope_key}:${row.cause_code}`;
+    const key = `${row.category || input.category || input.market}:${row.horizon}:${row.scope_type}:${row.scope_key}:${row.cause_code}`;
     if (!latestByScope.has(key)) latestByScope.set(key, row);
   }
   const findings = [...latestByScope.values()];

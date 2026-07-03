@@ -26,10 +26,10 @@ import {
     'rule-based',
   ]);
   const prompt = buildCodexDailyTop5Prompt('daily prompt');
-  assert.match(prompt, /MTN Daily Screener market Top10/);
-  assert.match(prompt, /markets\.US and markets\.KR/);
+  assert.match(prompt, /MTN Daily Screener category Top10/);
+  assert.match(prompt, /categories\.NASDAQ100/);
   assert.match(prompt, /<mtn_daily_top5_prompt>/);
-  assert.equal(parseCodexCliJsonOutput('{"markets":{"US":[],"KR":[]}}').markets.US.length, 0);
+  assert.equal(parseCodexCliJsonOutput('{"categories":{"NASDAQ100":[],"SP500":[],"KOSPI200":[],"KOSDAQ150":[]}}').categories.NASDAQ100.length, 0);
 }
 
 {

@@ -11,7 +11,7 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
   test('REC-01: 공식 추천 이력과 기간별 성과 표시', async ({ page }) => {
     await page.goto('/recommendations');
     await expect(page.getByRole('heading', { name: '추천 성과·원인 분석' })).toBeVisible();
-    await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
+    await expect(page.getByText('2026-05-19 나스닥 Top10')).toBeVisible();
     await expect(page.getByText('1. NVDA')).toBeVisible();
     await expect(page.getByRole('columnheader', { name: '현재 수익' })).toBeVisible();
     await expect(page.getByText('+4.20%').first()).toBeVisible();
@@ -41,18 +41,18 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(row.getByText('2026-06-19')).toBeVisible();
   });
 
-  test('REC-08: 시장과 분석 탭은 직접 이동 가능한 링크 제공', async ({ page }) => {
-    await page.goto('/recommendations?market=US&date=2026-05-19');
+  test('REC-08: 카테고리와 분석 탭은 직접 이동 가능한 링크 제공', async ({ page }) => {
+    await page.goto('/recommendations?category=NASDAQ100&date=2026-05-19');
     const main = page.getByRole('main');
 
-    await expect(main.getByRole('link', { name: '한국' })).toHaveAttribute('href', '/recommendations?market=KR&date=2026-05-19');
-    await expect(main.getByRole('link', { name: '성과 분석' })).toHaveAttribute('href', '/recommendations?market=US&date=2026-05-19&view=metrics');
-    await expect(main.getByRole('link', { name: '원인 분석' })).toHaveAttribute('href', '/recommendations?market=US&date=2026-05-19&view=diagnostics');
+    await expect(main.getByRole('link', { name: '코스피' })).toHaveAttribute('href', '/recommendations?category=KOSPI200&date=2026-05-19');
+    await expect(main.getByRole('link', { name: '성과 분석' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=metrics');
+    await expect(main.getByRole('link', { name: '원인 분석' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=diagnostics');
     await expect(main.getByRole('link', { name: '추천 이력' })).toHaveAttribute('aria-current', 'page');
 
-    await main.getByRole('link', { name: '한국' }).click();
-    await expect(page).toHaveURL('/recommendations?market=KR&date=2026-05-19');
-    await expect(page.getByRole('main').getByRole('link', { name: '한국' })).toHaveAttribute('aria-current', 'page');
+    await main.getByRole('link', { name: '코스피' }).click();
+    await expect(page).toHaveURL('/recommendations?category=KOSPI200&date=2026-05-19');
+    await expect(page.getByRole('main').getByRole('link', { name: '코스피' })).toHaveAttribute('aria-current', 'page');
   });
 
   test('REC-05: 미성숙 기간은 완료 거래일 수를 표시', async ({ page }) => {
@@ -89,7 +89,7 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await requestPromise;
 
     await expect(page).toHaveURL(/date=2026-05-19/);
-    await expect(page.getByText('2026-05-19 Top10')).toBeVisible();
+    await expect(page.getByText('2026-05-19 나스닥 Top10')).toBeVisible();
     await page.getByRole('link', { name: '전체 보기' }).click();
     await expect(page).not.toHaveURL(/date=/);
   });

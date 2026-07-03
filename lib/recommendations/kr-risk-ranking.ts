@@ -1,4 +1,6 @@
 import type {
+  DailyCategoryTop10Pick,
+  DailyScreenerCategory,
   DailyMarketTop10Pick,
   DailyScreenerCandidate,
   DailyScreenerSource,
@@ -12,7 +14,7 @@ export interface KrRecentRecommendation {
 }
 
 export interface KrRankedCandidate {
-  pick: DailyMarketTop10Pick;
+  pick: DailyCategoryTop10Pick | DailyMarketTop10Pick;
   aggregateScore: number;
   sourceScore: number;
   flowScore: number;
@@ -53,6 +55,7 @@ function marketStateValue(value: unknown) {
 
 export function selectKrRiskAdjustedTop10(input: {
   candidates: DailyScreenerCandidate[];
+  category?: DailyScreenerCategory;
   recentRecommendations?: KrRecentRecommendation[];
   marketState?: unknown;
   flowFeatures?: Map<string, KrInvestorFlowFeatures> | Record<string, KrInvestorFlowFeatures>;
@@ -63,13 +66,15 @@ export function selectKrRiskAdjustedTop10(input: {
   const grouped = new Map<string, DailyScreenerCandidate[]>();
   for (const candidate of input.candidates) {
     if (candidate.universe !== 'KOSPI200' && candidate.universe !== 'KOSDAQ150') continue;
-    grouped.set(candidate.ticker, [...(grouped.get(candidate.ticker) || []), candidate]);
+    if (input.category && candidate.universe !== input.category) continue;
+    grouped.set(`${candidate.universe}:${candidate.ticker}`, [...(grouped.get(`${candidate.universe}:${candidate.ticker}`) || []), candidate]);
   }
 
   const ranked: KrRankedCandidate[] = [];
-  for (const [ticker, signals] of grouped) {
+  for (const [, signals] of grouped) {
     const sources = [...new Set(signals.map((signal) => signal.source))].sort() as DailyScreenerSource[];
     const preferred = [...signals].sort((a, b) => b.score - a.score || a.source.localeCompare(b.source))[0];
+    const ticker = preferred.ticker;
     const sourceScore = Math.max(...signals.map((signal) => 100 - 5 * Math.max(0, (signal.rank || 1) - 1)))
       + Math.min(12, Math.max(0, sources.length - 1) * 4);
     const momentumOnly = sources.length === 1 && sources[0] === 'momentum';
@@ -114,6 +119,7 @@ export function selectKrRiskAdjustedTop10(input: {
     ranked.push({
       pick: {
         rank: 0,
+        category: preferred.universe,
         market: 'KR',
         ticker,
         name: preferred.name,
@@ -147,7 +153,7 @@ export function selectKrRiskAdjustedTop10(input: {
   for (const candidate of ranked) {
     const soleSource = candidate.sources.length === 1 ? candidate.sources[0] : null;
     if (soleSource === 'momentum' && momentumCount >= momentumLimit) continue;
-    if (candidate.pick.universe === 'KOSDAQ150' && kosdaqCount >= 4) continue;
+    if (!input.category && candidate.pick.universe === 'KOSDAQ150' && kosdaqCount >= 4) continue;
     if (soleSource && (soleSourceCounts.get(soleSource) || 0) >= 3) continue;
     selected.push(candidate);
     if (soleSource === 'momentum') momentumCount += 1;

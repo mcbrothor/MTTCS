@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { initialTelegramDelivery, pickCandidateSnapshot } from '../lib/recommendations/persistence.ts';
+import path from 'node:path';
+import { createJiti } from 'jiti';
+
+const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': path.resolve('.') } });
+const { initialTelegramDelivery, pickCandidateSnapshot } = jiti('../lib/recommendations/persistence.ts');
 
 const sentAt = '2026-06-19T12:15:49.495Z';
 
@@ -15,6 +19,7 @@ assert.deepEqual(initialTelegramDelivery(null), {
 
 const snapshot = pickCandidateSnapshot({
   rank: 1,
+  category: 'KOSPI200',
   market: 'KR',
   ticker: '005930',
   name: '삼성전자',

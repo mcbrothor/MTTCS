@@ -1,10 +1,26 @@
-import type { RecommendationMarket } from './types';
+import type { RecommendationCategory, RecommendationMarket } from './types';
 
 export const RECOMMENDATION_ANALYZER_VERSION = 'recommendation-diagnostics-2026.06-v1';
-export const RECOMMENDATION_ENGINE_VERSION = 'daily-top10-market-balanced-v1';
+export const RECOMMENDATION_ENGINE_VERSION = 'daily-top10-category-balanced-v1';
 export const KR_RISK_ENGINE_VERSION = 'kr-risk-ranked-v2';
 export const KR_RISK_FLOW_ENGINE_VERSION = 'kr-risk-flow-v2.1';
 export const KR_RECOMMENDATION_POLICY = process.env.KR_RECOMMENDATION_POLICY || RECOMMENDATION_ENGINE_VERSION;
+
+export const RECOMMENDATION_CATEGORIES: RecommendationCategory[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
+
+export const RECOMMENDATION_CATEGORY_MARKET = {
+  NASDAQ100: 'US',
+  SP500: 'US',
+  KOSPI200: 'KR',
+  KOSDAQ150: 'KR',
+} satisfies Record<RecommendationCategory, RecommendationMarket>;
+
+export const RECOMMENDATION_CATEGORY_LABEL = {
+  NASDAQ100: '나스닥',
+  SP500: 'S&P500',
+  KOSPI200: '코스피',
+  KOSDAQ150: '코스닥',
+} satisfies Record<RecommendationCategory, string>;
 
 export const BENCHMARK_BY_UNIVERSE = {
   NASDAQ100: '^NDX',

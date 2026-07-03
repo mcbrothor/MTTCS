@@ -1,16 +1,18 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["markets", "report_markdown"],
+  "required": ["categories", "report_markdown"],
   "additionalProperties": false,
   "properties": {
-    "markets": {
+    "categories": {
       "type": "object",
-      "required": ["US", "KR"],
+      "required": ["NASDAQ100", "SP500", "KOSPI200", "KOSDAQ150"],
       "additionalProperties": false,
       "properties": {
-        "US": { "$ref": "#/$defs/top10" },
-        "KR": { "$ref": "#/$defs/top10" }
+        "NASDAQ100": { "$ref": "#/$defs/top10" },
+        "SP500": { "$ref": "#/$defs/top10" },
+        "KOSPI200": { "$ref": "#/$defs/top10" },
+        "KOSDAQ150": { "$ref": "#/$defs/top10" }
       }
     },
     "report_markdown": { "type": "string" }

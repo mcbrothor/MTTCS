@@ -4,7 +4,13 @@ import { readRecommendationDiagnostics, readRecommendationMetrics } from '@/lib/
 import { formatRecommendationWeeklyReport } from '@/lib/recommendations/weekly-report';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { sendTelegramMessage } from '@/lib/telegram';
-import { KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION, RECOMMENDATION_ENGINE_VERSION } from '@/lib/recommendations/config';
+import {
+  KR_RISK_ENGINE_VERSION,
+  KR_RISK_FLOW_ENGINE_VERSION,
+  RECOMMENDATION_CATEGORIES,
+  RECOMMENDATION_CATEGORY_MARKET,
+  RECOMMENDATION_ENGINE_VERSION,
+} from '@/lib/recommendations/config';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -13,15 +19,17 @@ export async function GET(request: Request) {
   if (!validateCronRequest(request)) return apiError('Unauthorized cron request.', 'AUTH_REQUIRED', 401);
   try {
     const client = getSupabaseAdmin();
-    const markets = [];
-    for (const market of ['US', 'KR'] as const) {
+    const categories = [];
+    for (const category of RECOMMENDATION_CATEGORIES) {
+      const market = RECOMMENDATION_CATEGORY_MARKET[category];
       const [metrics, diagnostics, ...policyMetrics] = await Promise.all([
-        readRecommendationMetrics({ client, market }),
-        readRecommendationDiagnostics({ client, market }),
+        readRecommendationMetrics({ client, market, category }),
+        readRecommendationDiagnostics({ client, market, category }),
         ...(market === 'KR' ? [RECOMMENDATION_ENGINE_VERSION, KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION]
-          .map((engineVersion) => readRecommendationMetrics({ client, market, engineVersion })) : []),
+          .map((engineVersion) => readRecommendationMetrics({ client, market, category, engineVersion })) : []),
       ]);
-      markets.push({
+      categories.push({
+        category,
         market,
         horizons: metrics.horizons,
         causes: diagnostics.causeSummary,
@@ -34,11 +42,11 @@ export async function GET(request: Request) {
     const origin = process.env.NEXT_PUBLIC_APP_URL || null;
     const message = formatRecommendationWeeklyReport({
       generatedAt: new Date().toISOString(),
-      markets,
+      categories,
       dashboardUrl: origin ? `${origin.replace(/\/$/, '')}/recommendations?view=diagnostics` : null,
     });
     const delivery = await sendTelegramMessage(message);
-    return apiSuccess({ markets, delivery }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
+    return apiSuccess({ categories, delivery }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
   } catch (error) {
     return apiError(getErrorMessage(error, 'Recommendation weekly report failed.'), 'API_ERROR', 500);
   }

@@ -1,20 +1,32 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { readRecommendationMetrics } from '@/lib/recommendations/read';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { RecommendationMarket } from '@/lib/recommendations/types';
-import { KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION, RECOMMENDATION_ENGINE_VERSION } from '@/lib/recommendations/config';
+import type { RecommendationCategory, RecommendationMarket } from '@/lib/recommendations/types';
+import {
+  KR_RISK_ENGINE_VERSION,
+  KR_RISK_FLOW_ENGINE_VERSION,
+  RECOMMENDATION_CATEGORIES,
+  RECOMMENDATION_CATEGORY_MARKET,
+  RECOMMENDATION_ENGINE_VERSION,
+} from '@/lib/recommendations/config';
 import { evaluateKrPolicyPromotion } from '@/lib/recommendations/policy-evaluation';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const market = params.get('market')?.toUpperCase() || 'US';
+  const categoryParam = params.get('category')?.toUpperCase() || null;
+  if (categoryParam && !RECOMMENDATION_CATEGORIES.includes(categoryParam as RecommendationCategory)) {
+    return apiError('category must be NASDAQ100, SP500, KOSPI200, or KOSDAQ150.', 'INVALID_CATEGORY', 400);
+  }
+  const category = categoryParam as RecommendationCategory | null;
+  const market = category ? RECOMMENDATION_CATEGORY_MARKET[category] : (params.get('market')?.toUpperCase() || 'US');
   if (market !== 'US' && market !== 'KR') return apiError('market must be US or KR.', 'INVALID_MARKET', 400);
   try {
     const result = await readRecommendationMetrics({
       client: getSupabaseAdmin(),
       market: market as RecommendationMarket,
+      category,
       from: params.get('from'),
       to: params.get('to'),
       official: params.has('official') ? params.get('official') === 'true' : undefined,
@@ -28,6 +40,7 @@ export async function GET(request: Request) {
       ].map((engineVersion) => readRecommendationMetrics({
         client: getSupabaseAdmin(),
         market: 'KR',
+        category,
         from: params.get('from'),
         to: params.get('to'),
         engineVersion,

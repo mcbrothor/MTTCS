@@ -8,6 +8,7 @@ import type {
 
 export type DailyScreenerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie';
 export type DailyScreenerMarket = 'US' | 'KR';
+export type DailyScreenerCategory = ScannerUniverse;
 
 export const DAILY_SCREENER_SOURCES: DailyScreenerSource[] = [
   'minervini',
@@ -23,6 +24,15 @@ export const DAILY_SCREENER_UNIVERSES: ScannerUniverse[] = [
   'KOSPI200',
   'KOSDAQ150',
 ];
+
+export const DAILY_SCREENER_CATEGORIES: DailyScreenerCategory[] = DAILY_SCREENER_UNIVERSES;
+
+export const DAILY_SCREENER_CATEGORY_MARKET = {
+  NASDAQ100: 'US',
+  SP500: 'US',
+  KOSPI200: 'KR',
+  KOSDAQ150: 'KR',
+} satisfies Record<DailyScreenerCategory, DailyScreenerMarket>;
 
 export interface DailyScreenerCandidate {
   source: DailyScreenerSource;
@@ -69,11 +79,22 @@ export interface DailyMarketTop10Result {
   rawResponse: string;
 }
 
+export interface DailyCategoryTop10Pick extends DailyMarketTop10Pick {
+  category: DailyScreenerCategory;
+}
+
+export interface DailyCategoryTop10Result {
+  categories: Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
+  reportMarkdown: string;
+  rawResponse: string;
+}
+
 export interface DailyScanResult {
   runDate: string;
   candidates: DailyScreenerCandidate[];
   topBySource: Record<DailyScreenerSource, DailyScreenerCandidate[]>;
   topBySourceMarket: Record<DailyScreenerSource, Record<DailyScreenerMarket, DailyScreenerCandidate[]>>;
+  topBySourceCategory: Record<DailyScreenerSource, Record<DailyScreenerCategory, DailyScreenerCandidate[]>>;
   errors: { source: DailyScreenerSource; universe: ScannerUniverse; message: string }[];
   maxPerUniverse: number | null;
 }
@@ -102,6 +123,21 @@ function sourceLabel(source: DailyScreenerSource | 'mixed') {
 
 function marketLabel(market: DailyScreenerMarket) {
   return market === 'KR' ? '한국' : '미국';
+}
+
+export function categoryLabel(category: DailyScreenerCategory) {
+  if (category === 'NASDAQ100') return '나스닥';
+  if (category === 'SP500') return 'S&P500';
+  if (category === 'KOSPI200') return '코스피';
+  return '코스닥';
+}
+
+export function marketForDailyCategory(category: DailyScreenerCategory): DailyScreenerMarket {
+  return DAILY_SCREENER_CATEGORY_MARKET[category];
+}
+
+export function categoryForDailyCandidate(candidate: Pick<DailyScreenerCandidate, 'universe'>): DailyScreenerCategory {
+  return candidate.universe;
 }
 
 export function marketForDailyCandidate(candidate: Pick<DailyScreenerCandidate, 'universe' | 'exchange'>): DailyScreenerMarket {
@@ -493,13 +529,14 @@ export async function scanDailyScreeners(input: {
 
   const topBySource = groupTopCandidatesBySource(allCandidates, 10);
   const topBySourceMarket = groupTopCandidatesBySourceMarket(allCandidates, 10);
-  return { runDate: input.runDate, candidates: allCandidates, topBySource, topBySourceMarket, errors, maxPerUniverse };
+  const topBySourceCategory = groupTopCandidatesBySourceCategory(allCandidates, 10);
+  return { runDate: input.runDate, candidates: allCandidates, topBySource, topBySourceMarket, topBySourceCategory, errors, maxPerUniverse };
 }
 
 export function dedupeCandidatesBySourceTicker(candidates: DailyScreenerCandidate[]) {
   const best = new Map<string, DailyScreenerCandidate>();
   for (const candidate of candidates) {
-    const key = `${candidate.source}:${candidate.ticker}`;
+    const key = `${candidate.source}:${candidate.universe}:${candidate.ticker}`;
     const current = best.get(key);
     if (!current || candidate.score > current.score) best.set(key, candidate);
   }
@@ -556,6 +593,30 @@ export function flattenTopCandidatesBySourceMarket(topBySourceMarket: Record<Dai
   ]);
 }
 
+export function groupTopCandidatesBySourceCategory(candidates: DailyScreenerCandidate[], limit = 10) {
+  const result = DAILY_SCREENER_SOURCES.reduce((acc, source) => {
+    acc[source] = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] };
+    return acc;
+  }, {} as Record<DailyScreenerSource, Record<DailyScreenerCategory, DailyScreenerCandidate[]>>);
+  const deduped = dedupeCandidatesBySourceTicker(candidates);
+
+  for (const source of DAILY_SCREENER_SOURCES) {
+    for (const category of DAILY_SCREENER_CATEGORIES) {
+      result[source][category] = deduped
+        .filter((candidate) => candidate.source === source && categoryForDailyCandidate(candidate) === category)
+        .sort((a, b) => b.score - a.score || a.ticker.localeCompare(b.ticker))
+        .slice(0, limit)
+        .map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+    }
+  }
+
+  return result;
+}
+
+export function flattenTopCandidatesBySourceCategory(topBySourceCategory: Record<DailyScreenerSource, Record<DailyScreenerCategory, DailyScreenerCandidate[]>>) {
+  return DAILY_SCREENER_SOURCES.flatMap((source) => DAILY_SCREENER_CATEGORIES.flatMap((category) => topBySourceCategory[source]?.[category] ?? []));
+}
+
 export function ruleBasedDailyTop5(candidates: DailyScreenerCandidate[]): DailyTop5Result {
   const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number }>();
   for (const candidate of candidates) {
@@ -596,6 +657,31 @@ function aggregateDailyCandidates(candidates: DailyScreenerCandidate[]) {
     const key = `${market}:${candidate.ticker}`;
     // KR momentum 소스: 급등 고점 추격 후 되돌림 리스크가 높아 aggregate 가중치 60% 감산
     // 성과 분석 결과 KR momentum 적중률 14.3%, 평균수익 -7.24%로 치명적 부진
+    const effectiveScore = market === 'KR' && candidate.source === 'momentum'
+      ? Math.round(candidate.score * 0.4)
+      : candidate.score;
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, { best: candidate, sources: new Set([candidate.source]), aggregate: effectiveScore });
+      continue;
+    }
+    current.sources.add(candidate.source);
+    current.aggregate = Math.max(current.aggregate, effectiveScore) + Math.min(16, current.sources.size * 4);
+    if (effectiveScore > (market === 'KR' && current.best.source === 'momentum'
+      ? Math.round(current.best.score * 0.4)
+      : current.best.score)) {
+      current.best = candidate;
+    }
+  }
+  return grouped;
+}
+
+function aggregateDailyCandidatesByCategory(candidates: DailyScreenerCandidate[]) {
+  const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number }>();
+  for (const candidate of candidates) {
+    const category = categoryForDailyCandidate(candidate);
+    const market = marketForDailyCategory(category);
+    const key = `${category}:${candidate.ticker}`;
     const effectiveScore = market === 'KR' && candidate.source === 'momentum'
       ? Math.round(candidate.score * 0.4)
       : candidate.score;
@@ -701,6 +787,44 @@ export function ruleBasedDailyMarketTop10(candidates: DailyScreenerCandidate[]):
   };
 }
 
+export function ruleBasedDailyCategoryTop10(candidates: DailyScreenerCandidate[]): DailyCategoryTop10Result {
+  const grouped = aggregateDailyCandidatesByCategory(candidates);
+  const categories = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] } as Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
+
+  for (const category of DAILY_SCREENER_CATEGORIES) {
+    const market = marketForDailyCategory(category);
+    categories[category] = Array.from(grouped.values())
+      .filter((item) => categoryForDailyCandidate(item.best) === category)
+      .sort((a, b) => b.aggregate - a.aggregate || b.best.score - a.best.score || a.best.ticker.localeCompare(b.best.ticker))
+      .slice(0, 10)
+      .map((item, index) => ({
+        rank: index + 1,
+        category,
+        market,
+        ticker: item.best.ticker,
+        name: item.best.name,
+        universe: item.best.universe,
+        score: item.best.score,
+        grade: item.best.grade,
+        source: item.sources.size > 1 ? ('mixed' as const) : item.best.source,
+        reason: ruleBasedReason(item, market),
+        confidence: round(Math.min(0.94, 0.46 + item.aggregate / 210), 2),
+        risk: ruleBasedRisk(item, market),
+      }));
+  }
+
+  const counts = DAILY_SCREENER_CATEGORIES.map((category) => `${category}=${categories[category].length}`).join(', ');
+  if (DAILY_SCREENER_CATEGORIES.some((category) => categories[category].length !== 10)) {
+    throw new Error(`Rule-based category Top10 requires 10 picks per category; ${counts}.`);
+  }
+
+  return {
+    categories,
+    reportMarkdown: '',
+    rawResponse: JSON.stringify({ provider: 'rules', categories }, null, 2),
+  };
+}
+
 export function buildDailyTop5Prompt(input: { runDate: string; candidates: DailyScreenerCandidate[] }) {
   const candidateRows = input.candidates.map((candidate) => {
     const metricBits = Object.entries(candidate.metrics)
@@ -775,6 +899,54 @@ export function buildDailyMarketTop10Prompt(input: {
     `run_date: ${input.runDate}`,
     `market_context: ${JSON.stringify(input.marketContext || {})}`,
     'columns: market, ticker, name, source, universe, score, grade, reason, metrics',
+    candidateRows.join('\n'),
+  ].join('\n');
+}
+
+export function buildDailyCategoryTop10Prompt(input: {
+  runDate: string;
+  candidates: DailyScreenerCandidate[];
+  marketContext?: Partial<Record<DailyScreenerMarket | DailyScreenerCategory, unknown>>;
+}) {
+  const candidateRows = input.candidates.map((candidate) => {
+    const category = categoryForDailyCandidate(candidate);
+    const metricBits = Object.entries(candidate.metrics)
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .slice(0, 3)
+      .map(([key, value]) => `${key}=${String(value).slice(0, 18)}`)
+      .join(';');
+    return [
+      category,
+      marketForDailyCategory(category),
+      candidate.ticker,
+      candidate.name || candidate.ticker,
+      candidate.source,
+      candidate.universe,
+      candidate.score,
+      candidate.grade,
+      candidate.reason.replace(/\s+/g, ' ').slice(0, 80),
+      metricBits,
+    ].join('\t');
+  });
+
+  return [
+    'MTN Daily Screener 후보를 분석해 카테고리별 최종 추천 Top10을 고르세요.',
+    '카테고리는 NASDAQ100, SP500, KOSPI200, KOSDAQ150 네 가지입니다. 각 카테고리는 정확히 10개를 반환해야 합니다.',
+    '한국어로 판단하되, 출력은 JSON만 반환하세요. Markdown fence와 설명 문장을 금지합니다.',
+    '중요: 입력 후보에 없는 ticker를 만들지 마세요. 같은 카테고리 안의 ticker 중복은 금지입니다. 같은 ticker가 NASDAQ100과 SP500에 모두 있으면 각 카테고리에서 별도로 평가할 수 있습니다.',
+    '입력 후보는 스크리너별·카테고리별 Top10 후보 풀입니다. MTN 점수만 재정렬하지 말고, 외부 LLM이 보유하거나 접근 가능한 공개 시장 정보, 최근 뉴스 흐름, 업종/테마 사이클, 실적·밸류에이션 맥락, 유동성/수급 판단을 활용해 후보 간 상대 우위를 고도화하세요.',
+    '최신 뉴스, 실시간 가격, 재무 수치, 업종 이벤트를 알고 있거나 확인 가능한 경우 적극 반영하세요. 다만 입력 데이터와 외부 맥락이 충돌하면 그 충돌을 리스크나 confidence에 반영하고, 불확실한 정보는 단정하지 말고 "확인 필요"로 표시하세요.',
+    '평가 프레임: 1) 다중 스크리너 교차 포착, 2) 리스크 조정 모멘텀과 추세 지속성, 3) 피벗/진입 위치와 실패 리스크, 4) 거래대금·변동성·과열도, 5) 최신 뉴스/실적/가이던스/섹터 로테이션의 순풍 또는 역풍, 6) 카테고리별 특성(나스닥 성장/AI, S&P500 대형 우량주, 코스피 수급/대형주, 코스닥 테마/유동성), 7) 단일 섹터·단일 스크리너 집중 완화, 8) 상승 여력 대비 손실 비대칭성.',
+    '한국 카테고리 특화 주의사항: 1) momentum/RVOL 급등 종목은 고점 추격 후 되돌림 리스크가 매우 높으므로 신중하게 평가하세요. 2) 최근 3일 이상 하락 추세인 종목의 반복 추천을 피하세요. 3) 외국인/기관 수급 방향이 가격과 괴리될 수 있으니 주의하세요. 4) 코스닥은 테마 순환 주기가 짧아 진입 타이밍이 더 중요합니다. ETF·ETN·스팩·우선주는 후보 풀에서 이미 제외됐습니다.',
+    '각 종목 reason은 2문장 안팎으로 쓰세요. 첫 문장은 MTN 내부 근거(스크리너 교차 포착, 등급, RS/RVOL/ROC/피벗/거래대금 등)를, 두 번째 문장은 외부 LLM 판단 맥락(업종 사이클, 뉴스·실적·수급·밸류에이션·시장 레짐)을 담아 오늘 같은 카테고리 후보군 안에서 왜 더 우선인지 설명하세요.',
+    '각 종목 risk도 1~2문장으로 쓰세요. 단순한 "변동성" 표현을 피하고, 어떤 조건이 발생하면 탈락·하향해야 하는지 가격/수급/뉴스/실적/매크로 트리거를 구체적으로 적으세요.',
+    '투자 조언이 아니라 MTN 스크리너 후보 우선순위 판별입니다.',
+    '',
+    '필수 JSON shape: {"categories":{"NASDAQ100":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"SP500":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KOSPI200":[{"rank":1,"ticker":"005930","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KOSDAQ150":[{"rank":1,"ticker":"091990","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}]},"report_markdown":""}',
+    '',
+    `run_date: ${input.runDate}`,
+    `market_context: ${JSON.stringify(input.marketContext || {})}`,
+    'columns: category, market, ticker, name, source, universe, score, grade, reason, metrics',
     candidateRows.join('\n'),
   ].join('\n');
 }
@@ -964,6 +1136,75 @@ export function parseDailyMarketTop10Response(raw: string, candidates: DailyScre
   };
 }
 
+export function parseDailyCategoryTop10Response(raw: string, candidates: DailyScreenerCandidate[]): DailyCategoryTop10Result {
+  let parsed: unknown;
+  try {
+    parsed = parseJson(raw);
+  } catch (error) {
+    const categoryRows = Object.fromEntries(DAILY_SCREENER_CATEGORIES.map((category) => {
+      const json = findBalancedArrayAfterKey(raw, category);
+      return [category, json ? JSON.parse(json) : null];
+    })) as Record<DailyScreenerCategory, unknown>;
+    if (DAILY_SCREENER_CATEGORIES.some((category) => !Array.isArray(categoryRows[category]))) throw error;
+    parsed = { categories: categoryRows };
+  }
+
+  const root = parsed as Record<string, unknown>;
+  const categoryRoot = root.categories && typeof root.categories === 'object'
+    ? root.categories as Record<string, unknown>
+    : root;
+  const candidateByCategoryTicker = new Map<string, DailyScreenerCandidate>();
+  for (const candidate of candidates) {
+    const key = `${categoryForDailyCandidate(candidate)}:${candidate.ticker.toUpperCase()}`;
+    const current = candidateByCategoryTicker.get(key);
+    if (!current || candidate.score > current.score) candidateByCategoryTicker.set(key, candidate);
+  }
+
+  const categories = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] } as Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
+  for (const category of DAILY_SCREENER_CATEGORIES) {
+    const rows = Array.isArray(categoryRoot[category]) ? categoryRoot[category] as unknown[] : [];
+    const market = marketForDailyCategory(category);
+    const seen = new Set<string>();
+    categories[category] = rows.map((row, index) => {
+      if (!row || typeof row !== 'object') throw new Error(`${category} Top10 row must be an object.`);
+      const record = row as Record<string, unknown>;
+      const ticker = String(record.ticker || '').trim().toUpperCase();
+      const candidate = candidateByCategoryTicker.get(`${category}:${ticker}`);
+      if (!candidate) throw new Error(`Unexpected ticker in ${category} daily Top10: ${ticker}`);
+      if (seen.has(ticker)) throw new Error(`Duplicate ticker in ${category} daily Top10: ${ticker}`);
+      seen.add(ticker);
+      const source = String(record.source || candidate.source || 'mixed') as DailyTop5Pick['source'];
+      const confidence = Number(record.confidence ?? 0.5);
+      return {
+        rank: Number(record.rank) || index + 1,
+        category,
+        market,
+        ticker,
+        name: candidate.name,
+        universe: candidate.universe,
+        score: candidate.score,
+        grade: candidate.grade,
+        source: DAILY_SCREENER_SOURCES.includes(source as DailyScreenerSource) ? source : 'mixed',
+        reason: String(record.reason || candidate.reason || '').slice(0, 900),
+        confidence: round(clamp(Number.isFinite(confidence) ? confidence : 0.5, 0, 1), 2),
+        risk: record.risk === undefined || record.risk === null ? null : String(record.risk).slice(0, 600),
+      };
+    });
+
+    if (categories[category].length !== 10) {
+      throw new Error(`${category} daily Top10 response must include exactly 10 picks; received ${categories[category].length}.`);
+    }
+    categories[category].sort((a, b) => a.rank - b.rank);
+    categories[category].forEach((item, index) => { item.rank = index + 1; });
+  }
+
+  return {
+    categories,
+    reportMarkdown: typeof root.report_markdown === 'string' ? root.report_markdown : '',
+    rawResponse: raw,
+  };
+}
+
 export function formatDailyScreenerTelegramMessage(input: {
   runDate: string;
   source: DailyScreenerSource;
@@ -1004,6 +1245,29 @@ export function formatDailyMarketTop10TelegramMessage(input: {
     `*MTN Daily ${md(marketLabel(input.market))} 추천 Top10*`,
     `기준일: *${md(input.runDate)}* | 엔진: \`${md(input.provider)}\``,
     `후보: 스크리너별 Top10 통합 → LLM 최종 ${rows.length}개`,
+    '',
+    rows.length ? body : '전송할 후보가 없습니다.',
+  ].join('\n');
+}
+
+export function formatDailyCategoryTop10TelegramMessage(input: {
+  runDate: string;
+  category: DailyScreenerCategory;
+  top10: DailyCategoryTop10Pick[];
+  provider: string;
+}) {
+  const rows = input.top10.slice(0, 10);
+  const body = rows.map((pick) => [
+    `${pick.rank}. *${md(pick.ticker)}* — ${md(pick.name || pick.ticker)}`,
+    `   ${md(sourceLabel(pick.source))} | 신뢰도 ${formatPercent(pick.confidence)} | MTN ${formatNumber(pick.score, 0)} | ${md(pick.universe)}`,
+    `   근거: ${md(compactSentence(pick.reason, 620))}`,
+    pick.risk ? `   리스크: ${md(compactSentence(pick.risk, 360))}` : null,
+  ].filter(Boolean).join('\n')).join('\n\n');
+
+  return [
+    `*MTN Daily ${md(categoryLabel(input.category))} 추천 Top10*`,
+    `기준일: *${md(input.runDate)}* | 엔진: \`${md(input.provider)}\``,
+    `후보: 스크리너별 카테고리 Top10 통합 → LLM 최종 ${rows.length}개`,
     '',
     rows.length ? body : '전송할 후보가 없습니다.',
   ].join('\n');

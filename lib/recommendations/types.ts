@@ -1,6 +1,7 @@
 import type { OHLCData } from '@/types';
 
 export type RecommendationMarket = 'US' | 'KR';
+export type RecommendationCategory = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
 export type RecommendationHorizon = 'LIVE' | 'D5' | 'D20' | 'D60';
 export type RecommendationQuality = 'FULL' | 'FALLBACK' | 'UNADJUSTED' | 'ANOMALY' | 'MISSING';
 export type RecommendationCause =
@@ -38,6 +39,7 @@ export interface DiagnosticInput {
   pickId: string;
   publicationId: string;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   horizon: RecommendationHorizon;
   source: string;
   sector: string | null;
@@ -58,6 +60,7 @@ export interface DiagnosticFinding {
   publicationId: string | null;
   pickId: string | null;
   market: RecommendationMarket;
+  category?: RecommendationCategory | null;
   horizon: RecommendationHorizon;
   scopeType: 'PICK' | 'COHORT' | 'SEGMENT';
   scopeKey: string;

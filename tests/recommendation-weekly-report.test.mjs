@@ -7,7 +7,8 @@ const { formatRecommendationWeeklyReport } = jiti('../lib/recommendations/weekly
 
 const message = formatRecommendationWeeklyReport({
   generatedAt: '2026-06-20T07:00:00.000Z',
-  markets: [{
+  categories: [{
+    category: 'NASDAQ100',
     market: 'US',
     horizons: [{ horizon: 'D5', sampleSize: 40, positiveHitRate: 55, benchmarkWinRate: 47.5, averageExcessReturnPct: -1.2 }],
     causes: [{ causeCode: 'SIGNAL_SOURCE', count: 1, critical: 1, confirmed: 1 }],

@@ -1,6 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { BENCHMARK_BY_UNIVERSE, RECOMMENDATION_ENGINE_VERSION } from './config';
-import type { DailyMarketTop10Result, DailyScreenerCandidate } from '@/lib/daily-screeners';
+import {
+  BENCHMARK_BY_UNIVERSE,
+  RECOMMENDATION_CATEGORIES,
+  RECOMMENDATION_CATEGORY_MARKET,
+  RECOMMENDATION_ENGINE_VERSION,
+} from './config';
+import type { RecommendationCategory } from './types';
+import type { DailyCategoryTop10Result, DailyScreenerCandidate } from '@/lib/daily-screeners';
 
 interface PersistRecommendationInput {
   client: SupabaseClient;
@@ -9,12 +15,13 @@ interface PersistRecommendationInput {
   generatedAt: string;
   provider: string;
   model: string;
-  result: DailyMarketTop10Result;
+  result: DailyCategoryTop10Result;
   candidates: DailyScreenerCandidate[];
   telegramSentAt?: string | null;
   marketContext?: Record<string, unknown>;
   marketContextByMarket?: Partial<Record<'US' | 'KR', Record<string, unknown>>>;
-  markets?: ('US' | 'KR')[];
+  marketContextByCategory?: Partial<Record<RecommendationCategory, Record<string, unknown>>>;
+  categories?: RecommendationCategory[];
   candidateSnapshotByTicker?: Record<string, Record<string, unknown>>;
 }
 
@@ -24,16 +31,16 @@ export function initialTelegramDelivery(sentAt?: string | null) {
     : { telegram_status: 'PENDING' as const, telegram_sent_at: null };
 }
 
-function validateMarketRows(result: DailyMarketTop10Result, market: 'US' | 'KR') {
-  const rows = result.markets[market];
-  if (!Array.isArray(rows) || rows.length !== 10) throw new Error(`${market} recommendation publication requires exactly 10 picks.`);
-  if (new Set(rows.map((row) => row.ticker)).size !== 10) throw new Error(`${market} recommendation publication contains duplicate tickers.`);
-  if (new Set(rows.map((row) => row.rank)).size !== 10) throw new Error(`${market} recommendation publication contains duplicate ranks.`);
+function validateCategoryRows(result: DailyCategoryTop10Result, category: RecommendationCategory) {
+  const rows = result.categories[category];
+  if (!Array.isArray(rows) || rows.length !== 10) throw new Error(`${category} recommendation publication requires exactly 10 picks.`);
+  if (new Set(rows.map((row) => row.ticker)).size !== 10) throw new Error(`${category} recommendation publication contains duplicate tickers.`);
+  if (new Set(rows.map((row) => row.rank)).size !== 10) throw new Error(`${category} recommendation publication contains duplicate ranks.`);
   return rows;
 }
 
 export function pickCandidateSnapshot(
-  pick: DailyMarketTop10Result['markets']['US'][number],
+  pick: DailyCategoryTop10Result['categories']['NASDAQ100'][number],
   candidates: DailyScreenerCandidate[],
   extra?: Record<string, unknown>,
 ) {
@@ -66,17 +73,22 @@ export function pickCandidateSnapshot(
 }
 
 export async function persistRecommendationPolicy(input: PersistRecommendationInput & {
-  market: 'US' | 'KR';
+  category: RecommendationCategory;
   engineVersion: string;
   isOfficial: boolean;
 }) {
-  const market = input.market;
-  const picks = validateMarketRows(input.result, market);
+  const category = input.category;
+  const market = RECOMMENDATION_CATEGORY_MARKET[category];
+  const picks = validateCategoryRows(input.result, category);
+  const marketContext = input.marketContextByCategory?.[category]
+    || input.marketContextByMarket?.[market]
+    || input.marketContext
+    || {};
   const { data: existing, error: existingError } = await input.client
     .from('recommendation_publications')
     .select('id, version, is_official')
     .eq('run_date', input.runDate)
-    .eq('market', market)
+    .eq('category', category)
     .eq('engine_version', input.engineVersion)
     .maybeSingle();
   if (existingError) throw existingError;
@@ -91,11 +103,11 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     const { data, error } = await input.client.from('recommendation_publications').update({
       status: 'DRAFT',
       generated_at: input.generatedAt,
-      prompt_version: 'daily-market-top10-2026.06-v2.1',
+      prompt_version: 'daily-category-top10-2026.07-v1',
       llm_provider: input.provider,
       llm_model: input.model,
       ...initialTelegramDelivery(input.telegramSentAt),
-      market_context: input.marketContextByMarket?.[market] || input.marketContext || {},
+      market_context: marketContext,
       updated_at: new Date().toISOString(),
     }).eq('id', existing.id).select('*').single();
     if (error) throw error;
@@ -105,7 +117,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       .from('recommendation_publications')
       .select('version')
       .eq('run_date', input.runDate)
-      .eq('market', market)
+      .eq('category', category)
       .order('version', { ascending: false })
       .limit(1);
     if (versionsError) throw versionsError;
@@ -114,16 +126,17 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       screener_run_id: input.runId,
       run_date: input.runDate,
       market,
+      category,
       version,
       is_official: input.isOfficial,
       status: 'DRAFT',
       generated_at: input.generatedAt,
       engine_version: input.engineVersion,
-      prompt_version: 'daily-market-top10-2026.06-v2.1',
+      prompt_version: 'daily-category-top10-2026.07-v1',
       llm_provider: input.provider,
       llm_model: input.model,
       ...initialTelegramDelivery(input.telegramSentAt),
-      market_context: input.marketContextByMarket?.[market] || input.marketContext || {},
+      market_context: marketContext,
     }).select('*').single();
     if (error) throw error;
     publication = data;
@@ -134,7 +147,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       const candidate = pickCandidateSnapshot(
         pick,
         input.candidates,
-        input.candidateSnapshotByTicker?.[pick.ticker],
+        input.candidateSnapshotByTicker?.[`${category}:${pick.ticker}`] || input.candidateSnapshotByTicker?.[pick.ticker],
       );
       return {
         publication_id: publication.id,
@@ -173,10 +186,10 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
 
 export async function persistRecommendationPublications(input: PersistRecommendationInput) {
   const publications = [];
-  for (const market of input.markets || (['US', 'KR'] as const)) {
+  for (const category of input.categories || RECOMMENDATION_CATEGORIES) {
     publications.push(await persistRecommendationPolicy({
       ...input,
-      market,
+      category,
       engineVersion: RECOMMENDATION_ENGINE_VERSION,
       isOfficial: true,
     }));

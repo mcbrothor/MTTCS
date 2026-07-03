@@ -222,6 +222,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
         publicationId: row.publicationId,
         pickId: row.pickId,
         market: row.market,
+        category: row.category ?? null,
         horizon: row.horizon,
         scopeType: 'PICK',
         scopeKey: row.pickId,
@@ -242,6 +243,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
         publicationId: row.publicationId,
         pickId: row.pickId,
         market: row.market,
+        category: row.category ?? null,
         horizon: row.horizon,
         scopeType: 'PICK',
         scopeKey: row.pickId,
@@ -259,6 +261,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
         publicationId: row.publicationId,
         pickId: row.pickId,
         market: row.market,
+        category: row.category ?? null,
         horizon: row.horizon,
         scopeType: 'PICK',
         scopeKey: row.pickId,
@@ -277,6 +280,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
         publicationId: row.publicationId,
         pickId: row.pickId,
         market: row.market,
+        category: row.category ?? null,
         horizon: row.horizon,
         scopeType: 'PICK',
         scopeKey: row.pickId,
@@ -292,7 +296,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
     }
   }
 
-  const sourceGroups = groupBy(rows.filter((row) => row.excessReturnPct !== null), (row) => `${row.market}:${row.horizon}:${row.source}`);
+  const sourceGroups = groupBy(rows.filter((row) => row.excessReturnPct !== null), (row) => `${row.category || row.market}:${row.horizon}:${row.source}`);
   for (const [key, group] of sourceGroups) {
     const dates = new Set(group.map((row) => row.runDate));
     const excess = group.map((row) => row.excessReturnPct as number);
@@ -305,6 +309,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
       publicationId: null,
       pickId: null,
       market: first.market,
+      category: first.category ?? null,
       horizon: first.horizon,
       scopeType: 'SEGMENT',
       scopeKey: key,
@@ -334,6 +339,7 @@ export function buildDiagnosticFindings(rows: DiagnosticInput[]): DiagnosticFind
       publicationId: first.publicationId,
       pickId: null,
       market: first.market,
+      category: first.category ?? null,
       horizon: first.horizon,
       scopeType: 'COHORT',
       scopeKey: key,

@@ -142,11 +142,11 @@ export const DAILY_TOP5_PROVIDER_ORDER = [
 
 export function buildCodexDailyTop5Prompt(mtnPrompt) {
   return [
-    'You are the Codex CLI provider for MTN Daily Screener market Top10.',
+    'You are the Codex CLI provider for MTN Daily Screener category Top10.',
     'Do not edit files. Use the supplied MTN candidates plus any available public market context to judge relative Top10 quality.',
     'Use only the MTN daily screener prompt inside <mtn_daily_top5_prompt>.',
     'Return only an object matching the provided JSON schema.',
-    'The JSON must include markets.US and markets.KR, each with exactly ten valid tickers from the supplied candidate list.',
+    'The JSON must include categories.NASDAQ100, categories.SP500, categories.KOSPI200, and categories.KOSDAQ150, each with exactly ten valid tickers from the supplied candidate list.',
     '',
     '<mtn_daily_top5_prompt>',
     mtnPrompt,

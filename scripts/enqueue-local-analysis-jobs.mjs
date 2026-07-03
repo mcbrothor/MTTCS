@@ -1,7 +1,17 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
-const market = (process.argv.find((value) => value.startsWith('--market='))?.split('=')[1] || 'US').toUpperCase();
+const CATEGORY_MARKET = {
+  NASDAQ100: 'US',
+  SP500: 'US',
+  KOSPI200: 'KR',
+  KOSDAQ150: 'KR',
+};
+const category = (process.argv.find((value) => value.startsWith('--category='))?.split('=')[1] || '').toUpperCase();
+if (category && !CATEGORY_MARKET[category]) throw new Error('--category must be NASDAQ100, SP500, KOSPI200, or KOSDAQ150.');
+const market = category
+  ? CATEGORY_MARKET[category]
+  : (process.argv.find((value) => value.startsWith('--market='))?.split('=')[1] || 'US').toUpperCase();
 const limit = Math.max(1, Math.min(50, Number(process.argv.find((value) => value.startsWith('--limit='))?.split('=')[1] || 10)));
 const dryRun = process.argv.includes('--dry-run') || process.env.DRY_RUN === 'true';
 const runDate = process.argv.find((value) => value.startsWith('--run-date='))?.split('=')[1] || new Date().toISOString().slice(0, 10);
@@ -59,15 +69,17 @@ async function upsertJob(jobType, payload, priority = 0) {
 }
 
 async function readLatestRecommendationPicks() {
-  const { data: publications, error: publicationError } = await client
+  let query = client
     .from('recommendation_publications')
-    .select('id, run_date, market, engine_version')
+    .select('id, run_date, market, category, engine_version')
     .eq('market', market)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED')
     .lte('run_date', runDate)
     .order('run_date', { ascending: false })
     .limit(1);
+  if (category) query = query.eq('category', category);
+  const { data: publications, error: publicationError } = await query;
   if (publicationError) throw publicationError;
   const publication = publications?.[0];
   if (!publication) return [];
@@ -113,6 +125,7 @@ async function enqueueCommitteeAndNewsJobs(results) {
     const basePayload = {
       ticker,
       market,
+      category: pick.publication.category || null,
       recommendation_publication_id: pick.publication.id,
       recommendation_run_date: pick.publication.run_date,
       source: pick.source,
@@ -212,15 +225,17 @@ async function enqueueThesisCheckJobs(results) {
 async function enqueueBacktestJob(results) {
   const since = new Date(`${runDate}T00:00:00.000Z`);
   since.setUTCDate(since.getUTCDate() - 120);
-  const { data, error } = await client
+  let query = client
     .from('recommendation_performance')
-    .select('return_pct, excess_return_pct, horizon, evaluation_date, recommendation_picks!inner(ticker, rank, recommendation_publications!inner(market, run_date, is_official, status))')
+    .select('return_pct, excess_return_pct, horizon, evaluation_date, recommendation_picks!inner(ticker, rank, recommendation_publications!inner(market, category, run_date, is_official, status))')
     .eq('status', 'MATURED')
     .eq('recommendation_picks.recommendation_publications.market', market)
     .eq('recommendation_picks.recommendation_publications.is_official', true)
     .eq('recommendation_picks.recommendation_publications.status', 'PUBLISHED')
     .gte('recommendation_picks.recommendation_publications.run_date', since.toISOString().slice(0, 10))
     .limit(500);
+  if (category) query = query.eq('recommendation_picks.recommendation_publications.category', category);
+  const { data, error } = await query;
   if (error) throw error;
 
   const trades = (data || []).map((row) => ({
@@ -234,10 +249,10 @@ async function enqueueBacktestJob(results) {
 
   if (trades.length > 0) {
     results.push(await upsertJob('RECOMMENDATION_BACKTEST', {
-      strategy_key: `official-recommendations-${market.toLowerCase()}`,
+      strategy_key: category ? `official-recommendations-${category.toLowerCase()}` : `official-recommendations-${market.toLowerCase()}`,
       dataset_key: `${runDate}-d120`,
       trades,
-      assumptions: { market, run_date: runDate, lookback_days: 120 },
+      assumptions: { market, category: category || null, run_date: runDate, lookback_days: 120 },
     }, 5));
   }
 }
@@ -251,6 +266,7 @@ await enqueueBacktestJob(results);
 console.log(JSON.stringify({
   dryRun,
   market,
+  category: category || null,
   runDate,
   limit,
   enqueued: results.length,
