@@ -21,9 +21,16 @@ const message = formatRecommendationWeeklyReport({
 });
 
 assert.match(message, /MTN 추천 성과 주간 보고/);
-assert.match(message, /D5: n=40/);
+assert.match(message, /산식: 종목수익률=\(평가종가\/진입시가-1\), 초과수익=종목수익률-벤치마크수익률/);
+assert.match(message, /미국 · 나스닥/);
+assert.match(message, /벤치마크: \^NDX/);
+assert.match(message, /D5: 표본 n=40/);
+assert.match(message, /양수수익률 55\.0% \(22\/40\)/);
+assert.match(message, /벤치마크 초과율 47\.5% \(19\/40\)/);
+assert.match(message, /평균 초과수익 -1\.2%/);
 assert.match(message, /SIGNAL_SOURCE \(반복 원인 1건\)/);
-assert.match(message, /kr-risk-flow-v2\.1: D5 n=20/);
-assert.match(message, /수급커버 \+95\.0%/);
+assert.match(message, /kr-risk-flow-v2\.1: D5 표본 n=20/);
+assert.match(message, /수급데이터 커버리지 95\.0% \(19\/20\)/);
+assert.match(message, /성숙\(MATURED\) 및 가격품질 FULL\/FALLBACK 표본만 집계/);
 assert.match(message, /https:\/\/example.com/);
 console.log('recommendation weekly report tests passed');
