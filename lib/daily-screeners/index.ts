@@ -168,6 +168,23 @@ function compactSentence(value: string, maxLength: number) {
   return `${cleaned.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+function cleanSecurityName(name: string | null | undefined, ticker: string) {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  return trimmed.toUpperCase() === ticker.trim().toUpperCase() ? null : trimmed;
+}
+
+function displaySecurityName(name: string | null | undefined, ticker: string) {
+  return cleanSecurityName(name, ticker) ?? ticker;
+}
+
+function bestSecurityName(candidates: DailyScreenerCandidate[], ticker: string) {
+  return candidates
+    .map((candidate) => cleanSecurityName(candidate.name, ticker))
+    .find((name): name is string => Boolean(name))
+    ?? ticker;
+}
+
 function exchangeFor(item: ScannerConstituent, universe: ScannerUniverse) {
   if (item.exchange) return item.exchange;
   if (universe === 'KOSPI200') return 'KOSPI';
@@ -258,7 +275,7 @@ function normalizeMinerviniCandidate(
     universe,
     ticker: item.ticker.toUpperCase(),
     exchange: exchangeFor(item, universe),
-    name: item.name ?? item.ticker,
+    name: displaySecurityName(item.name, item.ticker),
     score,
     grade: minerviniGrade(score, data),
     price,
@@ -297,7 +314,7 @@ function normalizeCanslimCandidate(universe: ScannerUniverse, result: CanslimSca
     universe,
     ticker: result.ticker.toUpperCase(),
     exchange: result.exchange,
-    name: result.name ?? result.ticker,
+    name: displaySecurityName(result.name, result.ticker),
     score,
     grade: result.dualTier,
     price: result.currentPrice,
@@ -333,7 +350,7 @@ function normalizeLeaderCandidate(universe: ScannerUniverse, item: ScannerConsti
     universe,
     ticker: item.ticker.toUpperCase(),
     exchange: exchangeFor(item, universe),
-    name: item.name ?? item.ticker,
+    name: displaySecurityName(item.name, item.ticker),
     score,
     grade,
     price: numberOrNull(data.currentPrice) ?? item.currentPrice ?? null,
@@ -368,7 +385,7 @@ function normalizeMomentumCandidate(universe: ScannerUniverse, item: ScannerCons
     universe,
     ticker: item.ticker.toUpperCase(),
     exchange: exchangeFor(item, universe),
-    name: item.name ?? item.ticker,
+    name: displaySecurityName(item.name, item.ticker),
     score,
     grade,
     price: numberOrNull(data.currentPrice) ?? item.currentPrice ?? null,
@@ -400,7 +417,7 @@ function normalizeQullamaggieCandidate(universe: ScannerUniverse, item: ScannerC
     universe,
     ticker: item.ticker.toUpperCase(),
     exchange: exchangeFor(item, universe),
-    name: item.name ?? item.ticker,
+    name: displaySecurityName(item.name, item.ticker),
     score,
     grade,
     price: numberOrNull(data.currentPrice) ?? item.currentPrice ?? null,
@@ -454,7 +471,10 @@ async function scanCanslimUniverse(universe: ScannerUniverse, items: ScannerCons
     const params = new URLSearchParams({ ticker: item.ticker, exchange: exchangeFor(item, universe) });
     const response = await runCanslimSingle(new Request(`http://localhost/api/scanner/canslim?${params.toString()}`));
     const payload = await responseJson<{ result: CanslimScannerResult }>(response);
-    return normalizeCanslimCandidate(universe, { ...payload.result, name: payload.result.name || item.name || item.ticker });
+    const name = cleanSecurityName(payload.result.name, item.ticker)
+      ?? cleanSecurityName(item.name, item.ticker)
+      ?? item.ticker;
+    return normalizeCanslimCandidate(universe, { ...payload.result, name });
   });
 }
 
@@ -1089,8 +1109,12 @@ export function parseDailyMarketTop10Response(raw: string, candidates: DailyScre
     ? root.markets as Record<string, unknown>
     : root;
   const candidateByMarketTicker = new Map<string, DailyScreenerCandidate>();
+  const candidatesByMarketTicker = new Map<string, DailyScreenerCandidate[]>();
   for (const candidate of candidates) {
-    candidateByMarketTicker.set(`${marketForDailyCandidate(candidate)}:${candidate.ticker.toUpperCase()}`, candidate);
+    const key = `${marketForDailyCandidate(candidate)}:${candidate.ticker.toUpperCase()}`;
+    const current = candidateByMarketTicker.get(key);
+    if (!current || candidate.score > current.score) candidateByMarketTicker.set(key, candidate);
+    candidatesByMarketTicker.set(key, [...(candidatesByMarketTicker.get(key) || []), candidate]);
   }
 
   const markets = { US: [], KR: [] } as Record<DailyScreenerMarket, DailyMarketTop10Pick[]>;
@@ -1111,7 +1135,7 @@ export function parseDailyMarketTop10Response(raw: string, candidates: DailyScre
         rank: Number(record.rank) || index + 1,
         market,
         ticker,
-        name: candidate.name,
+        name: bestSecurityName(candidatesByMarketTicker.get(`${market}:${ticker}`) || [candidate], ticker),
         universe: candidate.universe,
         score: candidate.score,
         grade: candidate.grade,
@@ -1154,10 +1178,12 @@ export function parseDailyCategoryTop10Response(raw: string, candidates: DailySc
     ? root.categories as Record<string, unknown>
     : root;
   const candidateByCategoryTicker = new Map<string, DailyScreenerCandidate>();
+  const candidatesByCategoryTicker = new Map<string, DailyScreenerCandidate[]>();
   for (const candidate of candidates) {
     const key = `${categoryForDailyCandidate(candidate)}:${candidate.ticker.toUpperCase()}`;
     const current = candidateByCategoryTicker.get(key);
     if (!current || candidate.score > current.score) candidateByCategoryTicker.set(key, candidate);
+    candidatesByCategoryTicker.set(key, [...(candidatesByCategoryTicker.get(key) || []), candidate]);
   }
 
   const categories = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] } as Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
@@ -1180,7 +1206,7 @@ export function parseDailyCategoryTop10Response(raw: string, candidates: DailySc
         category,
         market,
         ticker,
-        name: candidate.name,
+        name: bestSecurityName(candidatesByCategoryTicker.get(`${category}:${ticker}`) || [candidate], ticker),
         universe: candidate.universe,
         score: candidate.score,
         grade: candidate.grade,

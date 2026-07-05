@@ -39,6 +39,12 @@ function validateCategoryRows(result: DailyCategoryTop10Result, category: Recomm
   return rows;
 }
 
+function cleanSecurityName(name: string | null | undefined, ticker: string) {
+  const trimmed = name?.trim();
+  if (!trimmed) return null;
+  return trimmed.toUpperCase() === ticker.trim().toUpperCase() ? null : trimmed;
+}
+
 export function pickCandidateSnapshot(
   pick: DailyCategoryTop10Result['categories']['NASDAQ100'][number],
   candidates: DailyScreenerCandidate[],
@@ -58,6 +64,7 @@ export function pickCandidateSnapshot(
       source_candidates: matching.map((candidate) => ({
         source: candidate.source,
         universe: candidate.universe,
+        name: candidate.name,
         exchange: candidate.exchange,
         score: candidate.score,
         grade: candidate.grade,
@@ -149,12 +156,18 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
         input.candidates,
         input.candidateSnapshotByTicker?.[`${category}:${pick.ticker}`] || input.candidateSnapshotByTicker?.[pick.ticker],
       );
+      const name = cleanSecurityName(pick.name, pick.ticker)
+        ?? cleanSecurityName(candidate.preferred.name, pick.ticker)
+        ?? input.candidates
+          .map((item) => item.ticker.toUpperCase() === pick.ticker.toUpperCase() ? cleanSecurityName(item.name, pick.ticker) : null)
+          .find((item): item is string => Boolean(item))
+        ?? pick.ticker;
       return {
         publication_id: publication.id,
         rank: pick.rank,
         ticker: pick.ticker,
         exchange: candidate.preferred.exchange,
-        name: pick.name,
+        name,
         universe: pick.universe,
         source: pick.source,
         score: pick.score,

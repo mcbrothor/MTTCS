@@ -200,6 +200,37 @@ function candidate(overrides) {
 }
 
 {
+  const kospi = [
+    candidate({ ticker: '000660', name: '000660', universe: 'KOSPI200', exchange: 'KOSPI', source: 'canslim', score: 95 }),
+    candidate({ ticker: '000660', name: 'SK하이닉스', universe: 'KOSPI200', exchange: 'KOSPI', source: 'minervini', score: 70 }),
+    ...Array.from({ length: 9 }, (_, index) => candidate({
+      ticker: `KP${index + 1}`,
+      name: `코스피기업 ${index + 1}`,
+      universe: 'KOSPI200',
+      exchange: 'KOSPI',
+      source: 'leader',
+      score: 80 - index,
+    })),
+  ];
+  const categories = {
+    NASDAQ100: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `NDX${index + 1}`, universe: 'NASDAQ100' })),
+    SP500: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `SP${index + 1}`, universe: 'SP500' })),
+    KOSPI200: kospi,
+    KOSDAQ150: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `KQ${index + 1}`, universe: 'KOSDAQ150', exchange: 'KOSDAQ' })),
+  };
+  const parsed = daily.parseDailyCategoryTop10Response(JSON.stringify({
+    categories: Object.fromEntries(Object.entries(categories).map(([category, rows]) => [category, rows
+      .filter((row, index, all) => all.findIndex((candidate) => candidate.ticker === row.ticker) === index)
+      .slice(0, 10)
+      .map((row, index) => ({ rank: index + 1, ticker: row.ticker, source: row.source }))])),
+    report_markdown: '',
+  }), Object.values(categories).flat());
+
+  assert.equal(parsed.categories.KOSPI200[0].ticker, '000660');
+  assert.equal(parsed.categories.KOSPI200[0].name, 'SK하이닉스');
+}
+
+{
   const categories = {
     NASDAQ100: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `NDX${index + 1}`, universe: 'NASDAQ100' })),
     SP500: Array.from({ length: 10 }, (_, index) => candidate({ ticker: `SP${index + 1}`, universe: 'SP500' })),
