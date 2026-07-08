@@ -70,4 +70,16 @@ assert.throws(() => ranking.selectKrRiskAdjustedTop10({
   marketState: 'RED',
 }), /requires 10 eligible picks/);
 
+const softConstraintCandidates = Array.from({ length: 12 }, (_, index) => candidate(`KQ${index}`, 'leader', index + 1, {
+  universe: 'KOSDAQ150',
+  dollarVolume: 5_000_000_000,
+}));
+const softConstraintSelected = ranking.selectKrRiskAdjustedTop10({
+  candidates: softConstraintCandidates,
+  category: 'KOSDAQ150',
+  marketState: 'YELLOW',
+});
+assert.equal(softConstraintSelected.length, 10);
+assert.ok(softConstraintSelected.some((row) => row.riskFlags.includes('soft_constraint_relaxed')));
+
 console.log('KR risk ranking tests passed');

@@ -161,6 +161,23 @@ export function selectKrRiskAdjustedTop10(input: {
     if (soleSource) soleSourceCounts.set(soleSource, (soleSourceCounts.get(soleSource) || 0) + 1);
     if (selected.length === 10) break;
   }
+  if (selected.length < 10 && ranked.length >= 10) {
+    const selectedKeys = new Set(selected.map((candidate) => `${candidate.pick.universe}:${candidate.pick.ticker}`));
+    for (const candidate of ranked) {
+      const key = `${candidate.pick.universe}:${candidate.pick.ticker}`;
+      if (selectedKeys.has(key)) continue;
+      selected.push({
+        ...candidate,
+        riskFlags: [...candidate.riskFlags, 'soft_constraint_relaxed'],
+        pick: {
+          ...candidate.pick,
+          risk: [...candidate.riskFlags, 'soft_constraint_relaxed'].join(', '),
+        },
+      });
+      selectedKeys.add(key);
+      if (selected.length === 10) break;
+    }
+  }
   if (selected.length !== 10) throw new Error(`KR risk ranking requires 10 eligible picks; received ${selected.length}.`);
   return selected.map((candidate, index) => ({
     ...candidate,

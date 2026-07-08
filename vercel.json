@@ -22,7 +22,7 @@
     },
     {
       "path": "/api/cron/daily-screeners",
-      "schedule": "0 12 * * 1-5"
+      "schedule": "0 09 * * *"
     },
     {
       "path": "/api/cron/recommendation-performance?market=US&shard=0&shards=4",
