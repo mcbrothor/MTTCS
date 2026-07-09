@@ -282,7 +282,11 @@ async function processCodexTask(session) {
 }
 
 function compactError(error, max = 600) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === 'object'
+      ? JSON.stringify(error)
+      : String(error);
   return message.length > max ? `${message.slice(0, max)}...` : message;
 }
 
