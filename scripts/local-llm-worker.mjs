@@ -14,6 +14,12 @@ import {
   parseCodexCliOutput,
   parseIbResponse,
 } from './lib/codex-cli-worker-utils.mjs';
+import {
+  DEFAULT_TECHNICAL_CHART_FALLBACKS,
+  DEFAULT_TECHNICAL_CHART_MODEL,
+  discoverTechnicalChartModel,
+  parseModelFallbacks,
+} from './lib/technical-chart-model-router.mjs';
 
 // Supabase 2.110 initializes Realtime even when this REST-only worker never subscribes.
 // Node 20 has no native WebSocket; a guard keeps the unused transport dormant.
@@ -55,6 +61,9 @@ const DAILY_TELEGRAM_CHARTS_PER_CATEGORY = Number.isInteger(dailyChartLimit)
 const DAILY_TELEGRAM_CHART_RANGE = process.env.DAILY_TELEGRAM_CHART_RANGE === 'ALL' ? 'ALL' : '1Y';
 const DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS = Math.max(5_000, Number(process.env.DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS || 25_000));
 const DAILY_TELEGRAM_CHARTS_AI_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AI_ENABLED?.toLowerCase() !== 'false';
+const TECHNICAL_CHART_LOCAL_MODEL = process.env.TECHNICAL_CHART_LOCAL_MODEL || DEFAULT_TECHNICAL_CHART_MODEL;
+const TECHNICAL_CHART_MODEL_FALLBACKS = parseModelFallbacks(process.env.TECHNICAL_CHART_MODEL_FALLBACKS || DEFAULT_TECHNICAL_CHART_FALLBACKS);
+const TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED = process.env.TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED?.toLowerCase() === 'true';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
@@ -73,6 +82,7 @@ const SUPPRESSED_TELEGRAM_MARKERS = [
   'MTN 시장 리포트:',
   'MTN 매크로 레짐 리포트',
 ];
+let technicalChartModelCache = { expiresAt: 0, route: null };
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('[Worker] Missing Supabase environment variables. Exiting.');
@@ -358,7 +368,7 @@ function dailyProviderModel(provider) {
   return 'mtn-rule-based';
 }
 
-async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prompt, systemPrompt, maxTokens, timeoutMs }) {
+async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prompt, systemPrompt, maxTokens, timeoutMs, responseFormat, extraBody }) {
   const response = await axios.post(url, {
     model,
     messages: [
@@ -367,6 +377,8 @@ async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prom
     ],
     temperature: 0.2,
     max_tokens: maxTokens || DAILY_TOP5_MAX_TOKENS,
+    ...(responseFormat ? { response_format: responseFormat } : {}),
+    ...(extraBody || {}),
   }, {
     timeout: timeoutMs || DAILY_TOP5_TIMEOUT_MS,
     headers: {
@@ -425,17 +437,47 @@ async function fetchCronMarketAnalysis(ticker, exchange) {
   return payload.data || payload;
 }
 
+async function resolveTechnicalChartLocalModel() {
+  if (!LOCAL_LLM_ENABLED) return null;
+  if (technicalChartModelCache.expiresAt > Date.now()) return technicalChartModelCache.route;
+  try {
+    const route = await discoverTechnicalChartModel({
+      baseUrl: LOCAL_LLM_API_URL,
+      preferredModel: TECHNICAL_CHART_LOCAL_MODEL,
+      fallbackModels: TECHNICAL_CHART_MODEL_FALLBACKS,
+      request: (url) => axios.get(url, { timeout: 3_000 }),
+    });
+    technicalChartModelCache = { expiresAt: Date.now() + 10 * 60 * 1000, route };
+    if (route) console.log(`[Worker] Technical chart model route: ${route.model} (${route.tier}).`);
+    else console.warn('[Worker] No compatible local technical chart model is installed; using deterministic analysis.');
+    return route;
+  } catch (error) {
+    technicalChartModelCache = { expiresAt: Date.now() + 60 * 1000, route: null };
+    console.warn(`[Worker] Local technical chart model discovery failed: ${compactError(error)}`);
+    return null;
+  }
+}
+
 async function runTechnicalChartAnalysis(marketAnalysis) {
   if (!DAILY_TELEGRAM_CHARTS_AI_ENABLED) {
-    return { technical: telegramChartImage.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'chart-patterns-v1' };
+    return { technical: technicalChartAnalysis.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'professional-chart-plan-v1' };
   }
   const prompt = technicalChartAnalysis.buildTechnicalChartAnalysisPrompt(marketAnalysis);
   const allowedPatternIds = (marketAnalysis.chartPatterns || []).map((pattern) => pattern.id);
+  const localRoute = await resolveTechnicalChartLocalModel();
   const providers = [
-    ...(LOCAL_LLM_ENABLED ? [{ provider: 'local-llm', model: LOCAL_LLM_MODEL, url: `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions` }] : []),
+    ...(localRoute ? [{
+      provider: 'local-llm',
+      model: localRoute.model,
+      url: `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`,
+      responseFormat: { type: 'json_schema', json_schema: { name: 'technical_chart_narrative', strict: true, schema: technicalChartAnalysis.technicalChartNarrativeSchema } },
+      extraBody: localRoute.disableThinking ? { think: false } : {},
+    }] : []),
+    ...(TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED ? [
     ...(GEMINI_API_KEY ? [{ provider: 'gemini', model: GEMINI_MODEL }] : []),
     ...(GROQ_API_KEY ? [{ provider: 'groq', model: GROQ_MODEL, url: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY }] : []),
     ...(CEREBRAS_API_KEY ? [{ provider: 'cerebras', model: CEREBRAS_MODEL, url: 'https://api.cerebras.ai/v1/chat/completions', apiKey: CEREBRAS_API_KEY }] : []),
+    ] : []),
   ];
   for (const item of providers) {
     try {
@@ -448,12 +490,13 @@ async function runTechnicalChartAnalysis(marketAnalysis) {
           maxTokens: 900,
           timeoutMs: DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS,
         });
-      return { technical: technicalChartAnalysis.parseTechnicalChartAnalysisResponse(raw, allowedPatternIds), provider: item.provider, model: item.model };
+      const narrative = technicalChartAnalysis.parseTechnicalChartAnalysisResponse(raw, allowedPatternIds);
+      return { technical: technicalChartAnalysis.finalizeTechnicalChartAnalysis(marketAnalysis, narrative), provider: item.provider, model: item.model };
     } catch (error) {
       console.warn(`[Worker] Technical chart AI failed: ${item.provider} - ${compactError(error)}`);
     }
   }
-  return { technical: telegramChartImage.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'chart-patterns-v1' };
+  return { technical: technicalChartAnalysis.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'professional-chart-plan-v1' };
 }
 
 function chartCandidateForPick(pick, category, candidates) {

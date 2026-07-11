@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { buildChartPatterns } from '../lib/finance/engines/chart-patterns.ts';
 import {
-  buildRuleBasedTechnicalAnalysis,
   renderTelegramChartPng,
   selectTelegramChartPicks,
   telegramChartCaption,
 } from '../lib/telegram/chart-image.ts';
+import { buildRuleBasedTechnicalAnalysis } from '../lib/ai/technical-chart-analysis.ts';
 
 function day(index) {
   const value = new Date('2025-01-02T00:00:00Z');

@@ -1,6 +1,6 @@
 import { Resvg } from '@resvg/resvg-js';
 import type { ChartPatternOverlay, MarketAnalysisResponse } from '@/types';
-import type { TechnicalChartAnalysis } from '@/lib/ai/technical-chart-analysis';
+import { buildRuleBasedTechnicalAnalysis, type TechnicalChartAnalysis } from '@/lib/ai/technical-chart-analysis';
 
 const WIDTH = 1200;
 const HEIGHT = 900;
@@ -53,28 +53,6 @@ function categoryColor(category: ChartPatternOverlay['lines'][number]['category'
 
 function truncate(value: string, length: number) {
   return value.length > length ? `${value.slice(0, Math.max(0, length - 1))}...` : value;
-}
-
-export function buildRuleBasedTechnicalAnalysis(analysis: MarketAnalysisResponse): TechnicalChartAnalysis {
-  const vcp = analysis.vcpAnalysis;
-  const patterns = analysis.chartPatterns || [];
-  const confirmed = patterns.filter((pattern) => pattern.status === 'CONFIRMED').map((pattern) => pattern.id);
-  const latest = analysis.priceData.at(-1)?.close ?? null;
-  const pivot = vcp.pivotPrice ?? analysis.riskPlan.entryPrice ?? null;
-  const invalidation = vcp.invalidationPrice ?? analysis.riskPlan.selectedStopPrice ?? analysis.riskPlan.stopLossPrice ?? null;
-  const abovePivot = latest !== null && pivot !== null && latest >= pivot;
-  const verdict = analysis.riskPlan.riskGate?.status === 'BLOCK' ? 'AVOID' : abovePivot && vcp.breakoutVolumeStatus === 'confirmed' ? 'BUY' : 'WATCH';
-  const label = patterns.slice(0, 2).map((pattern) => pattern.label).join(', ') || '패턴 신호 부족';
-  return {
-    verdict,
-    confidence: Math.max(0.35, Math.min(0.8, (vcp.score || 0) / 100)),
-    summaryKo: `${label}. ${abovePivot ? '피벗 위 가격 유지 여부' : '피벗 돌파'}와 거래량 확인이 필요합니다.`,
-    referencedPatternIds: confirmed,
-    entryCondition: pivot ? `${number(pivot)} 상향 돌파 및 거래량 확인` : '최근 고점 돌파와 거래량 확인',
-    invalidationCondition: invalidation ? `${number(invalidation)} 하향 이탈` : '베이스 저점 이탈',
-    patternRead: vcp.details?.slice(0, 2).join(' ') || label,
-    riskNotes: analysis.warnings.slice(0, 2).length ? analysis.warnings.slice(0, 2) : ['돌파 거래량과 시장 환경을 함께 확인하세요.'],
-  };
 }
 
 export function renderTelegramChartPng(input: TelegramChartImageInput) {
@@ -131,25 +109,27 @@ export function renderTelegramChartPng(input: TelegramChartImageInput) {
     { value: input.analysis.riskPlan.selectedStopPrice ?? input.analysis.riskPlan.stopLossPrice ?? input.analysis.vcpAnalysis.invalidationPrice, label: 'STOP', color: '#fb7185' },
   ].filter((item): item is { value: number; label: string; color: string } => typeof item.value === 'number' && Number.isFinite(item.value)).map((item) => `<line x1="${PLOT.left}" y1="${y(item.value).toFixed(1)}" x2="${PLOT.left + PLOT.width}" y2="${y(item.value).toFixed(1)}" stroke="${item.color}" stroke-width="1.5" stroke-dasharray="7 5"/><text x="${PLOT.left + PLOT.width + 8}" y="${(y(item.value) + 4).toFixed(1)}" fill="${item.color}" font-size="12">${item.label} ${number(item.value)}</text>`).join('');
   const verdictColor = input.technical.verdict === 'BUY' ? '#34d399' : input.technical.verdict === 'AVOID' ? '#fb7185' : '#fbbf24';
+  const setup = input.technical.professionalPlan;
   const labels = patterns.slice(0, 4).map((pattern) => `${pattern.label} ${Math.round(pattern.confidence * 100)}%`).join(' | ') || 'No confirmed pattern';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <rect width="100%" height="100%" fill="#020617"/>
     <text x="72" y="44" fill="#f8fafc" font-size="28" font-family="Arial, sans-serif" font-weight="700">${escapeXml(input.ticker)}${input.name ? ` · ${escapeXml(truncate(input.name, 28))}` : ''}</text>
     <text x="72" y="72" fill="#94a3b8" font-size="15" font-family="Arial, sans-serif">${escapeXml(input.exchange)} · Rank #${input.rank} · ${escapeXml(bars.at(-1)?.date || '')} · ${escapeXml(input.analysis.providerUsed)}</text>
-    <text x="1120" y="45" fill="${verdictColor}" text-anchor="end" font-size="26" font-family="Arial, sans-serif" font-weight="700">${input.technical.verdict}</text>
-    <text x="1120" y="70" fill="#cbd5e1" text-anchor="end" font-size="14" font-family="Arial, sans-serif">confidence ${Math.round(input.technical.confidence * 100)}%</text>
+    <text x="1120" y="42" fill="${verdictColor}" text-anchor="end" font-size="24" font-family="Arial, sans-serif" font-weight="700">${input.technical.verdict} · ${input.technical.setupGrade}</text>
+    <text x="1120" y="68" fill="#cbd5e1" text-anchor="end" font-size="14" font-family="Arial, sans-serif">${escapeXml(input.technical.readiness)} · Trend ${setup.trendScore}/5 · R ${number(setup.rewardRiskRatio, 1)}</text>
     ${Array.from({ length: 6 }, (_, index) => { const value = priceMin + ((priceMax - priceMin) * index / 5); return `<line x1="${PLOT.left}" y1="${y(value).toFixed(1)}" x2="${PLOT.left + PLOT.width}" y2="${y(value).toFixed(1)}" stroke="#1e293b" stroke-width="1"/><text x="20" y="${(y(value) + 4).toFixed(1)}" fill="#64748b" font-size="12">${number(value)}</text>`; }).join('')}
     ${zones}${volumes}${candlesticks}${maLines.map((line) => `<path d="${linePath(line.values, x, y)}" fill="none" stroke="${line.color}" stroke-width="1.5"/>`).join('')}${overlayLines}${riskLines}${markers}
     <text x="72" y="642" fill="#94a3b8" font-size="13" font-family="Arial, sans-serif">${escapeXml(labels)}</text>
     <line x1="72" y1="${FOOTER_TOP}" x2="1120" y2="${FOOTER_TOP}" stroke="#334155" stroke-width="1"/>
-    <text x="72" y="704" fill="#e2e8f0" font-size="18" font-family="Arial, sans-serif" font-weight="700">${escapeXml(truncate(input.technical.summaryKo, 96))}</text>
-    <text x="72" y="748" fill="#cbd5e1" font-size="16" font-family="Arial, sans-serif">Entry: ${escapeXml(truncate(input.technical.entryCondition, 88))}</text>
-    <text x="72" y="784" fill="#fda4af" font-size="16" font-family="Arial, sans-serif">Invalidation: ${escapeXml(truncate(input.technical.invalidationCondition, 82))}</text>
-    <text x="72" y="830" fill="#94a3b8" font-size="14" font-family="Arial, sans-serif">Risk: ${escapeXml(truncate(input.technical.riskNotes.join(' · '), 126))}</text>
+    <text x="72" y="704" fill="#e2e8f0" font-size="17" font-family="Arial, sans-serif" font-weight="700">${escapeXml(truncate(input.technical.summaryKo, 100))}</text>
+    <text x="72" y="744" fill="#cbd5e1" font-size="15" font-family="Arial, sans-serif">Trigger: ${escapeXml(truncate(input.technical.entryCondition, 94))}</text>
+    <text x="72" y="780" fill="#fda4af" font-size="15" font-family="Arial, sans-serif">Invalidation: ${escapeXml(truncate(input.technical.invalidationCondition, 88))}</text>
+    <text x="72" y="816" fill="#94a3b8" font-size="14" font-family="Arial, sans-serif">Risk: ${escapeXml(truncate(input.technical.riskNotes.join(' · '), 132))}</text>
+    <text x="72" y="850" fill="#64748b" font-size="13" font-family="Arial, sans-serif">${escapeXml(truncate(setup.addRule, 138))}</text>
   </svg>`;
   return new Resvg(svg, { fitTo: { mode: 'width', value: WIDTH } }).render().asPng();
 }
 
 export function telegramChartCaption(input: TelegramChartImageInput) {
-  return `${input.ticker} #${input.rank} · *${input.technical.verdict}*\n${truncate(input.technical.summaryKo, 380)}`;
+  return `${input.ticker} #${input.rank} · *${input.technical.verdict} ${input.technical.setupGrade}* · ${input.technical.readiness}\n${truncate(input.technical.summaryKo, 360)}`;
 }

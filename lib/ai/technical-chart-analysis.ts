@@ -1,9 +1,10 @@
 import type { ChartPatternOverlay, MarketAnalysisResponse } from '@/types';
+import { buildProfessionalChartPlan, type ProfessionalChartPlan, type ProfessionalSetupGrade, type TradeReadiness } from '@/lib/finance/engines/professional-chart-plan';
 import { extractStructuredJson } from './gemini';
 
 export type TechnicalChartVerdict = 'BUY' | 'WATCH' | 'AVOID';
 
-export interface TechnicalChartAnalysis {
+export interface TechnicalChartNarrative {
   verdict: TechnicalChartVerdict;
   confidence: number;
   summaryKo: string;
@@ -14,8 +15,14 @@ export interface TechnicalChartAnalysis {
   riskNotes: string[];
 }
 
+export interface TechnicalChartAnalysis extends TechnicalChartNarrative {
+  setupGrade: ProfessionalSetupGrade;
+  readiness: TradeReadiness;
+  professionalPlan: ProfessionalChartPlan;
+}
+
 function compactBars(input: MarketAnalysisResponse) {
-  return input.priceData.slice(-80).map((bar) => ({
+  return input.priceData.slice(-60).map((bar) => ({
     date: bar.date,
     open: bar.open,
     high: bar.high,
@@ -34,23 +41,38 @@ function compactPatterns(patterns: ChartPatternOverlay[]) {
     status: pattern.status,
     dateRange: pattern.dateRange,
     priceRange: pattern.priceRange,
-    anchors: pattern.anchors,
-    lines: pattern.lines,
-    zones: pattern.zones,
-    markers: pattern.markers,
     evidence: pattern.evidence,
   }));
 }
 
+export const technicalChartNarrativeSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'confidence', 'summaryKo', 'referencedPatternIds', 'entryCondition', 'invalidationCondition', 'patternRead', 'riskNotes'],
+  properties: {
+    verdict: { type: 'string', enum: ['BUY', 'WATCH', 'AVOID'] },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    summaryKo: { type: 'string' },
+    referencedPatternIds: { type: 'array', items: { type: 'string' } },
+    entryCondition: { type: 'string' },
+    invalidationCondition: { type: 'string' },
+    patternRead: { type: 'string' },
+    riskNotes: { type: 'array', items: { type: 'string' } },
+  },
+} as const;
+
 export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse) {
+  const professionalPlan = buildProfessionalChartPlan(input);
   return [
     'You are MTN technical chart analyst. Write Korean. Return JSON only.',
-    'Use only the supplied OHLCV, risk metrics, and chartPatterns.',
-    'Do not invent chart coordinates, dates, prices, pattern ids, or support/resistance levels.',
+    'You explain an existing professional trade plan; you do not create prices, coordinates, pattern ids, position sizes, or a new verdict.',
+    'The deterministic professionalPlan is the execution authority. Explain why its readiness and grade are justified using only the provided evidence.',
+    'Use only supplied OHLCV, risk metrics, chartPatterns, and professionalPlan.',
     'If you reference a pattern, use only ids from chartPatterns.',
+    'Keep the explanation conditional and execution-focused. Do not promise returns or use absolute language.',
     '',
     'Required JSON shape:',
-    '{"verdict":"BUY|WATCH|AVOID","confidence":0.75,"summaryKo":"...","referencedPatternIds":["pattern-vcp"],"entryCondition":"...","invalidationCondition":"...","patternRead":"...","riskNotes":["..."]}',
+    JSON.stringify(technicalChartNarrativeSchema),
     '',
     JSON.stringify({
       ticker: input.ticker,
@@ -63,7 +85,7 @@ export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse)
         pivotPrice: input.vcpAnalysis.pivotPrice,
         invalidationPrice: input.vcpAnalysis.invalidationPrice,
         breakoutVolumeStatus: input.vcpAnalysis.breakoutVolumeStatus,
-        details: input.vcpAnalysis.details.slice(0, 8),
+        details: input.vcpAnalysis.details.slice(0, 6),
       },
       riskPlan: {
         entryPrice: input.riskPlan.entryPrice,
@@ -75,14 +97,14 @@ export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse)
       },
       sepa: {
         status: input.sepaEvidence.status,
-        summary: input.sepaEvidence.summary,
         rsRating: input.sepaEvidence.metrics.rsRating,
-        rsSource: input.sepaEvidence.metrics.rsSource,
+        macroActionLevel: input.sepaEvidence.metrics.macroActionLevel ?? null,
       },
+      professionalPlan,
       chartPatterns: compactPatterns(input.chartPatterns ?? []),
-      warnings: input.warnings,
+      warnings: input.warnings.slice(0, 4),
       dataQuality: input.dataQuality,
-    }, null, 2),
+    }),
   ].join('\n');
 }
 
@@ -101,7 +123,7 @@ function assertStringArray(value: unknown, label: string) {
 export function validateTechnicalChartAnalysisPayload(
   payload: unknown,
   allowedPatternIds: string[],
-): TechnicalChartAnalysis {
+): TechnicalChartNarrative {
   if (!payload || typeof payload !== 'object') throw new Error('Technical chart analysis must be a JSON object.');
   const record = payload as Record<string, unknown>;
   const verdict = record.verdict;
@@ -127,6 +149,47 @@ export function validateTechnicalChartAnalysisPayload(
     invalidationCondition: assertString(record.invalidationCondition, 'invalidationCondition'),
     patternRead: assertString(record.patternRead, 'patternRead'),
     riskNotes: assertStringArray(record.riskNotes, 'riskNotes'),
+  };
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+export function finalizeTechnicalChartAnalysis(
+  input: MarketAnalysisResponse,
+  narrative: TechnicalChartNarrative,
+): TechnicalChartAnalysis {
+  const professionalPlan = buildProfessionalChartPlan(input);
+  return {
+    ...narrative,
+    verdict: professionalPlan.verdict,
+    confidence: Math.min(0.95, Math.max(0.2, (professionalPlan.trendScore + (professionalPlan.setupGrade === 'A' ? 3 : professionalPlan.setupGrade === 'B' ? 2 : 1)) / 10)),
+    setupGrade: professionalPlan.setupGrade,
+    readiness: professionalPlan.readiness,
+    professionalPlan,
+    entryCondition: professionalPlan.executionRule,
+    invalidationCondition: professionalPlan.exitRule,
+    riskNotes: unique([...professionalPlan.risks, ...narrative.riskNotes]).slice(0, 5),
+  };
+}
+
+export function buildRuleBasedTechnicalAnalysis(input: MarketAnalysisResponse): TechnicalChartAnalysis {
+  const professionalPlan = buildProfessionalChartPlan(input);
+  const patterns = input.chartPatterns || [];
+  const labels = patterns.slice(0, 2).map((pattern) => pattern.label).join(', ') || '확정 패턴 부족';
+  return {
+    verdict: professionalPlan.verdict,
+    confidence: Math.min(0.9, Math.max(0.25, (professionalPlan.trendScore + (professionalPlan.setupGrade === 'A' ? 3 : 1)) / 10)),
+    setupGrade: professionalPlan.setupGrade,
+    readiness: professionalPlan.readiness,
+    professionalPlan,
+    summaryKo: `${professionalPlan.setupGrade}등급 ${professionalPlan.readiness}: ${professionalPlan.trendSummary}. ${labels}를 실행 조건과 함께 평가합니다.`,
+    referencedPatternIds: patterns.filter((pattern) => pattern.status !== 'INVALIDATED').map((pattern) => pattern.id),
+    entryCondition: professionalPlan.executionRule,
+    invalidationCondition: professionalPlan.exitRule,
+    patternRead: `${labels}. ${professionalPlan.trendSummary}.`,
+    riskNotes: professionalPlan.risks,
   };
 }
 
