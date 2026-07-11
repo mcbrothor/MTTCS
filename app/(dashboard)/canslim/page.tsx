@@ -27,6 +27,8 @@ import { useContestSelection } from '@/hooks/useContestSelection';
 import { CANSLIM_LATEST_UNIVERSE_STORAGE_KEY } from '@/lib/contest-sources';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
+import TableSkeleton from '@/components/ui/TableSkeleton';
 import dynamic from 'next/dynamic';
 const CanslimDrilldownModal = dynamic(() => import('@/components/scanner/CanslimDrilldownModal'), { ssr: false });
 import MarketBanner from '@/components/ui/MarketBanner';
@@ -594,9 +596,10 @@ export default function CanslimScannerPage() {
 
   // === 테이블 렌더링 ===
   const renderTable = () => (
-    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50 backdrop-blur-sm">
-      <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
-        <colgroup>
+    <div className="w-full overflow-x-auto pb-4">
+      <div className="min-w-[1000px] overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50 backdrop-blur-sm">
+        <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
+          <colgroup>
           <col className="w-[4%]" />
           <col className="w-[12%]" />
           <col className="w-[10%]" />
@@ -726,7 +729,8 @@ export default function CanslimScannerPage() {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 
@@ -917,9 +921,17 @@ export default function CanslimScannerPage() {
       <MarketBanner compact={true} />
 
       {scanFatalError && (
-        <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-          <p className="text-sm text-red-100">스캔 실패: {scanFatalError}</p>
-          <button type="button" onClick={() => setScanFatalError(null)} className="ml-3 rounded-md px-3 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20">닫기</button>
+        <AsyncStatePanel
+          state="error"
+          title="스캔 실패"
+          message={scanFatalError}
+          onRetry={startScan}
+        />
+      )}
+
+      {isScanning && filteredResults.length === 0 && !scanFatalError && (
+        <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 shadow-xl mt-6">
+          <TableSkeleton cols={11} rows={5} />
         </div>
       )}
 

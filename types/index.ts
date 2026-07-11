@@ -28,6 +28,7 @@ export interface Trade {
   id: string;
   created_at: string;
   updated_at: string;
+  version?: number;
 
   ticker: string;
   direction: Direction;
@@ -571,6 +572,68 @@ export interface VcpAnalysis {
   details: string[];
 }
 
+export type ChartPatternType =
+  | 'VCP'
+  | 'HIGH_TIGHT_FLAG'
+  | 'BOLLINGER_SQUEEZE'
+  | 'POCKET_PIVOT'
+  | 'SUPPORT_RESISTANCE'
+  | 'CUP_WITH_HANDLE'
+  | 'DOUBLE_BOTTOM';
+
+export type ChartPatternStatus = 'CONFIRMED' | 'FORMING' | 'CANDIDATE' | 'INVALIDATED';
+export type ChartPatternOverlayCategory = 'base' | 'pivot' | 'risk' | 'volume' | 'pattern';
+
+export interface ChartPatternPoint {
+  date: string;
+  price: number;
+}
+
+export interface ChartPatternAnchor extends ChartPatternPoint {
+  role: string;
+  label?: string;
+}
+
+export interface ChartPatternLine {
+  id: string;
+  label: string;
+  category: ChartPatternOverlayCategory;
+  points: [ChartPatternPoint, ChartPatternPoint];
+  style: 'solid' | 'dashed' | 'dotted';
+}
+
+export interface ChartPatternZone {
+  id: string;
+  label: string;
+  category: ChartPatternOverlayCategory;
+  startDate: string;
+  endDate: string;
+  low: number;
+  high: number;
+}
+
+export interface ChartPatternMarker extends ChartPatternPoint {
+  id: string;
+  label: string;
+  category: ChartPatternOverlayCategory;
+  shape: 'circle' | 'diamond' | 'triangleUp' | 'triangleDown';
+}
+
+export interface ChartPatternOverlay {
+  id: string;
+  type: ChartPatternType;
+  label: string;
+  confidence: number;
+  status: ChartPatternStatus;
+  dateRange: { start: string; end: string };
+  priceRange: { low: number; high: number };
+  anchors: ChartPatternAnchor[];
+  lines: ChartPatternLine[];
+  zones: ChartPatternZone[];
+  markers: ChartPatternMarker[];
+  evidence: Record<string, unknown>;
+}
+
 export interface MarketAnalysisResponse {
   ticker: string;
   exchange: string;
@@ -581,6 +644,7 @@ export interface MarketAnalysisResponse {
   sepaEvidence: SepaEvidence;
   riskPlan: RiskPlan;
   vcpAnalysis: VcpAnalysis;
+  chartPatterns: ChartPatternOverlay[];
   fundamentals: FundamentalSnapshot | null;
   changePercent: number | null;
   adrPct: number | null;
@@ -807,6 +871,32 @@ export interface SecurityEvent {
 export type MarketState = 'GREEN' | 'YELLOW' | 'RED' | 'GREY';
 export type AiInsightProvider = 'gemini' | 'groq' | 'cerebras' | 'rules' | 'local-llm' | 'codex-cli';
 
+export type GroundedMarketInsightStance = 'NORMAL' | 'CAUTIOUS' | 'DEFENSIVE';
+export type GroundedMarketInsightActionCode = 'SCAN_NORMALLY' | 'REDUCE_POSITION_SIZE' | 'PAUSE_NEW_BUYS';
+
+export interface GroundedMarketInsight {
+  schemaVersion: '1';
+  headline: string;
+  stance: GroundedMarketInsightStance;
+  evidenceKeys: string[];
+  actionCode: GroundedMarketInsightActionCode;
+  commentary: string;
+}
+
+export interface AiInsightEvidence {
+  key: string;
+  label: string;
+  value: number | string | null;
+  unit: string;
+  threshold: number | string | null;
+  source: string;
+}
+
+export interface GroundedMarketInsightValidation {
+  status: 'VALID' | 'FALLBACK';
+  rejectionReasons: string[];
+}
+
 
 export interface AiFallbackAttempt {
   provider: string; model: string; status: 'success' | 'failed' | 'skipped'; message?: string;
@@ -822,6 +912,7 @@ export interface AiModelInsight {
   headline?: string;
   bullets?: string[];
   detail?: string;
+  groundedInsight?: GroundedMarketInsight;
   cachedAt?: string;
   message?: string;
   selected: boolean;
@@ -924,6 +1015,9 @@ export interface MasterFilterResponse {
   aiFallbackChain?: AiFallbackAttempt[];
   aiModelInsights?: AiModelInsight[];
   aiErrorSummary?: string | null;
+  aiInsight?: GroundedMarketInsight;
+  aiValidation?: GroundedMarketInsightValidation;
+  aiEvidence?: AiInsightEvidence[];
 }
 
 export type MacroRegime = 'RISK_ON' | 'RISK_OFF' | 'NEUTRAL';

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { runRuleEngine, RULE_ENGINE_PROVIDER, RULE_ENGINE_VERSION } from '@/lib/ai/contest-rule-engine';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -12,6 +13,8 @@ function errorMessage(error: unknown) {
 }
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(_req);
+  if (authFailure) return authFailure;
   const { id: sessionId } = await params;
 
   try {

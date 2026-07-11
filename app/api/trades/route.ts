@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 ﻿import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/session';
 import { getMtnKrLivePrice, getMtnUsLiveQuotes } from '@/lib/finance/core/live-price-providers';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { buildEntrySnapshot } from '@/lib/finance/core/snapshot';
 import { attachTradeMetrics } from '@/lib/finance/core/trade-metrics';
+import { evaluateRiskGate } from '@/lib/finance/core/risk-gate';
+import { getDefaultRiskPolicy } from '@/lib/finance/core/risk-policy';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { CapitalSnapshot, Trade, TradeStatus } from '@/types';
 
@@ -179,9 +182,12 @@ function buildTradeEntrySnapshot(trade: TradeRecordForSnapshot) {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const ticker = String(body.ticker || '').trim().toUpperCase();
+    const market = isKoreanTicker(ticker) ? 'KR' : 'US';
     const totalShares = Number(body.total_shares ?? body.position_size ?? 0);
     const plannedRisk = Number(body.planned_risk ?? 0);
     const riskPercent = normalizeRiskPercent(body.risk_percent ?? 0.03);
@@ -220,9 +226,6 @@ export async function POST(request: Request) {
       if (direction === 'SHORT' && targetPrice >= entryPrice) {
         return apiError('SHORT 수동 계획에서는 목표가가 진입가보다 낮아야 합니다.', 'INVALID_TARGET_PRICE');
       }
-      if (body.risk_gate?.status === 'BLOCK') {
-        return apiError('Risk gate blocked this manual strategy plan.', 'RISK_GATE_BLOCKED');
-      }
     }
 
     const entryPrice = Number(body.entry_price);
@@ -235,9 +238,24 @@ export async function POST(request: Request) {
         return apiError('SHORT 포지션에서는 손절가가 진입가보다 높아야 합니다.', 'INVALID_STOPLOSS');
       }
     }
+    const riskPolicy = getDefaultRiskPolicy(market);
+    const serverRiskGate = evaluateRiskGate({
+      policy: riskPolicy,
+      totalEquity: Number(body.total_equity) || 0,
+      candidateRisk: plannedRisk,
+      stopQuality: !entryPrice || !stoplossPrice
+        ? 'INVALID'
+        : direction === 'LONG'
+          ? (stoplossPrice < entryPrice ? 'VALID' : 'INVALID')
+          : (stoplossPrice > entryPrice ? 'VALID' : 'INVALID'),
+    });
+    if (serverRiskGate.status === 'BLOCK') {
+      return apiError('Server risk policy blocked this trade plan.', 'RISK_GATE_BLOCKED', 409, serverRiskGate);
+    }
 
     const record: Record<string, unknown> & TradeRecordForSnapshot = {
       ticker,
+      market,
       direction,
       plan_mode: planMode,
       status: 'PLANNED',
@@ -262,8 +280,8 @@ export async function POST(request: Request) {
       trailing_stops: body.trailing_stops ?? null,
       risk_strategy: body.risk_strategy ?? null,
       requested_risk_strategy: body.requested_risk_strategy ?? null,
-      risk_gate: body.risk_gate ?? null,
-      risk_policy_snapshot: body.risk_policy_snapshot ?? null,
+      risk_gate: serverRiskGate,
+      risk_policy_snapshot: riskPolicy,
       chart_plan: body.chart_plan ?? null,
       plan_answers: body.plan_answers ?? null,
       strategy_template_id: nullableText(body.strategy_template_id, 120),
@@ -277,6 +295,7 @@ export async function POST(request: Request) {
     };
 
     record.entry_snapshot = buildTradeEntrySnapshot(record as TradeRecordForSnapshot);
+    record.current_plan_snapshot = record.entry_snapshot;
 
     const session = await getServerSession();
     if (session) {
@@ -299,6 +318,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const limit = searchParams.has('limit') ? Math.max(1, parseInt(searchParams.get('limit')!, 10)) : null;
@@ -318,11 +339,16 @@ export async function GET(request: Request) {
     let query = supabaseServer
       .from('trades')
       .select('*, trade_executions(*)')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
+
+    const session = await getServerSession();
+    if (session) query = query.eq('user_id', session.systemId);
 
     if (id) {
       query = query.eq('id', id);
     } else {
+      if (market) query = query.eq('market', market);
       if (status) query = query.eq('status', status);
       if (limit !== null) query = query.range(offset, offset + limit - 1);
     }
@@ -331,12 +357,7 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    const allRecords = ((data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[])
-      .filter((trade) => {
-        if (market === 'KR') return isKoreanTicker(trade.ticker);
-        if (market === 'US') return !isKoreanTicker(trade.ticker);
-        return true;
-      });
+    const allRecords = (data || []) as unknown as (Trade & { trade_executions?: Trade['executions'] })[];
 
     const priceMap = includeLivePrices
       ? await buildLivePriceMap(allRecords, {
@@ -363,6 +384,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const id = String(body.id || '').trim();
@@ -375,6 +398,7 @@ export async function PATCH(request: Request) {
       .from('trades')
       .select('*')
       .eq('id', id)
+      .eq('user_id', (await getServerSession())?.systemId ?? '')
       .single();
 
     if (existingTradeError) throw existingTradeError;
@@ -394,6 +418,7 @@ export async function PATCH(request: Request) {
       const ticker = String(body.ticker).trim().toUpperCase();
       if (!ticker) return apiError('Ticker is required.', 'MISSING_TICKER');
       update.ticker = ticker;
+      update.market = isKoreanTicker(ticker) ? 'KR' : 'US';
     }
 
     if (body.status !== undefined) {
@@ -487,17 +512,26 @@ export async function PATCH(request: Request) {
     if (body.vcp_analysis !== undefined) update.vcp_analysis = body.vcp_analysis;
 
     if (Object.keys(body).some((field) => SNAPSHOT_RELEVANT_FIELDS.has(field))) {
+      if (existingTrade.entry_snapshot_locked_at) {
+        return apiError(
+          '진입 체결 후 계획 원본은 잠겼습니다. 사유를 포함한 amendment API를 사용하세요.',
+          'ENTRY_SNAPSHOT_LOCKED',
+          409,
+        );
+      }
       const mergedTrade = {
         ...(existingTrade as TradeRecordForSnapshot),
         ...update,
       };
       update.entry_snapshot = buildTradeEntrySnapshot(mergedTrade);
+      update.current_plan_snapshot = update.entry_snapshot;
     }
 
     const { data, error } = await supabaseServer
       .from('trades')
       .update(update)
       .eq('id', id)
+      .eq('user_id', (await getServerSession())?.systemId ?? '')
       .select('*, trade_executions(*)')
       .single();
 
@@ -519,6 +553,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id')?.trim();
 
@@ -527,7 +563,12 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const { error } = await supabaseServer.from('trades').delete().eq('id', id);
+    const session = await getServerSession();
+    const { error } = await supabaseServer
+      .from('trades')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', session?.systemId ?? '');
     if (error) throw error;
 
     return NextResponse.json({ data: { id } });

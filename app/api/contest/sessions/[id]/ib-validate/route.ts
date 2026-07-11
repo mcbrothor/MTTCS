@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { buildIbValidationPrompt, IB_PROMPT_VERSION, IB_RESPONSE_SCHEMA_VERSION } from '@/lib/ai/contest-ib-prompt';
 import { runContestAnalysis } from '@/lib/ai/contest-analysis';
@@ -179,6 +180,8 @@ function sanitizeReportMarkdown(text: string): string {
 
 // GET: 프롬프트만 반환 (LLM 호출 없음, 클립보드 복사용)
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(_req);
+  if (authFailure) return authFailure;
   const { id: sessionId } = await params;
 
   try {
@@ -216,6 +219,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 // POST: 외부 LLM 호출 및 IB 분석 결과 저장
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(req);
+  if (authFailure) return authFailure;
   const { id: sessionId } = await params;
 
   let forceLocal = false;

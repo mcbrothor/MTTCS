@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { supabaseServer } from '@/lib/supabase/server';
+import { sanitizeExternalError } from '@/lib/security/external-errors';
 
 interface KisTokenCache {
   cachedToken: string | null;
@@ -134,7 +135,7 @@ export async function getKisToken(): Promise<string> {
   try {
     return await tokenCache.pendingTokenRequest;
   } catch (error) {
-    console.error('Failed to get KIS Token:', error);
+    console.error('[KIS]', sanitizeExternalError('KIS', 'token', error));
     throw new Error('KIS API 인증 실패');
   } finally {
     tokenCache.pendingTokenRequest = null;

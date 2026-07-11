@@ -6,7 +6,7 @@ if (typeof window !== 'undefined') {
   throw new Error(
     '[MTN Security] lib/supabase/server.ts가 브라우저 번들에 포함되었습니다. ' +
     '이 모듈은 서버(API Route/Server Component) 전용입니다. ' +
-    '클라이언트에서는 lib/supabase/client.ts를 사용하세요.'
+    '클라이언트는 인증된 API Route를 사용하세요.'
   );
 }
 

@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { supabaseServer } from '@/lib/supabase/server';
 
 const VALID_STATUSES = ['OPEN', 'REVIEW_READY', 'COMPLETED'];
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { id } = await params;
     const body = await request.json();

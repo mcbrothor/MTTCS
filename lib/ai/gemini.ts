@@ -1,6 +1,22 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import type { AiFallbackAttempt, AiInsightProvider, AiModelInsight, EarlyWarningMatrix, MasterFilterMetricDetail } from '@/types';
+import type {
+  AiFallbackAttempt,
+  AiInsightEvidence,
+  AiInsightProvider,
+  AiModelInsight,
+  EarlyWarningMatrix,
+  GroundedMarketInsight,
+  GroundedMarketInsightValidation,
+  MasterFilterMetricDetail,
+} from '@/types';
 import { friendlyMetricLabel } from '../market-display.ts';
+import {
+  buildMarketInsightEvidenceCatalog,
+  buildRuleBasedGroundedInsight,
+  renderGroundedMarketInsight,
+  validateGroundedMarketInsight,
+  validationResult,
+} from './grounded-market-insight.ts';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -45,6 +61,9 @@ export interface MarketInsightResult {
   fallbackChain: AiFallbackAttempt[];
   modelInsights: AiModelInsight[];
   errorSummary: string | null;
+  aiInsight: GroundedMarketInsight;
+  aiValidation: GroundedMarketInsightValidation;
+  aiEvidence: AiInsightEvidence[];
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -197,7 +216,7 @@ function buildPrompt(input: MarketAnalysisInput) {
   return [
     'You are MTN Centaur, a concise market risk analyst.',
     'Write in Korean. Do not invent live data. Use only the supplied metrics and macro context.',
-    'Use plain language. Avoid abbreviations and internal model names unless a ticker itself is required.',
+    'Use plain language. Never write a number in commentary; cite evidenceKeys for every factual claim.',
     '',
     `시장 상태: ${input.marketState} (${input.metrics.displayScoreLabel ?? '종합 점수'}: ${input.metrics.totalScore})`,
     `${friendlyMetricLabel(input.metrics.trend.label)}: ${input.metrics.trend.value} (${input.metrics.trend.status}) - ${input.metrics.trend.description}`,
@@ -213,37 +232,32 @@ function buildPrompt(input: MarketAnalysisInput) {
     '시장 밖 위험과 원천 데이터:',
     JSON.stringify(input.macroData, null, 2),
     '',
-    'Respond ONLY with a JSON object (no markdown fences) in this exact shape:',
+    'Respond ONLY with a JSON object (no markdown fences and no extra keys) in this exact shape:',
     '{',
-    '  "headline": "<한 줄 핵심 판단, 20자 이내>",',
-    '  "bullets": ["<핵심 포인트 1>", "<핵심 포인트 2>", "<핵심 포인트 3>"],',
-    '  "detail": "<상세 서술: 시장 추세 근거, 매크로 리스크, 실전 행동 지침>"',
+    '  "schemaVersion": "1",',
+    '  "headline": "<한 줄 핵심 판단>",',
+    '  "stance": "NORMAL | CAUTIOUS | DEFENSIVE",',
+    '  "evidenceKeys": ["trend | breadth | volatility | adr | distribution | ftd | newHighLow | sectorRotation | totalScore"],',
+    '  "actionCode": "SCAN_NORMALLY | REDUCE_POSITION_SIZE | PAUSE_NEW_BUYS",',
+    '  "commentary": "<숫자를 쓰지 않은 정성적 설명>"',
     '}',
   ].filter(Boolean).join('\n');
 }
 
-interface StructuredInsight {
-  headline?: string;
-  bullets?: string[];
-  detail?: string;
-}
-
-function parseStructuredInsight(raw: string): { structured: StructuredInsight; text: string } {
-  try {
-    const parsed = extractStructuredJson(raw);
-    if (parsed && typeof parsed === 'object' && 'headline' in parsed) {
-      const s = parsed as StructuredInsight;
-      const fallbackText = [
-        s.headline,
-        ...(s.bullets ?? []).map((b: string) => `• ${b}`),
-        s.detail,
-      ].filter(Boolean).join('\n\n');
-      return { structured: s, text: fallbackText };
-    }
-  } catch {
-    // parsing failed — fall through to raw text
-  }
-  return { structured: {}, text: raw };
+export function parseGroundedInsightResponse(raw: string, evidenceCatalog: AiInsightEvidence[]) {
+  const knownKeys = new Set(evidenceCatalog.map((item) => item.key));
+  const groundedInsight = validateGroundedMarketInsight(extractStructuredJson(raw), knownKeys);
+  const selectedEvidence = groundedInsight.evidenceKeys
+    .map((key) => evidenceCatalog.find((item) => item.key === key))
+    .filter((item): item is AiInsightEvidence => Boolean(item));
+  const text = renderGroundedMarketInsight(groundedInsight, selectedEvidence);
+  return {
+    groundedInsight,
+    selectedEvidence,
+    text,
+    headline: groundedInsight.headline,
+    detail: [groundedInsight.commentary, ...text.split('\n\n').slice(2)].join('\n\n'),
+  };
 }
 
 export async function callGeminiModel(
@@ -343,16 +357,6 @@ export async function callCerebrasModel(
   return text;
 }
 
-function ruleBasedInsight(input: MarketAnalysisInput) {
-  const byState = {
-    GREEN: '시장 내부 강도와 섹터 로테이션이 우호적입니다. 돌파 후보는 피벗 근처 거래량 확인을 우선하세요.',
-    YELLOW: '상승 시도는 가능하지만 변동성, 참여 폭, 분산일 중 일부가 불완전합니다. 포지션 크기를 줄이고 실패 돌파는 빠르게 정리하세요.',
-    RED: '시장 압력이 높습니다. 신규 진입보다 현금 비중과 기존 포지션 방어를 우선하세요.',
-  };
-
-  return byState[input.marketState as keyof typeof byState] || byState.YELLOW;
-}
-
 function makeInsightId(provider: string, model: string, priority: number) {
   return `${priority}-${provider}-${model}`.replace(/[^a-zA-Z0-9._-]/g, '-');
 }
@@ -367,6 +371,7 @@ function attemptToInsight(input: {
   headline?: string;
   bullets?: string[];
   detail?: string;
+  groundedInsight?: GroundedMarketInsight;
   cachedAt?: string;
   message?: string;
 }): AiModelInsight {
@@ -381,6 +386,7 @@ function attemptToInsight(input: {
     headline: input.headline,
     bullets: input.bullets,
     detail: input.detail,
+    groundedInsight: input.groundedInsight,
     cachedAt: input.cachedAt ?? now,
     message: input.message,
     selected: false,
@@ -409,6 +415,7 @@ function withProviderSummaries(insights: AiModelInsight[]) {
 async function collectGemini(
   model: string,
   prompt: string,
+  evidenceCatalog: AiInsightEvidence[],
   chain: AiFallbackAttempt[],
   label: string,
   priority: number
@@ -421,9 +428,9 @@ async function collectGemini(
 
   try {
     const raw = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`);
-    const { structured, text } = parseStructuredInsight(raw);
+    const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
     chain.push({ provider: label, model, status: 'success' });
-    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', text, ...structured, priority });
+    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: label, model, status: 'failed', message });
@@ -431,7 +438,7 @@ async function collectGemini(
   }
 }
 
-async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectGroq(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!GROQ_API_KEY) {
     const message = 'GROQ_API_KEY is not configured.';
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'skipped', message });
@@ -440,9 +447,9 @@ async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority:
 
   try {
     const raw = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`);
-    const { structured, text } = parseStructuredInsight(raw);
+    const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', text, ...structured, priority });
+    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'failed', message });
@@ -450,7 +457,7 @@ async function collectGroq(prompt: string, chain: AiFallbackAttempt[], priority:
   }
 }
 
-async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectCerebras(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!CEREBRAS_API_KEY) {
     const message = 'CEREBRAS_API_KEY is not configured.';
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message });
@@ -459,9 +466,9 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
 
   try {
     const raw = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`);
-    const { structured, text } = parseStructuredInsight(raw);
+    const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', text, ...structured, priority });
+    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message });
@@ -469,7 +476,7 @@ async function collectCerebras(prompt: string, chain: AiFallbackAttempt[], prior
   }
 }
 
-async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectLocalLlm(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   if (!LOCAL_LLM_ENABLED) {
     const message = 'Local LLM is not enabled.';
     chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message });
@@ -478,9 +485,9 @@ async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], prior
 
   try {
     const raw = await withTimeout(callLocalLlmModel(prompt, 'You are a concise Korean market-regime analyst.', 900), `local-llm/${LOCAL_LLM_MODEL}`);
-    const { structured, text } = parseStructuredInsight(raw);
+    const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
     chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success', text, ...structured, priority });
+    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success', ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'failed', message });
@@ -488,7 +495,7 @@ async function collectLocalLlm(prompt: string, chain: AiFallbackAttempt[], prior
   }
 }
 
-async function collectCodexCli(prompt: string, chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectCodexCli(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
   const isVercel = process.env.VERCEL === '1';
   if (isVercel) {
     const message = 'Codex CLI is not available on Vercel environment.';
@@ -498,9 +505,9 @@ async function collectCodexCli(prompt: string, chain: AiFallbackAttempt[], prior
 
   try {
     const raw = await withTimeout(callCodexCli(prompt), `codex-cli/codex`, 25000);
-    const { structured, text } = parseStructuredInsight(raw);
+    const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
     chain.push({ provider: 'codex-cli', model: 'codex', status: 'success' });
-    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'success', text, ...structured, priority });
+    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'success', ...structured, priority });
   } catch (error: unknown) {
     const message = compactMessage(error);
     chain.push({ provider: 'codex-cli', model: 'codex', status: 'failed', message });
@@ -510,13 +517,14 @@ async function collectCodexCli(prompt: string, chain: AiFallbackAttempt[], prior
 
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
+  const evidenceCatalog = buildMarketInsightEvidenceCatalog(input.metrics);
   const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
-    collectGemini(GEMINI_PRIMARY_MODEL, prompt, chain, 'gemini-primary', 0),
+    collectGemini(GEMINI_PRIMARY_MODEL, prompt, evidenceCatalog, chain, 'gemini-primary', 0),
   ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, chain, 'gemini-fallback', 1));
+    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, evidenceCatalog, chain, 'gemini-fallback', 1));
   } else {
     const model = GEMINI_FALLBACK_MODEL || '(not configured)';
     const message = 'GEMINI_FALLBACK_MODEL is not configured.';
@@ -525,10 +533,10 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
   }
 
   tasks.push(
-    collectGroq(prompt, chain, 2),
-    collectCerebras(prompt, chain, 3),
-    collectLocalLlm(prompt, chain, 4),
-    collectCodexCli(prompt, chain, 5)
+    collectGroq(prompt, evidenceCatalog, chain, 2),
+    collectCerebras(prompt, evidenceCatalog, chain, 3),
+    collectLocalLlm(prompt, evidenceCatalog, chain, 4),
+    collectCodexCli(prompt, evidenceCatalog, chain, 5)
   );
 
   const { selected, modelInsights } = await settleModelInsightsUntilFirstSuccess(tasks);
@@ -539,9 +547,12 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
   }
   chain.sort((a, b) => (priorityByChainKey.get(a.provider) ?? 99) - (priorityByChainKey.get(b.provider) ?? 99));
 
-  if (selected) {
+  if (selected?.groundedInsight) {
     const selectedInsights = withProviderSummaries(modelInsights)
       .map((item) => ({ ...item, selected: item.id === selected.id }));
+    const selectedEvidence = selected.groundedInsight.evidenceKeys
+      .map((key) => evidenceCatalog.find((item) => item.key === key))
+      .filter((item): item is AiInsightEvidence => Boolean(item));
     return {
       text: selected.text || '',
       isAiGenerated: true,
@@ -550,6 +561,9 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
       fallbackChain: chain,
       modelInsights: selectedInsights,
       errorSummary: null,
+      aiInsight: selected.groundedInsight,
+      aiValidation: validationResult('VALID'),
+      aiEvidence: selectedEvidence,
     };
   }
 
@@ -559,12 +573,20 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     .join(' | ');
 
   chain.push({ provider: 'rules', model: 'mtn-rule-based', status: 'success' });
+  const groundedInsight = buildRuleBasedGroundedInsight(input.marketState);
+  const selectedEvidence = groundedInsight.evidenceKeys
+    .map((key) => evidenceCatalog.find((item) => item.key === key))
+    .filter((item): item is AiInsightEvidence => Boolean(item));
+  const text = renderGroundedMarketInsight(groundedInsight, selectedEvidence);
   const ruleInsight = attemptToInsight({
     provider: 'rules',
     label: 'rules',
     model: 'mtn-rule-based',
     status: 'success',
-    text: ruleBasedInsight(input),
+    text,
+    headline: groundedInsight.headline,
+    detail: [groundedInsight.commentary, ...text.split('\n\n').slice(2)].join('\n\n'),
+    groundedInsight,
     priority: 99,
   });
   return {
@@ -575,6 +597,9 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     fallbackChain: chain,
     modelInsights: [...modelInsights, { ...ruleInsight, selected: true }],
     errorSummary: failedMessages || 'No LLM provider was configured.',
+    aiInsight: groundedInsight,
+    aiValidation: validationResult('FALLBACK', failedMessages ? failedMessages.split(' | ') : ['No LLM provider was configured.']),
+    aiEvidence: selectedEvidence,
   };
 }
 

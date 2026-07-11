@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getYahooDailyPrice, getYahooQuotes, type YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { computeMacroScore } from '@/lib/macro/compute';
@@ -44,6 +45,8 @@ function computeKoreaMacroScore(data: Record<string, YahooQuote & { source?: str
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const market = new URL(request.url).searchParams.get('market') === 'KR' ? 'KR' : 'US';
     const [quotes, hyOasData, breakeven5yData, dgs10Data, dgs2Data, ...histories] = await Promise.all([

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics, macroIndexForUniverse, marketForUniverse } from '@/lib/finance/market/stock-metrics';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -15,6 +16,8 @@ function apiError(message: string, code: string, status = 500) {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const universe = parseUniverse(searchParams.get('universe'));
   const tickers = (searchParams.get('tickers') || '')

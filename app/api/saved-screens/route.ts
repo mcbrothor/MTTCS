@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth/session';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
@@ -7,7 +8,9 @@ async function context() {
   return session ? { session, db: getSupabaseAdmin() } : null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const ctx = await context();
     if (!ctx) return NextResponse.json({ message: '로그인이 필요합니다.' }, { status: 401 });
@@ -18,6 +21,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const ctx = await context();
     if (!ctx) return NextResponse.json({ message: '로그인이 필요합니다.' }, { status: 401 });
@@ -33,6 +38,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const ctx = await context();
   if (!ctx) return NextResponse.json({ message: '로그인이 필요합니다.' }, { status: 401 });
   const id = new URL(request.url).searchParams.get('id');

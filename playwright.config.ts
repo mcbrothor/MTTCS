@@ -38,6 +38,7 @@ try {
 export default defineConfig({
   testDir: path.join(__dirname, 'tests', 'e2e'),
   testMatch: '**/*.spec.ts',
+  testIgnore: '**/smoke/**',
   globalSetup: path.join(__dirname, 'tests', 'e2e', 'global-setup.ts'),
 
   /* Maximum time one test can run */

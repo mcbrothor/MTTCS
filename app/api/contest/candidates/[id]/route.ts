@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { buildContestSnapshot, buildLlmVerdict } from '@/lib/finance/core/snapshot';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -35,6 +36,8 @@ async function clearLinkedTradeSnapshots(tradeId: string) {
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { id } = await params;
     const body = await request.json();

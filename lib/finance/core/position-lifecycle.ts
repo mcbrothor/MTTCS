@@ -1,4 +1,5 @@
-import type { Trade, TradeExecution, TradeLegLabel } from '../../../types/index.ts';
+import type { Direction, Trade, TradeExecution, TradeLegLabel } from '../../../types/index.ts';
+import { calculateDirectionalPnL, directionMultiplier } from './trade-direction.ts';
 
 export interface PositionLifecycleEvent {
   id: string;
@@ -41,7 +42,8 @@ function sortExecutions(left: ReturnType<typeof normalizeExecution>, right: Retu
   return left.orderIndex - right.orderIndex;
 }
 
-export function buildPositionLifecycle(executions: TradeExecution[] = []): PositionLifecycleSummary {
+export function buildPositionLifecycle(direction: Direction, executions: TradeExecution[] = []): PositionLifecycleSummary {
+  directionMultiplier(direction);
   const orderedExecutions = executions
     .filter((execution) => Number.isFinite(Number(execution.price)) && Number.isFinite(Number(execution.shares)))
     .map(normalizeExecution)
@@ -64,6 +66,7 @@ export function buildPositionLifecycle(executions: TradeExecution[] = []): Posit
       runningShares += execution.shares;
       runningCost += execution.price * execution.shares;
       entryCount += 1;
+      realizedPnL -= execution.fees;
 
       events.push({
         id: execution.id,
@@ -87,7 +90,7 @@ export function buildPositionLifecycle(executions: TradeExecution[] = []): Posit
     let realizedPnLDelta: number | null = null;
 
     if (closedShares > 0 && avgCostBefore !== null) {
-      realizedPnLDelta = (execution.price - avgCostBefore) * closedShares - execution.fees;
+      realizedPnLDelta = calculateDirectionalPnL(direction, avgCostBefore, execution.price, closedShares) - execution.fees;
       realizedPnL += realizedPnLDelta;
       runningCost = Math.max(0, runningCost - avgCostBefore * closedShares);
       runningShares = Math.max(0, runningShares - closedShares);
@@ -132,6 +135,6 @@ export function buildPositionLifecycle(executions: TradeExecution[] = []): Posit
   };
 }
 
-export function buildTradePositionLifecycle(trade: Pick<Trade, 'executions'>) {
-  return buildPositionLifecycle(trade.executions || []);
+export function buildTradePositionLifecycle(trade: Pick<Trade, 'direction' | 'executions'>) {
+  return buildPositionLifecycle(trade.direction, trade.executions || []);
 }

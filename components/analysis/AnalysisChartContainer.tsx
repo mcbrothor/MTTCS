@@ -6,6 +6,7 @@ import TradingViewAdvancedChart from '../ui/TradingViewAdvancedChart';
 import LightweightChart from './LightweightChart';
 import { toTradingViewSymbol } from '../ui/TradingViewWidget';
 import { useIsMobile } from '@/lib/hooks/useViewport';
+import type { ChartPatternOverlay } from '@/types';
 
 type ChartSource = 'tradingview' | 'naver' | 'mtn';
 
@@ -15,6 +16,7 @@ interface PriceHistoryPoint {
   high: number;
   low: number;
   close: number;
+  volume?: number | null;
 }
 
 interface ChartPoint {
@@ -23,6 +25,7 @@ interface ChartPoint {
   high: number;
   low: number;
   close: number;
+  volume?: number | null;
 }
 
 interface AnalysisChartContainerProps {
@@ -32,6 +35,8 @@ interface AnalysisChartContainerProps {
   stopLossPrice?: number | null;
   targetPrice?: number | null;
   pivotLabel?: string;
+  chartPatterns?: ChartPatternOverlay[];
+  initialData?: ChartPoint[];
   initialSource?: ChartSource;
 }
 
@@ -42,6 +47,8 @@ export default function AnalysisChartContainer({
   stopLossPrice,
   targetPrice,
   pivotLabel,
+  chartPatterns = [],
+  initialData = [],
   initialSource = 'tradingview'
 }: AnalysisChartContainerProps) {
   const isMobile = useIsMobile();
@@ -51,7 +58,7 @@ export default function AnalysisChartContainer({
     ? (pivotPrice ? 'mtn' : 'naver')
     : (isKrx && initialSource === 'tradingview' ? 'naver' : initialSource);
   const [source, setSource] = useState<ChartSource>(resolvedInitial);
-  const [priceData, setPriceData] = useState<ChartPoint[]>([]);
+  const [priceData, setPriceData] = useState<ChartPoint[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +82,8 @@ export default function AnalysisChartContainer({
         open: d.open,
         high: d.high,
         low: d.low,
-        close: d.close
+        close: d.close,
+        volume: d.volume ?? null
       }));
       
       setPriceData(formatted);
@@ -86,6 +94,12 @@ export default function AnalysisChartContainer({
       setLoading(false);
     }
   }, [exchange, ticker]);
+
+  useEffect(() => {
+    if (initialData.length > 0) {
+      setPriceData(initialData);
+    }
+  }, [initialData]);
 
   useEffect(() => {
     if (source === 'mtn' && priceData.length === 0) {
@@ -125,7 +139,7 @@ export default function AnalysisChartContainer({
         </div>
         
         <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-          {source === 'mtn' && <span className="text-amber-500/80">★ Pivot & Stop Overlay</span>}
+          {source === 'mtn' && <span className="text-amber-500/80">★ Pattern Overlay</span>}
           {source === 'tradingview' && <span>Official Advanced Chart</span>}
         </div>
       </div>
@@ -174,6 +188,7 @@ export default function AnalysisChartContainer({
                 stopLossPrice={stopLossPrice} 
                 targetPrice={targetPrice}
                 pivotLabel={pivotLabel}
+                chartPatterns={chartPatterns}
                 height={500} 
               />
             )}

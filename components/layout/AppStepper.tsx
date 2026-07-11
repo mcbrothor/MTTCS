@@ -1,52 +1,48 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Check } from 'lucide-react';
-import { FLOW_STEPS, getActiveFlowStep } from '@/components/layout/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
 
 export default function AppStepper() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const activeStep = getActiveFlowStep(pathname);
-  const activeIndex = FLOW_STEPS.findIndex((step) => step.key === activeStep.key);
+  const currentSearch = searchParams.toString();
+
+  if (activeStep.tabs.length === 0) return null;
 
   return (
-    <div className="border-b border-[var(--border)] bg-[var(--surface-strong)]/85">
-      <div className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-1.5 sm:px-6 lg:px-8">
-        {FLOW_STEPS.map((step, index) => {
-          const isActive = step.key === activeStep.key;
-          const isDone = index < activeIndex;
+    <div
+      data-testid={activeStep.key === 'scanner' ? 'scanner-workspace-nav' : 'secondary-menu-nav'}
+      className="border-b border-[var(--border)] bg-[var(--surface-strong)]/85"
+    >
+      <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
+        <div className="hidden shrink-0 items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100 md:flex">
+          <span className="flex h-5 w-5 items-center justify-center rounded-md border border-emerald-400/40 text-[10px]">
+            {activeStep.step}
+          </span>
+          {activeStep.label}
+        </div>
 
-          return (
-            <Link
-              key={step.key}
-              href={step.href}
-              className={`flex min-w-[96px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors sm:min-w-[112px] ${
-                isActive
-                  ? 'border-emerald-400/40 bg-emerald-500/10 text-[var(--text-primary)]'
-                  : isDone
-                    ? 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)]'
-                    : 'border-transparent text-[var(--text-tertiary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-secondary)]'
-              }`}
-            >
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] font-bold ${
-                  isDone
-                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
-                    : isActive
-                      ? 'border-emerald-400/50 text-emerald-200'
-                      : 'border-[var(--border)] text-[var(--text-tertiary)]'
+        <div className="no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+          {activeStep.tabs.map((tab) => {
+            const active = isActiveTab(pathname, tab.href, currentSearch);
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  active
+                    ? 'border-sky-400/35 bg-sky-400/12 text-sky-100'
+                    : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                {isDone ? <Check className="h-3 w-3" /> : step.step}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[11px] font-semibold sm:text-xs">{step.label}</span>
-                <span className="hidden truncate text-[10px] text-[var(--text-tertiary)] sm:block">{step.sub}</span>
-              </span>
-            </Link>
-          );
-        })}
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

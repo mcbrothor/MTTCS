@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { supabaseServer } from '@/lib/supabase/server';
 
 const VALID_SOURCES = ['INITIAL', 'TEN_WEEK_MA', 'HIGH_WATERMARK', 'MANUAL', 'PYRAMID'];
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const tradeId = searchParams.get('trade_id')?.trim();
@@ -23,6 +26,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const tradeId = String(body.trade_id || '').trim();
@@ -60,6 +65,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id')?.trim();

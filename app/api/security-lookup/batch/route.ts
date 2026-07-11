@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 /**
  * 종목명 배치 조회 API
  *
@@ -64,6 +65,8 @@ async function parallelWithLimit<T, R>(
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const items: BatchItem[] = body?.items;

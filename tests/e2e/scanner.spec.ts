@@ -108,7 +108,7 @@ test.describe('TC-SCAN: 미너비니 스크리너', () => {
   });
 
   test('SCAN-11: 스캐너 메뉴 전환 시 공통 프레임 위치 유지', async ({ page }) => {
-    const routes = ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie'];
+    const routes = ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/reversal'];
 
     await page.goto(routes[0]);
 

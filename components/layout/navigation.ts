@@ -51,13 +51,14 @@ export const FLOW_STEPS: FlowStep[] = [
     label: '종목 발굴',
     sub: 'SEPA/VCP · CAN SLIM',
     href: '/scanner',
-    matchers: ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/cross-check'],
+    matchers: ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/reversal', '/cross-check'],
     tabs: [
       { href: '/scanner', label: '미너비니 스크리닝' },
       { href: '/canslim', label: '윌리엄 오닐 스크리닝' },
       { href: '/leader', label: '주도주 스캐너' },
       { href: '/momentum', label: '모멘텀 스캐너' },
       { href: '/qullamaggie', label: '쿨라매기 스캐너' },
+      { href: '/reversal', label: '전환 초입' },
     ],
   },
   {

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
@@ -35,7 +36,9 @@ async function getCountAndLastUpdated(table: string, market?: string) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Supabase Admin client is not configured' }, { status: 500 });
   }

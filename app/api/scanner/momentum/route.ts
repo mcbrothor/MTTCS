@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
@@ -131,6 +132,8 @@ async function parallelWithLimit<T, R>(
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = (await request.json()) as SurgeBatchRequest;
     const { items } = body;

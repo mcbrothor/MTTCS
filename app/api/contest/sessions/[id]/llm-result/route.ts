@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { normalizeContestLlmResponse } from '@/lib/contest';
 import { buildContestSnapshot, buildLlmVerdict } from '@/lib/finance/core/snapshot';
@@ -5,6 +6,8 @@ import { supabaseServer } from '@/lib/supabase/server';
 import type { BeautyContestSession, ContestCandidate } from '@/types';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { id } = await params;
     const body = await request.json();

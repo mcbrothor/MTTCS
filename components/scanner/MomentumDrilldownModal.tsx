@@ -110,6 +110,15 @@ export default function MomentumDrilldownModal({ result, onClose, onRecalculate 
                 exchange={result.exchange}
                 pivotPrice={pivotPrice}
                 stopLossPrice={stopLossPrice}
+                chartPatterns={analysis?.chartPatterns ?? []}
+                initialData={analysis?.priceData.map((bar) => ({
+                  time: bar.date,
+                  open: bar.open,
+                  high: bar.high,
+                  low: bar.low,
+                  close: bar.close,
+                  volume: bar.volume,
+                })) ?? []}
                 initialSource="mtn"
               />
             </div>

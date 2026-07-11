@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { GET as getMarketData } from '@/app/api/market-data/route';
 import type { MarketAnalysisResponse } from '@/types';
@@ -46,6 +47,8 @@ async function parallelWithLimit<T, R>(
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json() as ScannerBatchRequest;
     const { items, totalEquity, riskPercent } = body;

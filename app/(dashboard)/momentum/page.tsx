@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
+import TableSkeleton from '@/components/ui/TableSkeleton';
 import type { DataSourceMeta, ScannerUniverse } from '@/types';
 import type { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
 import type { DailyScannerSnapshot, DailyScannerSnapshotCandidate } from '@/lib/scanner/daily-snapshot';
@@ -351,9 +353,17 @@ export default function MomentumScannerPage() {
       </header>
 
       {scanFatalError && (
-        <div className="flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-          <p className="text-sm text-red-100">스캔 실패: {scanFatalError}</p>
-          <button type="button" onClick={() => setScanFatalError(null)} className="ml-3 rounded-md px-3 py-1 text-xs font-medium text-red-300 hover:bg-red-500/20">닫기</button>
+        <AsyncStatePanel
+          state="error"
+          title="스캔 실패"
+          message={scanFatalError}
+          onRetry={startScan}
+        />
+      )}
+
+      {isScanning && filteredAndSorted.length === 0 && !scanFatalError && (
+        <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 shadow-xl mt-6">
+          <TableSkeleton cols={6} rows={5} />
         </div>
       )}
 
@@ -503,7 +513,7 @@ export default function MomentumScannerPage() {
       {/* Results */}
       {results.length > 0 && (
         <>
-          {filteredAndSorted.length === 0 ? (
+          {filteredAndSorted.length === 0 && !isScanning ? (
             <div className="py-16 text-center text-slate-500 bg-slate-900 rounded-2xl border border-slate-800">
               해당 필터에 일치하는 모멘텀 급등 종목이 없습니다.
             </div>

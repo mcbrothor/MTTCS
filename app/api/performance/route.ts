@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { calculatePerformanceAttribution } from '@/lib/finance/core/performance-attribution';
 import { supabaseServer } from '@/lib/supabase/server';
 import type { Trade } from '@/types';
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const params = new URL(request.url).searchParams;
     const market = params.get('market') || 'ALL';

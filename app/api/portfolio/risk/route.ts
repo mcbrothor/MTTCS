@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { getMtnKrLivePrice, getMtnUsLiveQuotes } from '@/lib/finance/core/live-price-providers';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
@@ -148,6 +149,8 @@ async function enrichTossSecurityProfiles(
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const rawMarket = searchParams.get('market')?.toUpperCase() || 'US';

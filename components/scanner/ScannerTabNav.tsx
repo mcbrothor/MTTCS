@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Trophy, ScanSearch } from 'lucide-react';
+import { Activity, RefreshCw, Trophy, ScanSearch } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
 
 const STATE_TONE = {
@@ -61,6 +61,15 @@ export default function ScannerTabNav() {
       icon: <Activity className="h-4 w-4" />,
       activeColor: 'border-fuchsia-400/35 bg-fuchsia-500/10 text-fuchsia-100',
       idleColor: 'text-fuchsia-200',
+    },
+    {
+      id: 'reversal',
+      label: '전환 초입',
+      description: 'Bottom base · RS turn · accumulation · pivot trigger',
+      href: '/reversal',
+      icon: <RefreshCw className="h-4 w-4" />,
+      activeColor: 'border-emerald-400/35 bg-emerald-500/10 text-emerald-100',
+      idleColor: 'text-emerald-200',
     },
     {
       id: 'cross-check',

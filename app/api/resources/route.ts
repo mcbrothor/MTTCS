@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase/server';
 import { getServerSession } from '@/lib/auth/session';
@@ -11,7 +12,9 @@ function apiError(message: string, code: string, status = 400) {
 }
 
 // GET: 투자 링크 목록 조회
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { data, error } = await supabaseServer
       .from('investment_resources')
@@ -30,6 +33,8 @@ export async function GET() {
 
 // POST: 투자 링크 추가
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
 
@@ -76,6 +81,8 @@ export async function POST(request: Request) {
 
 // PATCH: 투자 링크 수정
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const id = String(body.id || '').trim();
@@ -116,6 +123,8 @@ export async function PATCH(request: Request) {
 
 // DELETE: 투자 링크 삭제
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id')?.trim();
 

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { readRecommendationMetrics } from '@/lib/recommendations/read';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
@@ -14,6 +15,8 @@ import { evaluateKrPolicyPromotion } from '@/lib/recommendations/policy-evaluati
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const params = new URL(request.url).searchParams;
   const categoryParam = params.get('category')?.toUpperCase() || null;
   if (categoryParam && !RECOMMENDATION_CATEGORIES.includes(categoryParam as RecommendationCategory)) {

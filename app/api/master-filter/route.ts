@@ -1,6 +1,14 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
-import type { AiInsightProvider, AiFallbackAttempt, AiModelInsight } from '@/types';
+import type {
+  AiFallbackAttempt,
+  AiInsightEvidence,
+  AiInsightProvider,
+  AiModelInsight,
+  GroundedMarketInsight,
+  GroundedMarketInsightValidation,
+} from '@/types';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
 import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { getKisIndexQuotes, getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
@@ -19,6 +27,9 @@ interface CachedInsight {
   fallbackChain: AiFallbackAttempt[];
   modelInsights: AiModelInsight[];
   errorSummary?: string | null;
+  aiInsight?: GroundedMarketInsight;
+  aiValidation?: GroundedMarketInsightValidation;
+  aiEvidence?: AiInsightEvidence[];
   cachedAt: number;
 }
 const insightCache = new Map<string, CachedInsight>();
@@ -185,6 +196,8 @@ function patchLatestBarWithQuote(data: OHLCData[], quote?: YahooQuote | null) {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const rawMarket = (searchParams.get('market')?.toUpperCase() || 'US');
@@ -432,6 +445,9 @@ export async function GET(request: Request) {
       aiFallbackChain: insight.fallbackChain,
       aiModelInsights: insight.modelInsights,
       aiErrorSummary: insight.errorSummary,
+      aiInsight: insight.aiInsight,
+      aiValidation: insight.aiValidation,
+      aiEvidence: insight.aiEvidence,
     };
 
     return NextResponse.json(responseData);

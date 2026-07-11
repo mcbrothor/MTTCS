@@ -3,9 +3,13 @@ import { cookies } from 'next/headers';
 export const AUTH_COOKIE_NAME = 'mtn_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
 
-interface SessionPayload {
+export interface SessionPayload {
   sub: string;
   exp: number;
+}
+
+export interface ServerSession extends SessionPayload {
+  systemId: string;
 }
 
 function base64UrlEncode(value: string) {
@@ -117,4 +121,36 @@ export async function getServerSession() {
     ...payload,
     systemId: SYSTEM_ADMIN_ID
   };
+}
+
+function readCookieHeader(request: Request, name: string) {
+  const cookieHeader = request.headers.get('cookie') || '';
+  for (const part of cookieHeader.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    const key = part.slice(0, separator).trim();
+    if (key !== name) continue;
+    const raw = part.slice(separator + 1).trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return null;
+}
+
+/**
+ * Request-scoped session verification for Route Handlers.
+ * This is deliberately independent from proxy.ts so a proxy bypass cannot
+ * turn a private handler into a public API.
+ */
+export async function getRequestSession(request: Request): Promise<ServerSession | null> {
+  if (!isAuthEnabled()) {
+    return { sub: 'admin', exp: Number.MAX_SAFE_INTEGER, systemId: SYSTEM_ADMIN_ID };
+  }
+
+  const payload = await verifySessionToken(readCookieHeader(request, AUTH_COOKIE_NAME));
+  if (!payload) return null;
+  return { ...payload, systemId: SYSTEM_ADMIN_ID };
 }

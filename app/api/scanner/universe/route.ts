@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { cacheGet, cacheKey, cacheSet } from '@/lib/cache';
 import { getScannerUniverse } from '@/lib/finance/market/scanner-universes';
@@ -18,6 +19,8 @@ function parseUniverse(value: string | null): ScannerUniverse | null {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const universe = parseUniverse(searchParams.get('universe'));
 

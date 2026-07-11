@@ -40,11 +40,13 @@ function candidate(overrides) {
     candidate({ ticker: 'AAA', score: 90 }),
     candidate({ ticker: 'BBB', score: 90 }),
     candidate({ source: 'momentum', ticker: 'MMM', score: 75 }),
+    candidate({ source: 'reversal', ticker: 'REV', score: 81, grade: 'TRIGGER' }),
   ];
   const grouped = daily.groupTopCandidatesBySource(rows, 2);
   assert.deepEqual(grouped.minervini.map((row) => row.ticker), ['AAA', 'BBB']);
   assert.deepEqual(grouped.minervini.map((row) => row.rank), [1, 2]);
   assert.equal(grouped.momentum[0].ticker, 'MMM');
+  assert.equal(grouped.reversal[0].ticker, 'REV');
 }
 
 {
@@ -321,13 +323,13 @@ function candidate(overrides) {
 {
   const message = daily.formatDailyScreenerTelegramMessage({
     runDate: '2026-06-12',
-    source: 'momentum',
+    source: 'reversal',
     market: 'KR',
-    candidates: [candidate({ source: 'momentum', ticker: 'MOMO', score: 88 })],
+    candidates: [candidate({ source: 'reversal', ticker: 'REV', score: 88, grade: 'TRIGGER' })],
   });
   assert.match(message, /MTN Daily/);
   assert.match(message, /한국 Top10/);
-  assert.match(message, /MOMO/);
+  assert.match(message, /REV/);
   assert.match(message, /AAA Inc/);
 }
 

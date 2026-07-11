@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { sendTelegramMessage } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const message = `🚀 *MTN 시스템 알림 테스트*\n\n텔레그램 연동이 성공적으로 완료되었습니다!\n\n기준 시각: ${new Date().toLocaleString('ko-KR')}\n환경: ${process.env.NODE_ENV}`;
     

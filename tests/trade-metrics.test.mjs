@@ -12,6 +12,7 @@ function run(name, fn) {
 }
 
 const baseTrade = {
+  direction: 'LONG',
   entry_price: 100,
   exit_price: null,
   planned_risk: 500,
@@ -109,4 +110,28 @@ run('flags exit shares above entry shares', () => {
   ]);
 
   assert.equal(metrics.invalidExitShares, true);
+});
+
+run('uses the same favorable-positive contract for SHORT pnl, risk, and slippage', () => {
+  const metrics = calculateTradeMetrics({
+    ...baseTrade,
+    direction: 'SHORT',
+    entry_price: 100,
+    stoploss_price: 105,
+  }, [
+    execution({ price: 99, shares: 100, fees: 1 }),
+    execution({ side: 'EXIT', price: 90, shares: 40, fees: 2, leg_label: 'MANUAL' }),
+  ], 95);
+
+  assert.equal(metrics.entrySlippagePct, 1);
+  assert.equal(metrics.realizedPnL, 357);
+  assert.equal(metrics.unrealizedPnL, 240);
+  assert.equal(metrics.openRisk, 360);
+});
+
+run('rejects a missing direction instead of silently treating it as LONG', () => {
+  assert.throws(
+    () => calculateTradeMetrics({ ...baseTrade, direction: undefined }, []),
+    /Unsupported trade direction/
+  );
 });

@@ -14,15 +14,11 @@ create table public.kr_investor_flow_daily (
   updated_at timestamptz not null default now(),
   primary key (ticker, trade_date, provider)
 );
-
 create index kr_investor_flow_daily_trade_date_idx
   on public.kr_investor_flow_daily (trade_date desc, ticker);
-
 alter table public.kr_investor_flow_daily enable row level security;
-
 revoke all on table public.kr_investor_flow_daily from anon, authenticated;
 grant select, insert, update, delete on table public.kr_investor_flow_daily to service_role;
-
 create policy "Service role full access kr_investor_flow_daily"
   on public.kr_investor_flow_daily
   for all

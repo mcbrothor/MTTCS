@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 /**
  * CAN SLIM 스캐너 API 엔드포인트
  *
@@ -203,6 +204,8 @@ function buildStockData(
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const ticker = searchParams.get('ticker')?.toUpperCase();

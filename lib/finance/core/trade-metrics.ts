@@ -1,4 +1,5 @@
-import type { Trade, TradeExecution, TradeMetrics, TradeStatus } from '../../../types/index.ts';
+import type { Direction, Trade, TradeExecution, TradeMetrics, TradeStatus } from '../../../types/index.ts';
+import { calculateDirectionalPnL, calculateEntrySlippagePct, directionMultiplier } from './trade-direction.ts';
 
 function finiteNumber(value: unknown): number | null {
   const numeric = Number(value);
@@ -21,11 +22,12 @@ export function calculateTradeMetrics(
     | 'total_shares'
     | 'position_size'
     | 'direction'
-  > & { direction?: 'LONG' | 'SHORT' },
+  > & { direction: Direction },
   executions: TradeExecution[] = [],
   currentPrice: number | null = null
 ): TradeMetrics {
-  const direction = trade.direction || 'LONG';
+  const direction = trade.direction;
+  const multiplier = directionMultiplier(direction);
   const normalized = executions
     .filter((execution) => Number.isFinite(Number(execution.price)) && Number.isFinite(Number(execution.shares)))
     .map((execution, orderIndex) => ({
@@ -74,11 +76,7 @@ export function calculateTradeMetrics(
     const closedShares = Math.min(execution.shares, runningShares);
     if (execution.shares > runningShares) invalidExitShares = true;
     if (closedShares > 0 && avgCost !== null) {
-      if (direction === 'SHORT') {
-        realizedGross += (avgCost - execution.price) * closedShares;
-      } else {
-        realizedGross += (execution.price - avgCost) * closedShares;
-      }
+      realizedGross += calculateDirectionalPnL(direction, avgCost, execution.price, closedShares);
       runningCost = Math.max(0, runningCost - avgCost * closedShares);
       runningShares = Math.max(0, runningShares - closedShares);
     }
@@ -94,22 +92,18 @@ export function calculateTradeMetrics(
   const rMultiple = realizedPnL !== null && plannedRisk && plannedRisk > 0 ? realizedPnL / plannedRisk : null;
   const entrySlippagePct =
     avgEntryPrice !== null && plannedEntry && plannedEntry > 0
-      ? ((avgEntryPrice - plannedEntry) / plannedEntry) * 100
+      ? calculateEntrySlippagePct(direction, plannedEntry, avgEntryPrice)
       : null;
   const executionProgressPct =
     plannedShares && plannedShares > 0 ? Math.min((entryShares / plannedShares) * 100, 100) : hasExecutions ? 100 : 0;
   const openRisk =
     netShares > 0 && avgEntryPrice !== null && stopLoss !== null
-      ? direction === 'SHORT'
-        ? Math.max(stopLoss - avgEntryPrice, 0) * netShares
-        : Math.max(avgEntryPrice - stopLoss, 0) * netShares
+      ? Math.max(multiplier * (avgEntryPrice - stopLoss), 0) * netShares
       : 0;
 
   const unrealizedPnL =
     netShares > 0 && avgEntryPrice !== null && currentPrice !== null
-      ? direction === 'SHORT'
-        ? (avgEntryPrice - currentPrice) * netShares
-        : (currentPrice - avgEntryPrice) * netShares
+      ? calculateDirectionalPnL(direction, avgEntryPrice, currentPrice, netShares)
       : null;
   const unrealizedR =
     unrealizedPnL !== null && plannedRisk && plannedRisk > 0 ? unrealizedPnL / plannedRisk : null;

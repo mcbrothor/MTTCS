@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { buildContestPrompt, CONTEST_PROMPT_VERSION, CONTEST_RESPONSE_SCHEMA_VERSION, reviewDueDate, validateContestCandidates } from '@/lib/contest';
 import { parseContestSource } from '@/lib/contest-sources';
@@ -12,7 +13,9 @@ function arrayOrEmpty(value: unknown) {
   return Array.isArray(value) ? value : [];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { data, error } = await supabaseServer
       .from('beauty_contest_sessions')
@@ -32,6 +35,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   let stage = 'parse_body';
   try {
     const body = await request.json();

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import crypto from 'node:crypto';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { getServerSession } from '@/lib/auth/session';
@@ -26,6 +27,8 @@ function idempotencyKey(jobType: string, payload: unknown) {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'UNAUTHORIZED', 401);
@@ -52,6 +55,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'UNAUTHORIZED', 401);
@@ -89,6 +94,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'UNAUTHORIZED', 401);

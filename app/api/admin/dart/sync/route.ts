@@ -1,9 +1,11 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
+import { sanitizeExternalError } from '@/lib/security/external-errors';
 
 /**
  * DART 고유번호 동기화 API — Phase 1~5 (매칭 + DB 저장)
@@ -18,7 +20,9 @@ function normalizeName(name: string): string {
     .trim();
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const apiKey = process.env.DART_API_KEY;
 
   if (!apiKey) {
@@ -206,8 +210,7 @@ export async function GET() {
       unmatched_details: unmatchedDetails,
     });
   } catch (error: unknown) {
-    console.error('[DART-SYNC] Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error('[DART-SYNC]', sanitizeExternalError('DART', 'corp-code-sync', error));
+    return NextResponse.json({ success: false, error: 'PROVIDER_UNAVAILABLE' }, { status: 502 });
   }
 }

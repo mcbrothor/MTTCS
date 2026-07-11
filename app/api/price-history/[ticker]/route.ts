@@ -1,10 +1,11 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextRequest, NextResponse } from 'next/server';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 
-export async function GET(
-  req: NextRequest,
-  props: { params: Promise<{ ticker: string }> }
-) {
+export async function GET(req: NextRequest,
+  props: { params: Promise<{ ticker: string }> }) {
+  const authFailure = await rejectUnauthenticatedRequest(req);
+  if (authFailure) return authFailure;
   try {
     const { ticker } = await props.params;
     if (!ticker) {

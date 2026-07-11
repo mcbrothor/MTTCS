@@ -23,7 +23,7 @@ const { GET } = jiti('../app/api/cron/daily-screeners/route.ts');
   assert.equal(payload.dry_run, true);
   assert.equal(payload.queued, false);
   assert.equal(payload.run_date, '2026-06-12');
-  assert.deepEqual(payload.scope.sources, ['minervini', 'canslim', 'leader', 'momentum', 'qullamaggie']);
+  assert.deepEqual(payload.scope.sources, ['minervini', 'canslim', 'leader', 'momentum', 'qullamaggie', 'reversal']);
   assert.deepEqual(payload.scope.universes, ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150']);
   assert.equal(payload.scope.max_per_universe, 40);
 }

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
@@ -7,6 +8,7 @@ import { calculateATR, calculateEntryPrice } from '@/lib/finance/core/moving-ave
 import { calculateMinerviniRiskPlan } from '@/lib/finance/core/position-sizing';
 import { fetchAggregatedFundamentals } from '@/lib/finance/market/fundamental-fetcher';
 import { analyzeVcp } from '@/lib/finance/engines/vcp';
+import { buildChartPatterns } from '@/lib/finance/engines/chart-patterns';
 import { cacheKey, tieredCacheGet, tieredCacheSet } from '@/lib/cache';
 import { fetchLatestMacroTrend, fetchLatestStockMetrics } from '@/lib/finance/market/stock-metrics';
 import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
@@ -325,6 +327,8 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const ticker = searchParams.get('ticker')?.trim().toUpperCase();
   const exchange = searchParams.get('exchange')?.trim().toUpperCase() || 'NAS';
@@ -358,7 +362,7 @@ export async function GET(request: Request) {
     const cacheId = cacheKey('market-data', 'market-cap-v3', ticker, exchange, totalEquity, riskPercentInput, requestedRiskStrategy, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = await tieredCacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
-      const cachedWithPriceMetrics = withPriceMetrics(cached);
+      const cachedWithPriceMetrics = withPriceMetrics({ ...cached, chartPatterns: cached.chartPatterns ?? [] });
       const latestPrice = cachedWithPriceMetrics.priceData.at(-1)?.close ?? null;
       const marketCap = estimateMarketCap(cachedWithPriceMetrics.fundamentals, latestPrice);
       const { metric, macroTrend } = skipStandardMetrics
@@ -416,6 +420,7 @@ export async function GET(request: Request) {
       sepaEvidence,
       riskPlan: {} as never,
       vcpAnalysis: {} as never,
+      chartPatterns: [],
       fundamentals,
       changePercent: null,
       adrPct: null,
@@ -456,6 +461,7 @@ export async function GET(request: Request) {
     const priceMetrics = calculatePriceMetrics(data);
     const latestClose = data.at(-1)?.close ?? null;
     const marketCap = estimateMarketCap(fundamentals, latestClose);
+    const chartPatterns = buildChartPatterns({ data, vcpAnalysis, riskPlan });
 
     const response: MarketAnalysisResponse = {
       ticker,
@@ -467,6 +473,7 @@ export async function GET(request: Request) {
       sepaEvidence,
       riskPlan,
       vcpAnalysis,
+      chartPatterns,
       fundamentals,
       changePercent: priceMetrics.changePercent,
       adrPct: priceMetrics.adrPct,

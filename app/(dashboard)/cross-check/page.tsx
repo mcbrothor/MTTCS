@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Eye, ScanSearch } from 'lucide-react';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
+import TableSkeleton from '@/components/ui/TableSkeleton';
 import { get } from 'idb-keyval';
 import type { ScannerUniverse } from '@/types';
 
@@ -14,7 +15,7 @@ const UNIVERSES: Record<ScannerUniverse, { label: string; desc: string }> = {
   KOSDAQ150: { label: 'KOSDAQ 150', desc: '한국 벤처주' },
 };
 
-type ScannerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie';
+type ScannerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie' | 'reversal';
 
 interface CrossCheckResult {
   ticker: string;
@@ -42,6 +43,7 @@ const SOURCES: { key: ScannerSource; label: string; tone: string }[] = [
   { key: 'leader', label: '주도주', tone: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
   { key: 'momentum', label: '모멘텀', tone: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
   { key: 'qullamaggie', label: '쿨라매기', tone: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20' },
+  { key: 'reversal', label: '전환 초입', tone: 'bg-teal-500/10 text-teal-300 border-teal-500/20' },
 ];
 
 function formatPrice(value: number | null, exchange: string) {
@@ -56,12 +58,14 @@ function formatPrice(value: number | null, exchange: string) {
 
 export default function CrossCheckPage() {
   const [universe, setUniverse] = useState<ScannerUniverse>('NASDAQ100');
-  const [results, setResults] = useState<CrossCheckResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<CrossCheckResult[]>([]);
 
   useEffect(() => {
     async function loadSnapshots() {
       setLoading(true);
+      setError(null);
       try {
         const aggregated = new Map<string, CrossCheckResult>();
 
@@ -107,6 +111,7 @@ export default function CrossCheckPage() {
           readScanner('leader', `mtn:scanner:leader:v1:${universe}`),
           readScanner('momentum', `mtn:scanner:momentum:v1:${universe}`),
           readScanner('qullamaggie', `mtn:scanner:qullamaggie:v1:${universe}`),
+          readScanner('reversal', `mtn:scanner:reversal:v1:${universe}`),
         ]);
 
         const list = Array.from(aggregated.values())
@@ -116,6 +121,7 @@ export default function CrossCheckPage() {
         setResults(list);
       } catch (err) {
         console.error('Failed to load cross-check data:', err);
+        setError(err instanceof Error ? err.message : '데이터 로딩 실패');
       } finally {
         setLoading(false);
       }
@@ -148,11 +154,20 @@ export default function CrossCheckPage() {
           교차 검증 결과 (최소 2개 이상의 스캐너에서 포착)
         </h2>
 
-        {loading ? (
-          <div className="flex h-32 items-center justify-center">
-            <LoadingSpinner />
+        {error && (
+          <AsyncStatePanel
+            state="error"
+            title="데이터 로딩 실패"
+            message={error}
+            onRetry={() => setUniverse(universe)} // Re-triggers useEffect
+          />
+        )}
+
+        {loading && !error ? (
+          <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 shadow-xl">
+            <TableSkeleton cols={5} rows={3} />
           </div>
-        ) : results.length > 0 ? (
+        ) : results.length > 0 && !error ? (
           <div className="overflow-x-auto">
             <table className="w-full whitespace-nowrap text-left text-sm">
               <thead className="border-b border-slate-800 text-slate-400">

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { calculateReturnPct, normalizeReviewStatus } from '@/lib/contest';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -8,6 +9,8 @@ function normalizeTags(value: unknown) {
 }
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -27,6 +30,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const id = String(body.id || '').trim();

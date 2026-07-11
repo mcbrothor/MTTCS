@@ -17,6 +17,7 @@
 # next.js
 /.next/
 /.next-e2e/
+/.next-verify/
 /out/
 
 # production
@@ -40,6 +41,7 @@ yarn-error.log*
 /scratch/
 /.gemini/
 /brain/
+/supabase/.temp/
 
 # claude code worktrees and session artifacts (never commit)
 /.claude/worktrees/

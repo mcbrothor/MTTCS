@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { generateMarketInsight } from '@/lib/ai/gemini';
 import { formatDetailedMarketReport } from '@/lib/telegram/format';
@@ -5,7 +6,9 @@ import { MasterFilterResponse, MasterFilterMetrics } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const markets = ['US', 'KR'] as const;
     const results = [];
@@ -56,6 +59,9 @@ export async function GET() {
         isAiGenerated: aiRes.isAiGenerated,
         aiProviderUsed: aiRes.providerUsed,
         aiModelUsed: aiRes.modelUsed,
+        aiInsight: aiRes.aiInsight,
+        aiValidation: aiRes.aiValidation,
+        aiEvidence: aiRes.aiEvidence,
       };
 
       const report = formatDetailedMarketReport(reportData);

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import pg from 'pg';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { getServerSession } from '@/lib/auth/session';
@@ -90,7 +91,9 @@ async function readLocalPostgresStatus() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'UNAUTHORIZED', 401);

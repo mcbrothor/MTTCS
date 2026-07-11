@@ -16,8 +16,10 @@ export async function GET(req: NextRequest) {
   try {
     console.log('[Cron] Starting stock metrics retention maintenance...');
     
-    // DB에 정의된 RPC 함수 호출
-    const { error } = await supabase.rpc('maintain_stock_metrics_retention');
+    // Destructive execution is explicit; the RPC defaults to a safe dry-run.
+    const { data, error } = await supabase.rpc('maintain_stock_metrics_retention_v2', {
+      p_dry_run: false,
+    });
 
     if (error) {
       console.error('[Cron] Failed to maintain retention:', error);
@@ -29,7 +31,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ 
       success: true, 
       timestamp: new Date().toISOString(),
-      message: 'Retention policy applied.' 
+      message: 'Retention policy applied.',
+      data,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

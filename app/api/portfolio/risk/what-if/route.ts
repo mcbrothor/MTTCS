@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { buildLivePriceMap } from '@/lib/finance/core/live-trade-pricing';
 import { getMtnKrLivePrice, getMtnUsLiveQuotes } from '@/lib/finance/core/live-price-providers';
@@ -8,6 +9,8 @@ import { supabaseServer } from '@/lib/supabase/server';
 import type { SecurityProfile, Trade } from '@/types';
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const market = body.market === 'KR' ? 'KR' : 'US';

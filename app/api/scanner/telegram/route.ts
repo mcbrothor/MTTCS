@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { normalizeTelegramPhotos, sendTelegramMessage, sendTelegramPhotos } from '@/lib/telegram';
 import { parseContestSource } from '@/lib/contest-sources';
@@ -31,6 +32,8 @@ function cleanCandidates(value: unknown): ScannerTelegramCandidate[] {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const source = parseContestSource(body.source) || 'minervini';

@@ -17,6 +17,8 @@ import { get, set } from 'idb-keyval';
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import MarketBanner from '@/components/ui/MarketBanner';
+import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
+import TableSkeleton from '@/components/ui/TableSkeleton';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 import { useContestSelection } from '@/hooks/useContestSelection';
 import {
@@ -695,10 +697,27 @@ export default function LeaderScannerPage() {
         </div>
       )}
 
+      {/* 스캔 실패 및 로딩 */}
+      {scanFatalError && (
+        <AsyncStatePanel
+          state="error"
+          title="스캔 실패"
+          message={scanFatalError}
+          onRetry={startScan}
+        />
+      )}
+
+      {isScanning && filteredResults.length === 0 && !scanFatalError && (
+        <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 shadow-xl">
+          <TableSkeleton cols={13} rows={5} />
+        </div>
+      )}
+
       {/* 테이블 */}
       {filteredResults.length > 0 && (
-        <div className="overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm shadow-xl">
-          <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="min-w-[1000px] overflow-visible rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-sm shadow-xl">
+            <table className="w-full table-fixed divide-y divide-slate-800 text-xs">
             <colgroup>
               <col className="w-[4%]" />
               <col className="w-[14%]" />
@@ -945,11 +964,12 @@ export default function LeaderScannerPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {/* 빈 상태 */}
-      {!isScanning && results.length === 0 && (
+      {!isScanning && results.length === 0 && !scanFatalError && (
         <div className="flex flex-col items-center justify-center space-y-6 rounded-3xl border border-slate-800 bg-slate-950/40 py-20 text-center">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-amber-500/20 bg-amber-500/5 shadow-inner">
             <Trophy className="h-10 w-10 text-amber-500/60" />

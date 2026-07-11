@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { supabaseServer } from '@/lib/supabase/server';
+import { sanitizeExternalError } from '@/lib/security/external-errors';
 
 /**
  * DART API Provider
@@ -94,13 +95,13 @@ export async function getDartCorpCode(stockCode: string): Promise<string | null>
       .maybeSingle();
 
     if (error) {
-      console.error('Supabase error in getDartCorpCode:', error.message);
+      console.error('[DART]', sanitizeExternalError('DART', 'corp-code-db', error));
       return null;
     }
 
     return data ? data.corp_code : null;
   } catch (error) {
-    console.error('Unexpected error in getDartCorpCode:', error);
+    console.error('[DART]', sanitizeExternalError('DART', 'corp-code-db', error));
     return null;
   }
 }
@@ -121,13 +122,13 @@ export async function getDartCompanyInfo(corpCode: string): Promise<DartCompanyI
     const data = response.data as DartCompanyInfo;
 
     if (data.status !== '000') {
-      console.error('DART API Error:', data.message);
+      console.error('[DART]', sanitizeExternalError('DART', 'company-info', new Error(data.message)));
       return null;
     }
 
     return data;
   } catch (error) {
-    console.error('Error fetching DART company info:', error);
+    console.error('[DART]', sanitizeExternalError('DART', 'company-info', error));
     return null;
   }
 }
@@ -198,7 +199,7 @@ export async function getDartFinancialData(
 
     return metrics;
   } catch (error) {
-    console.error(`Error fetching DART financial data (${year}, ${reprtCode}):`, error);
+    console.error('[DART]', sanitizeExternalError('DART', `financial-data:${year}:${reprtCode}`, error));
     return null;
   }
 }

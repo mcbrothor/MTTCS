@@ -31,7 +31,7 @@
           "ticker": { "type": "string", "minLength": 1 },
           "source": {
             "type": "string",
-            "enum": ["minervini", "canslim", "leader", "momentum", "qullamaggie", "mixed"]
+            "enum": ["minervini", "canslim", "leader", "momentum", "qullamaggie", "reversal", "mixed"]
           },
           "reason": { "type": "string", "minLength": 1 },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },

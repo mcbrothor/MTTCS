@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
@@ -5,7 +6,9 @@ import { supabaseAdmin } from '@/lib/supabase/server';
  * 펀더멘털 캐시 전체 삭제 (Admin용)
  * DART 동기화 후 최신 데이터를 즉시 반영할 때 사용합니다.
  */
-export async function POST() {
+export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { error, count } = await supabaseAdmin
       .from('fundamental_cache')

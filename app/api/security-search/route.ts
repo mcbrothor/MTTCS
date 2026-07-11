@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getScannerUniverse } from '@/lib/finance/market/scanner-universes';
 import type { ScannerUniverse, SecuritySearchResult } from '@/types';
@@ -16,7 +17,9 @@ async function rows() {
   cache={at:Date.now(),rows:[...map.values()]}; return cache.rows;
 }
 
-export async function GET(request:Request){
+export async function GET(request:Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const q=new URL(request.url).searchParams.get('q')?.trim().toLowerCase()||'';
   if(!q)return NextResponse.json({data:[]});
   const found=(await rows()).filter(x=>x.ticker.toLowerCase().includes(q)||x.name.toLowerCase().includes(q)).sort((a,b)=>Number(!a.ticker.toLowerCase().startsWith(q))-Number(!b.ticker.toLowerCase().startsWith(q))).slice(0,10);

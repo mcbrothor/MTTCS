@@ -1,0 +1,33 @@
+name: MTN Database Backup Verification
+
+on:
+  schedule:
+    - cron: '30 16 * * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Create and verify encrypted-at-rest backup artifact
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL"
+          pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl --file=mtn.dump
+          pg_restore --list mtn.dump > mtn.restore-list.txt
+          test -s mtn.restore-list.txt
+          sha256sum mtn.dump > mtn.dump.sha256
+      - name: Upload backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: mtn-db-backup-${{ github.run_id }}
+          path: |
+            mtn.dump
+            mtn.dump.sha256
+            mtn.restore-list.txt
+          retention-days: 7
+          if-no-files-found: error

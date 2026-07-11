@@ -6,10 +6,9 @@ import { MarketProvider } from '@/contexts/MarketContext';
 import Navbar from '@/components/layout/Navbar';
 import NavbarMobile from '@/components/layout/NavbarMobile';
 import AppStepper from '@/components/layout/AppStepper';
-import ScannerTabNav from '@/components/scanner/ScannerTabNav';
 import NavigatorWarningSystem from '@/components/master-filter/NavigatorWarningSystem';
 
-const SCANNER_PATHS = ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/cross-check'];
+const SCANNER_PATHS = ['/scanner', '/canslim', '/leader', '/momentum', '/qullamaggie', '/reversal', '/cross-check'];
 
 function isScannerWorkspace(pathname: string) {
   return SCANNER_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
@@ -38,7 +37,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <Suspense fallback={null}>
           <Navbar />
         </Suspense>
-        <AppStepper />
+        <Suspense fallback={null}>
+          <AppStepper />
+        </Suspense>
       </div>
 
       {/* 모바일 네비 (상단 바 + 하단 탭바) */}
@@ -53,10 +54,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* 모바일: pb-16 으로 하단 탭바 여백 확보 */}
       <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5 pb-20 sm:px-6 sm:py-6 md:pb-5 lg:px-8 lg:py-8">
         {withScannerWorkspace ? (
-          <div className="space-y-6">
-            <ScannerTabNav />
-            <div data-testid="scanner-page-content">{children}</div>
-          </div>
+          <div data-testid="scanner-page-content">{children}</div>
         ) : children}
       </main>
     </div>

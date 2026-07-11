@@ -10,6 +10,7 @@ assert.equal(getMaxPositionsForEquity(20_000, 'US'), 10);
 const trades = [
   {
     ticker: 'NVDA',
+    direction: 'LONG',
     status: 'ACTIVE',
     entry_price: 100,
     total_shares: 10,
@@ -17,6 +18,7 @@ const trades = [
   },
   {
     ticker: 'META',
+    direction: 'LONG',
     status: 'ACTIVE',
     entry_price: 200,
     total_shares: 5,
@@ -24,6 +26,7 @@ const trades = [
   },
   {
     ticker: 'AAPL',
+    direction: 'LONG',
     status: 'PLANNED',
     entry_price: 150,
     total_shares: 3,
@@ -64,11 +67,11 @@ assert.equal(marked.sectorExposure[0].exposure, 2400);
 assert.equal(marked.unknownRiskPositions, 0);
 
 const scoutTrade = {
-  ticker: 'SCOUT', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
+  ticker: 'SCOUT', direction: 'LONG', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
   metrics: { netShares: 10, avgEntryPrice: 10, currentPrice: 9.999, openRisk: 20 },
 };
 const boundaryTrade = {
-  ticker: 'BOUNDARY', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
+  ticker: 'BOUNDARY', direction: 'LONG', status: 'ACTIVE', entry_price: 10, stoploss_price: 8, total_shares: 10,
   metrics: { netShares: 10, avgEntryPrice: 10, currentPrice: 10, openRisk: 20 },
 };
 assert.equal(isScoutPosition(scoutTrade, 'US'), true);

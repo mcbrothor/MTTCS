@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getServerSession } from '@/lib/auth/session';
@@ -17,7 +18,9 @@ function apiError(message: string, code: string, status = 400) {
 }
 
 // GET: 관심 종목 목록 조회
-export async function GET() {
+export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
@@ -48,6 +51,8 @@ export async function GET() {
 
 // POST: 관심 종목 추가
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
 
@@ -101,6 +106,8 @@ export async function POST(request: Request) {
 
 // PATCH: 관심 종목 수정 (메모, 태그, 우선순위)
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const session = await getServerSession();
     if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
@@ -149,6 +156,8 @@ export async function PATCH(request: Request) {
 
 // DELETE: 관심 종목 삭제
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id')?.trim();
 

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { getServerSession } from '@/lib/auth/session';
 import { DAILY_SCREENER_SOURCES, DAILY_SCREENER_UNIVERSES, type DailyScreenerSource } from '@/lib/daily-screeners';
@@ -9,6 +10,8 @@ const MAX_RUN_LOOKBACK = 5;
 const MAX_CANDIDATES = 500;
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   const session = await getServerSession();
   if (!session) return apiError('로그인이 필요합니다.', 'AUTH_REQUIRED', 401);
 

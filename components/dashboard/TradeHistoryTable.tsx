@@ -156,7 +156,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     try {
       const response = await fetch('/api/trade-executions', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
         body: JSON.stringify({
           trade_id: trade.id,
           side: executionDraft.side,
@@ -166,6 +166,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
           shares: executionDraft.shares,
           fees: executionDraft.fees,
           note: executionDraft.note,
+          expected_version: trade.version,
         }),
       });
       const result = await response.json();
@@ -187,7 +188,11 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     setBusyId(trade.id);
     setError(null);
     try {
-      const response = await fetch(`/api/trade-executions?id=${encodeURIComponent(execution.id)}`, { method: 'DELETE' });
+      const params = new URLSearchParams({ id: execution.id, expected_version: String(trade.version ?? 0) });
+      const response = await fetch(`/api/trade-executions?${params}`, {
+        method: 'DELETE',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || '체결 기록 삭제에 실패했습니다.');
 

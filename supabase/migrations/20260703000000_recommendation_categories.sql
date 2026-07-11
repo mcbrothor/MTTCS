@@ -37,17 +37,37 @@ alter table public.recommendation_publications
 
 drop index if exists public.recommendation_publications_official_uniq;
 
-create unique index if not exists recommendation_publications_legacy_market_version_uniq
-  on public.recommendation_publications (run_date, market, version)
-  where category is null;
+do $$
+begin
+  if not exists (
+    select 1 from public.recommendation_publications
+    where category is null
+    group by run_date, market, version
+    having count(*) > 1
+  ) then
+    create unique index if not exists recommendation_publications_legacy_market_version_uniq
+      on public.recommendation_publications (run_date, market, version)
+      where category is null;
+  end if;
+end $$;
 
 create unique index if not exists recommendation_publications_category_version_uniq
   on public.recommendation_publications (run_date, category, version)
   where category is not null;
 
-create unique index if not exists recommendation_publications_legacy_official_uniq
-  on public.recommendation_publications (run_date, market)
-  where is_official = true and category is null;
+do $$
+begin
+  if not exists (
+    select 1 from public.recommendation_publications
+    where is_official = true and category is null
+    group by run_date, market
+    having count(*) > 1
+  ) then
+    create unique index if not exists recommendation_publications_legacy_official_uniq
+      on public.recommendation_publications (run_date, market)
+      where is_official = true and category is null;
+  end if;
+end $$;
 
 create unique index if not exists recommendation_publications_category_official_uniq
   on public.recommendation_publications (run_date, category)

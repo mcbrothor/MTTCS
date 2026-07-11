@@ -30,6 +30,7 @@ interface Pick {
   id: string;
   rank: number;
   ticker: string;
+  exchange: string;
   name: string | null;
   universe: string;
   source: string;
@@ -370,7 +371,16 @@ function HistoryView({ publications }: { publications: Publication[] }) {
                   const current = live?.evaluation_price !== null && live?.evaluation_price !== undefined ? live : latest;
                   return (
                     <tr key={pick.id} className="align-top text-slate-300">
-                      <td className="px-4 py-3"><p className="font-bold text-white">{pick.rank}. {pick.ticker}</p><p className="mt-1 text-slate-500">{pick.name || pick.universe} · {pick.source}</p></td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-white">{pick.rank}. {pick.ticker}</p>
+                        <p className="mt-1 text-slate-500">{pick.name || pick.universe} · {pick.source}</p>
+                        <a
+                          href={`/stock/${encodeURIComponent(pick.ticker)}?exchange=${encodeURIComponent(pick.exchange || (publication.market === 'KR' ? 'KOSPI' : 'NAS'))}`}
+                          className="mt-2 inline-flex rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-200 hover:border-sky-300 hover:text-white"
+                        >
+                          패턴 차트
+                        </a>
+                      </td>
                       <td className="max-w-sm py-3 pr-4"><p className="line-clamp-2">{pick.reason}</p>{pick.risk && <p className="mt-1 line-clamp-1 text-rose-300/70">위험: {pick.risk}</p>}</td>
                       <td className="py-3 pr-4 font-mono"><p className="font-semibold text-slate-200">{price(entry?.entry_price, publication.market)}</p><p className="mt-1 text-[10px] text-slate-500">{entry?.entry_date || '진입 대기'}</p></td>
                       <td className="py-3 pr-4 font-mono"><p className="font-semibold text-slate-200">{price(current?.evaluation_price, publication.market)}</p><p className="mt-1 text-[10px] text-slate-500">{current?.evaluation_date || '가격 대기'}</p></td>

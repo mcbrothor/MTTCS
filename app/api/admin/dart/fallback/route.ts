@@ -1,8 +1,10 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
 import { getYahooFundamentals } from '@/lib/finance/providers/yahoo-api';
 import { getNaverFinanceFundamentals } from '@/lib/finance/providers/naver-api';
+import { sanitizeExternalError } from '@/lib/security/external-errors';
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 20;
@@ -16,6 +18,8 @@ const MAX_LIMIT = 20;
  * ?offset=0&limit=10 파라미터로 배치를 나눠 호출합니다.
  */
 export async function GET(req: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(req);
+  if (authFailure) return authFailure;
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Supabase Admin client is not configured' }, { status: 500 });
   }
@@ -147,8 +151,7 @@ export async function GET(req: Request) {
       has_more: hasMore,
     });
   } catch (error: unknown) {
-    console.error('[DART-FALLBACK] Error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error('[DART-FALLBACK]', sanitizeExternalError('DART', 'fundamental-fallback', error));
+    return NextResponse.json({ success: false, error: 'PROVIDER_UNAVAILABLE' }, { status: 502 });
   }
 }

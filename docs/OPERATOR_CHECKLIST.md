@@ -1,6 +1,6 @@
 # MTN Operator Checklist
 
-Last verified: 2026-06-11
+Last verified: 2026-07-11
 
 ## 1. Production URLs
 
@@ -25,6 +25,12 @@ Confirm these exist in Vercel Production:
 - `KIS_BASE_URL`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `DAILY_TELEGRAM_CHARTS_ENABLED` (`false` until image delivery is verified)
+- `DAILY_TELEGRAM_CHARTS_PER_CATEGORY` (default: `3`, maximum: `10`)
+- `DAILY_TELEGRAM_CHART_RANGE` (default: `1Y`; `ALL` uses the full returned history)
+- `DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS` (default: `25000`)
+- `MTN_BASE_URL` (default: `https://mttcs.vercel.app`; used by the local worker for protected chart analysis)
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `CEREBRAS_API_KEY`
@@ -59,6 +65,17 @@ Required migrations confirmed:
 
 - `risk_policy_and_gate`
 - `trade_snapshots`
+- `20260711015944_add_trade_market_and_versions`
+- `20260711020223_trade_integrity_v2`
+- `20260711000000_harden_privileged_functions`
+
+Before production rollout, run migration validation in a staging database, then verify:
+
+- duplicate `Idempotency-Key` returns the original CREATE result and never adds a second execution
+- stale `expected_version` returns HTTP 409
+- first ENTRY sets `entry_snapshot_locked_at`; later plan changes require `/api/trades/:id/amendments`
+- `maintain_stock_metrics_retention_v2(true)` reports counts without deleting rows
+- the scheduled DB backup produces a non-empty `pg_restore --list` artifact; perform a full restore drill at least quarterly
 
 Required `public.trades` columns:
 
@@ -145,6 +162,7 @@ Expected behavior:
 - `pending-codex-cli` is processed by Codex CLI first.
 - Codex failure falls back to `pending-local-llm`.
 - Telegram report is sent to every id in `TELEGRAM_ALLOWED_CHAT_IDS`.
+- With `DAILY_TELEGRAM_CHARTS_ENABLED=true`, each daily category report is followed by PNG chart analyses for its top ranked recommendations. A failed chart image is logged and does not change the successful text delivery status.
 
 ## 6A. Local Analysis Infra
 

@@ -1,9 +1,12 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { supabaseServer } from '@/lib/supabase/server';
 
 const VALID_TRIGGER_TYPES = ['GAIN_PCT', 'PRICE', 'R_MULTIPLE', 'MANUAL'];
 
 export async function GET(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const tradeId = searchParams.get('trade_id')?.trim();
@@ -23,6 +26,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const tradeId = String(body.trade_id || '').trim();
@@ -61,6 +66,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = await request.json();
     const id = String(body.id || '').trim();
@@ -102,6 +109,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id')?.trim();

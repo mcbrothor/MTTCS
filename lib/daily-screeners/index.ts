@@ -6,7 +6,7 @@ import type {
   StockMetric,
 } from '@/types';
 
-export type DailyScreenerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie';
+export type DailyScreenerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie' | 'reversal';
 export type DailyScreenerMarket = 'US' | 'KR';
 export type DailyScreenerCategory = ScannerUniverse;
 
@@ -16,6 +16,7 @@ export const DAILY_SCREENER_SOURCES: DailyScreenerSource[] = [
   'leader',
   'momentum',
   'qullamaggie',
+  'reversal',
 ];
 
 export const DAILY_SCREENER_UNIVERSES: ScannerUniverse[] = [
@@ -117,6 +118,7 @@ function sourceLabel(source: DailyScreenerSource | 'mixed') {
   if (source === 'leader') return '주도주 Leader';
   if (source === 'momentum') return '모멘텀';
   if (source === 'qullamaggie') return '쿨라매기';
+  if (source === 'reversal') return '전환 초입';
   if (source === 'mixed') return '통합';
   return 'Minervini SEPA/VCP';
 }
@@ -428,6 +430,43 @@ function normalizeQullamaggieCandidate(universe: ScannerUniverse, item: ScannerC
   };
 }
 
+function normalizeReversalCandidate(universe: ScannerUniverse, item: ScannerConstituent, data: Record<string, unknown>): DailyScreenerCandidate {
+  const score = round(clamp(numberOrNull(data.reversalScore) ?? 0));
+  const stage = String(data.stage ?? 'REJECT');
+  const grade = String(data.grade ?? 'REJECT');
+  const metrics = {
+    reversal_score: score,
+    stage,
+    grade,
+    base_days: numberOrNull(data.baseDays),
+    base_range_pct: numberOrNull(data.baseRangePct),
+    drawdown_from_prior_high_pct: numberOrNull(data.drawdownFromPriorHighPct),
+    benchmark_relative_20d_pct: numberOrNull(data.benchmarkRelative20dPct),
+    benchmark_relative_60d_pct: numberOrNull(data.benchmarkRelative60dPct),
+    volume_dry_up_ratio: numberOrNull(data.volumeDryUpRatio),
+    up_down_volume_ratio: numberOrNull(data.upDownVolumeRatio),
+    distance_to_pivot_pct: numberOrNull(data.distanceToPivotPct),
+    rvol20: numberOrNull(data.rvol20),
+    stop_pct: numberOrNull(data.stopPct),
+    pivot_price: numberOrNull(data.pivotPrice),
+  };
+
+  return {
+    source: 'reversal',
+    universe,
+    ticker: item.ticker.toUpperCase(),
+    exchange: exchangeFor(item, universe),
+    name: displaySecurityName(item.name, item.ticker),
+    score,
+    grade: stage,
+    price: numberOrNull(data.currentPrice) ?? item.currentPrice ?? null,
+    priceAsOf: new Date().toISOString(),
+    reason: `${stage}, 전환 ${formatNumber(score, 0)}, pivot ${formatNumber(metrics.distance_to_pivot_pct)}%`,
+    metrics,
+    raw: { ...data },
+  };
+}
+
 async function scanMinerviniUniverse(universe: ScannerUniverse, items: ScannerConstituent[]) {
   const [{ POST: runMinerviniBatch }, metricsModule] = await Promise.all([
     import('../../app/api/scanner/batch/route'),
@@ -478,12 +517,14 @@ async function scanCanslimUniverse(universe: ScannerUniverse, items: ScannerCons
   });
 }
 
-async function scanBatchUniverse(source: Extract<DailyScreenerSource, 'leader' | 'momentum' | 'qullamaggie'>, universe: ScannerUniverse, items: ScannerConstituent[]) {
+async function scanBatchUniverse(source: Extract<DailyScreenerSource, 'leader' | 'momentum' | 'qullamaggie' | 'reversal'>, universe: ScannerUniverse, items: ScannerConstituent[]) {
   const routeModule = source === 'leader'
     ? await import('../../app/api/scanner/leader/route')
     : source === 'momentum'
       ? await import('../../app/api/scanner/momentum/route')
-      : await import('../../app/api/scanner/qullamaggie/route');
+      : source === 'reversal'
+        ? await import('../../app/api/scanner/reversal/route')
+        : await import('../../app/api/scanner/qullamaggie/route');
   const route = routeModule.POST as (request: Request) => Promise<Response>;
   const candidates: DailyScreenerCandidate[] = [];
 
@@ -508,6 +549,7 @@ async function scanBatchUniverse(source: Extract<DailyScreenerSource, 'leader' |
       if (source === 'leader') candidates.push(normalizeLeaderCandidate(universe, item, row.data));
       if (source === 'momentum') candidates.push(normalizeMomentumCandidate(universe, item, row.data));
       if (source === 'qullamaggie') candidates.push(normalizeQullamaggieCandidate(universe, item, row.data));
+      if (source === 'reversal') candidates.push(normalizeReversalCandidate(universe, item, row.data));
     }
   }
   return candidates;
@@ -570,6 +612,7 @@ export function groupTopCandidatesBySource(candidates: DailyScreenerCandidate[],
     leader: [],
     momentum: [],
     qullamaggie: [],
+    reversal: [],
   };
   const deduped = dedupeCandidatesBySourceTicker(candidates);
   for (const source of DAILY_SCREENER_SOURCES) {

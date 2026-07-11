@@ -10,7 +10,6 @@ import {
   AreaChart
 } from 'recharts';
 import StableResponsiveContainer from '@/components/ui/StableResponsiveContainer';
-import { supabase } from '@/lib/supabase/client';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
@@ -32,23 +31,12 @@ function HistoricalScoreChart({ ticker, market }: HistoricalScoreChartProps) {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      // const supabase = createClient(); // 기존 잘못된 코드 제거
-      
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const dateStr = thirtyDaysAgo.toISOString().split('T')[0];
-
       try {
-        const { data: metrics, error: supabaseError } = await supabase
-          .from('stock_metrics')
-          .select('calc_date, rs_rating')
-          .eq('ticker', ticker)
-          .eq('market', market)
-          .gte('calc_date', dateStr)
-          .order('calc_date', { ascending: true });
-
-        if (supabaseError) throw supabaseError;
-        setData(metrics || []);
+        const params = new URLSearchParams({ ticker, market, days: '30' });
+        const response = await fetch(`/api/scanner/metrics/history?${params}`);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Failed to fetch historical metrics');
+        setData(result.data || []);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Failed to fetch historical metrics';
         console.error('Failed to fetch historical metrics:', err);

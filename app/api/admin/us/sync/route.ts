@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getStandardScannerUniverse } from '@/lib/finance/market/scanner-universes';
@@ -17,6 +18,8 @@ const MAX_LIMIT = 50;
  * 예: offset=0→30→60→...→480 (500개 ÷ 30 = 17번 호출)
  */
 export async function GET(req: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(req);
+  if (authFailure) return authFailure;
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Supabase Admin client is not configured' }, { status: 500 });
   }

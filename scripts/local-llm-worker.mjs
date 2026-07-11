@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { createJiti } from 'jiti';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -14,6 +14,16 @@ import {
   parseCodexCliOutput,
   parseIbResponse,
 } from './lib/codex-cli-worker-utils.mjs';
+
+// Supabase 2.110 initializes Realtime even when this REST-only worker never subscribes.
+// Node 20 has no native WebSocket; a guard keeps the unused transport dormant.
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = class UnsupportedWorkerWebSocket {
+    constructor() {
+      throw new Error('WebSocket is unavailable in the MTN REST worker.');
+    }
+  };
+}
 
 // .env.local 변수들 (node --env-file=.env.local 로 주입됨)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -35,6 +45,16 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-2507';
+const CRON_SECRET = process.env.CRON_SECRET || '';
+const MTN_BASE_URL = (process.env.MTN_CHART_ANALYSIS_BASE_URL || process.env.MTN_BASE_URL || 'https://mttcs.vercel.app').replace(/\/$/, '');
+const DAILY_TELEGRAM_CHARTS_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_ENABLED?.toLowerCase() === 'true';
+const dailyChartLimit = Number(process.env.DAILY_TELEGRAM_CHARTS_PER_CATEGORY || 3);
+const DAILY_TELEGRAM_CHARTS_PER_CATEGORY = Number.isInteger(dailyChartLimit)
+  ? Math.min(10, Math.max(1, dailyChartLimit))
+  : 3;
+const DAILY_TELEGRAM_CHART_RANGE = process.env.DAILY_TELEGRAM_CHART_RANGE === 'ALL' ? 'ALL' : '1Y';
+const DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS = Math.max(5_000, Number(process.env.DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS || 25_000));
+const DAILY_TELEGRAM_CHARTS_AI_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AI_ENABLED?.toLowerCase() !== 'false';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
@@ -44,6 +64,8 @@ const recommendationPrices = jiti('../lib/recommendations/prices.ts');
 const krInvestorFlow = jiti('../lib/recommendations/kr-investor-flow.ts');
 const krRiskRanking = jiti('../lib/recommendations/kr-risk-ranking.ts');
 const recommendationConfig = jiti('../lib/recommendations/config.ts');
+const technicalChartAnalysis = jiti('../lib/ai/technical-chart-analysis.ts');
+const telegramChartImage = jiti('../lib/telegram/chart-image.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
 const CODEX_OUTPUT_SCHEMA = process.env.CODEX_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'ib-validation-result.schema.json');
 const DAILY_TOP5_OUTPUT_SCHEMA = process.env.DAILY_TOP5_OUTPUT_SCHEMA || path.join(PROJECT_ROOT, 'schemas', 'daily-screener-top5.schema.json');
@@ -120,6 +142,31 @@ async function sendTelegramMessage(text) {
           throw retryError;
         }
       }
+    }
+  }
+  return { skipped: false };
+}
+
+async function sendTelegramPhoto(png, caption, filename) {
+  if (!telegramBotToken || telegramChatIds.length === 0) return { skipped: true };
+  const url = `https://api.telegram.org/bot${telegramBotToken}/sendPhoto`;
+  for (const chatId of telegramChatIds) {
+    const tempFile = path.join(process.env.TMPDIR || '/tmp', `mtn-chart-${process.pid}-${Date.now()}-${filename}`);
+    await writeFile(tempFile, png);
+    const post = async (markdown) => {
+      const args = ['-sS', '-X', 'POST', url, '-F', `chat_id=${chatId}`, '-F', `photo=@${tempFile};type=image/png`, '-F', `caption=${caption.slice(0, 1024)}`];
+      if (markdown) args.push('-F', 'parse_mode=Markdown');
+      const { stdout } = await runProcess('curl', args, '', 45_000);
+      const payload = JSON.parse(stdout || '{}');
+      if (!payload?.ok) throw new Error(`Telegram photo upload failed: ${JSON.stringify(payload).slice(0, 500)}`);
+    };
+    try {
+      await post(true);
+    } catch (markdownError) {
+      console.warn(`[Worker] Telegram photo Markdown caption failed, retrying plain text: ${compactError(markdownError)}`);
+      await post(false);
+    } finally {
+      await rm(tempFile, { force: true });
     }
   }
   return { skipped: false };
@@ -311,17 +358,17 @@ function dailyProviderModel(provider) {
   return 'mtn-rule-based';
 }
 
-async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prompt }) {
+async function callOpenAiCompatibleProvider({ url, apiKey, provider, model, prompt, systemPrompt, maxTokens, timeoutMs }) {
   const response = await axios.post(url, {
     model,
     messages: [
-      { role: 'system', content: 'You are MTN Daily Screener category Top10 analyst. Return JSON only.' },
+      { role: 'system', content: systemPrompt || 'You are MTN Daily Screener category Top10 analyst. Return JSON only.' },
       { role: 'user', content: prompt },
     ],
     temperature: 0.2,
-    max_tokens: DAILY_TOP5_MAX_TOKENS,
+    max_tokens: maxTokens || DAILY_TOP5_MAX_TOKENS,
   }, {
-    timeout: DAILY_TOP5_TIMEOUT_MS,
+    timeout: timeoutMs || DAILY_TOP5_TIMEOUT_MS,
     headers: {
       ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
       'content-type': 'application/json',
@@ -345,6 +392,111 @@ async function callGeminiDailyTop5(prompt) {
   const text = result.response.text().trim();
   if (!text) throw new Error('Gemini returned an empty response.');
   return text;
+}
+
+async function callGeminiTechnicalChart(prompt) {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not configured.');
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    generationConfig: { maxOutputTokens: 900, temperature: 0.2 },
+  });
+  let timer;
+  const result = await Promise.race([
+    model.generateContent(prompt),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Gemini technical chart analysis timed out after ${DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS}ms.`)), DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+  const text = result.response.text().trim();
+  if (!text) throw new Error('Gemini returned an empty technical chart analysis.');
+  return text;
+}
+
+async function fetchCronMarketAnalysis(ticker, exchange) {
+  if (!CRON_SECRET) throw new Error('CRON_SECRET is not configured for chart analysis.');
+  const url = new URL('/api/cron/chart-analysis', MTN_BASE_URL);
+  url.searchParams.set('ticker', ticker);
+  url.searchParams.set('exchange', exchange);
+  const response = await fetch(url, { headers: { authorization: `Bearer ${CRON_SECRET}` } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload) throw new Error(`Chart analysis API failed: ${response.status}`);
+  return payload.data || payload;
+}
+
+async function runTechnicalChartAnalysis(marketAnalysis) {
+  if (!DAILY_TELEGRAM_CHARTS_AI_ENABLED) {
+    return { technical: telegramChartImage.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'chart-patterns-v1' };
+  }
+  const prompt = technicalChartAnalysis.buildTechnicalChartAnalysisPrompt(marketAnalysis);
+  const allowedPatternIds = (marketAnalysis.chartPatterns || []).map((pattern) => pattern.id);
+  const providers = [
+    ...(LOCAL_LLM_ENABLED ? [{ provider: 'local-llm', model: LOCAL_LLM_MODEL, url: `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions` }] : []),
+    ...(GEMINI_API_KEY ? [{ provider: 'gemini', model: GEMINI_MODEL }] : []),
+    ...(GROQ_API_KEY ? [{ provider: 'groq', model: GROQ_MODEL, url: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY }] : []),
+    ...(CEREBRAS_API_KEY ? [{ provider: 'cerebras', model: CEREBRAS_MODEL, url: 'https://api.cerebras.ai/v1/chat/completions', apiKey: CEREBRAS_API_KEY }] : []),
+  ];
+  for (const item of providers) {
+    try {
+      const raw = item.provider === 'gemini'
+        ? await callGeminiTechnicalChart(prompt)
+        : await callOpenAiCompatibleProvider({
+          ...item,
+          prompt,
+          systemPrompt: 'You are MTN technical chart analyst. Write Korean and return JSON only.',
+          maxTokens: 900,
+          timeoutMs: DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS,
+        });
+      return { technical: technicalChartAnalysis.parseTechnicalChartAnalysisResponse(raw, allowedPatternIds), provider: item.provider, model: item.model };
+    } catch (error) {
+      console.warn(`[Worker] Technical chart AI failed: ${item.provider} - ${compactError(error)}`);
+    }
+  }
+  return { technical: telegramChartImage.buildRuleBasedTechnicalAnalysis(marketAnalysis), provider: 'rules', model: 'chart-patterns-v1' };
+}
+
+function chartCandidateForPick(pick, category, candidates) {
+  return candidates.find((candidate) => candidate.ticker === pick.ticker && dailyScreeners.categoryForDailyCandidate(candidate) === category)
+    || candidates.find((candidate) => candidate.ticker === pick.ticker)
+    || null;
+}
+
+async function sendDailyTelegramCharts({ category, picks, candidates }) {
+  if (!DAILY_TELEGRAM_CHARTS_ENABLED) return { skipped: true, attempted: 0, sent: 0 };
+  const selected = telegramChartImage.selectTelegramChartPicks(picks || [], DAILY_TELEGRAM_CHARTS_PER_CATEGORY);
+  let sent = 0;
+  for (const pick of selected) {
+    try {
+      const candidate = chartCandidateForPick(pick, category, candidates);
+      const exchange = candidate?.exchange || pick.exchange || (dailyScreeners.marketForDailyCategory(category) === 'KR' ? 'KOSPI' : 'NAS');
+      const marketAnalysis = await fetchCronMarketAnalysis(pick.ticker, exchange);
+      if (!Array.isArray(marketAnalysis.priceData) || marketAnalysis.priceData.length < 20) {
+        console.warn(`[Worker] Skipped chart image for ${pick.ticker}: insufficient price data.`);
+        continue;
+      }
+      const { technical, provider, model } = await runTechnicalChartAnalysis(marketAnalysis);
+      const imageInput = {
+        ticker: pick.ticker,
+        exchange,
+        name: pick.name || candidate?.name,
+        rank: pick.rank,
+        analysis: marketAnalysis,
+        technical,
+        rangeBars: DAILY_TELEGRAM_CHART_RANGE === 'ALL' ? null : 252,
+      };
+      const png = telegramChartImage.renderTelegramChartPng(imageInput);
+      await sendTelegramPhoto(png, telegramChartImage.telegramChartCaption(imageInput), `${pick.ticker.toLowerCase()}-chart.png`);
+      sent += 1;
+      console.log(`[Worker] Telegram chart sent: ${category} ${pick.ticker} (${provider}/${model}).`);
+    } catch (error) {
+      const cause = error && typeof error === 'object' && 'cause' in error
+        ? `; cause=${compactError(error.cause)}`
+        : '';
+      console.error(`[Worker] Telegram chart failed: ${category} ${pick.ticker} - ${compactError(error)}${cause}`);
+    }
+  }
+  return { skipped: false, attempted: selected.length, sent };
 }
 
 async function callDailyTop5Provider(provider, prompt, candidates) {
@@ -885,6 +1037,16 @@ async function processDailyScreenerRun(run) {
             delivery?.skipped ? null : new Date().toISOString(),
           );
         }
+        if (!delivery?.skipped) {
+          const chartDelivery = await sendDailyTelegramCharts({
+            category,
+            picks: officialResultByCategory[category],
+            candidates: topCandidates,
+          });
+          if (!chartDelivery.skipped) {
+            console.log(`[Worker] Telegram chart delivery: ${category} ${chartDelivery.sent}/${chartDelivery.attempted}.`);
+          }
+        }
       } catch (error) {
         if (publication) {
           await recommendationPersistence.markRecommendationTelegramStatus(supabase, publication.id, 'FAILED');
@@ -937,6 +1099,28 @@ async function processDailyScreenerQueue() {
   if (!data || data.length === 0) return false;
   await processDailyScreenerRun(data[0]);
   return true;
+}
+
+async function replayDailyTelegramCharts(runDate, categories = [], tickers = []) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) throw new Error('Replay date must be YYYY-MM-DD.');
+  if (!DAILY_TELEGRAM_CHARTS_ENABLED) throw new Error('DAILY_TELEGRAM_CHARTS_ENABLED=true is required for chart replay.');
+  const { data: publications, error } = await supabase
+    .from('recommendation_publications')
+    .select('category, recommendation_picks(ticker, exchange, name, rank)')
+    .eq('run_date', runDate)
+    .eq('is_official', true)
+    .eq('status', 'PUBLISHED');
+  if (error) throw error;
+  const selectedPublications = categories.length
+    ? (publications || []).filter((publication) => categories.includes(publication.category))
+    : publications || [];
+  if (!selectedPublications.length) throw new Error(`No official recommendation publications found for ${runDate}.`);
+  for (const publication of selectedPublications) {
+    const picks = (Array.isArray(publication.recommendation_picks) ? publication.recommendation_picks : [])
+      .filter((pick) => tickers.length === 0 || tickers.includes(pick.ticker));
+    const delivery = await sendDailyTelegramCharts({ category: publication.category, picks, candidates: [] });
+    console.log(`[Worker] Replay chart delivery: ${publication.category} ${delivery.sent}/${delivery.attempted}.`);
+  }
 }
 
 async function processQueue() {
@@ -1054,6 +1238,21 @@ async function loop() {
   console.log(`[Worker] Waiting for tasks from Vercel...`);
   console.log('============================================');
 
+  const replayArg = process.argv.find((arg) => arg.startsWith('--replay-charts='));
+  if (replayArg) {
+    const categoryArg = process.argv.find((arg) => arg.startsWith('--replay-categories='));
+    const categories = categoryArg
+      ? categoryArg.slice('--replay-categories='.length).split(',').map((item) => item.trim()).filter(Boolean)
+      : [];
+    const tickerArg = process.argv.find((arg) => arg.startsWith('--replay-tickers='));
+    const tickers = tickerArg
+      ? tickerArg.slice('--replay-tickers='.length).split(',').map((item) => item.trim().toUpperCase()).filter(Boolean)
+      : [];
+    await replayDailyTelegramCharts(replayArg.slice('--replay-charts='.length), categories, tickers);
+    console.log('[Worker] Chart replay completed.');
+    return;
+  }
+
   if (process.env.WORKER_ONCE === 'true') {
     await processQueue();
     console.log('[Worker] WORKER_ONCE=true, exiting after one queue pass.');
@@ -1067,4 +1266,7 @@ async function loop() {
   }
 }
 
-loop();
+loop().catch((error) => {
+  console.error('[Worker] Fatal error:', compactError(error, 2000));
+  process.exit(1);
+});

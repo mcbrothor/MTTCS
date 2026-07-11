@@ -13,6 +13,7 @@ const WARMUP_ROUTES = [
   '/leader',
   '/momentum',
   '/qullamaggie',
+  '/reversal',
   '/contest',
   '/watchlist',
   '/plan',

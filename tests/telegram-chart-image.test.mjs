@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { buildChartPatterns } from '../lib/finance/engines/chart-patterns.ts';
+import {
+  buildRuleBasedTechnicalAnalysis,
+  renderTelegramChartPng,
+  selectTelegramChartPicks,
+  telegramChartCaption,
+} from '../lib/telegram/chart-image.ts';
+
+function day(index) {
+  const value = new Date('2025-01-02T00:00:00Z');
+  value.setUTCDate(value.getUTCDate() + index);
+  return value.toISOString().slice(0, 10);
+}
+
+function bars() {
+  return Array.from({ length: 260 }, (_, index) => {
+    const close = 100 + index * 0.15 + Math.sin(index / 5) * 2;
+    return { date: day(index), open: close * 0.995, high: close * 1.02, low: close * 0.98, close, volume: 900_000 + index * 1000 };
+  });
+}
+
+const vcp = {
+  score: 78, grade: 'strong', contractions: [], contractionScore: 80, volumeDryUpScore: 75, bbSqueezeScore: 0, pocketPivotScore: 0,
+  pivotPrice: 138, pivotDate: day(240), pivotAgeDays: 12, pivotKind: 'VCP_PIVOT', referenceHighPrice: 140, referenceHighDate: day(241),
+  invalidationPrice: 126, breakoutPrice: 140, recommendedEntry: 138, entrySource: 'VCP_PIVOT', breakoutVolumeRatio: 1.2,
+  breakoutVolumeStatus: 'pending', pocketPivots: [], bbWidth: 4, bbWidthPercentile: 30, baseLength: 60, baseType: 'Standard_VCP',
+  momentumBranch: 'EXTENDED', eightWeekReturnPct: 20, distanceFromMa50Pct: 5, low52WeekAdvancePct: 40, highTightFlag: null, details: ['VCP fixture'],
+};
+const priceData = bars();
+const marketAnalysis = {
+  ticker: 'TEST', exchange: 'NAS', providerUsed: 'fixture', providerAttempts: [], priceData, marketCap: null,
+  sepaEvidence: { status: 'pass', criteria: [], summary: { passed: 0, failed: 0, info: 0, corePassed: 0, coreFailed: 0, coreTotal: 0 }, metrics: { rsRating: 90, rsSource: 'DB_BATCH' } },
+  riskPlan: { entryPrice: 138, stopLossPrice: 126, selectedStopPrice: 126, targetPrice: 160, rewardRiskRatio: 2, riskGate: { status: 'PASS' } },
+  vcpAnalysis: vcp, chartPatterns: buildChartPatterns({ data: priceData, vcpAnalysis: vcp }), fundamentals: null, changePercent: 1.2, adrPct: 2.1,
+  dataQuality: { bars: 260, hasEnoughForAtr: true, hasEnoughForLongMa: true, missingFundamentals: [] }, warnings: [],
+};
+
+const technical = buildRuleBasedTechnicalAnalysis(marketAnalysis);
+const imageInput = { ticker: 'TEST', exchange: 'NAS', name: 'Test Corp', rank: 1, analysis: marketAnalysis, technical };
+const png = renderTelegramChartPng(imageInput);
+assert.ok(png.length > 10_000, 'Rendered chart should contain image data');
+assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'Rendered chart should be PNG');
+assert.match(telegramChartCaption(imageInput), /TEST/);
+assert.deepEqual(selectTelegramChartPicks([{ rank: 3 }, { rank: 1 }, { rank: 2 }, { rank: 4 }], 3).map((item) => item.rank), [1, 2, 3]);
+console.log('telegram chart image tests passed');

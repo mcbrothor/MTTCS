@@ -1,17 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
-import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
+import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep } from '@/components/layout/navigation';
 import GlobalSecuritySearch from '@/components/layout/GlobalSecuritySearch';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const activeStep = getActiveFlowStep(pathname);
-  const currentSearch = searchParams.toString();
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[rgba(4,8,16,0.94)] backdrop-blur">
@@ -63,20 +61,6 @@ export default function Navbar() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {activeStep.tabs.map((tab) => (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  isActiveTab(pathname, tab.href, currentSearch)
-                    ? 'border-sky-400/35 bg-sky-400/12 text-sky-100'
-                    : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {tab.label}
-              </Link>
-            ))}
-
             {UTILITY_LINKS.map((item) => (
               <Link
                 key={item.href}

@@ -1,3 +1,4 @@
+import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
@@ -87,6 +88,8 @@ async function parallelWithLimit<T, R>(
 }
 
 export async function POST(request: Request) {
+  const authFailure = await rejectUnauthenticatedRequest(request);
+  if (authFailure) return authFailure;
   try {
     const body = (await request.json()) as LeaderBatchRequest;
     const { items, benchmarkTicker, totalSectors = 11 } = body;

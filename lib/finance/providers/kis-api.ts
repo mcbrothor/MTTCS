@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getKisToken } from './kis-auth';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
+import { sanitizeExternalError } from '@/lib/security/external-errors';
 import type { OHLCData } from '@/types';
 
 /** 지정 ms만큼 대기합니다. KIS API 초당 20건 제한 대응용. */
@@ -293,13 +294,15 @@ export async function getKisDomesticPrice(ticker: string): Promise<number | null
     });
 
     if (response.data.rt_cd !== '0') {
-      console.error(`KIS 현재가 조회 실패 (${ticker}):`, response.data.msg1);
+      console.error('[KIS]', sanitizeExternalError('KIS', `domestic-price:${ticker}`, {
+        response: { data: response.data },
+      }));
       return null;
     }
 
     return Number(response.data.output?.stck_prpr) || null;
   } catch (error) {
-    console.error(`KIS API 호출 오류 (${ticker}):`, error);
+    console.error('[KIS]', sanitizeExternalError('KIS', `domestic-price:${ticker}`, error));
     return null;
   }
 }
@@ -450,7 +453,9 @@ export async function getKisMarketForeignNetBuy(
     );
 
     if (response.data.rt_cd !== '0') {
-      console.warn(`KIS 외국인 순매수 조회 실패 (${proxyTicker}):`, response.data.msg1);
+      console.warn('[KIS]', sanitizeExternalError('KIS', `foreign-net-buy:${proxyTicker}`, {
+        response: { data: response.data },
+      }));
       return [];
     }
 
@@ -464,7 +469,7 @@ export async function getKisMarketForeignNetBuy(
       }))
       .slice(0, days);
   } catch (err) {
-    console.warn('KIS 외국인 순매수 조회 오류:', err instanceof Error ? err.message : err);
+    console.warn('[KIS]', sanitizeExternalError('KIS', 'foreign-net-buy', err));
     return [];
   }
 }
@@ -520,10 +525,12 @@ export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>
           regularMarketChangePercent: changePercent,
         };
       } else {
-        console.warn(`KIS Index fetch failed for ${iscd}:`, response.data.msg1);
+        console.warn('[KIS]', sanitizeExternalError('KIS', `index-quote:${iscd}`, {
+          response: { data: response.data },
+        }));
       }
     } catch (error) {
-      console.warn(`KIS Index fetch failed for ${iscd}:`, error);
+      console.warn('[KIS]', sanitizeExternalError('KIS', `index-quote:${iscd}`, error));
     }
   };
 
