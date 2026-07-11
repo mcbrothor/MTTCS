@@ -326,9 +326,11 @@ async function fetchPriceData(ticker: string, exchange: string): Promise<{
   }
 }
 
-export async function GET(request: Request) {
-  const authFailure = await rejectUnauthenticatedRequest(request);
-  if (authFailure) return authFailure;
+async function marketDataResponse(request: Request, trustedInternalRequest = false) {
+  if (!trustedInternalRequest) {
+    const authFailure = await rejectUnauthenticatedRequest(request);
+    if (authFailure) return authFailure;
+  }
   const { searchParams } = new URL(request.url);
   const ticker = searchParams.get('ticker')?.trim().toUpperCase();
   const exchange = searchParams.get('exchange')?.trim().toUpperCase() || 'NAS';
@@ -514,4 +516,12 @@ export async function GET(request: Request) {
       recoverable
     );
   }
+}
+
+export async function GET(request: Request) {
+  return marketDataResponse(request);
+}
+
+export async function getMarketDataForCron(request: Request) {
+  return marketDataResponse(request, true);
 }

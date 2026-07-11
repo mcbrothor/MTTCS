@@ -17,6 +17,15 @@ const { GET } = jiti('../app/api/cron/chart-analysis/route.ts');
   assert.equal(response.status, 400);
 }
 
+{
+  const response = await GET(new Request('http://localhost/api/cron/chart-analysis?ticker=BAD%20TICKER&exchange=NAS', {
+    headers: { authorization: 'Bearer test-cron-secret' },
+  }));
+  const payload = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(payload.code, 'INVALID_TICKER');
+}
+
 if (previousSecret === undefined) delete process.env.CRON_SECRET;
 else process.env.CRON_SECRET = previousSecret;
 console.log('chart analysis cron tests passed');
