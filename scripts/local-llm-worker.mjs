@@ -17,7 +17,7 @@ import {
 import {
   DEFAULT_TECHNICAL_CHART_FALLBACKS,
   DEFAULT_TECHNICAL_CHART_MODEL,
-  discoverTechnicalChartModel,
+  discoverTechnicalChartModels,
   parseModelFallbacks,
 } from './lib/technical-chart-model-router.mjs';
 
@@ -59,7 +59,7 @@ const DAILY_TELEGRAM_CHARTS_PER_CATEGORY = Number.isInteger(dailyChartLimit)
   ? Math.min(10, Math.max(1, dailyChartLimit))
   : 3;
 const DAILY_TELEGRAM_CHART_RANGE = process.env.DAILY_TELEGRAM_CHART_RANGE === 'ALL' ? 'ALL' : '1Y';
-const DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS = Math.max(5_000, Number(process.env.DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS || 25_000));
+const DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS = Math.max(5_000, Number(process.env.DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS || 60_000));
 const DAILY_TELEGRAM_CHARTS_AI_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AI_ENABLED?.toLowerCase() !== 'false';
 const TECHNICAL_CHART_LOCAL_MODEL = process.env.TECHNICAL_CHART_LOCAL_MODEL || DEFAULT_TECHNICAL_CHART_MODEL;
 const TECHNICAL_CHART_MODEL_FALLBACKS = parseModelFallbacks(process.env.TECHNICAL_CHART_MODEL_FALLBACKS || DEFAULT_TECHNICAL_CHART_FALLBACKS);
@@ -88,7 +88,7 @@ const SUPPRESSED_TELEGRAM_MARKERS = [
   'MTN 시장 리포트:',
   'MTN 매크로 레짐 리포트',
 ];
-let technicalChartModelCache = { expiresAt: 0, route: null };
+let technicalChartModelCache = { expiresAt: 0, routes: [] };
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('[Worker] Missing Supabase environment variables. Exiting.');
@@ -432,6 +432,31 @@ async function callGeminiTechnicalChart(prompt) {
   return text;
 }
 
+async function callOllamaTechnicalChart({ model, prompt }) {
+  const root = LOCAL_LLM_API_URL.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  const response = await axios.post(`${root}/api/chat`, {
+    model,
+    messages: [
+      { role: 'system', content: 'You are MTN technical chart analyst. Write Korean and return JSON only.' },
+      { role: 'user', content: prompt },
+    ],
+    stream: false,
+    format: technicalChartAnalysis.technicalChartNarrativeSchema,
+    think: false,
+    options: {
+      temperature: 0.2,
+      num_ctx: 4096,
+      num_predict: 360,
+    },
+  }, {
+    timeout: DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS,
+    headers: { 'content-type': 'application/json' },
+  });
+  const text = response.data?.message?.content?.trim();
+  if (!text) throw new Error('Ollama returned an empty technical chart analysis.');
+  return text;
+}
+
 async function fetchCronMarketAnalysis(ticker, exchange, includeFundamentals = false) {
   if (!CRON_SECRET) throw new Error('CRON_SECRET is not configured for chart analysis.');
   const url = new URL('/api/cron/chart-analysis', MTN_BASE_URL);
@@ -444,24 +469,24 @@ async function fetchCronMarketAnalysis(ticker, exchange, includeFundamentals = f
   return payload.data || payload;
 }
 
-async function resolveTechnicalChartLocalModel() {
-  if (!LOCAL_LLM_ENABLED) return null;
-  if (technicalChartModelCache.expiresAt > Date.now()) return technicalChartModelCache.route;
+async function resolveTechnicalChartLocalModels() {
+  if (!LOCAL_LLM_ENABLED) return [];
+  if (technicalChartModelCache.expiresAt > Date.now()) return technicalChartModelCache.routes;
   try {
-    const route = await discoverTechnicalChartModel({
+    const routes = await discoverTechnicalChartModels({
       baseUrl: LOCAL_LLM_API_URL,
       preferredModel: TECHNICAL_CHART_LOCAL_MODEL,
       fallbackModels: TECHNICAL_CHART_MODEL_FALLBACKS,
       request: (url) => axios.get(url, { timeout: 3_000 }),
     });
-    technicalChartModelCache = { expiresAt: Date.now() + 10 * 60 * 1000, route };
-    if (route) console.log(`[Worker] Technical chart model route: ${route.model} (${route.tier}).`);
+    technicalChartModelCache = { expiresAt: Date.now() + 10 * 60 * 1000, routes };
+    if (routes.length) console.log(`[Worker] Technical chart model routes: ${routes.map((route) => `${route.model} (${route.tier})`).join(' -> ')}.`);
     else console.warn('[Worker] No compatible local technical chart model is installed; using deterministic analysis.');
-    return route;
+    return routes;
   } catch (error) {
-    technicalChartModelCache = { expiresAt: Date.now() + 60 * 1000, route: null };
+    technicalChartModelCache = { expiresAt: Date.now() + 60 * 1000, routes: [] };
     console.warn(`[Worker] Local technical chart model discovery failed: ${compactError(error)}`);
-    return null;
+    return [];
   }
 }
 
@@ -471,15 +496,12 @@ async function runTechnicalChartAnalysis(marketAnalysis) {
   }
   const prompt = technicalChartAnalysis.buildTechnicalChartAnalysisPrompt(marketAnalysis);
   const allowedPatternIds = (marketAnalysis.chartPatterns || []).map((pattern) => pattern.id);
-  const localRoute = await resolveTechnicalChartLocalModel();
+  const localRoutes = await resolveTechnicalChartLocalModels();
   const providers = [
-    ...(localRoute ? [{
+    ...localRoutes.map((localRoute) => ({
       provider: 'local-llm',
       model: localRoute.model,
-      url: `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`,
-      responseFormat: { type: 'json_schema', json_schema: { name: 'technical_chart_narrative', strict: true, schema: technicalChartAnalysis.technicalChartNarrativeSchema } },
-      extraBody: localRoute.disableThinking ? { think: false } : {},
-    }] : []),
+    })),
     ...(TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED ? [
     ...(GEMINI_API_KEY ? [{ provider: 'gemini', model: GEMINI_MODEL }] : []),
     ...(GROQ_API_KEY ? [{ provider: 'groq', model: GROQ_MODEL, url: 'https://api.groq.com/openai/v1/chat/completions', apiKey: GROQ_API_KEY }] : []),
@@ -488,9 +510,11 @@ async function runTechnicalChartAnalysis(marketAnalysis) {
   ];
   for (const item of providers) {
     try {
-      const raw = item.provider === 'gemini'
-        ? await callGeminiTechnicalChart(prompt)
-        : await callOpenAiCompatibleProvider({
+      const raw = item.provider === 'local-llm'
+        ? await callOllamaTechnicalChart({ model: item.model, prompt })
+        : item.provider === 'gemini'
+          ? await callGeminiTechnicalChart(prompt)
+          : await callOpenAiCompatibleProvider({
           ...item,
           prompt,
           systemPrompt: 'You are MTN technical chart analyst. Write Korean and return JSON only.',

@@ -29,7 +29,7 @@ Confirm these exist in Vercel Production:
 - `DAILY_TELEGRAM_CHARTS_ENABLED` (`false` until image delivery is verified)
 - `DAILY_TELEGRAM_CHARTS_PER_CATEGORY` (default: `3`, maximum: `10`)
 - `DAILY_TELEGRAM_CHART_RANGE` (default: `1Y`; `ALL` uses the full returned history)
-- `DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS` (default: `25000`)
+- `DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS` (default: `60000`; first local 14B inference includes model-load time)
 - `DAILY_RECOMMENDATION_CHART_GATE_ENABLED` (default: `true`; excludes invalid, extended, or fundamentally unverified picks from Telegram chart delivery)
 - `DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY` (default: `3`, maximum: `5`)
 - `MTN_BASE_URL` (default: `https://mttcs.vercel.app`; used by the local worker for protected chart analysis)

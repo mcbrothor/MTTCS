@@ -22,7 +22,7 @@ export interface TechnicalChartAnalysis extends TechnicalChartNarrative {
 }
 
 function compactBars(input: MarketAnalysisResponse) {
-  return input.priceData.slice(-60).map((bar) => ({
+  return input.priceData.slice(-40).map((bar) => ({
     date: bar.date,
     open: bar.open,
     high: bar.high,
@@ -33,7 +33,7 @@ function compactBars(input: MarketAnalysisResponse) {
 }
 
 function compactPatterns(patterns: ChartPatternOverlay[]) {
-  return patterns.map((pattern) => ({
+  return patterns.slice(0, 6).map((pattern) => ({
     id: pattern.id,
     type: pattern.type,
     label: pattern.label,
@@ -41,7 +41,7 @@ function compactPatterns(patterns: ChartPatternOverlay[]) {
     status: pattern.status,
     dateRange: pattern.dateRange,
     priceRange: pattern.priceRange,
-    evidence: pattern.evidence,
+    evidence: Object.fromEntries(Object.entries(pattern.evidence).slice(0, 5)),
   }));
 }
 
@@ -69,6 +69,7 @@ export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse)
     'The deterministic professionalPlan is the execution authority. Explain why its readiness and grade are justified using only the provided evidence.',
     'Use only supplied OHLCV, risk metrics, chartPatterns, and professionalPlan.',
     'If you reference a pattern, use only ids from chartPatterns.',
+    'Keep every field concise: summaryKo and patternRead are at most two short Korean sentences; riskNotes contains one to three short items.',
     'Keep the explanation conditional and execution-focused. Do not promise returns or use absolute language.',
     '',
     'Required JSON shape:',
@@ -85,7 +86,7 @@ export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse)
         pivotPrice: input.vcpAnalysis.pivotPrice,
         invalidationPrice: input.vcpAnalysis.invalidationPrice,
         breakoutVolumeStatus: input.vcpAnalysis.breakoutVolumeStatus,
-        details: input.vcpAnalysis.details.slice(0, 6),
+        details: input.vcpAnalysis.details.slice(0, 4),
       },
       riskPlan: {
         entryPrice: input.riskPlan.entryPrice,
