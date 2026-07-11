@@ -3,6 +3,7 @@ import { getKisToken } from './kis-auth';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { sanitizeExternalError } from '@/lib/security/external-errors';
 import type { OHLCData } from '@/types';
+import { normalizeChartDate, toCompactChartDate } from '@/lib/finance/core/chart-time';
 
 /** 지정 ms만큼 대기합니다. KIS API 초당 20건 제한 대응용. */
 function sleep(ms: number) {
@@ -50,14 +51,11 @@ interface KisMarketCapRankingRow {
 const KIS_PAGE_SIZE = 100;
 const DEFAULT_TARGET_BARS = 260;
 
-function normalizeDate(date: string) {
-  return date.replaceAll('-', '');
-}
-
 function previousCalendarDate(yyyymmdd: string) {
-  const year = Number(yyyymmdd.slice(0, 4));
-  const month = Number(yyyymmdd.slice(4, 6)) - 1;
-  const day = Number(yyyymmdd.slice(6, 8));
+  const compactDate = toCompactChartDate(yyyymmdd);
+  const year = Number(compactDate.slice(0, 4));
+  const month = Number(compactDate.slice(4, 6)) - 1;
+  const day = Number(compactDate.slice(6, 8));
   const date = new Date(Date.UTC(year, month, day));
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10).replaceAll('-', '');
@@ -67,7 +65,8 @@ function sortAndDedupe(data: OHLCData[]) {
   const byDate = new Map<string, OHLCData>();
   for (const bar of data) {
     if (Number.isFinite(bar.close) && bar.date) {
-      byDate.set(normalizeDate(bar.date), { ...bar, date: normalizeDate(bar.date) });
+      const date = normalizeChartDate(bar.date);
+      byDate.set(date, { ...bar, date });
     }
   }
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -113,7 +112,7 @@ async function getOverseasDailyPricePage(
   return output2
     .filter((item) => item.xymd)
     .map((item) => ({
-      date: normalizeDate(item.xymd || ''),
+      date: normalizeChartDate(item.xymd || ''),
       open: Number(item.open),
       high: Number(item.high),
       low: Number(item.low),
@@ -211,7 +210,7 @@ async function getDomesticDailyPricePage(
   return output2
     .filter((item): item is KisDomesticDailyPriceRow & { stck_bsop_date: string } => Boolean(item.stck_bsop_date))
     .map((item) => ({
-      date: item.stck_bsop_date,
+      date: normalizeChartDate(item.stck_bsop_date),
       open: Number(item.stck_oprc),
       high: Number(item.stck_hgpr),
       low: Number(item.stck_lwpr),

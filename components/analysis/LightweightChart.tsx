@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, IPriceLine, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import type { CandlestickData, HistogramData, ISeriesApi, LineData, Time } from 'lightweight-charts';
 import type { ChartPatternLine, ChartPatternMarker, ChartPatternOverlay, ChartPatternOverlayCategory, ChartPatternZone } from '@/types';
+import { isIsoChartDate, normalizeChartDate } from '@/lib/finance/core/chart-time';
 
 interface LightweightChartProps {
   data: { time: string; open: number; high: number; low: number; close: number; volume?: number | null }[];
@@ -153,6 +154,37 @@ function volumeData(data: LightweightChartProps['data']): HistogramData<Time>[] 
     }));
 }
 
+function normalizeChartData(data: LightweightChartProps['data']) {
+  const byTime = new Map<string, LightweightChartProps['data'][number]>();
+  for (const bar of data) {
+    const time = normalizeChartDate(bar.time);
+    if (!isIsoChartDate(time)) continue;
+    byTime.set(time, { ...bar, time });
+  }
+  return Array.from(byTime.values()).sort((left, right) => left.time.localeCompare(right.time));
+}
+
+function normalizeChartPatterns(patterns: ChartPatternOverlay[]) {
+  return patterns.map((pattern) => ({
+    ...pattern,
+    dateRange: {
+      start: normalizeChartDate(pattern.dateRange.start),
+      end: normalizeChartDate(pattern.dateRange.end),
+    },
+    anchors: pattern.anchors.map((anchor) => ({ ...anchor, date: normalizeChartDate(anchor.date) })),
+    lines: pattern.lines.map((line) => ({
+      ...line,
+      points: line.points.map((point) => ({ ...point, date: normalizeChartDate(point.date) })) as ChartPatternLine['points'],
+    })),
+    zones: pattern.zones.map((zone) => ({
+      ...zone,
+      startDate: normalizeChartDate(zone.startDate),
+      endDate: normalizeChartDate(zone.endDate),
+    })),
+    markers: pattern.markers.map((marker) => ({ ...marker, date: normalizeChartDate(marker.date) })),
+  }));
+}
+
 export default function LightweightChart({ 
   data, 
   pivotPrice, 
@@ -177,14 +209,16 @@ export default function LightweightChart({
     volume: true,
   });
   const [renderedOverlay, setRenderedOverlay] = useState<RenderedOverlay>(EMPTY_OVERLAY);
-  const patternCount = chartPatterns.length;
+  const normalizedData = useMemo(() => normalizeChartData(data), [data]);
+  const normalizedPatterns = useMemo(() => normalizeChartPatterns(chartPatterns), [chartPatterns]);
+  const patternCount = normalizedPatterns.length;
   const modes = useMemo<OverlayMode[]>(() => ['all', 'base', 'pivot', 'volume'], []);
   const ranges = useMemo<RangeMode[]>(() => ['3M', '6M', '1Y', 'ALL'], []);
   const studies = useMemo<StudyKey[]>(() => ['ma20', 'ma50', 'ma200', 'volume'], []);
   const visibleData = useMemo(() => {
     const bars = RANGE_BARS[rangeMode];
-    return bars === null ? data : data.slice(-bars);
-  }, [data, rangeMode]);
+    return bars === null ? normalizedData : normalizedData.slice(-bars);
+  }, [normalizedData, rangeMode]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -367,9 +401,9 @@ export default function LightweightChart({
       setRenderedOverlay({
         width,
         height: chartHeight,
-        lines: chartPatterns.flatMap((pattern) => pattern.lines).map(visibleLine).filter((item): item is RenderedLine => Boolean(item)),
-        zones: chartPatterns.flatMap((pattern) => pattern.zones).map(visibleZone).filter((item): item is RenderedZone => Boolean(item)),
-        markers: chartPatterns.flatMap((pattern) => pattern.markers).map(visibleMarker).filter((item): item is RenderedMarker => Boolean(item)),
+        lines: normalizedPatterns.flatMap((pattern) => pattern.lines).map(visibleLine).filter((item): item is RenderedLine => Boolean(item)),
+        zones: normalizedPatterns.flatMap((pattern) => pattern.zones).map(visibleZone).filter((item): item is RenderedZone => Boolean(item)),
+        markers: normalizedPatterns.flatMap((pattern) => pattern.markers).map(visibleMarker).filter((item): item is RenderedMarker => Boolean(item)),
       });
     };
 
@@ -392,7 +426,7 @@ export default function LightweightChart({
       seriesRef.current = null;
       chart.remove();
     };
-  }, [chartPatterns, enabledStudies, height, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
+  }, [enabledStudies, height, normalizedPatterns, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
 
   return (
     <div className="relative w-full rounded-2xl border border-slate-800 overflow-hidden bg-slate-950">
