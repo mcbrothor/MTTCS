@@ -45,7 +45,7 @@ function percent(value: number | null, digits = 1) {
 
 function riskGateBlocked(input: MarketAnalysisResponse) {
   const status = input.riskPlan.riskGate?.status;
-  return status === 'BLOCK' || status === 'FAIL';
+  return status === 'BLOCK';
 }
 
 export function buildProfessionalChartPlan(input: MarketAnalysisResponse): ProfessionalChartPlan {

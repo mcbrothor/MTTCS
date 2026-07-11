@@ -43,4 +43,5 @@ assert.ok(png.length > 10_000, 'Rendered chart should contain image data');
 assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'Rendered chart should be PNG');
 assert.match(telegramChartCaption(imageInput), /TEST/);
 assert.deepEqual(selectTelegramChartPicks([{ rank: 3 }, { rank: 1 }, { rank: 2 }, { rank: 4 }], 3).map((item) => item.rank), [1, 2, 3]);
+assert.deepEqual(selectTelegramChartPicks([{ rank: 1, chartGate: { eligible: false } }, { rank: 2, chartGate: { eligible: true } }], 3).map((item) => item.rank), [2]);
 console.log('telegram chart image tests passed');

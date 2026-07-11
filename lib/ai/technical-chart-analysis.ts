@@ -65,7 +65,7 @@ export function buildTechnicalChartAnalysisPrompt(input: MarketAnalysisResponse)
   const professionalPlan = buildProfessionalChartPlan(input);
   return [
     'You are MTN technical chart analyst. Write Korean. Return JSON only.',
-    'You explain an existing professional trade plan; you do not create prices, coordinates, pattern ids, position sizes, or a new verdict.',
+    'You explain an existing professional trade plan. Do not invent chart coordinates, prices, pattern IDs, position sizes, or a new verdict.',
     'The deterministic professionalPlan is the execution authority. Explain why its readiness and grade are justified using only the provided evidence.',
     'Use only supplied OHLCV, risk metrics, chartPatterns, and professionalPlan.',
     'If you reference a pattern, use only ids from chartPatterns.',

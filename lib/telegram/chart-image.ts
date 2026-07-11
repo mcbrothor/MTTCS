@@ -18,8 +18,9 @@ export interface TelegramChartImageInput {
   rangeBars?: number | null;
 }
 
-export function selectTelegramChartPicks<T extends { rank: number }>(picks: T[], limit: number) {
+export function selectTelegramChartPicks<T extends { rank: number; chartGate?: { eligible?: boolean } }>(picks: T[], limit: number) {
   return [...picks]
+    .filter((pick) => pick.chartGate?.eligible !== false)
     .sort((left, right) => left.rank - right.rank)
     .slice(0, Math.min(10, Math.max(1, limit)));
 }

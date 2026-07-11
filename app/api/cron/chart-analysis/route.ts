@@ -12,13 +12,14 @@ export async function GET(request: Request) {
   const source = new URL(request.url);
   const ticker = source.searchParams.get('ticker');
   const exchange = source.searchParams.get('exchange');
+  const includeFundamentals = source.searchParams.get('includeFundamentals') === 'true';
   if (!ticker || !exchange) {
     return NextResponse.json({ success: false, message: 'ticker and exchange are required.' }, { status: 400 });
   }
   const target = new URL('/api/market-data', source.origin);
   target.searchParams.set('ticker', ticker);
   target.searchParams.set('exchange', exchange);
-  target.searchParams.set('includeFundamentals', 'false');
+  target.searchParams.set('includeFundamentals', String(includeFundamentals));
   target.searchParams.set('skipStandardMetrics', 'false');
   return getMarketData(new Request(target));
 }

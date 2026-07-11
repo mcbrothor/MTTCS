@@ -30,6 +30,8 @@ Confirm these exist in Vercel Production:
 - `DAILY_TELEGRAM_CHARTS_PER_CATEGORY` (default: `3`, maximum: `10`)
 - `DAILY_TELEGRAM_CHART_RANGE` (default: `1Y`; `ALL` uses the full returned history)
 - `DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS` (default: `25000`)
+- `DAILY_RECOMMENDATION_CHART_GATE_ENABLED` (default: `true`; excludes invalid, extended, or fundamentally unverified picks from Telegram chart delivery)
+- `DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY` (default: `3`, maximum: `5`)
 - `MTN_BASE_URL` (default: `https://mttcs.vercel.app`; used by the local worker for protected chart analysis)
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
@@ -54,6 +56,9 @@ Local Codex worker optional variables:
 - `LOCAL_LLM_ENABLED`
 - `LOCAL_LLM_API_URL`
 - `LOCAL_LLM_MODEL`
+- `TECHNICAL_CHART_LOCAL_MODEL` (default: `qwen3:14b`)
+- `TECHNICAL_CHART_MODEL_FALLBACKS` (default: `qwen3:8b,qwen2.5:7b`)
+- `TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED` (default: `false`)
 - `LOCAL_LLM_PROXY_SECRET` (optional; defaults to `TOSS_PROXY_SECRET`)
 - `LOCAL_LLM_UPSTREAM_URL` (local only; defaults to `http://127.0.0.1:11434/v1`)
 
@@ -134,7 +139,8 @@ For production Local LLM calls, keep the Mac mini Next server exposed through th
 
 - Vercel `LOCAL_LLM_ENABLED=true`
 - Vercel `LOCAL_LLM_API_URL=https://<mac-funnel-host>/api/local-llm-proxy`
-- Vercel `LOCAL_LLM_MODEL=qwen3.6:14b`
+- Vercel `LOCAL_LLM_MODEL=qwen2.5:7b` for lightweight non-chart jobs
+- Local worker `TECHNICAL_CHART_LOCAL_MODEL=qwen3:14b`, with `qwen3:8b,qwen2.5:7b` as installed-model fallbacks
 - The local proxy authenticates with `LOCAL_LLM_PROXY_SECRET` or `TOSS_PROXY_SECRET`.
 
 Start on the Mac mini when IB validation queue processing is needed:
@@ -162,7 +168,7 @@ Expected behavior:
 - `pending-codex-cli` is processed by Codex CLI first.
 - Codex failure falls back to `pending-local-llm`.
 - Telegram report is sent to every id in `TELEGRAM_ALLOWED_CHAT_IDS`.
-- With `DAILY_TELEGRAM_CHARTS_ENABLED=true`, each daily category report is followed by PNG chart analyses for its top ranked recommendations. A failed chart image is logged and does not change the successful text delivery status.
+- With `DAILY_TELEGRAM_CHARTS_ENABLED=true`, each daily category report is followed by PNG chart analyses only for picks that pass the integrated chart and fundamental-data gate. A failed image is logged and does not change the successful text delivery status.
 
 ## 6A. Local Analysis Infra
 

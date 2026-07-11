@@ -64,6 +64,11 @@ const DAILY_TELEGRAM_CHARTS_AI_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AI_EN
 const TECHNICAL_CHART_LOCAL_MODEL = process.env.TECHNICAL_CHART_LOCAL_MODEL || DEFAULT_TECHNICAL_CHART_MODEL;
 const TECHNICAL_CHART_MODEL_FALLBACKS = parseModelFallbacks(process.env.TECHNICAL_CHART_MODEL_FALLBACKS || DEFAULT_TECHNICAL_CHART_FALLBACKS);
 const TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED = process.env.TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED?.toLowerCase() === 'true';
+const DAILY_RECOMMENDATION_CHART_GATE_ENABLED = process.env.DAILY_RECOMMENDATION_CHART_GATE_ENABLED?.toLowerCase() !== 'false';
+const dailyRecommendationChartGateConcurrency = Number(process.env.DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY || 3);
+const DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY = Number.isInteger(dailyRecommendationChartGateConcurrency)
+  ? Math.min(5, Math.max(1, dailyRecommendationChartGateConcurrency))
+  : 3;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
@@ -73,6 +78,7 @@ const recommendationPrices = jiti('../lib/recommendations/prices.ts');
 const krInvestorFlow = jiti('../lib/recommendations/kr-investor-flow.ts');
 const krRiskRanking = jiti('../lib/recommendations/kr-risk-ranking.ts');
 const recommendationConfig = jiti('../lib/recommendations/config.ts');
+const recommendationChartGate = jiti('../lib/recommendations/chart-gate.ts');
 const technicalChartAnalysis = jiti('../lib/ai/technical-chart-analysis.ts');
 const telegramChartImage = jiti('../lib/telegram/chart-image.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
@@ -426,11 +432,12 @@ async function callGeminiTechnicalChart(prompt) {
   return text;
 }
 
-async function fetchCronMarketAnalysis(ticker, exchange) {
+async function fetchCronMarketAnalysis(ticker, exchange, includeFundamentals = false) {
   if (!CRON_SECRET) throw new Error('CRON_SECRET is not configured for chart analysis.');
   const url = new URL('/api/cron/chart-analysis', MTN_BASE_URL);
   url.searchParams.set('ticker', ticker);
   url.searchParams.set('exchange', exchange);
+  url.searchParams.set('includeFundamentals', String(includeFundamentals));
   const response = await fetch(url, { headers: { authorization: `Bearer ${CRON_SECRET}` } });
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload) throw new Error(`Chart analysis API failed: ${response.status}`);
@@ -503,6 +510,64 @@ function chartCandidateForPick(pick, category, candidates) {
   return candidates.find((candidate) => candidate.ticker === pick.ticker && dailyScreeners.categoryForDailyCandidate(candidate) === category)
     || candidates.find((candidate) => candidate.ticker === pick.ticker)
     || null;
+}
+
+async function mapWithConcurrency(items, limit, mapper) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function applyDailyRecommendationChartGate({ categories, candidates }) {
+  if (!DAILY_RECOMMENDATION_CHART_GATE_ENABLED) return { categories, snapshots: {} };
+  const entries = Object.entries(categories).flatMap(([category, picks]) => (picks || []).map((pick) => ({ category, pick })));
+  const checks = await mapWithConcurrency(entries, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async ({ category, pick }) => {
+    const candidate = chartCandidateForPick(pick, category, candidates);
+    const exchange = candidate?.exchange || pick.exchange || (dailyScreeners.marketForDailyCategory(category) === 'KR' ? 'KOSPI' : 'NAS');
+    try {
+      const analysis = await fetchCronMarketAnalysis(pick.ticker, exchange, true);
+      if (!Array.isArray(analysis.priceData) || analysis.priceData.length < 200) {
+        throw new Error('insufficient price history for integrated chart gate');
+      }
+      const technical = technicalChartAnalysis.buildRuleBasedTechnicalAnalysis(analysis);
+      return {
+        category,
+        ticker: pick.ticker,
+        chartGate: recommendationChartGate.buildRecommendationChartGate(analysis, technical),
+      };
+    } catch (error) {
+      console.warn(`[Worker] Recommendation chart gate unavailable: ${category} ${pick.ticker} - ${compactError(error)}`);
+      return {
+        category,
+        ticker: pick.ticker,
+        chartGate: recommendationChartGate.buildUnverifiedRecommendationChartGate('차트 또는 공식 펀더멘털 데이터 확인 실패'),
+      };
+    }
+  });
+  const gates = new Map(checks.map((item) => [`${item.category}:${item.ticker}`, item.chartGate]));
+  const snapshots = {};
+  const gatedCategories = Object.fromEntries(Object.entries(categories).map(([category, picks]) => {
+    const gated = recommendationChartGate.rankChartGatedPicks((picks || []).map((pick) => {
+      const chartGate = gates.get(`${category}:${pick.ticker}`)
+        || recommendationChartGate.buildUnverifiedRecommendationChartGate('통합 검증 결과가 없습니다.');
+      const snapshot = { chart_gate: chartGate };
+      snapshots[`${category}:${pick.ticker}`] = snapshot;
+      snapshots[pick.ticker] = snapshots[pick.ticker] || snapshot;
+      return { ...pick, chartGate };
+    }));
+    const eligible = gated.filter((pick) => pick.chartGate?.eligible).length;
+    console.log(`[Worker] Recommendation chart gate: ${category} ${eligible}/${gated.length} eligible.`);
+    return [category, gated];
+  }));
+  return { categories: gatedCategories, snapshots };
 }
 
 async function sendDailyTelegramCharts({ category, picks, candidates }) {
@@ -946,10 +1011,18 @@ async function processDailyScreenerRun(run) {
       },
     });
     const top5Attempt = await runDailyTop5Chain(prompt, topCandidates);
+    const chartGated = await applyDailyRecommendationChartGate({
+      categories: top5Attempt.result.categories,
+      candidates: topCandidates,
+    });
+    const gatedResult = {
+      ...top5Attempt.result,
+      categories: chartGated.categories,
+    };
     const top5Result = {
       provider: top5Attempt.provider,
       model: top5Attempt.model,
-      categories: top5Attempt.result.categories,
+      categories: gatedResult.categories,
       report_markdown: top5Attempt.result.reportMarkdown,
       raw_response: top5Attempt.result.rawResponse,
       generated_at: new Date().toISOString(),
@@ -966,7 +1039,7 @@ async function processDailyScreenerRun(run) {
       generatedAt: top5Result.generated_at,
       provider: top5Attempt.provider,
       model: top5Attempt.model,
-      result: top5Attempt.result,
+      result: gatedResult,
       candidates: scan.candidates,
       marketContext: {
         scan_summary: scanSummary,
@@ -982,9 +1055,9 @@ async function processDailyScreenerRun(run) {
         provider_chain: top5Attempt.chain,
       }])),
       categories: usCategories,
-      candidateSnapshotByTicker: flowSnapshotByTicker,
+      candidateSnapshotByTicker: { ...flowSnapshotByTicker, ...chartGated.snapshots },
     });
-    const officialResultByCategory = Object.fromEntries(usCategories.map((category) => [category, top5Attempt.result.categories[category]]));
+    const officialResultByCategory = Object.fromEntries(usCategories.map((category) => [category, gatedResult.categories[category]]));
     if (krSessionOpen) {
       const marketState = marketContextByMarket.KR?.market_state || 'YELLOW';
       const allowedPolicies = [
@@ -1013,10 +1086,19 @@ async function processDailyScreenerRun(run) {
           useFlow: true,
         });
         const policies = [
-          { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: top5Attempt.result.categories[category], ranked: null },
+          { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: gatedResult.categories[category], ranked: null },
           { engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION, picks: riskRanked.map((row) => row.pick), ranked: riskRanked },
           { engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION, picks: flowRanked.map((row) => row.pick), ranked: flowRanked },
         ];
+        const officialPolicy = policies.find((policy) => policy.engineVersion === activePolicy);
+        if (officialPolicy?.ranked) {
+          const gatedOfficialPolicy = await applyDailyRecommendationChartGate({
+            categories: { [category]: officialPolicy.picks },
+            candidates: topCandidates,
+          });
+          officialPolicy.picks = gatedOfficialPolicy.categories[category];
+          officialPolicy.chartGateSnapshots = gatedOfficialPolicy.snapshots;
+        }
         for (const policy of policies) {
           const deterministicSnapshots = policy.ranked
             ? Object.fromEntries(policy.ranked.flatMap((row) => {
@@ -1040,7 +1122,7 @@ async function processDailyScreenerRun(run) {
             generatedAt: top5Result.generated_at,
             provider: top5Attempt.provider,
             model: top5Attempt.model,
-            result: { ...top5Attempt.result, categories: { ...top5Attempt.result.categories, [category]: policy.picks } },
+            result: { ...gatedResult, categories: { ...gatedResult.categories, [category]: policy.picks } },
             candidates: scan.candidates,
             category,
             engineVersion: policy.engineVersion,
@@ -1052,7 +1134,7 @@ async function processDailyScreenerRun(run) {
                 provider_chain: top5Attempt.chain,
               },
             },
-            candidateSnapshotByTicker: deterministicSnapshots,
+            candidateSnapshotByTicker: { ...deterministicSnapshots, ...chartGated.snapshots, ...(policy.chartGateSnapshots || {}) },
           });
           recommendationPublications.push(publication);
           if (policy.engineVersion === activePolicy) officialResultByCategory[category] = policy.picks;

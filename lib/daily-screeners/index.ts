@@ -58,6 +58,16 @@ export interface DailyTop5Pick {
   reason: string;
   confidence: number;
   risk?: string | null;
+  chartGate?: {
+    disposition: 'ACTIONABLE' | 'WATCHLIST' | 'EXCLUDED' | 'UNVERIFIED';
+    verdict: 'BUY' | 'WATCH' | 'AVOID' | 'UNVERIFIED';
+    setupGrade: 'A' | 'B' | 'C' | 'D' | null;
+    readiness: string | null;
+    eligible: boolean;
+    fundamentalVerification: 'VERIFIED' | 'PARTIAL' | 'MISSING' | 'UNVERIFIED';
+    score: number;
+    summary: string;
+  };
 }
 
 export interface DailyTop5Result {
@@ -1330,6 +1340,7 @@ export function formatDailyCategoryTop10TelegramMessage(input: {
     `${pick.rank}. *${md(pick.ticker)}* — ${md(pick.name || pick.ticker)}`,
     `   ${md(sourceLabel(pick.source))} | 신뢰도 ${formatPercent(pick.confidence)} | MTN ${formatNumber(pick.score, 0)} | ${md(pick.universe)}`,
     `   근거: ${md(compactSentence(pick.reason, 620))}`,
+    pick.chartGate ? `   통합 게이트: ${md(pick.chartGate.summary)}` : null,
     pick.risk ? `   리스크: ${md(compactSentence(pick.risk, 360))}` : null,
   ].filter(Boolean).join('\n')).join('\n\n');
 

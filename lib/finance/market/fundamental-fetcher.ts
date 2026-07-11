@@ -3,6 +3,7 @@ import { getDartCorpCode, getDartFinancialData, type FundamentalMetrics } from '
 import { getSecFundamentals } from '../providers/sec-edgar-api';
 import type { FundamentalSnapshot } from '@/types';
 import { supabaseServer } from '@/lib/supabase/server';
+import { hasCoreFundamentalCoverage, mergeFundamentalFallback } from './fundamental-quality';
 
 const CACHE_VALID_DAYS = 1; // 24시간 TTL 적용
 
@@ -12,6 +13,18 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function cacheSnapshot(cacheData: Record<string, unknown>): FundamentalSnapshot {
+  return {
+    marketCap: null,
+    epsGrowthPct: numberOrNull(cacheData.eps_growth_pct),
+    revenueGrowthPct: numberOrNull(cacheData.revenue_growth_pct),
+    roePct: numberOrNull(cacheData.roe_pct),
+    debtToEquityPct: numberOrNull(cacheData.debt_to_equity_pct),
+    floatShares: numberOrNull(cacheData.float_shares),
+    sharesOutstanding: numberOrNull(cacheData.shares_outstanding),
+    source: typeof cacheData.source === 'string' && cacheData.source ? cacheData.source : 'Cache',
+  };
+}
 
 /**
  * 전역 펀더멘털 데이터 수집기
@@ -25,6 +38,7 @@ export async function fetchAggregatedFundamentals(
   const isKR = exchange === 'KOSPI' || exchange === 'KOSDAQ';
   const yahooTicker = isKR ? `${ticker}.${exchange === 'KOSPI' ? 'KS' : 'KQ'}` : ticker;
   const market = isKR ? 'KR' : 'US';
+  let cachedFallback: FundamentalSnapshot | null = null;
 
   try {
     // 1. 캐시 확인
@@ -42,37 +56,19 @@ export async function fetchAggregatedFundamentals(
         const daysSinceUpdate = (now - lastUpdated) / (1000 * 60 * 60 * 24);
 
         if (daysSinceUpdate < CACHE_VALID_DAYS) {
-          const cachedSnapshot: FundamentalSnapshot = {
-            marketCap: null,
-            epsGrowthPct: numberOrNull(cacheData.eps_growth_pct),
-            revenueGrowthPct: numberOrNull(cacheData.revenue_growth_pct),
-            roePct: numberOrNull(cacheData.roe_pct),
-            debtToEquityPct: numberOrNull(cacheData.debt_to_equity_pct),
-            floatShares: numberOrNull(cacheData.float_shares),
-            sharesOutstanding: numberOrNull(cacheData.shares_outstanding),
-            source: cacheData.source || 'Cache',
-          };
-          if (cachedSnapshot.sharesOutstanding !== null) return cachedSnapshot;
-
-          const yahooQuote = await getYahooFundamentals(yahooTicker);
-          if (!yahooQuote) return cachedSnapshot;
-
-          return {
-            ...cachedSnapshot,
-            marketCap: yahooQuote.marketCap ?? null,
-            floatShares: cachedSnapshot.floatShares ?? yahooQuote.floatShares ?? null,
-            sharesOutstanding: yahooQuote.sharesOutstanding ?? null,
-            sector: yahooQuote.sector ?? null,
-            source: `${cachedSnapshot.source} + Yahoo Finance quoteSummary`,
-          };
+          const cachedSnapshot = cacheSnapshot(cacheData as Record<string, unknown>);
+          if (hasCoreFundamentalCoverage(cachedSnapshot)) return cachedSnapshot;
+          cachedFallback = cachedSnapshot;
+          warnings.push('FUNDAMENTAL_CACHE_PARTIAL: refreshing official sources because EPS, revenue growth, or ROE is missing.');
         }
       }
-    } catch {
-      // 캐시 에러 무시하고 진행
+    } catch (error) {
+      warnings.push(`FUNDAMENTAL_CACHE_READ_FAILED: ${error instanceof Error ? error.message : 'Unknown'}`);
     }
 
     // 2. Yahoo Finance 기본 데이터 가져오기
     const yahoo = await getYahooFundamentals(yahooTicker);
+    if (!yahoo) warnings.push('YAHOO_FUNDAMENTALS_UNAVAILABLE: attempting official filing sources.');
 
     // 3. 국가별 공식 데이터 보강 (DART / EDGAR)
     let augmented: FundamentalSnapshot | null = null;
@@ -82,7 +78,10 @@ export async function fetchAggregatedFundamentals(
       augmented = await augmentWithEdgar(ticker, yahoo, warnings);
     }
 
-    const finalResult = augmented || yahoo;
+    const finalResult = mergeFundamentalFallback(augmented || yahoo, cachedFallback);
+    if (!hasCoreFundamentalCoverage(finalResult)) {
+      warnings.push('FUNDAMENTAL_COVERAGE_INCOMPLETE: EPS growth, revenue growth, or ROE remains unavailable after source fallback.');
+    }
 
     // 4. 캐시에 저장
     if (finalResult && (finalResult.epsGrowthPct !== null || finalResult.revenueGrowthPct !== null || finalResult.roePct !== null || finalResult.floatShares !== null)) {
@@ -122,7 +121,10 @@ async function augmentWithDart(
 ): Promise<FundamentalSnapshot | null> {
   try {
     const corpCode = await getDartCorpCode(ticker);
-    if (!corpCode) return yahoo;
+    if (!corpCode) {
+      if (!hasCoreFundamentalCoverage(yahoo)) warnings.push('DART_FUNDAMENTALS_UNAVAILABLE: no matching filing company code.');
+      return yahoo;
+    }
 
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -194,6 +196,7 @@ async function augmentWithDart(
       };
     }
 
+    if (!hasCoreFundamentalCoverage(yahoo)) warnings.push('DART_FUNDAMENTALS_UNAVAILABLE: no usable filing metrics were returned.');
     return yahoo;
   } catch (err) {
     warnings.push(`DART 보강 실패: ${err instanceof Error ? err.message : 'Unknown'}`);
@@ -212,7 +215,10 @@ async function augmentWithEdgar(
 ): Promise<FundamentalSnapshot | null> {
   try {
     const edgar = await getSecFundamentals(ticker);
-    if (!edgar) return yahoo;
+    if (!edgar) {
+      if (!hasCoreFundamentalCoverage(yahoo)) warnings.push('SEC_EDGAR_FUNDAMENTALS_UNAVAILABLE: no usable filing metrics were returned.');
+      return yahoo;
+    }
 
     if (!yahoo) return edgar;
 
@@ -233,7 +239,8 @@ async function augmentWithEdgar(
       debtToEquityPct: yahoo.debtToEquityPct ?? edgar.debtToEquityPct,
       source: `${edgar.source} + Yahoo`,
     };
-  } catch {
+  } catch (error) {
+    warnings.push(`SEC_EDGAR_FUNDAMENTALS_FAILED: ${error instanceof Error ? error.message : 'Unknown'}`);
     return yahoo;
   }
 }
