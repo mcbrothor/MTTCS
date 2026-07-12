@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, IPriceLine, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import type { CandlestickData, HistogramData, ISeriesApi, LineData, Time } from 'lightweight-charts';
 import type { ChartPatternLine, ChartPatternMarker, ChartPatternOverlay, ChartPatternOverlayCategory, ChartPatternZone } from '@/types';
+import { isChartOverlayVisible, type ChartOverlayMode } from '@/lib/finance/core/chart-overlay-focus';
 import { isIsoChartDate, normalizeChartDate } from '@/lib/finance/core/chart-time';
 
 interface LightweightChartProps {
@@ -13,15 +14,19 @@ interface LightweightChartProps {
   targetPrice?: number | null;
   pivotLabel?: string;
   chartPatterns?: ChartPatternOverlay[];
+  focusedPatternId?: string | null;
+  onPatternFocusChange?: (patternId: string | null) => void;
   height?: number;
 }
 
-type OverlayMode = 'all' | 'base' | 'pivot' | 'volume';
+type OverlayMode = ChartOverlayMode;
 type RangeMode = '3M' | '6M' | '1Y' | 'ALL';
 type StudyKey = 'ma20' | 'ma50' | 'ma200' | 'volume';
 
 interface RenderedLine {
   id: string;
+  patternId: string;
+  category: ChartPatternOverlayCategory;
   label: string;
   x1: number;
   y1: number;
@@ -33,6 +38,8 @@ interface RenderedLine {
 
 interface RenderedZone {
   id: string;
+  patternId: string;
+  category: ChartPatternOverlayCategory;
   label: string;
   x: number;
   y: number;
@@ -43,6 +50,8 @@ interface RenderedZone {
 
 interface RenderedMarker {
   id: string;
+  patternId: string;
+  category: ChartPatternOverlayCategory;
   label: string;
   x: number;
   y: number;
@@ -101,18 +110,6 @@ const RANGE_BARS: Record<RangeMode, number | null> = {
   '1Y': 252,
   ALL: null,
 };
-
-function categoriesForMode(mode: OverlayMode): Set<ChartPatternOverlayCategory> | null {
-  if (mode === 'all') return null;
-  if (mode === 'base') return new Set(['base', 'pattern']);
-  if (mode === 'pivot') return new Set(['pivot', 'risk']);
-  return new Set(['volume']);
-}
-
-function categoryVisible(category: ChartPatternOverlayCategory, mode: OverlayMode) {
-  const categories = categoriesForMode(mode);
-  return categories === null || categories.has(category);
-}
 
 function lineDash(style: ChartPatternLine['style']) {
   if (style === 'dashed') return '6 4';
@@ -192,6 +189,8 @@ export default function LightweightChart({
   targetPrice,
   pivotLabel = 'Pivot',
   chartPatterns = [],
+  focusedPatternId = null,
+  onPatternFocusChange,
   height = 400 
 }: LightweightChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -211,6 +210,8 @@ export default function LightweightChart({
   const [renderedOverlay, setRenderedOverlay] = useState<RenderedOverlay>(EMPTY_OVERLAY);
   const normalizedData = useMemo(() => normalizeChartData(data), [data]);
   const normalizedPatterns = useMemo(() => normalizeChartPatterns(chartPatterns), [chartPatterns]);
+  const activePatternId = normalizedPatterns.some((pattern) => pattern.id === focusedPatternId) ? focusedPatternId : null;
+  const activePattern = activePatternId ? normalizedPatterns.find((pattern) => pattern.id === activePatternId) ?? null : null;
   const patternCount = normalizedPatterns.length;
   const modes = useMemo<OverlayMode[]>(() => ['all', 'base', 'pivot', 'volume'], []);
   const ranges = useMemo<RangeMode[]>(() => ['3M', '6M', '1Y', 'ALL'], []);
@@ -219,6 +220,20 @@ export default function LightweightChart({
     const bars = RANGE_BARS[rangeMode];
     return bars === null ? normalizedData : normalizedData.slice(-bars);
   }, [normalizedData, rangeMode]);
+  const visibleOverlay = useMemo(() => {
+    const isVisible = (patternId: string, category: ChartPatternOverlayCategory) => isChartOverlayVisible({
+      patternId,
+      category,
+      mode: overlayMode,
+      focusedPatternId: activePatternId,
+    });
+    return {
+      ...renderedOverlay,
+      lines: renderedOverlay.lines.filter((line) => isVisible(line.patternId, line.category)),
+      zones: renderedOverlay.zones.filter((zone) => isVisible(zone.patternId, zone.category)),
+      markers: renderedOverlay.markers.filter((marker) => isVisible(marker.patternId, marker.category)),
+    };
+  }, [activePatternId, overlayMode, renderedOverlay]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -295,7 +310,8 @@ export default function LightweightChart({
     }
 
     // Pivot Line
-    if (pivotPrice) {
+    const showTradePlanLines = !activePatternId && (overlayMode === 'all' || overlayMode === 'pivot');
+    if (showTradePlanLines && pivotPrice) {
       pivotLineRef.current = candlestickSeries.createPriceLine({
         price: pivotPrice,
         color: '#fbbf24',
@@ -307,7 +323,7 @@ export default function LightweightChart({
     }
 
     // Stop Loss Line
-    if (stopLossPrice) {
+    if (showTradePlanLines && stopLossPrice) {
       stopLineRef.current = candlestickSeries.createPriceLine({
         price: stopLossPrice,
         color: '#f43f5e',
@@ -318,7 +334,7 @@ export default function LightweightChart({
       });
     }
 
-    if (targetPrice) {
+    if (showTradePlanLines && targetPrice) {
       targetLineRef.current = candlestickSeries.createPriceLine({
         price: targetPrice,
         color: '#38bdf8',
@@ -348,8 +364,7 @@ export default function LightweightChart({
       };
       const toX = (date: string) => timeScale.timeToCoordinate(clampDate(date) as Time);
       const toY = (price: number) => candlestickSeries.priceToCoordinate(price);
-      const visibleLine = (line: ChartPatternLine): RenderedLine | null => {
-        if (!categoryVisible(line.category, overlayMode)) return null;
+      const visibleLine = (patternId: string, line: ChartPatternLine): RenderedLine | null => {
         const x1 = toX(line.points[0].date);
         const y1 = toY(line.points[0].price);
         const x2 = toX(line.points[1].date);
@@ -357,6 +372,8 @@ export default function LightweightChart({
         if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
         return {
           id: line.id,
+          patternId,
+          category: line.category,
           label: line.label,
           x1,
           y1,
@@ -366,8 +383,7 @@ export default function LightweightChart({
           dash: lineDash(line.style),
         };
       };
-      const visibleZone = (zone: ChartPatternZone): RenderedZone | null => {
-        if (!categoryVisible(zone.category, overlayMode)) return null;
+      const visibleZone = (patternId: string, zone: ChartPatternZone): RenderedZone | null => {
         const x1 = toX(zone.startDate);
         const x2 = toX(zone.endDate);
         const top = toY(zone.high);
@@ -375,6 +391,8 @@ export default function LightweightChart({
         if (x1 === null || x2 === null || top === null || bottom === null) return null;
         return {
           id: zone.id,
+          patternId,
+          category: zone.category,
           label: zone.label,
           x: Math.min(x1, x2),
           y: Math.min(top, bottom),
@@ -383,13 +401,14 @@ export default function LightweightChart({
           color: CATEGORY_COLOR[zone.category],
         };
       };
-      const visibleMarker = (marker: ChartPatternMarker): RenderedMarker | null => {
-        if (!categoryVisible(marker.category, overlayMode)) return null;
+      const visibleMarker = (patternId: string, marker: ChartPatternMarker): RenderedMarker | null => {
         const x = toX(marker.date);
         const y = toY(marker.price);
         if (x === null || y === null) return null;
         return {
           id: marker.id,
+          patternId,
+          category: marker.category,
           label: marker.label,
           x,
           y,
@@ -401,9 +420,9 @@ export default function LightweightChart({
       setRenderedOverlay({
         width,
         height: chartHeight,
-        lines: normalizedPatterns.flatMap((pattern) => pattern.lines).map(visibleLine).filter((item): item is RenderedLine => Boolean(item)),
-        zones: normalizedPatterns.flatMap((pattern) => pattern.zones).map(visibleZone).filter((item): item is RenderedZone => Boolean(item)),
-        markers: normalizedPatterns.flatMap((pattern) => pattern.markers).map(visibleMarker).filter((item): item is RenderedMarker => Boolean(item)),
+        lines: normalizedPatterns.flatMap((pattern) => pattern.lines.map((line) => visibleLine(pattern.id, line))).filter((item): item is RenderedLine => Boolean(item)),
+        zones: normalizedPatterns.flatMap((pattern) => pattern.zones.map((zone) => visibleZone(pattern.id, zone))).filter((item): item is RenderedZone => Boolean(item)),
+        markers: normalizedPatterns.flatMap((pattern) => pattern.markers.map((marker) => visibleMarker(pattern.id, marker))).filter((item): item is RenderedMarker => Boolean(item)),
       });
     };
 
@@ -426,7 +445,7 @@ export default function LightweightChart({
       seriesRef.current = null;
       chart.remove();
     };
-  }, [enabledStudies, height, normalizedPatterns, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
+  }, [activePatternId, enabledStudies, height, normalizedPatterns, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
 
   return (
     <div className="relative w-full rounded-2xl border border-slate-800 overflow-hidden bg-slate-950">
@@ -434,12 +453,12 @@ export default function LightweightChart({
       {patternCount > 0 ? (
         <svg
           className="pointer-events-none absolute left-0 top-0 z-[5]"
-          width={renderedOverlay.width}
-          height={renderedOverlay.height}
-          viewBox={`0 0 ${renderedOverlay.width} ${renderedOverlay.height}`}
+          width={visibleOverlay.width}
+          height={visibleOverlay.height}
+          viewBox={`0 0 ${visibleOverlay.width} ${visibleOverlay.height}`}
           aria-hidden="true"
         >
-          {renderedOverlay.zones.map((zone) => (
+          {visibleOverlay.zones.map((zone) => (
             <g key={zone.id}>
               <rect
                 x={zone.x}
@@ -458,7 +477,7 @@ export default function LightweightChart({
               </text>
             </g>
           ))}
-          {renderedOverlay.lines.map((line) => (
+          {visibleOverlay.lines.map((line) => (
             <g key={line.id}>
               <line
                 x1={line.x1}
@@ -470,12 +489,12 @@ export default function LightweightChart({
                 strokeDasharray={line.dash}
                 strokeLinecap="round"
               />
-              <text x={Math.max(4, Math.min(renderedOverlay.width - 72, line.x2 - 68))} y={line.y2 - 5} fill={line.color} fontSize="10" fontWeight="700">
+              <text x={Math.max(4, Math.min(visibleOverlay.width - 72, line.x2 - 68))} y={line.y2 - 5} fill={line.color} fontSize="10" fontWeight="700">
                 {line.label}
               </text>
             </g>
           ))}
-          {renderedOverlay.markers.map((marker) => (
+          {visibleOverlay.markers.map((marker) => (
             <g key={marker.id}>
               {marker.shape === 'circle' ? (
                 <circle cx={marker.x} cy={marker.y} r="5" fill={marker.color} fillOpacity="0.9" />
@@ -531,7 +550,11 @@ export default function LightweightChart({
             <button
               key={mode}
               type="button"
-              onClick={() => setOverlayMode(mode)}
+              data-overlay-mode={mode}
+              onClick={() => {
+                setOverlayMode(mode);
+                onPatternFocusChange?.(null);
+              }}
               className={`rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
                 overlayMode === mode
                   ? 'bg-emerald-500/20 text-emerald-100'
@@ -541,7 +564,18 @@ export default function LightweightChart({
               {MODE_LABEL[mode]}
             </button>
           ))}
-          <span className="px-2 py-1 text-[10px] font-bold text-slate-500">{patternCount} patterns</span>
+          {activePattern ? (
+            <button
+              type="button"
+              onClick={() => onPatternFocusChange?.(null)}
+              className="rounded-md px-2 py-1 text-[10px] font-bold text-sky-200 hover:bg-slate-800"
+              title="패턴 포커스 해제"
+            >
+              {activePattern.label} 포커스
+            </button>
+          ) : (
+            <span className="px-2 py-1 text-[10px] font-bold text-slate-500">{patternCount} patterns</span>
+          )}
         </div>
       ) : null}
       <div className="absolute bottom-3 right-3 z-10 flex max-w-[calc(100%-24px)] flex-wrap gap-1 rounded-lg border border-slate-700 bg-slate-950/85 p-1 shadow-xl backdrop-blur">

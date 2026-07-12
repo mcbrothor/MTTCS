@@ -27,8 +27,10 @@ export default function Stock360Page() {
   const [meta, setMeta] = useState<DataSourceMeta | null>(null);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [error, setError] = useState('');
+  const [focusedPatternId, setFocusedPatternId] = useState<string | null>(null);
 
   useEffect(() => {
+    setFocusedPatternId(null);
     fetch(`/api/market-data?ticker=${encodeURIComponent(ticker)}&exchange=${exchange}`)
       .then(async (response) => {
         const payload = await response.json();
@@ -85,9 +87,17 @@ export default function Stock360Page() {
               <h2 className="font-bold text-white">MTN Pro 패턴 차트</h2>
               <div className="flex max-w-full flex-wrap gap-2">
                 {patterns.slice(0, 5).map((pattern) => (
-                  <span key={pattern.id} className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${patternTone(pattern)}`}>
+                  <button
+                    key={pattern.id}
+                    type="button"
+                    onClick={() => setFocusedPatternId((current) => current === pattern.id ? null : pattern.id)}
+                    aria-pressed={focusedPatternId === pattern.id}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors ${patternTone(pattern)} ${
+                      focusedPatternId === pattern.id ? 'ring-1 ring-white/70' : 'hover:brightness-125'
+                    }`}
+                  >
                     {pattern.label} {(pattern.confidence * 100).toFixed(0)}%
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -99,6 +109,8 @@ export default function Stock360Page() {
                 stopLossPrice={analysis.riskPlan.selectedStopPrice ?? analysis.riskPlan.stopLossPrice}
                 targetPrice={analysis.riskPlan.targetPrice}
                 chartPatterns={patterns}
+                focusedPatternId={focusedPatternId}
+                onPatternFocusChange={setFocusedPatternId}
                 initialData={analysis.priceData.map((bar) => ({
                   time: bar.date,
                   open: bar.open,

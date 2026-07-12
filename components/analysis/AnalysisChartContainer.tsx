@@ -36,6 +36,8 @@ interface AnalysisChartContainerProps {
   targetPrice?: number | null;
   pivotLabel?: string;
   chartPatterns?: ChartPatternOverlay[];
+  focusedPatternId?: string | null;
+  onPatternFocusChange?: (patternId: string | null) => void;
   initialData?: ChartPoint[];
   initialSource?: ChartSource;
 }
@@ -48,6 +50,8 @@ export default function AnalysisChartContainer({
   targetPrice,
   pivotLabel,
   chartPatterns = [],
+  focusedPatternId,
+  onPatternFocusChange,
   initialData = [],
   initialSource = 'tradingview'
 }: AnalysisChartContainerProps) {
@@ -61,6 +65,13 @@ export default function AnalysisChartContainer({
   const [priceData, setPriceData] = useState<ChartPoint[]>(initialData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [internalPatternFocus, setInternalPatternFocus] = useState<string | null>(null);
+  const activePatternFocus = focusedPatternId === undefined ? internalPatternFocus : focusedPatternId;
+
+  const setPatternFocus = (patternId: string | null) => {
+    if (focusedPatternId === undefined) setInternalPatternFocus(patternId);
+    onPatternFocusChange?.(patternId);
+  };
 
   const fetchPriceData = useCallback(async () => {
     setLoading(true);
@@ -114,34 +125,69 @@ export default function AnalysisChartContainer({
   return (
     <div className="flex h-full flex-col bg-slate-950">
       {/* Chart Source Toggle */}
-      <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/50 px-4 py-2">
-        <div className="flex gap-1 rounded-lg bg-slate-950 p-1">
-          <SourceButton 
-            active={source === 'mtn'} 
-            onClick={() => setSource('mtn')} 
-            icon={<TrendingUp className="h-3.5 w-3.5" />}
-            label="MTN Pro"
-          />
-          {!isKrx && !isMobile && (
+      <div className="border-b border-slate-800 bg-slate-900/50">
+        <div className="flex items-center justify-between px-4 py-2">
+          <div className="flex gap-1 rounded-lg bg-slate-950 p-1">
             <SourceButton
-              active={source === 'tradingview'}
-              onClick={() => setSource('tradingview')}
+              active={source === 'mtn'}
+              onClick={() => setSource('mtn')}
               icon={<TrendingUp className="h-3.5 w-3.5" />}
-              label="TradingView"
+              label="MTN Pro"
             />
-          )}
-          <SourceButton 
-            active={source === 'naver'} 
-            onClick={() => setSource('naver')} 
-            icon={<Globe className="h-3.5 w-3.5" />}
-            label="Naver"
-          />
+            {!isKrx && !isMobile && (
+              <SourceButton
+                active={source === 'tradingview'}
+                onClick={() => setSource('tradingview')}
+                icon={<TrendingUp className="h-3.5 w-3.5" />}
+                label="TradingView"
+              />
+            )}
+            <SourceButton
+              active={source === 'naver'}
+              onClick={() => setSource('naver')}
+              icon={<Globe className="h-3.5 w-3.5" />}
+              label="Naver"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+            {source === 'mtn' && <span className="text-amber-500/80">★ Pattern Overlay</span>}
+            {source === 'tradingview' && <span>Official Advanced Chart</span>}
+          </div>
         </div>
-        
-        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
-          {source === 'mtn' && <span className="text-amber-500/80">★ Pattern Overlay</span>}
-          {source === 'tradingview' && <span>Official Advanced Chart</span>}
-        </div>
+        {source === 'mtn' && chartPatterns.length > 0 ? (
+          <div className="flex gap-1 overflow-x-auto border-t border-slate-800/70 px-4 py-2 [scrollbar-width:none]">
+            <button
+              type="button"
+              data-pattern-focus-id="all"
+              onClick={() => setPatternFocus(null)}
+              aria-pressed={activePatternFocus === null}
+              className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
+                activePatternFocus === null
+                  ? 'bg-slate-700 text-white'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+              }`}
+            >
+              전체 패턴
+            </button>
+            {chartPatterns.map((pattern) => (
+              <button
+                key={pattern.id}
+                type="button"
+                data-pattern-focus-id={pattern.id}
+                onClick={() => setPatternFocus(pattern.id)}
+                aria-pressed={activePatternFocus === pattern.id}
+                className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-bold transition-colors ${
+                  activePatternFocus === pattern.id
+                    ? 'bg-sky-500/20 text-sky-100 ring-1 ring-sky-400/40'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                }`}
+              >
+                {pattern.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* Main Display Area */}
@@ -189,6 +235,8 @@ export default function AnalysisChartContainer({
                 targetPrice={targetPrice}
                 pivotLabel={pivotLabel}
                 chartPatterns={chartPatterns}
+                focusedPatternId={activePatternFocus}
+                onPatternFocusChange={setPatternFocus}
                 height={500} 
               />
             )}
