@@ -596,9 +596,12 @@ async function applyDailyRecommendationChartGate({ categories, candidates }) {
 
 async function sendDailyTelegramCharts({ category, picks, candidates }) {
   if (!DAILY_TELEGRAM_CHARTS_ENABLED) return { skipped: true, attempted: 0, sent: 0 };
-  const selected = telegramChartImage.selectTelegramChartPicks(picks || [], DAILY_TELEGRAM_CHARTS_PER_CATEGORY);
+  const selected = telegramChartImage.selectTelegramChartPicks(picks || [], 10);
+  let attempted = 0;
   let sent = 0;
   for (const pick of selected) {
+    if (sent >= DAILY_TELEGRAM_CHARTS_PER_CATEGORY) break;
+    attempted += 1;
     try {
       const candidate = chartCandidateForPick(pick, category, candidates);
       const exchange = candidate?.exchange || pick.exchange || (dailyScreeners.marketForDailyCategory(category) === 'KR' ? 'KOSPI' : 'NAS');
@@ -608,6 +611,10 @@ async function sendDailyTelegramCharts({ category, picks, candidates }) {
         continue;
       }
       const { technical, provider, model } = await runTechnicalChartAnalysis(marketAnalysis);
+      if (!telegramChartImage.isTelegramChartAnalysisSendable(technical)) {
+        console.warn(`[Worker] Skipped chart image for ${category} ${pick.ticker}: ${technical.verdict}/${technical.readiness}.`);
+        continue;
+      }
       const imageInput = {
         ticker: pick.ticker,
         exchange,
@@ -628,7 +635,7 @@ async function sendDailyTelegramCharts({ category, picks, candidates }) {
       console.error(`[Worker] Telegram chart failed: ${category} ${pick.ticker} - ${compactError(error)}${cause}`);
     }
   }
-  return { skipped: false, attempted: selected.length, sent };
+  return { skipped: false, attempted, sent };
 }
 
 async function callDailyTop5Provider(provider, prompt, candidates) {
@@ -1255,7 +1262,7 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
   if (!DAILY_TELEGRAM_CHARTS_ENABLED) throw new Error('DAILY_TELEGRAM_CHARTS_ENABLED=true is required for chart replay.');
   const { data: publications, error } = await supabase
     .from('recommendation_publications')
-    .select('category, recommendation_picks(ticker, exchange, name, rank)')
+    .select('category, recommendation_picks(ticker, exchange, name, rank, candidate_snapshot)')
     .eq('run_date', runDate)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED');
@@ -1266,7 +1273,11 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
   if (!selectedPublications.length) throw new Error(`No official recommendation publications found for ${runDate}.`);
   for (const publication of selectedPublications) {
     const picks = (Array.isArray(publication.recommendation_picks) ? publication.recommendation_picks : [])
-      .filter((pick) => tickers.length === 0 || tickers.includes(pick.ticker));
+      .filter((pick) => tickers.length === 0 || tickers.includes(pick.ticker))
+      .map((pick) => ({
+        ...pick,
+        chartGate: pick.candidate_snapshot?.chart_gate,
+      }));
     const delivery = await sendDailyTelegramCharts({ category: publication.category, picks, candidates: [] });
     console.log(`[Worker] Replay chart delivery: ${publication.category} ${delivery.sent}/${delivery.attempted}.`);
   }

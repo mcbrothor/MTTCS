@@ -20,9 +20,17 @@ export interface TelegramChartImageInput {
 
 export function selectTelegramChartPicks<T extends { rank: number; chartGate?: { eligible?: boolean } }>(picks: T[], limit: number) {
   return [...picks]
-    .filter((pick) => pick.chartGate?.eligible !== false)
+    .filter((pick) => pick.chartGate?.eligible === true)
     .sort((left, right) => left.rank - right.rank)
     .slice(0, Math.min(10, Math.max(1, limit)));
+}
+
+export function isTelegramChartAnalysisSendable(
+  technical: Pick<TechnicalChartAnalysis, 'verdict' | 'readiness'>,
+) {
+  return technical.verdict !== 'AVOID'
+    && technical.readiness !== 'INVALID'
+    && technical.readiness !== 'EXTENDED';
 }
 
 function escapeXml(value: string) {

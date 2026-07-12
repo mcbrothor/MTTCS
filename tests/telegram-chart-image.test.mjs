@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { buildChartPatterns } from '../lib/finance/engines/chart-patterns.ts';
 import {
+  isTelegramChartAnalysisSendable,
   renderTelegramChartPng,
   selectTelegramChartPicks,
   telegramChartCaption,
@@ -42,6 +43,16 @@ const png = renderTelegramChartPng(imageInput);
 assert.ok(png.length > 10_000, 'Rendered chart should contain image data');
 assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'Rendered chart should be PNG');
 assert.match(telegramChartCaption(imageInput), /TEST/);
-assert.deepEqual(selectTelegramChartPicks([{ rank: 3 }, { rank: 1 }, { rank: 2 }, { rank: 4 }], 3).map((item) => item.rank), [1, 2, 3]);
+assert.deepEqual(selectTelegramChartPicks([{ rank: 3 }, { rank: 1 }, { rank: 2 }, { rank: 4 }], 3), []);
+assert.deepEqual(selectTelegramChartPicks([
+  { rank: 3, chartGate: { eligible: true } },
+  { rank: 1, chartGate: { eligible: true } },
+  { rank: 2, chartGate: { eligible: true } },
+  { rank: 4, chartGate: { eligible: true } },
+], 3).map((item) => item.rank), [1, 2, 3]);
 assert.deepEqual(selectTelegramChartPicks([{ rank: 1, chartGate: { eligible: false } }, { rank: 2, chartGate: { eligible: true } }], 3).map((item) => item.rank), [2]);
+assert.equal(isTelegramChartAnalysisSendable({ verdict: 'BUY', readiness: 'ACTIONABLE' }), true);
+assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'NEAR_TRIGGER' }), true);
+assert.equal(isTelegramChartAnalysisSendable({ verdict: 'AVOID', readiness: 'INVALID' }), false);
+assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'EXTENDED' }), false);
 console.log('telegram chart image tests passed');
