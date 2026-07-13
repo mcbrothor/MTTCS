@@ -71,6 +71,15 @@ export async function createSessionToken(username: string) {
   return `${body}.${signature}`;
 }
 
+export async function createInternalRequest(input: RequestInfo | URL, init?: RequestInit) {
+  if (!isAuthEnabled()) return new Request(input, init);
+
+  const headers = new Headers(init?.headers);
+  const token = await createSessionToken('mtn-internal');
+  headers.set('cookie', `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}`);
+  return new Request(input, { ...init, headers });
+}
+
 export async function verifySessionToken(token?: string | null) {
   const secret = getAuthSecret();
   if (!secret || !token) return null;

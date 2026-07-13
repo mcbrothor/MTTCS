@@ -1,4 +1,5 @@
 import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
+import { createInternalRequest } from '@/lib/auth/session';
 import { NextResponse } from 'next/server';
 import { GET as getMarketData } from '@/app/api/market-data/route';
 import type { MarketAnalysisResponse } from '@/types';
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
         url.searchParams.set('skipStandardMetrics', 'true');
 
         // Next.js API 핸들러 직접 호출 (HTTP 오버헤드 없음)
-        const mockReq = new Request(url);
+        const mockReq = await createInternalRequest(url);
         const res = await getMarketData(mockReq);
         
         if (!res.ok) {

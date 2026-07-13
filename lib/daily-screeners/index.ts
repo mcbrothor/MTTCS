@@ -5,6 +5,7 @@ import type {
   ScannerUniverse,
   StockMetric,
 } from '@/types';
+import { createInternalRequest } from '@/lib/auth/session';
 
 export type DailyScreenerSource = 'minervini' | 'canslim' | 'leader' | 'momentum' | 'qullamaggie' | 'reversal';
 export type DailyScreenerMarket = 'US' | 'KR';
@@ -488,7 +489,7 @@ async function scanMinerviniUniverse(universe: ScannerUniverse, items: ScannerCo
   const candidates: DailyScreenerCandidate[] = [];
 
   for (const chunk of chunks(items, 20)) {
-    const response = await runMinerviniBatch(new Request('http://localhost/api/scanner/batch', {
+    const response = await runMinerviniBatch(await createInternalRequest('http://localhost/api/scanner/batch', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -518,7 +519,7 @@ async function scanCanslimUniverse(universe: ScannerUniverse, items: ScannerCons
   const { GET: runCanslimSingle } = await import('../../app/api/scanner/canslim/route');
   return runWithLimit(items, universe.startsWith('KOS') ? 2 : 3, async (item) => {
     const params = new URLSearchParams({ ticker: item.ticker, exchange: exchangeFor(item, universe) });
-    const response = await runCanslimSingle(new Request(`http://localhost/api/scanner/canslim?${params.toString()}`));
+    const response = await runCanslimSingle(await createInternalRequest(`http://localhost/api/scanner/canslim?${params.toString()}`));
     const payload = await responseJson<{ result: CanslimScannerResult }>(response);
     const name = cleanSecurityName(payload.result.name, item.ticker)
       ?? cleanSecurityName(item.name, item.ticker)
@@ -539,7 +540,7 @@ async function scanBatchUniverse(source: Extract<DailyScreenerSource, 'leader' |
   const candidates: DailyScreenerCandidate[] = [];
 
   for (const chunk of chunks(items, 20)) {
-    const response = await route(new Request(`http://localhost/api/scanner/${source}`, {
+    const response = await route(await createInternalRequest(`http://localhost/api/scanner/${source}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
