@@ -1,6 +1,6 @@
 import { Resvg } from '@resvg/resvg-js';
 import type { ChartPatternOverlay, MarketAnalysisResponse } from '@/types';
-import { buildRuleBasedTechnicalAnalysis, type TechnicalChartAnalysis } from '@/lib/ai/technical-chart-analysis';
+import type { TechnicalChartAnalysis } from '@/lib/ai/technical-chart-analysis';
 
 const WIDTH = 1200;
 const HEIGHT = 900;

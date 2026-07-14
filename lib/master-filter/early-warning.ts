@@ -27,6 +27,7 @@ export interface EarlyWarningInput {
   macroQuotes: Record<string, EarlyWarningQuote | undefined>;
   breadthRows: { symbol: string; above200: boolean; return20: number }[];
   sectorRows: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[];
+  foreignNetBuy5d?: number | null;
   asOf?: string;
 }
 
@@ -102,7 +103,19 @@ function rotationLabel(diagnosis: RotationDiagnosis) {
   return '방향 확인 필요';
 }
 
-function diagnoseRotation(input: EarlyWarningInput): EarlyWarningMatrix['rotation'] {
+function isKoreaMarket(market: string) {
+  return market === 'KR' || market.startsWith('KR_');
+}
+
+function koreanIndexLabel(symbol: string) {
+  if (symbol === '^KS200') return 'KOSPI 200';
+  if (symbol === '^KS11') return 'KOSPI';
+  if (symbol === '^KQ150') return 'KOSDAQ 150';
+  if (symbol === '^KQ11') return 'KOSDAQ';
+  return symbol;
+}
+
+function diagnoseUsRotation(input: EarlyWarningInput): EarlyWarningMatrix['rotation'] {
   const spyChange = quoteChange(input.macroQuotes.SPY) ?? 0;
   const qqqChange = quoteChange(input.macroQuotes.QQQ);
   const magsChange = quoteChange(input.macroQuotes.MAGS);
@@ -153,8 +166,75 @@ function diagnoseRotation(input: EarlyWarningInput): EarlyWarningMatrix['rotatio
   };
 }
 
+function diagnoseKoreaRotation(input: EarlyWarningInput): EarlyWarningMatrix['rotation'] {
+  const leaders = input.sectorRows.slice(0, 3);
+  const positiveLeaders = leaders.filter((row) => row.return20 > 0);
+  const averageReturn = leaders.length
+    ? leaders.reduce((sum, row) => sum + row.return20, 0) / leaders.length
+    : null;
+
+  let diagnosis: RotationDiagnosis = 'UNCONFIRMED';
+  if (
+    (input.above200Pct < 40 && positiveLeaders.length <= 1) ||
+    (isNumber(averageReturn) && averageReturn <= -3)
+  ) {
+    diagnosis = 'BROAD_DE_RISKING';
+  } else if (input.above200Pct >= 40 && positiveLeaders.length >= 2) {
+    diagnosis = 'HEALTHY_ROTATION';
+  }
+
+  const detail = diagnosis === 'HEALTHY_ROTATION'
+    ? '국내 주도 업종 다수가 상승하고 시장 참여 폭도 유지돼 업종 간 순환이 이어지고 있습니다.'
+    : diagnosis === 'BROAD_DE_RISKING'
+      ? '국내 주도 업종 약세와 시장 참여 폭 위축이 함께 나타나 자금 이탈 위험이 커졌습니다.'
+      : '국내 주도 업종과 시장 참여 폭의 방향이 아직 충분히 뚜렷하지 않습니다.';
+
+  return {
+    diagnosis,
+    label: rotationLabel(diagnosis),
+    detail,
+    receivers: positiveLeaders.map((row) => row.name),
+    defensives: [],
+  };
+}
+
+function diagnoseRotation(input: EarlyWarningInput): EarlyWarningMatrix['rotation'] {
+  return isKoreaMarket(input.market) ? diagnoseKoreaRotation(input) : diagnoseUsRotation(input);
+}
+
 function buildIndexSignal(input: EarlyWarningInput): EarlyWarningSignal {
   const mainDistance = distancePct(input.mainPrice, input.mainMa50);
+  if (isKoreaMarket(input.market)) {
+    const secondarySymbol = input.mainSymbol.includes('KQ') ? '^KS11' : '^KQ11';
+    const secondaryQuote = input.macroQuotes[secondarySymbol];
+    const secondaryDistance = distancePct(quotePrice(secondaryQuote), quoteMa50(secondaryQuote));
+    const belowCount = [mainDistance, secondaryDistance].filter((value) => isNumber(value) && value < 0).length;
+    let status = priceLineStatus(input.mainPrice, input.mainMa50);
+    if (belowCount >= 2) status = input.above200Pct < 40 ? 'HALT' : 'REDUCE';
+    else if (belowCount === 1) status = stricter(status, 'WATCH');
+
+    const secondaryValue = isNumber(secondaryDistance)
+      ? ` · ${koreanIndexLabel(secondarySymbol)} ${formatPct(secondaryDistance)}`
+      : '';
+    return {
+      id: 'index_ma50',
+      title: '국내 대표 지수가 50일 평균선 위에 있는가',
+      what: '한국 대표 지수들이 최근 50거래일 평균 가격 위에 있는지 봅니다.',
+      why: '국내 시장이 강할 때는 주요 지수가 50일 평균선 위에서 버팁니다. 동반 이탈하면 단기 매도 압력이 커진 것으로 봅니다.',
+      status,
+      value: `${koreanIndexLabel(input.mainSymbol)} ${formatPct(mainDistance)}${secondaryValue}`,
+      threshold: '국내 대표 지수가 50일 평균선 위',
+      action: status === 'OK'
+        ? '새 매수 검토 가능'
+        : status === 'WATCH'
+          ? '돌파 매수는 작게 시작'
+          : status === 'REDUCE'
+            ? '새 매수 비중 축소'
+            : '신규 매수 중단',
+      source: 'KIS·Yahoo Finance 국내 지수 가격과 50일 평균',
+    };
+  }
+
   const qqqPrice = quotePrice(input.macroQuotes.QQQ);
   const qqqDistance = distancePct(qqqPrice, quoteMa50(input.macroQuotes.QQQ));
   const belowCount = [mainDistance, qqqDistance].filter((value) => isNumber(value) && value < 0).length;
@@ -178,6 +258,62 @@ function buildIndexSignal(input: EarlyWarningInput): EarlyWarningSignal {
           ? '새 매수 비중 축소'
           : '신규 매수 중단',
     source: 'Yahoo Finance price and 50-day average',
+  };
+}
+
+function buildKoreaLeadershipSignal(input: EarlyWarningInput): EarlyWarningSignal {
+  const leaders = input.sectorRows.slice(0, 3);
+  const averageReturn = leaders.length
+    ? leaders.reduce((sum, row) => sum + row.return20, 0) / leaders.length
+    : null;
+  const positiveCount = leaders.filter((row) => row.return20 > 0).length;
+  let status: EarlyWarningSeverity = 'WATCH';
+  if (leaders.length > 0 && positiveCount >= 2 && isNumber(averageReturn) && averageReturn >= 0) status = 'OK';
+  else if (leaders.length > 0 && positiveCount === 0 && isNumber(averageReturn) && averageReturn <= -3) status = 'REDUCE';
+
+  return {
+    id: 'sector_leadership',
+    title: '국내 주도 업종의 흐름이 유지되는가',
+    what: '최근 20거래일 수익률 상위 국내 업종들이 상승 흐름을 이어가는지 봅니다.',
+    why: '국내 상승장이 건강하려면 일부 종목만이 아니라 주도 업종 여러 곳으로 매수세가 이어져야 합니다.',
+    status,
+    value: leaders.length
+      ? `${leaders.map((row) => row.name).join(' · ')}${isNumber(averageReturn) ? ` · 평균 ${formatPct(averageReturn)}` : ''}`
+      : '국내 업종 데이터 확인 필요',
+    threshold: '상위 3개 업종 중 2개 이상 상승',
+    action: status === 'OK'
+      ? '주도 업종 후보 확인'
+      : status === 'WATCH'
+        ? '업종 확산 여부를 더 확인'
+        : '약한 업종의 신규 비중 축소',
+    source: '국내 업종 ETF 20거래일 수익률',
+  };
+}
+
+function buildKoreaForeignFlowSignal(input: EarlyWarningInput): EarlyWarningSignal {
+  const netBuy = input.foreignNetBuy5d;
+  let status: EarlyWarningSeverity = 'WATCH';
+  if (isNumber(netBuy) && netBuy >= 500) status = 'OK';
+  else if (isNumber(netBuy) && netBuy <= -500) status = input.above200Pct < 40 ? 'HALT' : 'REDUCE';
+
+  return {
+    id: 'foreign_flow',
+    title: '외국인 수급이 국내 시장을 지지하는가',
+    what: '국내 대표지수 ETF의 최근 5거래일 외국인 순매수 흐름을 봅니다.',
+    why: '외국인 수급은 국내 대형주와 지수 방향에 영향을 주므로 추세와 함께 확인할 필요가 있습니다.',
+    status,
+    value: isNumber(netBuy)
+      ? `${netBuy > 0 ? '+' : ''}${round(netBuy / 100, 1)}억원 (5거래일 누적)`
+      : '외국인 수급 데이터 확인 필요',
+    threshold: '대표지수 ETF 5거래일 누적 ±5억원',
+    action: status === 'OK'
+      ? '외국인 수급 지지 확인'
+      : status === 'WATCH'
+        ? '지수 추세와 수급을 함께 확인'
+        : status === 'REDUCE'
+          ? '대형주 신규 비중 축소'
+          : '신규 매수 중단',
+    source: 'KIS 국내 대표지수 ETF 외국인 수급',
   };
 }
 
@@ -255,7 +391,9 @@ function buildBreadthSignal(input: EarlyWarningInput): EarlyWarningSignal {
   return {
     id: 'market_breadth',
     title: '함께 오르는 종목이 줄고 있는가',
-    what: '주요 지수와 시장 폭 대용 ETF가 장기 평균선 위에 얼마나 남아 있는지 봅니다.',
+    what: isKoreaMarket(input.market)
+      ? '국내 대표 지수와 시장 폭 대용 ETF가 장기 평균선 위에 얼마나 남아 있는지 봅니다.'
+      : '주요 지수와 시장 폭 대용 ETF가 장기 평균선 위에 얼마나 남아 있는지 봅니다.',
     why: '지수는 몇 개 대형주로 버틸 수 있지만, 함께 오르는 종목이 줄면 상승장의 체력이 약해집니다.',
     status,
     value: `${round(input.above200Pct, 0)}%가 200일 평균선 위${isNumber(avgReturn20) ? ` · 20일 평균 ${formatPct(avgReturn20)}` : ''}`,
@@ -267,11 +405,15 @@ function buildBreadthSignal(input: EarlyWarningInput): EarlyWarningSignal {
         : status === 'REDUCE'
           ? '새 매수 수량 축소'
           : '신규 매수 중단',
-    source: 'ETF breadth proxy',
+    source: isKoreaMarket(input.market) ? '국내 대표지수·ETF 시장 폭 대용치' : 'ETF breadth proxy',
   };
 }
 
-function buildMoneyFlowSignal(rotation: EarlyWarningMatrix['rotation'], breadthStatus: EarlyWarningSeverity): EarlyWarningSignal {
+function buildMoneyFlowSignal(
+  rotation: EarlyWarningMatrix['rotation'],
+  breadthStatus: EarlyWarningSeverity,
+  koreaMarket = false,
+): EarlyWarningSignal {
   let status: EarlyWarningSeverity = 'WATCH';
   if (rotation.diagnosis === 'HEALTHY_ROTATION' || rotation.diagnosis === 'BIG_TECH_LEADERSHIP') status = 'OK';
   if (rotation.diagnosis === 'BROAD_DE_RISKING') status = breadthStatus === 'HALT' ? 'HALT' : 'REDUCE';
@@ -279,11 +421,15 @@ function buildMoneyFlowSignal(rotation: EarlyWarningMatrix['rotation'], breadthS
   return {
     id: 'money_flow',
     title: '빠진 돈이 시장 안에 남아 있는가',
-    what: '빅테크에서 빠진 돈이 중소형주, 리츠, 산업재로 가는지 아니면 달러, 채권, 금으로 빠지는지 봅니다.',
-    why: '건강한 순환이면 시장 내부에서 주도주만 바뀌지만, 방어 자산으로 몰리면 시장 전체 위험 회피로 볼 수 있습니다.',
+    what: koreaMarket
+      ? '국내 주도 업종이 바뀌면서도 상승 업종과 시장 참여 폭이 유지되는지 봅니다.'
+      : '빅테크에서 빠진 돈이 중소형주, 리츠, 산업재로 가는지 아니면 달러, 채권, 금으로 빠지는지 봅니다.',
+    why: koreaMarket
+      ? '건강한 순환이면 국내 시장 안에서 주도 업종만 바뀌지만, 상승 업종과 참여 폭이 함께 줄면 시장 이탈로 볼 수 있습니다.'
+      : '건강한 순환이면 시장 내부에서 주도주만 바뀌지만, 방어 자산으로 몰리면 시장 전체 위험 회피로 볼 수 있습니다.',
     status,
     value: rotation.label,
-    threshold: '시장 안 순환은 양호, 방어자산 쏠림은 위험',
+    threshold: koreaMarket ? '국내 업종 순환은 양호, 참여 폭 동반 축소는 위험' : '시장 안 순환은 양호, 방어자산 쏠림은 위험',
     action: status === 'OK'
       ? '순환 업종 후보 확인'
       : status === 'WATCH'
@@ -291,19 +437,21 @@ function buildMoneyFlowSignal(rotation: EarlyWarningMatrix['rotation'], breadthS
         : status === 'REDUCE'
           ? '새 매수 비중 축소'
           : '신규 매수 중단',
-    source: 'ETF relative flow proxy',
+    source: koreaMarket ? '국내 업종 수익률·시장 폭 대용치' : 'ETF relative flow proxy',
     detail: rotation.detail,
   };
 }
 
 export function buildEarlyWarningMatrix(input: EarlyWarningInput): EarlyWarningMatrix {
+  const koreaMarket = isKoreaMarket(input.market);
   const rotation = diagnoseRotation(input);
   const indexSignal = buildIndexSignal(input);
-  const bigTechSignal = buildBigTechSignal(input, rotation);
-  const audJpySignal = buildAudJpySignal(input, rotation);
   const breadthSignal = buildBreadthSignal(input);
-  const moneyFlowSignal = buildMoneyFlowSignal(rotation, breadthSignal.status);
-  const signals = [indexSignal, bigTechSignal, audJpySignal, breadthSignal, moneyFlowSignal];
+  const moneyFlowSignal = buildMoneyFlowSignal(rotation, breadthSignal.status, koreaMarket);
+  const marketSpecificSignals = koreaMarket
+    ? [buildKoreaLeadershipSignal(input), buildKoreaForeignFlowSignal(input)]
+    : [buildBigTechSignal(input, rotation), buildAudJpySignal(input, rotation)];
+  const signals = [indexSignal, ...marketSpecificSignals, breadthSignal, moneyFlowSignal];
   const status = signals.reduce<EarlyWarningSeverity>((current, signal) => stricter(current, signal.status), 'OK');
   const { summary, action } = severitySummary(status);
 

@@ -15,6 +15,7 @@ import { calculatePriceMetrics } from '@/lib/finance/core/price-metrics';
 import { normalizeRiskStrategy } from '@/lib/finance/core/risk-policy';
 import type { FundamentalSnapshot, MacroTrend, MarketAnalysisResponse, OHLCData, ProviderAttempt, StockMetric } from '@/types';
 import { buildFreshnessMeta } from '@/lib/data/freshness';
+import { validateCronRequest } from '@/lib/auth/cron';
 
 const REQUIRED_SEPA_BARS = 252;
 const TARGET_KIS_BARS = 260;
@@ -522,6 +523,9 @@ export async function GET(request: Request) {
   return marketDataResponse(request);
 }
 
-export async function getMarketDataForCron(request: Request) {
+export async function POST(request: Request) {
+  if (!validateCronRequest(request)) {
+    return apiError('Unauthorized cron request.', 'AUTH_REQUIRED', 401);
+  }
   return marketDataResponse(request, true);
 }

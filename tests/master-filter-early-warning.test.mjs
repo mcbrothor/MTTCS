@@ -108,6 +108,73 @@ function baseInput(overrides = {}) {
   assert.equal(matrix.signals.find((signal) => signal.id === 'money_flow')?.status, 'HALT');
 }
 
+{
+  const matrix = buildEarlyWarningMatrix(baseInput({
+    market: 'KR_KOSPI',
+    mainSymbol: '^KS200',
+    mainPrice: 418,
+    mainMa50: 405,
+    above200Pct: 67,
+    foreignNetBuy5d: 920,
+    breadthRows: [
+      { symbol: '^KS200', above200: true, return20: 4.2 },
+      { symbol: '^KQ11', above200: true, return20: 2.8 },
+      { symbol: '069500.KS', above200: true, return20: 3.9 },
+    ],
+    sectorRows: [
+      { symbol: '455850.KS', name: '반도체', return20: 8.1, riskOn: true, rank: 1 },
+      { symbol: '123310.KS', name: '자동차', return20: 5.4, riskOn: true, rank: 2 },
+      { symbol: '091220.KS', name: '은행', return20: 2.1, riskOn: false, rank: 3 },
+    ],
+    macroQuotes: {
+      '^KS200': quote(418, 0.8, 405),
+      '^KQ11': quote(910, 0.5, 890),
+      // 한국 시장 결과는 미국 전용 입력이 섞여 와도 참조하면 안 된다.
+      QQQ: quote(90, -8, 110),
+      MAGS: quote(45, -9, 60),
+      'AUDJPY=X': quote(101, -5, 110),
+      RSP: quote(150, -4, 170),
+      UUP: quote(33, 3, 30),
+    },
+  }));
+
+  const serialized = JSON.stringify(matrix);
+  assert.equal(matrix.rotation.diagnosis, 'HEALTHY_ROTATION');
+  assert.ok(matrix.signals.some((signal) => signal.id === 'sector_leadership'));
+  assert.ok(matrix.signals.some((signal) => signal.id === 'foreign_flow'));
+  assert.doesNotMatch(serialized, /QQQ|MAGS|AUD\/JPY|RSP|UUP|빅테크|미국 시장|해외 성장주/);
+}
+
+{
+  const matrix = buildEarlyWarningMatrix(baseInput({
+    market: 'KR_KOSDAQ',
+    mainSymbol: '^KQ11',
+    mainPrice: 820,
+    mainMa50: 850,
+    above200Pct: 25,
+    foreignNetBuy5d: -1400,
+    breadthRows: [
+      { symbol: '^KS11', above200: false, return20: -7 },
+      { symbol: '^KQ11', above200: false, return20: -6 },
+      { symbol: '229200.KS', above200: false, return20: -7.5 },
+    ],
+    sectorRows: [
+      { symbol: '244580.KS', name: '바이오', return20: -4, riskOn: true, rank: 1 },
+      { symbol: '455850.KS', name: '반도체', return20: -6, riskOn: true, rank: 2 },
+      { symbol: '305720.KS', name: '2차전지', return20: -8, riskOn: true, rank: 3 },
+    ],
+    macroQuotes: {
+      '^KQ11': quote(820, -2.5, 850),
+      '^KS11': quote(2750, -1.8, 2830),
+    },
+  }));
+
+  assert.equal(matrix.status, 'HALT');
+  assert.equal(matrix.rotation.diagnosis, 'BROAD_DE_RISKING');
+  assert.equal(matrix.signals.find((signal) => signal.id === 'foreign_flow')?.status, 'HALT');
+  assert.match(matrix.signals.find((signal) => signal.id === 'index_ma50')?.value ?? '', /KOSDAQ.*KOSPI/);
+}
+
 assert.equal(friendlyMetricLabel('Average Daily Range (ADR)'), '20일 평균 하루 변동폭');
 assert.equal(friendlyMetricLabel('Follow-Through Day'), '강한 반등 확인 여부');
 assert.equal(friendlyDecisionHeadline('GO_FULL', false), '정상 진입 가능');

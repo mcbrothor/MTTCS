@@ -938,6 +938,8 @@ export type EarlyWarningSignalId =
   | 'index_ma50'
   | 'big_tech_line'
   | 'aud_jpy'
+  | 'sector_leadership'
+  | 'foreign_flow'
   | 'market_breadth'
   | 'money_flow';
 

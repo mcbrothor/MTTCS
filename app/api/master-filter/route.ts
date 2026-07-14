@@ -46,10 +46,9 @@ const US_MACRO_SYMBOLS = [
 ];
 
 const KR_MACRO_SYMBOLS = [
-  '^KS200', '^KQ150', '^KS11', '^KQ11', 'KRW=X', '069500.KS', '233740.KS',
+  '^KS200', '^KS11', '^KQ11', 'KRW=X', '069500.KS', '233740.KS',
   '139230.KS', '455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS',
   '117680.KS', '117700.KS', '139260.KS', '139280.KS',
-  'SPY', 'QQQ', 'IWM', 'MDY', 'RSP', 'MAGS', 'AUDJPY=X', 'XLI', 'XLRE', 'IYR', 'SHY', 'TLT', 'GLD', 'UUP',
 ];
 
 const US_SECTOR_ETFS = ['XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB'];
@@ -62,7 +61,7 @@ const US_SECTOR_NAMES: Record<string, string> = {
 
 // KOSPI 전용
 const KOSPI_SECTOR_ETFS = ['455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
-const KOSPI_BREADTH_ETFS = ['^KS200', '^KQ150', '069500.KS'];
+const KOSPI_BREADTH_ETFS = ['^KS200', '^KS11', '^KQ11', '069500.KS'];
 const KOSPI_SECTOR_NAMES: Record<string, string> = {
   '455850.KS': '반도체', '305720.KS': '2차전지', '123310.KS': '자동차',
   '244580.KS': '바이오', '091220.KS': '은행', '117680.KS': '철강',
@@ -71,7 +70,7 @@ const KOSPI_SECTOR_NAMES: Record<string, string> = {
 
 // KOSDAQ 전용
 const KOSDAQ_SECTOR_ETFS = ['244580.KS', '455850.KS', '305720.KS', '139260.KS', '091220.KS'];
-const KOSDAQ_BREADTH_ETFS = ['^KQ150', '^KQ11', '229200.KS'];
+const KOSDAQ_BREADTH_ETFS = ['^KQ11', '^KS11', '229200.KS'];
 const KOSDAQ_SECTOR_NAMES: Record<string, string> = {
   '244580.KS': '바이오', '455850.KS': '반도체', '305720.KS': '2차전지',
   '139260.KS': 'IT', '091220.KS': '은행',
@@ -295,7 +294,9 @@ export async function GET(request: Request) {
     }
 
     // 외국인 순매수 5일 누적 (양수=순매수, 음수=순매도)
-    const foreignNetBuy5d = foreignNetBuy.slice(0, 5).reduce((sum, r) => sum + r.netBuyAmount, 0);
+    const foreignNetBuy5d = foreignNetBuy.length
+      ? foreignNetBuy.slice(0, 5).reduce((sum, r) => sum + r.netBuyAmount, 0)
+      : undefined;
 
     // 1. 공통 로직으로 계산 위임
     const breadthRows = breadthSeries
@@ -353,6 +354,7 @@ export async function GET(request: Request) {
       macroQuotes: macroMap,
       breadthRows,
       sectorRows,
+      foreignNetBuy5d,
       asOf: calculatedAt,
     });
 

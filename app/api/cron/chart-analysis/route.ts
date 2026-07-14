@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { validateCronRequest } from '@/lib/contest-cron';
-import { getMarketDataForCron } from '@/app/api/market-data/route';
+import { validateCronRequest } from '@/lib/auth/cron';
+import { POST as getMarketDataForCron } from '@/app/api/market-data/route';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -21,5 +21,8 @@ export async function GET(request: Request) {
   target.searchParams.set('exchange', exchange);
   target.searchParams.set('includeFundamentals', String(includeFundamentals));
   target.searchParams.set('skipStandardMetrics', 'false');
-  return getMarketDataForCron(new Request(target));
+  return getMarketDataForCron(new Request(target, {
+    method: 'POST',
+    headers: { authorization: request.headers.get('authorization') || '' },
+  }));
 }

@@ -6,6 +6,14 @@ const previousSecret = process.env.CRON_SECRET;
 process.env.CRON_SECRET = 'test-cron-secret';
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': path.resolve('.') } });
 const { GET } = jiti('../app/api/cron/chart-analysis/route.ts');
+const { POST: marketDataPost } = jiti('../app/api/market-data/route.ts');
+
+{
+  const response = await marketDataPost(new Request('http://localhost/api/market-data?ticker=AAPL&exchange=NAS', {
+    method: 'POST',
+  }));
+  assert.equal(response.status, 401);
+}
 
 {
   const response = await GET(new Request('http://localhost/api/cron/chart-analysis?ticker=AAPL&exchange=NAS'));

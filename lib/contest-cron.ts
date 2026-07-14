@@ -4,6 +4,8 @@ import { calculateReturnPct, isReviewDue, summarizeContestReview } from '@/lib/c
 import { sendTelegramMessage } from '@/lib/telegram';
 import type { ContestMarket, ContestReview } from '@/types';
 
+export { validateCronRequest } from '@/lib/auth/cron';
+
 interface DueReviewRow extends ContestReview {
   contest_candidates: {
     id: string;
@@ -101,12 +103,4 @@ export async function runContestReviewBatch(market: ContestMarket) {
   }
 
   return { market, checked: rows.length, updated: updates.filter((item) => item.status === 'UPDATED').length, updates };
-}
-
-export function validateCronRequest(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-
-  const authHeader = request.headers.get('authorization');
-  return authHeader === `Bearer ${secret}`;
 }

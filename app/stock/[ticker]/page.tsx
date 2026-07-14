@@ -23,6 +23,11 @@ export default function Stock360Page() {
   const { ticker } = useParams<{ ticker: string }>();
   const search = useSearchParams();
   const exchange = search.get('exchange') || 'NAS';
+
+  return <Stock360Content key={`${ticker}:${exchange}`} ticker={ticker} exchange={exchange} />;
+}
+
+function Stock360Content({ ticker, exchange }: { ticker: string; exchange: string }) {
   const [analysis, setAnalysis] = useState<MarketAnalysisResponse | null>(null);
   const [meta, setMeta] = useState<DataSourceMeta | null>(null);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
@@ -30,7 +35,6 @@ export default function Stock360Page() {
   const [focusedPatternId, setFocusedPatternId] = useState<string | null>(null);
 
   useEffect(() => {
-    setFocusedPatternId(null);
     fetch(`/api/market-data?ticker=${encodeURIComponent(ticker)}&exchange=${exchange}`)
       .then(async (response) => {
         const payload = await response.json();
