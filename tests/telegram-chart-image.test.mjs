@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
 import { buildChartPatterns } from '../lib/finance/engines/chart-patterns.ts';
 import {
   isTelegramChartAnalysisSendable,
@@ -40,9 +41,13 @@ const marketAnalysis = {
 const technical = buildRuleBasedTechnicalAnalysis(marketAnalysis);
 const imageInput = { ticker: 'TEST', exchange: 'NAS', name: 'Test Corp', rank: 1, analysis: marketAnalysis, technical };
 const png = renderTelegramChartPng(imageInput);
-assert.ok(png.length > 10_000, 'Rendered chart should contain image data');
+if (process.env.CHART_TEST_OUTPUT) writeFileSync(process.env.CHART_TEST_OUTPUT, png);
+assert.ok(png.length > 20_000, 'Rendered chart should contain readable image data');
 assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'Rendered chart should be PNG');
 assert.match(telegramChartCaption(imageInput), /TEST/);
+assert.match(telegramChartCaption(imageInput), /판정: 관찰/);
+assert.match(telegramChartCaption(imageInput), /품질: [ABCD]/);
+assert.match(telegramChartCaption(imageInput), /현재 단계:/);
 assert.deepEqual(selectTelegramChartPicks([{ rank: 3 }, { rank: 1 }, { rank: 2 }, { rank: 4 }], 3), []);
 assert.deepEqual(selectTelegramChartPicks([
   { rank: 3, chartGate: { eligible: true } },
@@ -55,4 +60,28 @@ assert.equal(isTelegramChartAnalysisSendable({ verdict: 'BUY', readiness: 'ACTIO
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'NEAR_TRIGGER' }), true);
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'AVOID', readiness: 'INVALID' }), false);
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'EXTENDED' }), false);
+
+const fallbackAnalysis = {
+  ...marketAnalysis,
+  vcpAnalysis: {
+    ...vcp,
+    pivotPrice: null,
+    pivotDate: null,
+    recommendedEntry: 170,
+    entrySource: 'RECENT_HIGH_FALLBACK',
+    referenceHighPrice: 170,
+    breakoutVolumeStatus: 'pending',
+  },
+  riskPlan: { ...marketAnalysis.riskPlan, entryPrice: 170, selectedStopPrice: 158, stopLossPrice: 158 },
+  chartPatterns: [],
+};
+const fallbackTechnical = buildRuleBasedTechnicalAnalysis(fallbackAnalysis);
+const fallbackInput = { ...imageInput, analysis: fallbackAnalysis, technical: fallbackTechnical };
+const fallbackCaption = telegramChartCaption(fallbackInput);
+assert.equal(fallbackTechnical.professionalPlan.entryPrice, null);
+assert.match(fallbackCaption, /유효 진입가 미확정/);
+assert.match(fallbackCaption, /현재는 매수하지 않습니다/);
+const fallbackPng = renderTelegramChartPng(fallbackInput);
+assert.ok(fallbackPng.length > 20_000);
+if (process.env.CHART_FALLBACK_TEST_OUTPUT) writeFileSync(process.env.CHART_FALLBACK_TEST_OUTPUT, fallbackPng);
 console.log('telegram chart image tests passed');

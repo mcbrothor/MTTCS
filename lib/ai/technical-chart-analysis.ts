@@ -1,5 +1,6 @@
 import type { ChartPatternOverlay, MarketAnalysisResponse } from '@/types';
 import { buildProfessionalChartPlan, type ProfessionalChartPlan, type ProfessionalSetupGrade, type TradeReadiness } from '@/lib/finance/engines/professional-chart-plan';
+import { describeProfessionalPlan } from '@/lib/finance/core/professional-plan-presentation';
 import { extractStructuredJson } from './gemini';
 
 export type TechnicalChartVerdict = 'BUY' | 'WATCH' | 'AVOID';
@@ -177,6 +178,7 @@ export function finalizeTechnicalChartAnalysis(
 
 export function buildRuleBasedTechnicalAnalysis(input: MarketAnalysisResponse): TechnicalChartAnalysis {
   const professionalPlan = buildProfessionalChartPlan(input);
+  const presentation = describeProfessionalPlan(professionalPlan);
   const patterns = input.chartPatterns || [];
   const labels = patterns.slice(0, 2).map((pattern) => pattern.label).join(', ') || '확정 패턴 부족';
   return {
@@ -185,11 +187,11 @@ export function buildRuleBasedTechnicalAnalysis(input: MarketAnalysisResponse): 
     setupGrade: professionalPlan.setupGrade,
     readiness: professionalPlan.readiness,
     professionalPlan,
-    summaryKo: `${professionalPlan.setupGrade}등급 ${professionalPlan.readiness}: ${professionalPlan.trendSummary}. ${labels}를 실행 조건과 함께 평가합니다.`,
+    summaryKo: `${presentation.verdictLabel}: ${presentation.action} 셋업 품질은 ${professionalPlan.setupGrade}등급(${presentation.gradeLabel})이고, 현재 단계는 ${presentation.readinessLabel}입니다.`,
     referencedPatternIds: patterns.filter((pattern) => pattern.status !== 'INVALIDATED').map((pattern) => pattern.id),
     entryCondition: professionalPlan.executionRule,
     invalidationCondition: professionalPlan.exitRule,
-    patternRead: `${labels}. ${professionalPlan.trendSummary}.`,
+    patternRead: `${labels}. ${professionalPlan.trendSummary}. ${presentation.readinessMeaning}`,
     riskNotes: professionalPlan.risks,
   };
 }

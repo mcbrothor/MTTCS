@@ -54,6 +54,7 @@ const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-
 const CRON_SECRET = process.env.CRON_SECRET || '';
 const MTN_BASE_URL = (process.env.MTN_CHART_ANALYSIS_BASE_URL || process.env.MTN_BASE_URL || 'https://mttcs.vercel.app').replace(/\/$/, '');
 const DAILY_TELEGRAM_CHARTS_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_ENABLED?.toLowerCase() === 'true';
+const DAILY_TELEGRAM_CHARTS_AUTO_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AUTO_ENABLED?.toLowerCase() === 'true';
 const dailyChartLimit = Number(process.env.DAILY_TELEGRAM_CHARTS_PER_CATEGORY || 3);
 const DAILY_TELEGRAM_CHARTS_PER_CATEGORY = Number.isInteger(dailyChartLimit)
   ? Math.min(10, Math.max(1, dailyChartLimit))
@@ -1190,7 +1191,7 @@ async function processDailyScreenerRun(run) {
             delivery?.skipped ? null : new Date().toISOString(),
           );
         }
-        if (!delivery?.skipped) {
+        if (!delivery?.skipped && DAILY_TELEGRAM_CHARTS_AUTO_ENABLED) {
           const chartDelivery = await sendDailyTelegramCharts({
             category,
             picks: officialResultByCategory[category],
