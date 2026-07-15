@@ -100,6 +100,8 @@ assert.match(webhookRoute, /readTelegramWebhookConfig/);
 assert.match(webhookRoute, /secretsMatch/);
 assert.match(webhookRoute, /getSupabaseAdmin\(\)/);
 assert.match(webhookRoute, /status: 503/);
+assert.match(webhookRoute, /TELEGRAM_WEBHOOK_TIMEOUT_MS = \(maxDuration - 5\) \* 1000/);
+assert.match(webhookRoute, /timeoutMilliseconds: TELEGRAM_WEBHOOK_TIMEOUT_MS/);
 assert.doesNotMatch(webhookRoute, /supabaseServer/);
 
 console.log('security hardening tests passed');

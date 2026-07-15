@@ -17,6 +17,7 @@ import type { MarketAnalysisResponse } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
+const TELEGRAM_WEBHOOK_TIMEOUT_MS = (maxDuration - 5) * 1000;
 
 const webhookConfig = readTelegramWebhookConfig();
 const bot = webhookConfig ? new Bot(webhookConfig.token) : null;
@@ -296,5 +297,8 @@ export async function POST(req: Request) {
   const unauthorized = validateWebhookRequest(req);
   if (unauthorized) return unauthorized;
   if (!bot) return new Response('Telegram webhook is not configured', { status: 503 });
-  return webhookCallback(bot, 'std/http')(req);
+  return webhookCallback(bot, 'std/http', {
+    onTimeout: 'throw',
+    timeoutMilliseconds: TELEGRAM_WEBHOOK_TIMEOUT_MS,
+  })(req);
 }
