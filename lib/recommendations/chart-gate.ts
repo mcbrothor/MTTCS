@@ -38,7 +38,10 @@ function technicalScore(technical: TechnicalChartAnalysis) {
   }[technical.readiness];
   const gradeWeight = { A: 160, B: 110, C: 50, D: -80 }[technical.setupGrade];
   const verdictWeight = technical.verdict === 'BUY' ? 180 : technical.verdict === 'WATCH' ? 0 : -1_000;
-  return readinessWeight + gradeWeight + verdictWeight + technical.professionalPlan.trendScore * 15;
+  const confluenceWeight = Number.isFinite(technical.professionalPlan.confluenceScore)
+    ? technical.professionalPlan.confluenceScore * 2
+    : technical.professionalPlan.trendScore * 15;
+  return readinessWeight + gradeWeight + verdictWeight + confluenceWeight;
 }
 
 export function buildRecommendationChartGate(

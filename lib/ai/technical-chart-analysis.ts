@@ -166,7 +166,7 @@ export function finalizeTechnicalChartAnalysis(
   return {
     ...narrative,
     verdict: professionalPlan.verdict,
-    confidence: Math.min(0.95, Math.max(0.2, (professionalPlan.trendScore + (professionalPlan.setupGrade === 'A' ? 3 : professionalPlan.setupGrade === 'B' ? 2 : 1)) / 10)),
+    confidence: Math.min(0.95, Math.max(0.2, professionalPlan.confluenceScore / 100)),
     setupGrade: professionalPlan.setupGrade,
     readiness: professionalPlan.readiness,
     professionalPlan,
@@ -183,15 +183,15 @@ export function buildRuleBasedTechnicalAnalysis(input: MarketAnalysisResponse): 
   const labels = patterns.slice(0, 2).map((pattern) => pattern.label).join(', ') || '확정 패턴 부족';
   return {
     verdict: professionalPlan.verdict,
-    confidence: Math.min(0.9, Math.max(0.25, (professionalPlan.trendScore + (professionalPlan.setupGrade === 'A' ? 3 : 1)) / 10)),
+    confidence: Math.min(0.9, Math.max(0.25, professionalPlan.confluenceScore / 100)),
     setupGrade: professionalPlan.setupGrade,
     readiness: professionalPlan.readiness,
     professionalPlan,
-    summaryKo: `${presentation.verdictLabel}: ${presentation.action} 셋업 품질은 ${professionalPlan.setupGrade}등급(${presentation.gradeLabel})이고, 현재 단계는 ${presentation.readinessLabel}입니다.`,
+    summaryKo: `${presentation.verdictLabel}: ${presentation.action} 컨플루언스 ${professionalPlan.confluenceScore}/100, ${professionalPlan.timeframeSummary}, 현재 단계는 ${presentation.readinessLabel}입니다.`,
     referencedPatternIds: patterns.filter((pattern) => pattern.status !== 'INVALIDATED').map((pattern) => pattern.id),
     entryCondition: professionalPlan.executionRule,
     invalidationCondition: professionalPlan.exitRule,
-    patternRead: `${labels}. ${professionalPlan.trendSummary}. ${presentation.readinessMeaning}`,
+    patternRead: `${labels}. ${professionalPlan.timeframeSummary}. ${professionalPlan.trendSummary}. ${presentation.readinessMeaning}`,
     riskNotes: professionalPlan.risks,
   };
 }

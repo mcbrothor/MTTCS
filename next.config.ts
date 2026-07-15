@@ -8,6 +8,9 @@ const scriptPolicy = process.env.NODE_ENV === 'production'
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   serverExternalPackages: ['@resvg/resvg-js'],
+  outputFileTracingIncludes: {
+    '/api/telegram-webhook': ['./assets/fonts/**/*'],
+  },
   async headers() {
     return [{
       source: '/:path*',

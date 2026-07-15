@@ -4,6 +4,26 @@ export type ProfessionalSetupGrade = 'A' | 'B' | 'C' | 'D';
 export type TradeReadiness = 'ACTIONABLE' | 'NEAR_TRIGGER' | 'EARLY' | 'EXTENDED' | 'INVALID';
 export type ProfessionalVerdict = 'BUY' | 'WATCH' | 'AVOID';
 export type ProfessionalEntryMode = 'BREAKOUT' | 'PULLBACK' | 'WAIT_FOR_BASE' | 'NO_TRADE';
+export type ProfessionalTrendState = 'UPTREND' | 'MIXED' | 'DOWNTREND' | 'INSUFFICIENT';
+export type TimeframeAlignment = 'BULLISH_ALIGNED' | 'MIXED' | 'BEARISH_CONFLICT' | 'INSUFFICIENT';
+
+export interface ProfessionalConfluenceFactor {
+  id: 'DAILY_TREND' | 'WEEKLY_TREND' | 'BASE_QUALITY' | 'VOLUME' | 'RISK' | 'REWARD';
+  label: string;
+  status: 'PASS' | 'PARTIAL' | 'FAIL' | 'NA';
+  score: number;
+  maxScore: number;
+  detail: string;
+}
+
+export interface ProfessionalTradeScenario {
+  id: 'PRIMARY' | 'ALTERNATE' | 'FAILURE';
+  label: string;
+  condition: string;
+  action: string;
+  zoneLow: number | null;
+  zoneHigh: number | null;
+}
 
 export interface ProfessionalChartPlan {
   setupGrade: ProfessionalSetupGrade;
@@ -11,10 +31,18 @@ export interface ProfessionalChartPlan {
   verdict: ProfessionalVerdict;
   trendScore: number;
   trendSummary: string;
+  dailyTrend: ProfessionalTrendState;
+  weeklyTrend: ProfessionalTrendState;
+  timeframeAlignment: TimeframeAlignment;
+  timeframeSummary: string;
+  confluenceScore: number;
+  confluenceFactors: ProfessionalConfluenceFactor[];
   entryMode: ProfessionalEntryMode;
   currentPrice: number | null;
   triggerPrice: number | null;
   referenceResistance: number | null;
+  keySupport: number | null;
+  keyResistance: number | null;
   entryPrice: number | null;
   entryZoneLow: number | null;
   entryZoneHigh: number | null;
@@ -31,6 +59,7 @@ export interface ProfessionalChartPlan {
   confirmations: string[];
   risks: string[];
   noTradeBefore: string[];
+  scenarios: [ProfessionalTradeScenario, ProfessionalTradeScenario, ProfessionalTradeScenario];
 }
 
 function average(values: number[]) {
@@ -71,16 +100,56 @@ function trustedTrigger(input: MarketAnalysisResponse) {
   return null;
 }
 
-function nearestSupport(input: MarketAnalysisResponse, currentPrice: number | null, movingAverages: Array<number | null>) {
-  if (currentPrice === null) return null;
-  const structural = (input.chartPatterns || [])
+function weeklyCloses(bars: MarketAnalysisResponse['priceData']) {
+  const weeks = new Map<string, number>();
+  for (const bar of bars) {
+    const date = new Date(`${bar.date}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime())) continue;
+    const daysFromMonday = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - daysFromMonday);
+    weeks.set(date.toISOString().slice(0, 10), bar.close);
+  }
+  return [...weeks.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, close]) => close);
+}
+
+function classifyWeeklyTrend(bars: MarketAnalysisResponse['priceData']): ProfessionalTrendState {
+  const closes = weeklyCloses(bars);
+  const latest = closes.at(-1) ?? null;
+  const ma10 = movingAverage(closes, 10);
+  const ma30 = movingAverage(closes, 30);
+  const priorMa30 = movingAverage(closes, 30, 4);
+  if (latest === null || ma10 === null || ma30 === null || priorMa30 === null) return 'INSUFFICIENT';
+  if (latest > ma10 && ma10 > ma30 && ma30 > priorMa30) return 'UPTREND';
+  if (latest < ma10 && ma10 < ma30 && ma30 < priorMa30) return 'DOWNTREND';
+  return 'MIXED';
+}
+
+function structuralLevelPrices(input: MarketAnalysisResponse) {
+  return (input.chartPatterns || [])
     .filter((pattern) => pattern.type === 'SUPPORT_RESISTANCE')
     .flatMap((pattern) => pattern.lines)
-    .filter((line) => line.category === 'risk' || /^S\d/i.test(line.label))
     .map((line) => line.points.at(-1)?.price)
-    .filter((value): value is number => positive(value) && value < currentPrice);
-  return [...structural, ...movingAverages.filter((value): value is number => positive(value) && value < currentPrice)]
+    .filter((value): value is number => positive(value));
+}
+
+function keyLevels(
+  input: MarketAnalysisResponse,
+  currentPrice: number | null,
+  movingAverages: Array<number | null>,
+) {
+  if (currentPrice === null) return { support: null, resistance: null };
+  const structural = structuralLevelPrices(input);
+  const support = [...structural, ...movingAverages.filter((value): value is number => positive(value))]
+    .filter((value) => value < currentPrice)
     .sort((left, right) => right - left)[0] ?? null;
+  const resistance = [
+    ...structural,
+    input.vcpAnalysis.referenceHighPrice,
+    trustedTrigger(input),
+  ]
+    .filter((value): value is number => positive(value) && value > currentPrice)
+    .sort((left, right) => left - right)[0] ?? null;
+  return { support, resistance };
 }
 
 export function buildProfessionalChartPlan(input: MarketAnalysisResponse): ProfessionalChartPlan {
@@ -97,7 +166,8 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
     ? input.vcpAnalysis.referenceHighPrice
     : null;
   const entryWindowHigh = triggerPrice === null ? null : triggerPrice * 1.025;
-  const nearestSupportPrice = nearestSupport(input, currentPrice, [ma20, ma50]);
+  const levels = keyLevels(input, currentPrice, [ma20, ma50]);
+  const nearestSupportPrice = levels.support;
   const extendedFromTrigger = currentPrice !== null && triggerPrice !== null && currentPrice > triggerPrice * 1.05;
   const extendedFromMa50 = currentPrice !== null && ma50 !== null && ((currentPrice - ma50) / ma50) * 100 > 15;
   const extended = extendedFromTrigger || extendedFromMa50;
@@ -148,6 +218,15 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
   const ma50AboveMa200 = ma50 !== null && ma200 !== null && ma50 > ma200;
   const ma50Rising = ma50 !== null && priorMa50 !== null && ma50 > priorMa50;
   const trendScore = [aboveMa20, aboveMa50, aboveMa200, ma50AboveMa200, ma50Rising].filter(Boolean).length;
+  const dailyTrend: ProfessionalTrendState = trendScore >= 4 ? 'UPTREND' : trendScore <= 1 ? 'DOWNTREND' : 'MIXED';
+  const weeklyTrend = classifyWeeklyTrend(bars);
+  const timeframeAlignment: TimeframeAlignment = weeklyTrend === 'INSUFFICIENT'
+    ? 'INSUFFICIENT'
+    : dailyTrend === 'UPTREND' && weeklyTrend === 'UPTREND'
+      ? 'BULLISH_ALIGNED'
+      : dailyTrend === 'DOWNTREND' || weeklyTrend === 'DOWNTREND'
+        ? 'BEARISH_CONFLICT'
+        : 'MIXED';
   const confirmedBase = (input.chartPatterns || []).some((pattern) => (
     ['VCP', 'HIGH_TIGHT_FLAG', 'CUP_WITH_HANDLE', 'DOUBLE_BOTTOM'].includes(pattern.type)
       && (pattern.status === 'CONFIRMED' || pattern.status === 'FORMING')
@@ -158,6 +237,57 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
   const containedRisk = stopDistancePct !== null && stopDistancePct >= 2.5 && stopDistancePct <= 8;
   const rewardAdequate = rewardRiskRatio !== null && rewardRiskRatio >= 2;
   const blocked = currentPrice === null || (triggerPrice !== null && riskGateBlocked(input));
+  const confluenceFactors: ProfessionalConfluenceFactor[] = [
+    {
+      id: 'DAILY_TREND',
+      label: '일봉 추세',
+      status: trendScore >= 4 ? 'PASS' : trendScore >= 2 ? 'PARTIAL' : 'FAIL',
+      score: trendScore * 6,
+      maxScore: 30,
+      detail: `추세 조건 ${trendScore}/5 충족`,
+    },
+    {
+      id: 'WEEKLY_TREND',
+      label: '주봉 추세',
+      status: weeklyTrend === 'UPTREND' ? 'PASS' : weeklyTrend === 'MIXED' ? 'PARTIAL' : weeklyTrend === 'INSUFFICIENT' ? 'NA' : 'FAIL',
+      score: weeklyTrend === 'UPTREND' ? 15 : weeklyTrend === 'MIXED' ? 7 : weeklyTrend === 'INSUFFICIENT' ? 5 : 0,
+      maxScore: 15,
+      detail: weeklyTrend === 'UPTREND' ? '10주선·30주선 상승 정렬' : weeklyTrend === 'MIXED' ? '주봉 정렬 혼조' : weeklyTrend === 'DOWNTREND' ? '주봉 하락 정렬' : '주봉 데이터 부족',
+    },
+    {
+      id: 'BASE_QUALITY',
+      label: '베이스 품질',
+      status: confirmedBase ? 'PASS' : 'FAIL',
+      score: confirmedBase ? 15 : 0,
+      maxScore: 15,
+      detail: confirmedBase ? '현재 유효한 베이스 확인' : '실행 가능한 베이스 미확정',
+    },
+    {
+      id: 'VOLUME',
+      label: '거래량 확인',
+      status: volumeConfirmed ? 'PASS' : 'FAIL',
+      score: volumeConfirmed ? 15 : 0,
+      maxScore: 15,
+      detail: volumeConfirmed ? `상대 거래량 ${number(relativeVolume, 1)}배` : `상대 거래량 ${number(relativeVolume, 1)}배 · 확장 미확인`,
+    },
+    {
+      id: 'RISK',
+      label: '손절 구조',
+      status: entryPrice === null ? 'NA' : containedRisk ? 'PASS' : 'FAIL',
+      score: containedRisk ? 15 : 0,
+      maxScore: 15,
+      detail: entryPrice === null ? '진입 미확정' : `초기 위험 ${percent(stopDistancePct)}`,
+    },
+    {
+      id: 'REWARD',
+      label: '보상비',
+      status: entryPrice === null ? 'NA' : rewardAdequate ? 'PASS' : 'FAIL',
+      score: rewardAdequate ? 10 : 0,
+      maxScore: 10,
+      detail: entryPrice === null ? '진입 미확정' : `${number(rewardRiskRatio, 1)}R`,
+    },
+  ];
+  const confluenceScore = confluenceFactors.reduce((sum, factor) => sum + factor.score, 0);
   const confirmations = [
     aboveMa20 ? '가격이 20일선 위에 있습니다.' : null,
     aboveMa50 ? '가격이 50일선 위에 있습니다.' : null,
@@ -183,11 +313,10 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
   else if (breakout && entryWindowHigh !== null && currentPrice !== null && currentPrice <= entryWindowHigh && volumeConfirmed) readiness = 'ACTIONABLE';
   else if (triggerPrice !== null && currentPrice !== null && currentPrice >= triggerPrice * 0.97 && currentPrice <= triggerPrice * 1.025) readiness = 'NEAR_TRIGGER';
 
-  const qualityScore = trendScore + (confirmedBase ? 1 : 0) + (containedRisk ? 1 : 0) + (rewardAdequate ? 1 : 0) + (volumeConfirmed ? 1 : 0);
   const setupGrade: ProfessionalSetupGrade = readiness === 'INVALID' ? 'D'
-    : qualityScore >= 8 ? 'A'
-      : qualityScore >= 6 ? 'B'
-        : qualityScore >= 4 ? 'C'
+    : confluenceScore >= 80 ? 'A'
+      : confluenceScore >= 65 ? 'B'
+        : confluenceScore >= 45 ? 'C'
           : 'D';
   const verdict: ProfessionalVerdict = readiness === 'ACTIONABLE' && setupGrade === 'A' ? 'BUY'
     : readiness === 'INVALID' ? 'AVOID'
@@ -200,14 +329,58 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
     riskGateBlocked(input) ? '위험 게이트 해제' : null,
   ].filter((value): value is string => Boolean(value));
   const trendSummary = `추세 조건 5개 중 ${trendScore}개 충족 · 현재가가 20/50/200일선 ${aboveMa20 ? '위' : '아래'}/${aboveMa50 ? '위' : '아래'}/${aboveMa200 ? '위' : '아래'}`;
+  const trendLabel = (trend: ProfessionalTrendState) => trend === 'UPTREND' ? '상승' : trend === 'DOWNTREND' ? '하락' : trend === 'MIXED' ? '혼조' : '데이터 부족';
+  const alignmentLabel = timeframeAlignment === 'BULLISH_ALIGNED' ? '상승 정합' : timeframeAlignment === 'BEARISH_CONFLICT' ? '하락 충돌' : timeframeAlignment === 'MIXED' ? '부분 정합' : '판단 보류';
+  const timeframeSummary = `일봉 ${trendLabel(dailyTrend)} · 주봉 ${trendLabel(weeklyTrend)} · ${alignmentLabel}`;
 
+  const waitResistance = levels.resistance ?? referenceResistance;
   const executionRule = entryMode === 'WAIT_FOR_BASE'
-    ? `최근 고점 ${number(referenceResistance)}은 저항선일 뿐 매수가가 아닙니다. 베이스가 형성되고 피벗이 확정되기 전에는 진입가를 제시하지 않습니다.`
+    ? `핵심 저항 ${number(waitResistance)}은 매수가가 아닙니다. 베이스가 형성되고 피벗이 확정되기 전에는 진입가를 제시하지 않습니다.`
     : entryMode === 'PULLBACK' && entryZoneLow !== null && entryZoneHigh !== null
       ? `현재가는 추격 구간입니다. ${number(entryZoneLow)}~${number(entryZoneHigh)} 눌림 구간에서 지지 후 전일 고가 회복 또는 강한 종가 반전을 확인할 때만 진입을 재검토합니다.`
       : entryMode === 'NO_TRADE'
         ? '현재는 실행 가능한 진입 시나리오가 없습니다. 구조가 재정비될 때까지 거래하지 않습니다.'
         : `종가가 돌파 기준 ${number(triggerPrice)}를 넘고 거래량이 50일 평균의 1.4배 이상일 때만 진입을 검토합니다. 허용 추격 상단은 ${number(entryWindowHigh)}입니다.`;
+  const primaryAction = entryMode === 'BREAKOUT' && entryZoneLow !== null && entryZoneHigh !== null
+    ? `${number(entryZoneLow)}~${number(entryZoneHigh)}에서 계획 비중만 분할 진입합니다.`
+    : entryMode === 'PULLBACK' && entryZoneLow !== null && entryZoneHigh !== null
+      ? `${number(entryZoneLow)}~${number(entryZoneHigh)} 지지 확인 후에만 진입합니다.`
+      : '현금을 유지하고 유효 피벗이 확정될 때까지 진입하지 않습니다.';
+  const alternateCondition = triggerPrice !== null
+    ? `돌파 후 ${number(triggerPrice)} 부근을 재시험하면서 거래량이 감소하고 종가가 다시 기준가 위로 회복합니다.`
+    : levels.support !== null
+      ? `핵심 지지 ${number(levels.support)}를 지킨 뒤 20일선을 회복하고 최소 3주 베이스를 완성합니다.`
+      : '최소 3주 이상의 변동성 수축 베이스와 명확한 피벗을 새로 형성합니다.';
+  const failureLevel = stopPrice ?? levels.support;
+  const failureCondition = failureLevel !== null
+    ? `${number(failureLevel)} 종가 이탈 또는 주봉 추세가 하락으로 전환되면 관찰 가설을 폐기합니다.`
+    : '최근 스윙 저점 이탈 또는 주봉 추세 하락 전환 시 관찰 가설을 폐기합니다.';
+  const scenarios: ProfessionalChartPlan['scenarios'] = [
+    {
+      id: 'PRIMARY',
+      label: entryMode === 'PULLBACK' ? '기본 · 눌림 확인' : entryMode === 'BREAKOUT' ? '기본 · 거래량 돌파' : '기본 · 베이스 대기',
+      condition: executionRule,
+      action: primaryAction,
+      zoneLow: entryZoneLow,
+      zoneHigh: entryZoneHigh,
+    },
+    {
+      id: 'ALTERNATE',
+      label: '대안 · 재시험 후 회복',
+      condition: alternateCondition,
+      action: '반전 캔들 종가 확인 전에는 선진입하지 않습니다.',
+      zoneLow: levels.support,
+      zoneHigh: triggerPrice,
+    },
+    {
+      id: 'FAILURE',
+      label: '실패 · 가설 폐기',
+      condition: failureCondition,
+      action: '신규 진입을 취소하고 다음 베이스가 형성될 때까지 후보 우선순위를 내립니다.',
+      zoneLow: failureLevel,
+      zoneHigh: failureLevel,
+    },
+  ];
 
   return {
     setupGrade,
@@ -215,10 +388,18 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
     verdict,
     trendScore,
     trendSummary,
+    dailyTrend,
+    weeklyTrend,
+    timeframeAlignment,
+    timeframeSummary,
+    confluenceScore,
+    confluenceFactors,
     entryMode,
     currentPrice,
     triggerPrice,
     referenceResistance,
+    keySupport: levels.support,
+    keyResistance: levels.resistance,
     entryPrice,
     entryZoneLow,
     entryZoneHigh,
@@ -237,5 +418,6 @@ export function buildProfessionalChartPlan(input: MarketAnalysisResponse): Profe
     confirmations,
     risks,
     noTradeBefore,
+    scenarios,
   };
 }

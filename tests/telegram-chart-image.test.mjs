@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import sharp from 'sharp';
 import { buildChartPatterns } from '../lib/finance/engines/chart-patterns.ts';
 import {
   isTelegramChartAnalysisSendable,
   renderTelegramChartPng,
+  selectActionableChartPatterns,
   selectTelegramChartPicks,
   telegramChartCaption,
+  telegramChartFontPath,
 } from '../lib/telegram/chart-image.ts';
 import { buildRuleBasedTechnicalAnalysis } from '../lib/ai/technical-chart-analysis.ts';
 
@@ -42,8 +45,21 @@ const technical = buildRuleBasedTechnicalAnalysis(marketAnalysis);
 const imageInput = { ticker: 'TEST', exchange: 'NAS', name: 'Test Corp', rank: 1, analysis: marketAnalysis, technical };
 const png = renderTelegramChartPng(imageInput);
 if (process.env.CHART_TEST_OUTPUT) writeFileSync(process.env.CHART_TEST_OUTPUT, png);
+assert.equal(existsSync(telegramChartFontPath()), true, 'Bundled Korean font must exist');
 assert.ok(png.length > 20_000, 'Rendered chart should contain readable image data');
 assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'Rendered chart should be PNG');
+const headerPixels = await sharp(png)
+  .extract({ left: 900, top: 15, width: 220, height: 75 })
+  .removeAlpha()
+  .raw()
+  .toBuffer();
+let nonBackgroundPixels = 0;
+for (let index = 0; index < headerPixels.length; index += 3) {
+  if (Math.abs(headerPixels[index] - 2) + Math.abs(headerPixels[index + 1] - 6) + Math.abs(headerPixels[index + 2] - 23) > 30) {
+    nonBackgroundPixels += 1;
+  }
+}
+assert.ok(nonBackgroundPixels > 150, 'Korean verdict text must be rasterized into the PNG');
 assert.match(telegramChartCaption(imageInput), /TEST/);
 assert.match(telegramChartCaption(imageInput), /판정: 관찰/);
 assert.match(telegramChartCaption(imageInput), /품질: [ABCD]/);
@@ -60,6 +76,14 @@ assert.equal(isTelegramChartAnalysisSendable({ verdict: 'BUY', readiness: 'ACTIO
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'NEAR_TRIGGER' }), true);
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'AVOID', readiness: 'INVALID' }), false);
 assert.equal(isTelegramChartAnalysisSendable({ verdict: 'WATCH', readiness: 'EXTENDED' }), false);
+
+const freshPattern = { ...marketAnalysis.chartPatterns[0], id: 'fresh', confidence: 0.82, status: 'CONFIRMED', dateRange: { start: day(220), end: day(259) } };
+const stalePattern = { ...freshPattern, id: 'stale', confidence: 0.95, dateRange: { start: day(1), end: day(20) } };
+const weakCandidate = { ...freshPattern, id: 'weak', confidence: 0.6, status: 'CANDIDATE' };
+assert.deepEqual(
+  selectActionableChartPatterns([stalePattern, weakCandidate, freshPattern], priceData).map((pattern) => pattern.id),
+  ['fresh'],
+);
 
 const fallbackAnalysis = {
   ...marketAnalysis,

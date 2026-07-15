@@ -1,4 +1,6 @@
 import { Resvg } from '@resvg/resvg-js';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import type { ChartPatternLine, ChartPatternOverlay, MarketAnalysisResponse } from '@/types';
 import type { TechnicalChartAnalysis } from '@/lib/ai/technical-chart-analysis';
 import { describeProfessionalPlan } from '@/lib/finance/core/professional-plan-presentation';
@@ -8,7 +10,9 @@ const HEIGHT = 1500;
 const PRICE_PLOT = { left: 82, top: 158, width: 1010, height: 535 };
 const VOLUME_PLOT = { left: 82, top: 718, width: 1010, height: 105 };
 const RANGE_BARS = 252;
-const FONT = 'Arial, Apple SD Gothic Neo, sans-serif';
+const FONT_FAMILY = 'Noto Sans KR';
+const FONT = `'${FONT_FAMILY}'`;
+const FONT_FILE = 'assets/fonts/NotoSansKR-Variable.ttf';
 
 export interface TelegramChartImageInput {
   ticker: string;
@@ -18,6 +22,18 @@ export interface TelegramChartImageInput {
   analysis: MarketAnalysisResponse;
   technical: TechnicalChartAnalysis;
   rangeBars?: number | null;
+}
+
+export function telegramChartFontPath() {
+  return path.join(process.cwd(), FONT_FILE);
+}
+
+function requireTelegramChartFont() {
+  const fontPath = telegramChartFontPath();
+  if (!existsSync(fontPath)) {
+    throw new Error(`Telegram chart font is missing: ${fontPath}`);
+  }
+  return fontPath;
 }
 
 export function selectTelegramChartPicks<T extends { rank: number; chartGate?: { eligible?: boolean } }>(picks: T[], limit: number) {
@@ -103,13 +119,24 @@ function textLines(value: string, x: number, y: number, maxChars: number, maxLin
     .join('');
 }
 
-function selectReadablePatterns(patterns: ChartPatternOverlay[]) {
+export function selectActionableChartPatterns(
+  patterns: ChartPatternOverlay[],
+  bars: MarketAnalysisResponse['priceData'],
+) {
   const priority = ['VCP', 'HIGH_TIGHT_FLAG', 'CUP_WITH_HANDLE', 'DOUBLE_BOTTOM'];
-  const primary = [...patterns]
-    .filter((pattern) => priority.includes(pattern.type) && pattern.status !== 'INVALIDATED')
+  const dateIndex = new Map(bars.map((bar, index) => [bar.date, index]));
+  const latestIndex = bars.length - 1;
+  const relevant = patterns.filter((pattern) => {
+    if (pattern.status === 'INVALIDATED' || pattern.confidence < 0.55) return false;
+    if (pattern.status === 'CANDIDATE' && pattern.confidence < 0.72) return false;
+    const endIndex = dateIndex.get(pattern.dateRange.end);
+    return endIndex === undefined || latestIndex - endIndex <= 80;
+  });
+  const primary = [...relevant]
+    .filter((pattern) => priority.includes(pattern.type))
     .sort((left, right) => priority.indexOf(left.type) - priority.indexOf(right.type) || right.confidence - left.confidence)[0];
-  const supportResistance = patterns.find((pattern) => pattern.type === 'SUPPORT_RESISTANCE');
-  const volumeSignal = patterns.find((pattern) => pattern.type === 'POCKET_PIVOT');
+  const supportResistance = relevant.find((pattern) => pattern.type === 'SUPPORT_RESISTANCE');
+  const volumeSignal = relevant.find((pattern) => pattern.type === 'POCKET_PIVOT');
   return [primary, supportResistance, volumeSignal].filter((pattern): pattern is ChartPatternOverlay => Boolean(pattern));
 }
 
@@ -135,8 +162,8 @@ function nearestSupportResistanceLines(patterns: ChartPatternOverlay[], currentP
 
 function section(title: string, body: string, y: number, accent: string, maxLines = 2) {
   return `<line x1="82" y1="${y}" x2="82" y2="${y + 88}" stroke="${accent}" stroke-width="5"/>
-    <text x="106" y="${y + 20}" fill="${accent}" font-size="17" font-family="${FONT}" font-weight="700">${escapeXml(title)}</text>
-    ${textLines(body, 106, y + 51, 76, maxLines, '#e2e8f0', 20, 28)}`;
+    <text x="106" y="${y + 20}" fill="${accent}" font-size="19" font-family="${FONT}" font-weight="700">${escapeXml(title)}</text>
+    ${textLines(body, 106, y + 53, 70, maxLines, '#e2e8f0', 22, 29)}`;
 }
 
 export function renderTelegramChartPng(input: TelegramChartImageInput) {
@@ -166,7 +193,7 @@ export function renderTelegramChartPng(input: TelegramChartImageInput) {
     { values: movingAverage(closes, 200), color: '#f97316', label: '200일선' },
   ];
   const toIndex = (date: string) => dateIndex.get(date) ?? (date < bars[0].date ? 0 : bars.length - 1);
-  const patterns = selectReadablePatterns(input.analysis.chartPatterns || []);
+  const patterns = selectActionableChartPatterns(input.analysis.chartPatterns || [], bars);
   const primary = patterns.find((pattern) => pattern.type !== 'SUPPORT_RESISTANCE' && pattern.type !== 'POCKET_PIVOT');
   const zones = (primary?.zones || []).slice(-3).map((zone) => {
     const x1 = x(toIndex(zone.startDate));
@@ -201,47 +228,77 @@ export function renderTelegramChartPng(input: TelegramChartImageInput) {
     const height = ((bar.volume || 0) / volumeMax) * VOLUME_PLOT.height;
     return `<rect x="${(x(index) - Math.max(1, 300 / bars.length)).toFixed(1)}" y="${(VOLUME_PLOT.top + VOLUME_PLOT.height - height).toFixed(1)}" width="${Math.max(2, 600 / bars.length).toFixed(1)}" height="${height.toFixed(1)}" fill="${bar.close >= bar.open ? '#10b981' : '#fb7185'}" fill-opacity="0.42"/>`;
   }).join('');
-  const horizontalLine = (value: number, label: string, color: string, dash = '8 6') => `<line x1="${PRICE_PLOT.left}" y1="${y(value).toFixed(1)}" x2="${PRICE_PLOT.left + PRICE_PLOT.width}" y2="${y(value).toFixed(1)}" stroke="${color}" stroke-width="2" stroke-dasharray="${dash}"/><rect x="${PRICE_PLOT.left + PRICE_PLOT.width - 188}" y="${(y(value) - 21).toFixed(1)}" width="188" height="24" fill="#020617" fill-opacity="0.86"/><text x="${PRICE_PLOT.left + PRICE_PLOT.width - 8}" y="${(y(value) - 4).toFixed(1)}" fill="${color}" text-anchor="end" font-size="15" font-family="${FONT}" font-weight="700">${escapeXml(label)} ${number(value)}</text>`;
-  const referenceVisible = setup.referenceResistance !== null
-    && setup.referenceResistance >= priceMin - padding
-    && setup.referenceResistance <= priceMax + padding;
-  const planLines = [
-    setup.triggerPrice !== null ? horizontalLine(setup.triggerPrice, '돌파 기준', '#fbbf24') : '',
-    setup.stopPrice !== null ? horizontalLine(setup.stopPrice, '손절 기준', '#fb7185') : '',
-    referenceVisible && setup.referenceResistance !== null ? horizontalLine(setup.referenceResistance, '저항 · 매수가 아님', '#94a3b8', '3 7') : '',
-    horizontalLine(currentPrice, '현재가', '#f8fafc', '2 5'),
-  ].join('');
+  const horizontalLine = (
+    value: number,
+    label: string,
+    color: string,
+    dash = '8 6',
+    side: 'left' | 'right' = 'right',
+  ) => {
+    const labelX = side === 'right' ? PRICE_PLOT.left + PRICE_PLOT.width - 238 : PRICE_PLOT.left;
+    const textX = side === 'right' ? PRICE_PLOT.left + PRICE_PLOT.width - 10 : PRICE_PLOT.left + 10;
+    return `<line x1="${PRICE_PLOT.left}" y1="${y(value).toFixed(1)}" x2="${PRICE_PLOT.left + PRICE_PLOT.width}" y2="${y(value).toFixed(1)}" stroke="${color}" stroke-width="2" stroke-dasharray="${dash}"/><rect x="${labelX}" y="${(y(value) - 24).toFixed(1)}" width="238" height="28" fill="#020617" fill-opacity="0.9"/><text x="${textX}" y="${(y(value) - 5).toFixed(1)}" fill="${color}" text-anchor="${side === 'right' ? 'end' : 'start'}" font-size="17" font-family="${FONT}" font-weight="700">${escapeXml(label)} ${number(value)}</text>`;
+  };
+  const levelLines: Array<{ value: number; label: string; color: string; dash: string; side: 'left' | 'right' }> = [];
+  const addLevel = (value: number | null, label: string, color: string, dash: string, side: 'left' | 'right') => {
+    if (value === null || value < priceMin - padding || value > priceMax + padding) return;
+    if (levelLines.some((line) => Math.abs(line.value - value) / value < 0.0025)) return;
+    levelLines.push({ value, label, color, dash, side });
+  };
+  addLevel(currentPrice, '현재가', '#f8fafc', '2 5', 'right');
+  addLevel(setup.triggerPrice, '1 돌파 기준', '#fbbf24', '8 6', 'right');
+  addLevel(setup.stopPrice, '3 무효화', '#fb7185', '8 6', 'right');
+  addLevel(setup.keySupport, '2 핵심 지지', '#38bdf8', '5 5', 'left');
+  addLevel(setup.keyResistance, setup.triggerPrice === null ? '1 핵심 저항 · 매수가 아님' : '상단 저항', '#a78bfa', '3 7', 'left');
+  const planLines = levelLines.map((line) => horizontalLine(line.value, line.label, line.color, line.dash, line.side)).join('');
   const entryZone = setup.entryZoneLow !== null && setup.entryZoneHigh !== null
-    ? `<rect x="${PRICE_PLOT.left}" y="${y(setup.entryZoneHigh).toFixed(1)}" width="${PRICE_PLOT.width}" height="${Math.max(2, y(setup.entryZoneLow) - y(setup.entryZoneHigh)).toFixed(1)}" fill="#38bdf8" fill-opacity="0.10" stroke="#38bdf8" stroke-opacity="0.6" stroke-width="1"/><text x="${PRICE_PLOT.left + 8}" y="${(y(setup.entryZoneHigh) - 7).toFixed(1)}" fill="#7dd3fc" font-size="14" font-family="${FONT}" font-weight="700">계획 구간 ${number(setup.entryZoneLow)}~${number(setup.entryZoneHigh)}</text>`
+    ? `<rect x="${PRICE_PLOT.left}" y="${y(setup.entryZoneHigh).toFixed(1)}" width="${PRICE_PLOT.width}" height="${Math.max(2, y(setup.entryZoneLow) - y(setup.entryZoneHigh)).toFixed(1)}" fill="#38bdf8" fill-opacity="0.10" stroke="#38bdf8" stroke-opacity="0.6" stroke-width="1"/><text x="${PRICE_PLOT.left + 8}" y="${(y(setup.entryZoneHigh) - 7).toFixed(1)}" fill="#7dd3fc" font-size="17" font-family="${FONT}" font-weight="700">계획 구간 ${number(setup.entryZoneLow)}~${number(setup.entryZoneHigh)}</text>`
     : '';
   const dateTicks = Array.from({ length: 6 }, (_, index) => Math.round(index * (bars.length - 1) / 5)).map((index) => `<line x1="${x(index).toFixed(1)}" y1="${VOLUME_PLOT.top + VOLUME_PLOT.height}" x2="${x(index).toFixed(1)}" y2="${VOLUME_PLOT.top + VOLUME_PLOT.height + 7}" stroke="#64748b"/><text x="${x(index).toFixed(1)}" y="${VOLUME_PLOT.top + VOLUME_PLOT.height + 27}" fill="#94a3b8" text-anchor="middle" font-size="13" font-family="${FONT}">${escapeXml(bars[index].date.slice(2))}</text>`).join('');
   const verdictColor = input.technical.verdict === 'BUY' ? '#34d399' : input.technical.verdict === 'AVOID' ? '#fb7185' : '#fbbf24';
+  const alignmentColor = setup.timeframeAlignment === 'BULLISH_ALIGNED' ? '#34d399' : setup.timeframeAlignment === 'BEARISH_CONFLICT' ? '#fb7185' : '#c4b5fd';
   const labels = patterns.map((pattern) => `${patternLabel(pattern)} ${Math.round(pattern.confidence * 100)}%`).join(' · ') || '확정 패턴 없음';
-  const evidence = [setup.trendSummary, ...setup.confirmations.slice(0, 2), ...setup.risks.slice(0, 2)].join(' ');
+  const confluenceDetails = setup.confluenceFactors
+    .filter((factor) => factor.status === 'PASS' || factor.status === 'PARTIAL')
+    .slice(0, 3)
+    .map((factor) => `${factor.label} ${factor.score}/${factor.maxScore}`)
+    .join(' · ') || '확인된 정합 요인 없음';
+  const [primaryScenario, alternateScenario, failureScenario] = setup.scenarios;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
     <rect width="100%" height="100%" fill="#020617"/>
-    <text x="82" y="48" fill="#f8fafc" font-size="30" font-family="${FONT}" font-weight="700">${escapeXml(input.ticker)}${input.name ? ` · ${escapeXml(truncate(input.name, 24))}` : ''}</text>
-    <text x="82" y="78" fill="#94a3b8" font-size="15" font-family="${FONT}">${escapeXml(input.exchange)} · 추천 ${input.rank}위 · 기준일 ${escapeXml(bars.at(-1)?.date || '')}</text>
-    <text x="1110" y="48" fill="${verdictColor}" text-anchor="end" font-size="28" font-family="${FONT}" font-weight="700">${escapeXml(presentation.verdictLabel)}</text>
-    <text x="1110" y="78" fill="#cbd5e1" text-anchor="end" font-size="15" font-family="${FONT}">현재가 ${number(currentPrice)} · 거래량 ${number(setup.relativeVolume, 1)}배</text>
-    <text x="82" y="128" fill="#60a5fa" font-size="14" font-family="${FONT}">20일선</text><text x="148" y="128" fill="#fbbf24" font-size="14" font-family="${FONT}">50일선</text><text x="214" y="128" fill="#f97316" font-size="14" font-family="${FONT}">200일선</text><text x="292" y="128" fill="#94a3b8" font-size="14" font-family="${FONT}">${escapeXml(truncate(labels, 92))}</text>
+    <text x="82" y="20" fill="#64748b" font-size="13" font-family="${FONT}" font-weight="700">MTN TECHNICAL INSIGHT · DETERMINISTIC LEVELS</text>
+    <text x="82" y="54" fill="#f8fafc" font-size="30" font-family="${FONT}" font-weight="700">${escapeXml(input.ticker)}${input.name ? ` · ${escapeXml(truncate(input.name, 24))}` : ''}</text>
+    <text x="82" y="82" fill="#94a3b8" font-size="16" font-family="${FONT}">${escapeXml(input.exchange)} · 추천 ${input.rank}위 · 기준일 ${escapeXml(bars.at(-1)?.date || '')}</text>
+    <text x="1110" y="54" fill="${verdictColor}" text-anchor="end" font-size="29" font-family="${FONT}" font-weight="700">${escapeXml(presentation.verdictLabel)}</text>
+    <text x="1110" y="82" fill="#cbd5e1" text-anchor="end" font-size="16" font-family="${FONT}">현재가 ${number(currentPrice)} · 거래량 ${number(setup.relativeVolume, 1)}배</text>
+    <text x="82" y="130" fill="#60a5fa" font-size="16" font-family="${FONT}">20일선</text><text x="155" y="130" fill="#fbbf24" font-size="16" font-family="${FONT}">50일선</text><text x="228" y="130" fill="#f97316" font-size="16" font-family="${FONT}">200일선</text><text x="310" y="130" fill="#94a3b8" font-size="16" font-family="${FONT}">${escapeXml(truncate(labels, 82))}</text>
     ${Array.from({ length: 6 }, (_, index) => { const value = priceMin + ((priceMax - priceMin) * index / 5); return `<line x1="${PRICE_PLOT.left}" y1="${y(value).toFixed(1)}" x2="${PRICE_PLOT.left + PRICE_PLOT.width}" y2="${y(value).toFixed(1)}" stroke="#1e293b" stroke-width="1"/><text x="20" y="${(y(value) + 5).toFixed(1)}" fill="#64748b" font-size="13" font-family="${FONT}">${number(value)}</text>`; }).join('')}
     ${zones}${entryZone}${candlesticks}${maLines.map((line) => `<path d="${linePath(line.values, x, y)}" fill="none" stroke="${line.color}" stroke-width="1.6"/>`).join('')}${overlayLines}${planLines}${markers}
     <line x1="${VOLUME_PLOT.left}" y1="${VOLUME_PLOT.top + VOLUME_PLOT.height}" x2="${VOLUME_PLOT.left + VOLUME_PLOT.width}" y2="${VOLUME_PLOT.top + VOLUME_PLOT.height}" stroke="#334155"/>${volumes}${dateTicks}
     <line x1="82" y1="866" x2="1110" y2="866" stroke="#334155"/>
     <rect x="82" y="890" width="330" height="110" fill="#0f172a"/><rect x="435" y="890" width="330" height="110" fill="#0f172a"/><rect x="788" y="890" width="322" height="110" fill="#0f172a"/>
-    <text x="102" y="918" fill="${verdictColor}" font-size="16" font-family="${FONT}" font-weight="700">판정 · ${escapeXml(presentation.verdictLabel)} (${presentation.verdictCode})</text>
-    ${textLines(presentation.verdictMeaning, 102, 949, 27, 3, '#cbd5e1', 15, 19)}
-    <text x="455" y="918" fill="#7dd3fc" font-size="16" font-family="${FONT}" font-weight="700">품질 · ${presentation.gradeCode} · ${escapeXml(presentation.gradeLabel)}</text>
-    ${textLines(presentation.gradeMeaning, 455, 949, 27, 3, '#cbd5e1', 15, 19)}
-    <text x="808" y="918" fill="#c4b5fd" font-size="16" font-family="${FONT}" font-weight="700">단계 · ${escapeXml(presentation.readinessLabel)} (${presentation.readinessCode})</text>
-    ${textLines(presentation.readinessMeaning, 808, 949, 26, 3, '#cbd5e1', 15, 19)}
+    <text x="102" y="918" fill="${verdictColor}" font-size="18" font-family="${FONT}" font-weight="700">판정 · ${escapeXml(presentation.verdictLabel)} (${presentation.verdictCode})</text>
+    ${textLines(presentation.verdictMeaning, 102, 951, 25, 3, '#cbd5e1', 17, 21)}
+    <text x="455" y="918" fill="#7dd3fc" font-size="18" font-family="${FONT}" font-weight="700">컨플루언스 · ${setup.confluenceScore}/100 · ${presentation.gradeCode}</text>
+    ${textLines(confluenceDetails, 455, 951, 25, 3, '#cbd5e1', 17, 21)}
+    <text x="808" y="918" fill="${alignmentColor}" font-size="18" font-family="${FONT}" font-weight="700">다중 시간대 · ${escapeXml(presentation.readinessLabel)}</text>
+    ${textLines(`${setup.timeframeSummary}. ${presentation.readinessMeaning}`, 808, 951, 24, 3, '#cbd5e1', 17, 21)}
     ${section('지금 할 일', presentation.action, 1020, verdictColor)}
-    ${section('진입 계획', setup.executionRule, 1132, '#38bdf8', 3)}
-    ${section('무효화와 손절', setup.exitRule, 1260, '#fb7185', 2)}
-    ${section('판단 근거와 핵심 리스크', evidence, 1372, '#a78bfa', 2)}
+    ${section(`1 ${primaryScenario.label}`, `${primaryScenario.condition} ${primaryScenario.action}`, 1132, '#38bdf8', 3)}
+    ${section(`2 ${alternateScenario.label}`, `${alternateScenario.condition} ${alternateScenario.action}`, 1260, '#a78bfa', 3)}
+    ${section(`3 ${failureScenario.label}`, `${failureScenario.condition} ${failureScenario.action}`, 1380, '#fb7185', 3)}
   </svg>`;
-  return new Resvg(svg, { fitTo: { mode: 'width', value: WIDTH } }).render().asPng();
+  return new Resvg(svg, {
+    fitTo: { mode: 'width', value: WIDTH },
+    font: {
+      fontFiles: [requireTelegramChartFont()],
+      loadSystemFonts: false,
+      defaultFontFamily: FONT_FAMILY,
+      sansSerifFamily: FONT_FAMILY,
+    },
+    languages: ['ko-KR', 'en-US'],
+    textRendering: 1,
+  }).render().asPng();
 }
 
 export function telegramChartCaption(input: TelegramChartImageInput) {
@@ -253,9 +310,13 @@ export function telegramChartCaption(input: TelegramChartImageInput) {
   return [
     `${input.ticker} · 추천 ${input.rank}위`,
     `판정: ${presentation.verdictLabel}(${presentation.verdictCode}) - ${presentation.verdictMeaning}`,
-    `품질: ${presentation.gradeCode}·${presentation.gradeLabel} - ${presentation.gradeMeaning}`,
+    `품질: ${presentation.gradeCode}·${presentation.gradeLabel} · 컨플루언스 ${setup.confluenceScore}/100`,
     `현재 단계: ${presentation.readinessLabel}(${presentation.readinessCode}) - ${presentation.readinessMeaning}`,
+    `다중 시간대: ${setup.timeframeSummary}`,
+    `핵심 레벨: 지지 ${number(setup.keySupport)} · 저항 ${number(setup.keyResistance)}`,
     `계획 구간: ${entry} · 손절: ${number(setup.stopPrice)} · 2R 목표: ${number(setup.targetPrice)}`,
     `지금 할 일: ${presentation.action}`,
+    `기본 시나리오: ${setup.scenarios[0].condition}`,
+    `실패 조건: ${setup.scenarios[2].condition}`,
   ].join('\n').slice(0, 1024);
 }
