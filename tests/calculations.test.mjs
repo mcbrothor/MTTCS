@@ -78,6 +78,17 @@ run('caps Minervini stop at 8 percent max loss', () => {
   assert.equal(plan.totalShares, 62);
 });
 
+run('preserves structural stop and reward plan without account equity', () => {
+  const plan = calculateMinerviniRiskPlan(0, 100, 2, 0.01, 94);
+  assert.equal(plan.stopLossPrice, 94);
+  assert.equal(plan.selectedStopPrice, 94);
+  assert.equal(plan.riskPerShare, 6);
+  assert.equal(plan.targetPrice, 112);
+  assert.equal(plan.rewardRiskRatio, 2);
+  assert.equal(plan.totalShares, 0);
+  assert.equal(plan.riskGate?.status, 'REDUCE');
+});
+
 run('supports ATR volatility risk strategy selection', () => {
   const plan = calculateMinerviniRiskPlan(50_000, 100, 2, 0.01, 90, undefined, {
     requestedRiskStrategy: 'ATR_VOLATILITY',

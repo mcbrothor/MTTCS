@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildProfessionalChartPlan } from '../lib/finance/engines/professional-chart-plan.ts';
+import { calculateMinerviniRiskPlan } from '../lib/finance/core/position-sizing.ts';
 
 const priceData = Array.from({ length: 260 }, (_, index) => {
   const close = index === 259 ? 139 : 100 + index * 0.14;
@@ -22,4 +23,11 @@ assert.match(actionable.executionRule, /138/);
 const blocked = buildProfessionalChartPlan({ ...base, riskPlan: { ...base.riskPlan, riskGate: { status: 'BLOCK' } } });
 assert.equal(blocked.verdict, 'AVOID');
 assert.equal(blocked.readiness, 'INVALID');
+
+const zeroEquity = buildProfessionalChartPlan({
+  ...base,
+  riskPlan: calculateMinerviniRiskPlan(0, 138, 3, 0.01, 132, priceData),
+});
+assert.notEqual(zeroEquity.readiness, 'INVALID');
+assert.equal(zeroEquity.stopPrice, 132);
 console.log('professional chart plan tests passed');

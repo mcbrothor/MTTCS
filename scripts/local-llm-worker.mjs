@@ -550,31 +550,28 @@ async function mapWithConcurrency(items, limit, mapper) {
   return results;
 }
 
+async function analyzeRecommendationChartGate({ category, pick, candidates }) {
+  const candidate = chartCandidateForPick(pick, category, candidates);
+  const exchange = candidate?.exchange || pick.exchange || (dailyScreeners.marketForDailyCategory(category) === 'KR' ? 'KOSPI' : 'NAS');
+  try {
+    const analysis = await fetchCronMarketAnalysis(pick.ticker, exchange, true);
+    if (!Array.isArray(analysis.priceData) || analysis.priceData.length < 200) {
+      throw new Error('insufficient price history for integrated chart gate');
+    }
+    const technical = technicalChartAnalysis.buildRuleBasedTechnicalAnalysis(analysis);
+    return recommendationChartGate.buildRecommendationChartGate(analysis, technical);
+  } catch (error) {
+    console.warn(`[Worker] Recommendation chart gate unavailable: ${category} ${pick.ticker} - ${compactError(error)}`);
+    return recommendationChartGate.buildUnverifiedRecommendationChartGate('차트 또는 공식 펀더멘털 데이터 확인 실패');
+  }
+}
+
 async function applyDailyRecommendationChartGate({ categories, candidates }) {
   if (!DAILY_RECOMMENDATION_CHART_GATE_ENABLED) return { categories, snapshots: {} };
   const entries = Object.entries(categories).flatMap(([category, picks]) => (picks || []).map((pick) => ({ category, pick })));
   const checks = await mapWithConcurrency(entries, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async ({ category, pick }) => {
-    const candidate = chartCandidateForPick(pick, category, candidates);
-    const exchange = candidate?.exchange || pick.exchange || (dailyScreeners.marketForDailyCategory(category) === 'KR' ? 'KOSPI' : 'NAS');
-    try {
-      const analysis = await fetchCronMarketAnalysis(pick.ticker, exchange, true);
-      if (!Array.isArray(analysis.priceData) || analysis.priceData.length < 200) {
-        throw new Error('insufficient price history for integrated chart gate');
-      }
-      const technical = technicalChartAnalysis.buildRuleBasedTechnicalAnalysis(analysis);
-      return {
-        category,
-        ticker: pick.ticker,
-        chartGate: recommendationChartGate.buildRecommendationChartGate(analysis, technical),
-      };
-    } catch (error) {
-      console.warn(`[Worker] Recommendation chart gate unavailable: ${category} ${pick.ticker} - ${compactError(error)}`);
-      return {
-        category,
-        ticker: pick.ticker,
-        chartGate: recommendationChartGate.buildUnverifiedRecommendationChartGate('차트 또는 공식 펀더멘털 데이터 확인 실패'),
-      };
-    }
+    const chartGate = await analyzeRecommendationChartGate({ category, pick, candidates });
+    return { category, ticker: pick.ticker, chartGate };
   });
   const gates = new Map(checks.map((item) => [`${item.category}:${item.ticker}`, item.chartGate]));
   const snapshots = {};
@@ -1262,7 +1259,7 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
   if (!DAILY_TELEGRAM_CHARTS_ENABLED) throw new Error('DAILY_TELEGRAM_CHARTS_ENABLED=true is required for chart replay.');
   const { data: publications, error } = await supabase
     .from('recommendation_publications')
-    .select('category, recommendation_picks(ticker, exchange, name, rank, candidate_snapshot)')
+    .select('category, recommendation_picks(id, ticker, exchange, name, rank, candidate_snapshot)')
     .eq('run_date', runDate)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED');
@@ -1272,12 +1269,22 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
     : publications || [];
   if (!selectedPublications.length) throw new Error(`No official recommendation publications found for ${runDate}.`);
   for (const publication of selectedPublications) {
-    const picks = (Array.isArray(publication.recommendation_picks) ? publication.recommendation_picks : [])
-      .filter((pick) => tickers.length === 0 || tickers.includes(pick.ticker))
-      .map((pick) => ({
-        ...pick,
-        chartGate: pick.candidate_snapshot?.chart_gate,
-      }));
+    const storedPicks = (Array.isArray(publication.recommendation_picks) ? publication.recommendation_picks : [])
+      .filter((pick) => tickers.length === 0 || tickers.includes(pick.ticker));
+    const picks = await mapWithConcurrency(storedPicks, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async (pick) => {
+      const chartGate = await analyzeRecommendationChartGate({ category: publication.category, pick, candidates: [] });
+      const candidateSnapshot = { ...(pick.candidate_snapshot || {}), chart_gate: chartGate };
+      const { error: updateError } = await supabase
+        .from('recommendation_picks')
+        .update({ candidate_snapshot: candidateSnapshot })
+        .eq('id', pick.id);
+      if (updateError) {
+        console.warn(`[Worker] Replay chart gate persistence failed: ${publication.category} ${pick.ticker} - ${updateError.message}`);
+      }
+      return { ...pick, candidate_snapshot: candidateSnapshot, chartGate };
+    });
+    const eligible = picks.filter((pick) => pick.chartGate?.eligible).length;
+    console.log(`[Worker] Replay chart gate refreshed: ${publication.category} ${eligible}/${picks.length} eligible.`);
     const delivery = await sendDailyTelegramCharts({ category: publication.category, picks, candidates: [] });
     console.log(`[Worker] Replay chart delivery: ${publication.category} ${delivery.sent}/${delivery.attempted}.`);
   }

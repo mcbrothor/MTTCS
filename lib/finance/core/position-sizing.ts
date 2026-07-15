@@ -35,7 +35,6 @@ export function calculatePositionSize(
   riskPerShare: number;
 } {
   if (
-    totalEquity <= 0 ||
     entryPrice <= 0 ||
     stopLossPrice <= 0 ||
     stopLossPrice >= entryPrice ||
@@ -44,9 +43,9 @@ export function calculatePositionSize(
     return { maxRisk: 0, stopLossPrice: 0, shares: 0, riskPerShare: 0 };
   }
 
-  const maxRisk = totalEquity * riskPercent;
+  const maxRisk = totalEquity > 0 ? totalEquity * riskPercent : 0;
   const riskPerShare = entryPrice - stopLossPrice;
-  const shares = Math.max(0, Math.floor(maxRisk / riskPerShare));
+  const shares = maxRisk > 0 ? Math.max(0, Math.floor(maxRisk / riskPerShare)) : 0;
 
   return {
     maxRisk: round(maxRisk),

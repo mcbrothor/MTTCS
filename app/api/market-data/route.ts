@@ -362,7 +362,7 @@ async function marketDataResponse(request: Request, trustedInternalRequest = fal
   }
 
   try {
-    const cacheId = cacheKey('market-data', 'market-cap-v3', ticker, exchange, totalEquity, riskPercentInput, requestedRiskStrategy, includeFundamentals ? 'fundamentals' : 'price-only');
+    const cacheId = cacheKey('market-data', 'market-cap-v5', ticker, exchange, totalEquity, riskPercentInput, requestedRiskStrategy, includeFundamentals ? 'fundamentals' : 'price-only');
     const cached = await tieredCacheGet<MarketAnalysisResponse>(cacheId);
     if (cached) {
       const cachedWithPriceMetrics = withPriceMetrics({ ...cached, chartPatterns: cached.chartPatterns ?? [] });
