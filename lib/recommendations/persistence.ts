@@ -31,6 +31,35 @@ export function initialTelegramDelivery(sentAt?: string | null) {
     : { telegram_status: 'PENDING' as const, telegram_sent_at: null };
 }
 
+export function preservedTelegramDelivery(existingStatus?: string | null, existingSentAt?: string | null) {
+  return existingStatus === 'SENT' && existingSentAt
+    ? { telegram_status: 'SENT' as const, telegram_sent_at: existingSentAt }
+    : initialTelegramDelivery(null);
+}
+
+export function shouldPreserveSentPublication(isOfficial: boolean, telegramStatus?: string | null) {
+  return isOfficial && telegramStatus === 'SENT';
+}
+
+export function shouldPreservePublishedPublication(
+  isOfficial: boolean,
+  publicationStatus?: string | null,
+) {
+  return isOfficial ? publicationStatus === 'PUBLISHED' : publicationStatus === 'SHADOW';
+}
+
+export function canPromoteShadowPublication(
+  existingOfficial: boolean,
+  requestedOfficial: boolean,
+  publicationStatus?: string | null,
+) {
+  return !existingOfficial && requestedOfficial && publicationStatus === 'SHADOW';
+}
+
+export function canReplaceIncompleteOfficial(publicationStatus?: string | null) {
+  return publicationStatus === 'DRAFT' || publicationStatus === 'FAILED';
+}
+
 function validateCategoryRows(result: DailyCategoryTop10Result, category: RecommendationCategory) {
   const rows = result.categories[category];
   if (!Array.isArray(rows) || rows.length !== 10) throw new Error(`${category} recommendation publication requires exactly 10 picks.`);
@@ -93,7 +122,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     || {};
   const { data: existing, error: existingError } = await input.client
     .from('recommendation_publications')
-    .select('id, version, is_official')
+    .select('id, version, is_official, status, telegram_status, telegram_sent_at')
     .eq('run_date', input.runDate)
     .eq('category', category)
     .eq('engine_version', input.engineVersion)
@@ -103,7 +132,68 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
   let publication;
   if (existing) {
     if (existing.is_official !== input.isOfficial) {
+      if (canPromoteShadowPublication(existing.is_official, input.isOfficial, existing.status)) {
+        const { data: categoryOfficial, error: categoryOfficialError } = await input.client
+          .from('recommendation_publications')
+          .select('id, engine_version, status')
+          .eq('run_date', input.runDate)
+          .eq('category', category)
+          .eq('is_official', true)
+          .maybeSingle();
+        if (categoryOfficialError) throw categoryOfficialError;
+        if (categoryOfficial && !canReplaceIncompleteOfficial(categoryOfficial.status)) {
+          throw new Error(`Category ${category} already has official publication ${categoryOfficial.engine_version}.`);
+        }
+        if (categoryOfficial) {
+          const { data: demoted, error: demoteError } = await input.client
+            .from('recommendation_publications')
+            .update({
+              is_official: false,
+              telegram_status: 'SKIPPED',
+              telegram_sent_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', categoryOfficial.id)
+            .eq('is_official', true)
+            .eq('status', categoryOfficial.status)
+            .select('id')
+            .maybeSingle();
+          if (demoteError) throw demoteError;
+          if (!demoted) throw new Error(`Incomplete official publication ${categoryOfficial.id} changed during recovery.`);
+        }
+        const { data: promoted, error: promoteError } = await input.client
+          .from('recommendation_publications')
+          .update({
+            is_official: true,
+            status: 'PUBLISHED',
+            telegram_status: 'PENDING',
+            telegram_sent_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id)
+          .eq('is_official', false)
+          .eq('status', 'SHADOW')
+          .select('*, recommendation_picks(*)')
+          .single();
+        if (promoteError) throw promoteError;
+        return {
+          ...promoted,
+          picks: [...(promoted.recommendation_picks || [])].sort((left, right) => left.rank - right.rank),
+        };
+      }
       throw new Error(`Publication policy ${input.engineVersion} cannot change official status.`);
+    }
+    if (shouldPreservePublishedPublication(existing.is_official, existing.status)) {
+      const { data: preserved, error: preservedError } = await input.client
+        .from('recommendation_publications')
+        .select('*, recommendation_picks(*)')
+        .eq('id', existing.id)
+        .single();
+      if (preservedError) throw preservedError;
+      return {
+        ...preserved,
+        picks: [...(preserved.recommendation_picks || [])].sort((left, right) => left.rank - right.rank),
+      };
     }
     const { error: deleteError } = await input.client.from('recommendation_picks').delete().eq('publication_id', existing.id);
     if (deleteError) throw deleteError;
@@ -113,7 +203,9 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       prompt_version: 'daily-category-top10-2026.07-v1',
       llm_provider: input.provider,
       llm_model: input.model,
-      ...initialTelegramDelivery(input.telegramSentAt),
+      ...(input.telegramSentAt
+        ? initialTelegramDelivery(input.telegramSentAt)
+        : preservedTelegramDelivery(existing.telegram_status, existing.telegram_sent_at)),
       market_context: marketContext,
       updated_at: new Date().toISOString(),
     }).eq('id', existing.id).select('*').single();
@@ -216,9 +308,12 @@ export async function markRecommendationTelegramStatus(
   status: 'SENT' | 'FAILED' | 'SKIPPED',
   sentAt: string | null = null
 ) {
-  const { error } = await client
+  const { data, error } = await client
     .from('recommendation_publications')
     .update({ telegram_status: status, telegram_sent_at: sentAt, updated_at: new Date().toISOString() })
-    .eq('id', publicationId);
+    .eq('id', publicationId)
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error(`Recommendation publication ${publicationId} was not updated.`);
 }

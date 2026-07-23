@@ -47,5 +47,6 @@ assert.deepEqual(selectTelegramChartMenuOptions(options).map((option) => option.
 
 const workerSource = readFileSync(new URL('../scripts/local-llm-worker.mjs', import.meta.url), 'utf8');
 assert.match(workerSource, /DAILY_TELEGRAM_CHARTS_AUTO_ENABLED = .*=== 'true'/);
-assert.match(workerSource, /!delivery\?\.skipped && DAILY_TELEGRAM_CHARTS_AUTO_ENABLED/);
+assert.match(workerSource, /afterSent: DAILY_TELEGRAM_CHARTS_AUTO_ENABLED \? async/);
+assert.match(workerSource, /postDeliveryFailures/);
 console.log('telegram chart request tests passed');

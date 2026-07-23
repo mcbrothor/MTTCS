@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.mantori.mtn-daily-screener-watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/opt/node@24/bin/node</string>
+    <string>--env-file=/Users/mantori/vibecoding/MTN/.env.local</string>
+    <string>/Users/mantori/vibecoding/MTN/scripts/daily-screener-watchdog.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/mantori/vibecoding/MTN</string>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key>
+      <integer>16</integer>
+      <key>Minute</key>
+      <integer>40</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>18</integer>
+      <key>Minute</key>
+      <integer>30</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>20</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+  </array>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/tmp/mtn-daily-screener-watchdog.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/mtn-daily-screener-watchdog.err.log</string>
+</dict>
+</plist>

@@ -2,7 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { createJiti } from 'jiti';
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { unlinkSync } from 'node:fs';
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -20,6 +22,15 @@ import {
   discoverTechnicalChartModels,
   parseModelFallbacks,
 } from './lib/technical-chart-model-router.mjs';
+import {
+  deliverCategoriesIndependently,
+  isTradingSession,
+  resolveRecommendationPolicies,
+} from './lib/daily-recommendation-worker-utils.mjs';
+import {
+  createTelegramReceiptLedger,
+  telegramReceiptKey,
+} from './lib/telegram-delivery-receipts.mjs';
 
 // Supabase 2.110 initializes Realtime even when this REST-only worker never subscribes.
 // Node 20 has no native WebSocket; a guard keeps the unused transport dormant.
@@ -70,8 +81,14 @@ const dailyRecommendationChartGateConcurrency = Number(process.env.DAILY_RECOMME
 const DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY = Number.isInteger(dailyRecommendationChartGateConcurrency)
   ? Math.min(5, Math.max(1, dailyRecommendationChartGateConcurrency))
   : 3;
+const DAILY_SCREENER_STALE_AFTER_MS = Math.max(10 * 60_000, Number(process.env.DAILY_SCREENER_STALE_AFTER_MS || 30 * 60_000));
+const DAILY_TELEGRAM_RETRY_DELAY_MS = Math.max(60_000, Number(process.env.DAILY_TELEGRAM_RETRY_DELAY_MS || 5 * 60_000));
+const DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS = Math.max(0, Math.min(7, Number(process.env.DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS || 2)));
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+const WORKER_LOCK_PATH = process.env.MTN_CODEX_WORKER_LOCK_PATH || '/tmp/mtn-codex-worker.lock';
+const TELEGRAM_RECEIPT_PATH = process.env.MTN_TELEGRAM_RECEIPT_PATH
+  || path.join(homedir(), 'Library', 'Application Support', 'MTN', 'telegram-delivery-receipts.jsonl');
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
 const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
@@ -97,35 +114,58 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const telegramReceipts = createTelegramReceiptLedger(TELEGRAM_RECEIPT_PATH);
 
 async function postTelegramPayload(url, payload) {
+  const curlArgs = [
+    '-sS', '--connect-timeout', '15', '--max-time', '30',
+    '--write-out', '\n__MTN_CURL_META__:%{http_code}:%{size_upload}:%{time_connect}',
+    '-X', 'POST', url, '-H', 'content-type: application/json', '--data-binary', '@-',
+  ];
+  let output;
   try {
-    await axios.post(url, payload, { timeout: 15000 });
-    return;
+    output = await runProcess('/usr/bin/curl', curlArgs, JSON.stringify(payload), 35_000);
   } catch (error) {
-    console.warn('[Worker] Telegram axios request failed; retrying with curl:', error.code || error.message);
+    const meta = parseTelegramCurlOutput(error?.stdout || '').meta;
+    if (error?.processTimedOut || Number(meta?.sizeUpload || 0) > 0) {
+      const uncertain = new Error(`Telegram delivery outcome is uncertain: ${compactError(error)}`);
+      uncertain.deliveryUncertain = true;
+      uncertain.cause = error;
+      throw uncertain;
+    }
+    throw error;
   }
-
-  const { stdout } = await runProcess(
-    'curl',
-    ['-sS', '-X', 'POST', url, '-H', 'content-type: application/json', '--data-binary', '@-'],
-    JSON.stringify(payload),
-    30000,
-  );
-  const parsed = JSON.parse(stdout || '{}');
+  const { body } = parseTelegramCurlOutput(output.stdout);
+  const parsed = JSON.parse(body || '{}');
   if (!parsed.ok) {
-    throw new Error(`Telegram API error: ${JSON.stringify(parsed).slice(0, 800)}`);
+    const error = new Error(`Telegram API error: ${parsed.description || JSON.stringify(parsed).slice(0, 800)}`);
+    error.response = { status: parsed.error_code || 500, data: parsed };
+    throw error;
   }
+  return parsed.result;
 }
 
-async function sendTelegramMessage(text) {
+function parseTelegramCurlOutput(stdout) {
+  const marker = '\n__MTN_CURL_META__:';
+  const markerIndex = String(stdout || '').lastIndexOf(marker);
+  if (markerIndex < 0) return { body: String(stdout || ''), meta: null };
+  const body = stdout.slice(0, markerIndex);
+  const [httpCode, sizeUpload, timeConnect] = stdout.slice(markerIndex + marker.length).trim().split(':');
+  return { body, meta: { httpCode, sizeUpload, timeConnect } };
+}
+
+function isTelegramMarkdownRejection(error) {
+  const description = String(error?.response?.data?.description || '');
+  return error?.response?.status === 400 && /parse entities|can't parse/i.test(description);
+}
+
+async function sendTelegramMessage(text, { publicationId = null } = {}) {
   if (SUPPRESSED_TELEGRAM_MARKERS.some((marker) => text.includes(marker))) {
     console.log('[Worker] Suppressed Telegram report by marker.');
     return { skipped: true, suppressed: true };
   }
   if (!telegramBotToken || telegramChatIds.length === 0) {
-    console.log('[Worker] Telegram credentials missing, skipping telegram notification.');
-    return { skipped: true };
+    throw new Error('Telegram credentials are missing.');
   }
   const url = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
   
@@ -138,20 +178,44 @@ async function sendTelegramMessage(text) {
 
   for (let i = 0; i < chunks.length; i++) {
     for (const chatId of telegramChatIds) {
+      const receiptKey = publicationId ? telegramReceiptKey(publicationId, chatId, i) : null;
+      if (receiptKey && await telegramReceipts.has(receiptKey)) {
+        console.log(`[Worker] Telegram receipt already exists; skipping duplicate: ${publicationId} chunk ${i + 1}/${chunks.length}.`);
+        continue;
+      }
       try {
-        await postTelegramPayload(url, {
+        const telegramResult = await postTelegramPayload(url, {
           chat_id: chatId,
           text: chunks[i],
           parse_mode: 'Markdown'
         });
+        if (receiptKey) await telegramReceipts.record({
+          key: receiptKey,
+          publicationId,
+          chatId,
+          chunkIndex: i,
+          chunkCount: chunks.length,
+          text: chunks[i],
+          messageId: telegramResult?.message_id,
+        });
         // Add a small delay between chunks/recipients to avoid rate limiting.
         await new Promise(r => setTimeout(r, 500));
       } catch (e) {
+        if (!isTelegramMarkdownRejection(e)) throw e;
         console.warn(`[Worker] Telegram Markdown failed for chat ${chatId} on chunk ${i+1}/${chunks.length}; retrying plain text:`, e.response?.data || e.message);
         try {
-          await postTelegramPayload(url, {
+          const telegramResult = await postTelegramPayload(url, {
             chat_id: chatId,
             text: chunks[i],
+          });
+          if (receiptKey) await telegramReceipts.record({
+            key: receiptKey,
+            publicationId,
+            chatId,
+            chunkIndex: i,
+            chunkCount: chunks.length,
+            text: chunks[i],
+            messageId: telegramResult?.message_id,
           });
           await new Promise(r => setTimeout(r, 500));
         } catch (retryError) {
@@ -209,7 +273,11 @@ function runProcess(command, args, input, timeoutMs) {
     let stderr = '';
     const timer = setTimeout(() => {
       child.kill('SIGTERM');
-      finish(new Error(`${command} timed out after ${timeoutMs}ms.`));
+      const error = new Error(`${command} timed out after ${timeoutMs}ms.`);
+      error.processTimedOut = true;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      finish(error);
     }, timeoutMs);
 
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
@@ -225,7 +293,11 @@ function runProcess(command, args, input, timeoutMs) {
         finish(null, { stdout, stderr });
         return;
       }
-      finish(new Error(`${command} exited with code ${code}: ${(stderr || stdout).slice(0, 1200)}`));
+      const error = new Error(`${command} exited with code ${code}: ${(stderr || stdout).slice(0, 1200)}`);
+      error.exitCode = code;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      finish(error);
     });
 
     child.stdin.end(input);
@@ -352,6 +424,44 @@ function compactError(error, max = 600) {
       ? JSON.stringify(error)
       : String(error);
   return message.length > max ? `${message.slice(0, max)}...` : message;
+}
+
+async function acquireWorkerLock(retrying = false) {
+  try {
+    const handle = await open(WORKER_LOCK_PATH, 'wx', 0o600);
+    await handle.writeFile(`${process.pid}\n`);
+    await handle.close();
+    process.once('exit', () => {
+      try {
+        unlinkSync(WORKER_LOCK_PATH);
+      } catch (error) {
+        if (error?.code !== 'ENOENT') console.error(`[Worker] Failed to remove lock: ${compactError(error)}`);
+      }
+    });
+    return handle;
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error;
+    let ownerPid = 0;
+    try {
+      ownerPid = Number((await readFile(WORKER_LOCK_PATH, 'utf8')).trim());
+    } catch {
+      ownerPid = 0;
+    }
+    let ownerAlive = false;
+    if (Number.isInteger(ownerPid) && ownerPid > 0) {
+      try {
+        process.kill(ownerPid, 0);
+        ownerAlive = true;
+      } catch (signalError) {
+        ownerAlive = signalError?.code === 'EPERM';
+      }
+    }
+    if (ownerAlive || retrying) {
+      throw new Error(`Another MTN worker is already running (pid ${ownerPid || 'unknown'}).`);
+    }
+    unlinkSync(WORKER_LOCK_PATH);
+    return acquireWorkerLock(true);
+  }
 }
 
 function scopeArray(scope, key, fallback) {
@@ -692,7 +802,7 @@ async function callDailyTop5Provider(provider, prompt, candidates) {
   return dailyScreeners.ruleBasedDailyCategoryTop10(candidates);
 }
 
-async function runDailyTop5Chain(prompt, candidates) {
+async function runDailyTop5Chain(prompt, candidates, onProviderFailure) {
   const chain = [];
 
   for (const provider of DAILY_TOP5_PROVIDER_ORDER) {
@@ -710,6 +820,7 @@ async function runDailyTop5Chain(prompt, candidates) {
       const message = compactError(error);
       chain.push({ provider, model, status: 'failed', message });
       console.warn(`[Worker] Daily Top5 provider failed: ${provider} - ${message}`);
+      if (onProviderFailure) await onProviderFailure({ provider, model, message });
     }
   }
 
@@ -946,10 +1057,11 @@ async function processDailyScreenerRun(run) {
       generated_at: new Date().toISOString(),
     };
 
-    await supabase
+    const { error: scanSummaryError } = await supabase
       .from('daily_screener_runs')
       .update({ scan_summary: scanSummary, updated_at: new Date().toISOString() })
       .eq('id', run.id);
+    if (scanSummaryError) throw new Error(`daily screener scan summary update failed: ${scanSummaryError.message}`);
 
     if (resumedFromCandidates) {
       console.log('[Worker] Persisted candidates found; rebuilding category Top10 from saved screener candidates.');
@@ -960,8 +1072,9 @@ async function processDailyScreenerRun(run) {
     let krBenchmark = null;
     try {
       krBenchmark = await recommendationPrices.fetchRecommendationBenchmarkBars('^KS200');
-      const latestTradeDate = krBenchmark.bars.at(-1)?.date || null;
-      krSessionOpen = latestTradeDate === run.run_date;
+      const tradeDates = krBenchmark.bars.map((bar) => bar.date);
+      const latestTradeDate = tradeDates.at(-1) || null;
+      krSessionOpen = isTradingSession(tradeDates, run.run_date);
       marketContextByMarket.KR = {
         ...marketContextByMarket.KR,
         benchmark_latest_trade_date: latestTradeDate,
@@ -1031,6 +1144,7 @@ async function processDailyScreenerRun(run) {
         scan_summary: scanSummary,
       }];
     }));
+    await touchDailyScreenerRun(run.id);
     const prompt = dailyScreeners.buildDailyCategoryTop10Prompt({
       runDate: run.run_date,
       candidates: topCandidates,
@@ -1039,7 +1153,7 @@ async function processDailyScreenerRun(run) {
         ...marketContextByCategory,
       },
     });
-    const top5Attempt = await runDailyTop5Chain(prompt, topCandidates);
+    const top5Attempt = await runDailyTop5Chain(prompt, topCandidates, () => touchDailyScreenerRun(run.id));
     const chartGated = await applyDailyRecommendationChartGate({
       categories: top5Attempt.result.categories,
       candidates: topCandidates,
@@ -1056,6 +1170,7 @@ async function processDailyScreenerRun(run) {
       raw_response: top5Attempt.result.rawResponse,
       generated_at: new Date().toISOString(),
     };
+    await touchDailyScreenerRun(run.id);
 
     const usCategories = recommendationConfig.RECOMMENDATION_CATEGORIES
       .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category] === 'US');
@@ -1086,7 +1201,20 @@ async function processDailyScreenerRun(run) {
       categories: usCategories,
       candidateSnapshotByTicker: { ...flowSnapshotByTicker, ...chartGated.snapshots },
     });
-    const officialResultByCategory = Object.fromEntries(usCategories.map((category) => [category, gatedResult.categories[category]]));
+    const officialResultByCategory = Object.fromEntries(recommendationPublications
+      .filter((publication) => publication.is_official)
+      .map((publication) => [publication.category, storedRecommendationPicks(publication)]));
+    const { data: existingKrPublications, error: existingKrPublicationsError } = await supabase
+      .from('recommendation_publications')
+      .select('*, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+      .eq('screener_run_id', run.id)
+      .eq('is_official', true)
+      .eq('status', 'PUBLISHED')
+      .in('category', krCategories);
+    if (existingKrPublicationsError) throw existingKrPublicationsError;
+    const existingKrPublicationByCategory = new Map((existingKrPublications || [])
+      .map((publication) => [publication.category, publication]));
+    const policyFailures = [];
     if (krSessionOpen) {
       const marketState = marketContextByMarket.KR?.market_state || 'YELLOW';
       const allowedPolicies = [
@@ -1098,28 +1226,61 @@ async function processDailyScreenerRun(run) {
         ? recommendationConfig.KR_RECOMMENDATION_POLICY
         : recommendationConfig.RECOMMENDATION_ENGINE_VERSION;
       for (const category of krCategories) {
+        const existingOfficialPublication = existingKrPublicationByCategory.get(category);
+        if (existingOfficialPublication) {
+          recommendationPublications.push(existingOfficialPublication);
+          officialResultByCategory[category] = storedRecommendationPicks(existingOfficialPublication);
+          console.log(`[Worker] Preserving published official recommendation: ${run.run_date} ${category}.`);
+          await touchDailyScreenerRun(run.id);
+          continue;
+        }
         const recentRecommendations = await loadRecentKrRecommendations(run.run_date, category);
-        const riskRanked = krRiskRanking.selectKrRiskAdjustedTop10({
-          candidates: topCandidates,
-          category,
-          recentRecommendations,
-          marketState,
-          useFlow: false,
+        const selection = resolveRecommendationPolicies({
+          basePolicy: {
+            engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
+            picks: gatedResult.categories[category],
+            ranked: null,
+          },
+          requestedEngineVersion: activePolicy,
+          optionalPolicies: [
+            {
+              engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION,
+              build: () => {
+                const ranked = krRiskRanking.selectKrRiskAdjustedTop10({
+                  candidates: topCandidates,
+                  category,
+                  recentRecommendations,
+                  marketState,
+                  useFlow: false,
+                });
+                return { picks: ranked.map((row) => row.pick), ranked };
+              },
+            },
+            {
+              engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION,
+              build: () => {
+                const ranked = krRiskRanking.selectKrRiskAdjustedTop10({
+                  candidates: topCandidates,
+                  category,
+                  recentRecommendations,
+                  marketState,
+                  flowFeatures,
+                  useFlow: true,
+                });
+                return { picks: ranked.map((row) => row.pick), ranked };
+              },
+            },
+          ],
         });
-        const flowRanked = krRiskRanking.selectKrRiskAdjustedTop10({
-          candidates: topCandidates,
-          category,
-          recentRecommendations,
-          marketState,
-          flowFeatures,
-          useFlow: true,
-        });
-        const policies = [
-          { engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION, picks: gatedResult.categories[category], ranked: null },
-          { engineVersion: recommendationConfig.KR_RISK_ENGINE_VERSION, picks: riskRanked.map((row) => row.pick), ranked: riskRanked },
-          { engineVersion: recommendationConfig.KR_RISK_FLOW_ENGINE_VERSION, picks: flowRanked.map((row) => row.pick), ranked: flowRanked },
-        ];
-        const officialPolicy = policies.find((policy) => policy.engineVersion === activePolicy);
+        for (const failure of selection.failures) {
+          const finding = { category, phase: 'policy_selection', ...failure };
+          policyFailures.push(finding);
+          console.warn(`[Worker] KR policy unavailable; continuing with fallback: ${category} ${failure.engineVersion} - ${failure.message}`);
+        }
+        if (selection.effectiveEngineVersion !== activePolicy) {
+          console.warn(`[Worker] KR official policy fallback: ${category} ${activePolicy} -> ${selection.effectiveEngineVersion}`);
+        }
+        const officialPolicy = selection.policies.find((policy) => policy.isOfficial);
         if (officialPolicy?.ranked) {
           const gatedOfficialPolicy = await applyDailyRecommendationChartGate({
             categories: { [category]: officialPolicy.picks },
@@ -1128,7 +1289,8 @@ async function processDailyScreenerRun(run) {
           officialPolicy.picks = gatedOfficialPolicy.categories[category];
           officialPolicy.chartGateSnapshots = gatedOfficialPolicy.snapshots;
         }
-        for (const policy of policies) {
+        officialResultByCategory[category] = officialPolicy.picks;
+        for (const policy of selection.policies) {
           const deterministicSnapshots = policy.ranked
             ? Object.fromEntries(policy.ranked.flatMap((row) => {
               const snapshot = {
@@ -1144,89 +1306,108 @@ async function processDailyScreenerRun(run) {
               return [[row.pick.ticker, snapshot], [`${category}:${row.pick.ticker}`, snapshot]];
             }))
             : flowSnapshotByTicker;
-          const publication = await recommendationPersistence.persistRecommendationPolicy({
-            client: supabase,
-            runId: run.id,
-            runDate: run.run_date,
-            generatedAt: top5Result.generated_at,
-            provider: top5Attempt.provider,
-            model: top5Attempt.model,
-            result: { ...gatedResult, categories: { ...gatedResult.categories, [category]: policy.picks } },
-            candidates: scan.candidates,
-            category,
-            engineVersion: policy.engineVersion,
-            isOfficial: policy.engineVersion === activePolicy,
-            marketContextByCategory: {
-              [category]: {
-                ...marketContextByCategory[category],
-                scan_summary: scanSummary,
-                provider_chain: top5Attempt.chain,
+          try {
+            const publication = await recommendationPersistence.persistRecommendationPolicy({
+              client: supabase,
+              runId: run.id,
+              runDate: run.run_date,
+              generatedAt: top5Result.generated_at,
+              provider: top5Attempt.provider,
+              model: top5Attempt.model,
+              result: { ...gatedResult, categories: { ...gatedResult.categories, [category]: policy.picks } },
+              candidates: scan.candidates,
+              category,
+              engineVersion: policy.engineVersion,
+              isOfficial: policy.isOfficial,
+              marketContextByCategory: {
+                [category]: {
+                  ...marketContextByCategory[category],
+                  scan_summary: scanSummary,
+                  provider_chain: top5Attempt.chain,
+                  policy_selection: {
+                    requested_engine_version: activePolicy,
+                    effective_engine_version: selection.effectiveEngineVersion,
+                    failures: selection.failures,
+                  },
+                },
               },
-            },
-            candidateSnapshotByTicker: { ...deterministicSnapshots, ...chartGated.snapshots, ...(policy.chartGateSnapshots || {}) },
-          });
-          recommendationPublications.push(publication);
-          if (policy.engineVersion === activePolicy) officialResultByCategory[category] = policy.picks;
+              candidateSnapshotByTicker: { ...deterministicSnapshots, ...chartGated.snapshots, ...(policy.chartGateSnapshots || {}) },
+            });
+            recommendationPublications.push(publication);
+          } catch (error) {
+            if (policy.isOfficial) throw error;
+            const message = compactError(error);
+            policyFailures.push({ category, phase: 'policy_persistence', engineVersion: policy.engineVersion, message });
+            console.warn(`[Worker] KR shadow policy persistence failed; continuing: ${category} ${policy.engineVersion} - ${message}`);
+          }
         }
+        await touchDailyScreenerRun(run.id);
       }
     }
     const publicationByCategory = new Map(recommendationPublications
       .filter((publication) => publication.is_official)
       .map((publication) => [publication.category, publication]));
-
-    for (const category of krSessionOpen ? recommendationConfig.RECOMMENDATION_CATEGORIES : usCategories) {
-      const publication = publicationByCategory.get(category);
-      try {
-        const delivery = await sendTelegramMessage(dailyScreeners.formatDailyCategoryTop10TelegramMessage({
-          runDate: run.run_date,
-          category,
-          top10: officialResultByCategory[category],
-          provider: `${top5Attempt.provider} (${top5Attempt.model})`,
-        }));
-        if (publication) {
-          await recommendationPersistence.markRecommendationTelegramStatus(
-            supabase,
-            publication.id,
-            delivery?.skipped ? 'SKIPPED' : 'SENT',
-            delivery?.skipped ? null : new Date().toISOString(),
-          );
-        }
-        if (!delivery?.skipped && DAILY_TELEGRAM_CHARTS_AUTO_ENABLED) {
+    const deliveryCategories = krSessionOpen ? recommendationConfig.RECOMMENDATION_CATEGORIES : usCategories;
+    const deliveryResult = await deliverCategoriesIndependently({
+      categories: deliveryCategories,
+      publicationByCategory,
+      picksByCategory: officialResultByCategory,
+      formatMessage: ({ category, picks }) => dailyScreeners.formatDailyCategoryTop10TelegramMessage({
+        runDate: run.run_date,
+        category,
+        top10: picks,
+        provider: `${top5Attempt.provider} (${top5Attempt.model})`,
+      }),
+      sendMessage: sendTelegramMessage,
+      markStatus: markRecommendationTelegramStatusWithRetry,
+      afterSent: DAILY_TELEGRAM_CHARTS_AUTO_ENABLED ? async ({ category, picks }) => {
           const chartDelivery = await sendDailyTelegramCharts({
             category,
-            picks: officialResultByCategory[category],
+            picks,
             candidates: topCandidates,
           });
           if (!chartDelivery.skipped) {
             console.log(`[Worker] Telegram chart delivery: ${category} ${chartDelivery.sent}/${chartDelivery.attempted}.`);
           }
-        }
-      } catch (error) {
-        if (publication) {
-          await recommendationPersistence.markRecommendationTelegramStatus(supabase, publication.id, 'FAILED');
-        }
-        throw error;
-      }
+        } : null,
+    });
+    for (const failure of deliveryResult.failures) {
+      console.error(`[Worker] Telegram category delivery failed; continuing: ${failure.category} - ${failure.message}`);
+    }
+    for (const failure of deliveryResult.postDeliveryFailures) {
+      console.warn(`[Worker] Telegram post-delivery task failed: ${failure.category} - ${failure.message}`);
     }
 
-    await supabase
+    const deliveredCategoryCount = deliveryResult.sentCategories.length + deliveryResult.alreadySentCategories.length;
+    const allTelegramSent = deliveredCategoryCount === deliveryCategories.length;
+    const findings = [
+      ...scan.errors,
+      ...policyFailures,
+      ...deliveryResult.failures.map((failure) => ({ ...failure, phase: 'telegram_delivery' })),
+      ...deliveryResult.skippedCategories.map((category) => ({ category, phase: 'telegram_delivery', message: 'Delivery was skipped.' })),
+      ...deliveryResult.postDeliveryFailures.map((failure) => ({ ...failure, phase: 'telegram_post_delivery' })),
+    ];
+    const completedAt = new Date().toISOString();
+    const { error: completionError } = await supabase
       .from('daily_screener_runs')
       .update({
         status: 'completed',
+        scan_summary: { ...scanSummary, delivery_categories: deliveryCategories },
         llm_provider_chain: top5Attempt.chain,
         top5_result: top5Result,
-        error_summary: scan.errors.length ? JSON.stringify(scan.errors).slice(0, 2000) : null,
-        telegram_sent_at: new Date().toISOString(),
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        error_summary: findings.length ? JSON.stringify(findings).slice(0, 2000) : null,
+        telegram_sent_at: allTelegramSent ? completedAt : null,
+        completed_at: completedAt,
+        updated_at: completedAt,
       })
       .eq('id', run.id);
+    if (completionError) throw new Error(`daily screener completion update failed: ${completionError.message}`);
 
-    console.log(`[Worker] 🟢 Daily Screener run completed: ${run.id}`);
+    console.log(`[Worker] 🟢 Daily Screener run completed: ${run.id} (telegram ${deliveredCategoryCount}/${deliveryCategories.length})`);
   } catch (error) {
     const message = compactError(error, 2000);
     console.error(`[Worker] ❌ Daily Screener run failed: ${message}`);
-    await supabase
+    const { error: statusError } = await supabase
       .from('daily_screener_runs')
       .update({
         status: 'failed',
@@ -1234,7 +1415,188 @@ async function processDailyScreenerRun(run) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', run.id);
+    if (statusError) {
+      throw new Error(`${message}; failed to persist run failure: ${statusError.message}`);
+    }
   }
+}
+
+let lastStaleRecoveryCheckAt = 0;
+
+function kstDateDaysAgo(days) {
+  const shifted = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  shifted.setUTCDate(shifted.getUTCDate() - days);
+  return shifted.toISOString().slice(0, 10);
+}
+
+async function touchDailyScreenerRun(runId) {
+  const { error } = await supabase
+    .from('daily_screener_runs')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', runId)
+    .eq('status', 'processing');
+  if (error) throw error;
+}
+
+async function recoverStaleDailyScreenerRuns() {
+  const now = Date.now();
+  if (now - lastStaleRecoveryCheckAt < 60_000) return [];
+  lastStaleRecoveryCheckAt = now;
+  const recoveredAt = new Date(now).toISOString();
+  const staleBefore = new Date(now - DAILY_SCREENER_STALE_AFTER_MS).toISOString();
+  const { data, error } = await supabase
+    .from('daily_screener_runs')
+    .update({
+      status: 'pending',
+      error_summary: `Automatically recovered stale processing run at ${recoveredAt}.`,
+      updated_at: recoveredAt,
+    })
+    .eq('status', 'processing')
+    .gte('run_date', kstDateDaysAgo(DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS))
+    .lt('updated_at', staleBefore)
+    .select('id, run_date');
+  if (error) throw new Error(`stale daily screener recovery failed: ${error.message}`);
+  for (const run of data || []) {
+    console.warn(`[Worker] Requeued stale Daily Screener run ${run.id} (${run.run_date}).`);
+  }
+  return data || [];
+}
+
+function storedRecommendationPicks(publication) {
+  const rows = Array.isArray(publication.picks)
+    ? publication.picks
+    : Array.isArray(publication.recommendation_picks) ? publication.recommendation_picks : [];
+  return rows
+    .sort((left, right) => left.rank - right.rank)
+    .map((pick) => ({
+      ...pick,
+      category: publication.category,
+      market: publication.market,
+      chartGate: pick.candidate_snapshot?.chart_gate,
+    }));
+}
+
+async function syncRunTelegramCompletion(runId) {
+  const { data: run, error: runError } = await supabase
+    .from('daily_screener_runs')
+    .select('id, status, scope, scan_summary')
+    .eq('id', runId)
+    .maybeSingle();
+  if (runError) throw runError;
+  if (!run || run.status !== 'completed') return;
+  const { data: publications, error: publicationsError } = await supabase
+    .from('recommendation_publications')
+    .select('category, telegram_status, telegram_sent_at')
+    .eq('screener_run_id', runId)
+    .eq('is_official', true)
+    .eq('status', 'PUBLISHED');
+  if (publicationsError) throw publicationsError;
+  const expectedCategories = scopeArray(
+    run.scan_summary,
+    'delivery_categories',
+    scopeArray(run.scope, 'universes', recommendationConfig.RECOMMENDATION_CATEGORIES),
+  )
+    .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORIES.includes(category));
+  const publicationCategories = new Set((publications || []).map((publication) => publication.category));
+  if (!expectedCategories.length
+    || expectedCategories.some((category) => !publicationCategories.has(category))
+    || publications.some((publication) => publication.telegram_status !== 'SENT')) return;
+  const sentAt = publications
+    .map((publication) => publication.telegram_sent_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from('daily_screener_runs')
+    .update({ telegram_sent_at: sentAt, updated_at: new Date().toISOString() })
+    .eq('id', runId);
+  if (updateError) throw updateError;
+}
+
+async function markRecommendationTelegramStatusWithRetry(publicationId, status, sentAt = null) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await recommendationPersistence.markRecommendationTelegramStatus(supabase, publicationId, status, sentAt);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1_000));
+    }
+  }
+  throw lastError;
+}
+
+async function claimRecommendationTelegramPublication(publication) {
+  const claimedAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('recommendation_publications')
+    .update({ telegram_status: 'FAILED', telegram_sent_at: null, updated_at: claimedAt })
+    .eq('id', publication.id)
+    .eq('telegram_status', publication.telegram_status)
+    .eq('updated_at', publication.updated_at)
+    .select('id')
+    .maybeSingle();
+  if (error) throw new Error(`recommendation telegram claim failed: ${error.message}`);
+  return Boolean(data);
+}
+
+async function deliverStoredRecommendationPublication(publication) {
+  const picks = storedRecommendationPicks(publication);
+  if (picks.length === 0) {
+    await markRecommendationTelegramStatusWithRetry(publication.id, 'FAILED');
+    throw new Error(`${publication.category} publication ${publication.id} has no persisted picks.`);
+  }
+  let telegramAccepted = false;
+  try {
+    await sendTelegramMessage(dailyScreeners.formatDailyCategoryTop10TelegramMessage({
+      runDate: publication.run_date,
+      category: publication.category,
+      top10: picks,
+      provider: `${publication.llm_provider || 'unknown'} (${publication.llm_model || 'unknown'})`,
+    }), { publicationId: publication.id });
+    telegramAccepted = true;
+    const sentAt = new Date().toISOString();
+    await markRecommendationTelegramStatusWithRetry(publication.id, 'SENT', sentAt);
+    await syncRunTelegramCompletion(publication.screener_run_id);
+    console.log(`[Worker] Telegram outbox delivered: ${publication.run_date} ${publication.category} ${publication.id}.`);
+  } catch (error) {
+    if (!telegramAccepted) {
+      await markRecommendationTelegramStatusWithRetry(
+        publication.id,
+        error?.deliveryUncertain ? 'SKIPPED' : 'FAILED',
+      );
+    } else {
+      console.error(`[Worker] Telegram was accepted but its SENT receipt could not be finalized: ${publication.id}.`);
+    }
+    throw error;
+  }
+}
+
+async function processPendingRecommendationTelegramQueue() {
+  const minRunDate = kstDateDaysAgo(DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS);
+  const retryBefore = Date.now() - DAILY_TELEGRAM_RETRY_DELAY_MS;
+  const { data, error } = await supabase
+    .from('recommendation_publications')
+    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+    .eq('is_official', true)
+    .eq('status', 'PUBLISHED')
+    .in('telegram_status', ['PENDING', 'FAILED'])
+    .gte('run_date', minRunDate)
+    .order('run_date', { ascending: false })
+    .order('category', { ascending: true })
+    .limit(20);
+  if (error) throw new Error(`recommendation telegram outbox query failed: ${error.message}`);
+  const publication = (data || []).find((item) => item.telegram_status === 'PENDING'
+    || Date.parse(item.updated_at || '') <= retryBefore);
+  if (!publication) return false;
+  if (!await claimRecommendationTelegramPublication(publication)) return true;
+  try {
+    await deliverStoredRecommendationPublication(publication);
+  } catch (deliveryError) {
+    console.error(`[Worker] Telegram outbox delivery failed: ${publication.run_date} ${publication.category} - ${compactError(deliveryError)}`);
+  }
+  return true;
 }
 
 async function processDailyScreenerQueue() {
@@ -1247,12 +1609,35 @@ async function processDailyScreenerQueue() {
     .limit(1);
 
   if (error) {
-    console.error('[Worker] Error checking Daily Screener queue:', error.message);
-    return false;
+    throw new Error(`daily screener queue query failed: ${error.message}`);
   }
   if (!data || data.length === 0) return false;
   await processDailyScreenerRun(data[0]);
   return true;
+}
+
+async function replayDailyTelegrams(runDate, categories = []) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) throw new Error('Replay date must be YYYY-MM-DD.');
+  const { data, error } = await supabase
+    .from('recommendation_publications')
+    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+    .eq('run_date', runDate)
+    .eq('is_official', true)
+    .eq('status', 'PUBLISHED')
+    .in('telegram_status', ['PENDING', 'FAILED'])
+    .order('category', { ascending: true });
+  if (error) throw error;
+  const publications = categories.length
+    ? (data || []).filter((publication) => categories.includes(publication.category))
+    : data || [];
+  if (!publications.length) throw new Error(`No pending official recommendation telegrams found for ${runDate}.`);
+  for (const publication of publications) {
+    if (!await claimRecommendationTelegramPublication(publication)) {
+      console.warn(`[Worker] Telegram replay skipped because publication was claimed elsewhere: ${publication.id}.`);
+      continue;
+    }
+    await deliverStoredRecommendationPublication(publication);
+  }
 }
 
 async function replayDailyTelegramCharts(runDate, categories = [], tickers = []) {
@@ -1292,6 +1677,8 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
 }
 
 async function processQueue() {
+  await recoverStaleDailyScreenerRuns();
+  if (await processPendingRecommendationTelegramQueue()) return;
   if (await processDailyScreenerQueue()) return;
 
   const { data: pending, error } = await supabase
@@ -1302,8 +1689,7 @@ async function processQueue() {
     .limit(1);
 
   if (error) {
-    console.error('[Worker] Error checking queue:', error.message);
-    return;
+    throw new Error(`analysis queue query failed: ${error.message}`);
   }
   
   if (!pending || pending.length === 0) return;
@@ -1398,6 +1784,7 @@ async function processQueue() {
 }
 
 async function loop() {
+  await acquireWorkerLock();
   console.log('============================================');
   console.log('[Worker] 🟢 MTN Codex/Local LLM Queue Worker Started');
   console.log(`[Worker] Codex CLI: ${CODEX_CLI_ENABLED ? CODEX_CLI_BIN : 'disabled'}`);
@@ -1405,6 +1792,17 @@ async function loop() {
   console.log(`[Worker] Daily Top5 providers: ${DAILY_TOP5_PROVIDER_ORDER.join(' → ')}`);
   console.log(`[Worker] Waiting for tasks from Vercel...`);
   console.log('============================================');
+
+  const telegramReplayArg = process.argv.find((arg) => arg.startsWith('--replay-telegrams='));
+  if (telegramReplayArg) {
+    const categoryArg = process.argv.find((arg) => arg.startsWith('--replay-categories='));
+    const categories = categoryArg
+      ? categoryArg.slice('--replay-categories='.length).split(',').map((item) => item.trim()).filter(Boolean)
+      : [];
+    await replayDailyTelegrams(telegramReplayArg.slice('--replay-telegrams='.length), categories);
+    console.log('[Worker] Telegram replay completed.');
+    return;
+  }
 
   const replayArg = process.argv.find((arg) => arg.startsWith('--replay-charts='));
   if (replayArg) {
@@ -1427,9 +1825,16 @@ async function loop() {
     return;
   }
   
+  let consecutiveQueueFailures = 0;
   while (true) {
-    await processQueue();
-    // 10초마다 큐 확인
+    try {
+      await processQueue();
+      consecutiveQueueFailures = 0;
+    } catch (error) {
+      consecutiveQueueFailures += 1;
+      console.error(`[Worker] Queue pass failed (${consecutiveQueueFailures}/3): ${compactError(error, 1200)}`);
+      if (consecutiveQueueFailures >= 3) throw error;
+    }
     await new Promise(r => setTimeout(r, 10000));
   }
 }

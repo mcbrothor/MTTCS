@@ -3,7 +3,15 @@ import path from 'node:path';
 import { createJiti } from 'jiti';
 
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': path.resolve('.') } });
-const { initialTelegramDelivery, pickCandidateSnapshot } = jiti('../lib/recommendations/persistence.ts');
+const {
+  canPromoteShadowPublication,
+  canReplaceIncompleteOfficial,
+  initialTelegramDelivery,
+  preservedTelegramDelivery,
+  shouldPreservePublishedPublication,
+  shouldPreserveSentPublication,
+  pickCandidateSnapshot,
+} = jiti('../lib/recommendations/persistence.ts');
 
 const sentAt = '2026-06-19T12:15:49.495Z';
 
@@ -16,6 +24,30 @@ assert.deepEqual(initialTelegramDelivery(null), {
   telegram_status: 'PENDING',
   telegram_sent_at: null,
 });
+
+assert.deepEqual(preservedTelegramDelivery('SENT', sentAt), {
+  telegram_status: 'SENT',
+  telegram_sent_at: sentAt,
+});
+
+assert.deepEqual(preservedTelegramDelivery('FAILED', null), {
+  telegram_status: 'PENDING',
+  telegram_sent_at: null,
+});
+
+assert.equal(shouldPreserveSentPublication(true, 'SENT'), true);
+assert.equal(shouldPreserveSentPublication(false, 'SENT'), false);
+assert.equal(shouldPreserveSentPublication(true, 'FAILED'), false);
+assert.equal(shouldPreservePublishedPublication(true, 'PUBLISHED'), true);
+assert.equal(shouldPreservePublishedPublication(true, 'FAILED'), false);
+assert.equal(shouldPreservePublishedPublication(false, 'SHADOW'), true);
+assert.equal(shouldPreservePublishedPublication(false, 'PUBLISHED'), false);
+assert.equal(canPromoteShadowPublication(false, true, 'SHADOW'), true);
+assert.equal(canPromoteShadowPublication(false, true, 'FAILED'), false);
+assert.equal(canPromoteShadowPublication(true, false, 'PUBLISHED'), false);
+assert.equal(canReplaceIncompleteOfficial('FAILED'), true);
+assert.equal(canReplaceIncompleteOfficial('DRAFT'), true);
+assert.equal(canReplaceIncompleteOfficial('PUBLISHED'), false);
 
 const snapshot = pickCandidateSnapshot({
   rank: 1,
