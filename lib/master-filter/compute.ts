@@ -336,16 +336,16 @@ export function computeP3(
 
   if (intradayShock.staleDailyData) {
     shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
-    shockWarnings.push('Daily history is stale versus live market quotes.');
+    shockWarnings.push('장마감 데이터와 현재 시세의 기준 시각이 달라 판단을 보수적으로 낮췄습니다.');
   }
 
   if (isKoreaSymbol) {
     if (hasValueAtOrBelow(kospiChange, -5) || hasValueAtOrBelow(kosdaqChange, -5) || hasValueAtOrBelow(mainChange, -5)) {
       shockStateCap = stricterMarketState(shockStateCap, 'RED');
-      shockWarnings.push('Korea index shock is beyond -5%; new entries are halted regardless of moving-average trend.');
+      shockWarnings.push('국내 지수가 장중 5% 이상 급락해 이동평균선과 관계없이 새 매수를 중단했습니다.');
     } else if (hasValueAtOrBelow(kospiChange, -3) || hasValueAtOrBelow(kosdaqChange, -3) || hasValueAtOrBelow(mainChange, -3)) {
       shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
-      shockWarnings.push('Korea index shock is beyond -3%; GREEN is not allowed intraday.');
+      shockWarnings.push('국내 지수가 장중 3% 이상 하락해 오늘은 진입 가능 판정을 내리지 않습니다.');
     }
   } else if (
     hasValueAtOrBelow(mainChange, -1.5) ||
@@ -353,7 +353,7 @@ export function computeP3(
     hasValueAtOrBelow(semiChange, -5)
   ) {
     shockStateCap = stricterMarketState(shockStateCap, 'RED');
-    shockWarnings.push('US intraday risk shock is severe; new entries are halted.');
+    shockWarnings.push('미국 증시의 장중 하락 폭이 중단 기준을 넘어 새 매수를 멈췄습니다.');
   } else if (
     hasValueAtOrBelow(mainChange, -0.8) ||
     hasValueAtOrBelow(techChange, -2) ||
@@ -361,7 +361,7 @@ export function computeP3(
     (hasValueAtOrAbove(vixChange, 8) && currentVix >= 18)
   ) {
     shockStateCap = stricterMarketState(shockStateCap, 'YELLOW');
-    shockWarnings.push('US intraday risk shock detected; GREEN is not allowed.');
+    shockWarnings.push('미국 증시의 장중 하락 폭이 주의 기준을 넘어 오늘은 진입 가능 판정을 내리지 않습니다.');
   }
 
   if (shockStateCap === 'RED' && state !== 'RED') {
@@ -410,7 +410,7 @@ export function computeP3(
       threshold: isKoreaSymbol ? 'KR -3% warning / -5% halt' : 'SPY -0.8%, QQQ -2%, semis -3.5%',
       status: (shockStateCap === 'RED' ? 'FAIL' : shockStateCap === 'YELLOW' ? 'WARNING' : 'PASS') as 'PASS' | 'WARNING' | 'FAIL',
       unit: 'signals',
-      description: shockWarnings.length ? shockWarnings.join(' ') : 'Live quote shock did not cap the market state.',
+      description: shockWarnings.length ? shockWarnings.join(' ') : '현재 시세에서 장중 급락 경보가 감지되지 않았습니다.',
       source: 'Live quote guard',
       score: shockStateCap === 'RED' ? 0 : shockStateCap === 'YELLOW' ? 8 : 20,
       weight: 20,

@@ -11,7 +11,16 @@ import { useMarket } from '@/contexts/MarketContext';
 import { formatDelay, formatTimestamp } from '@/lib/format';
 import { ADVANCE_DECLINE_RATIO_BANDS, getAverageDailyRangeGuidance } from '@/lib/master-filter/adr-presentation';
 import { normalizeSectorReturn } from '@/lib/master-filter/sector-rows';
-import { friendlyMetricDescription, friendlyMetricLabel, friendlyMetricStatus } from '@/lib/market-display';
+import {
+  friendlyDataSource,
+  friendlyFundName,
+  friendlyMetricDescription,
+  friendlyMetricLabel,
+  friendlyMetricStatus,
+  friendlyMetricThreshold,
+  friendlyMetricValue,
+  friendlySectorLabel,
+} from '@/lib/market-display';
 import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
 const METRIC_HELP: Record<string, { alias?: string; icon?: string; tooltip: string; formula?: string; accordion?: string }> = {
@@ -100,11 +109,10 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
               />
             )}
           </div>
-          <p className="mt-2 font-mono text-2xl font-black text-white">
-            {detail.value}
-            {detail.unit && <span className="ml-1 text-xs text-slate-500">{detail.unit}</span>}
+          <p className="mt-2 text-2xl font-black text-white">
+            {friendlyMetricValue(detail)}
           </p>
-          <p className="mt-1 text-xs text-slate-500">기준: {detail.threshold}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">판정 기준: {friendlyMetricThreshold(detail)}</p>
         </div>
         <StatusBadge state={statusToState(detail.status)} label={friendlyMetricStatus(detail.status)} size="sm" />
       </div>
@@ -173,7 +181,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
           <span>{friendlyDescription}</span>
         </div>
-        <p className="mt-2 font-mono text-[10px] uppercase tracking-wide text-slate-600">{detail.source}</p>
+        <p className="mt-2 text-[10px] tracking-wide text-slate-600">데이터: {friendlyDataSource(detail.source)}</p>
         {originalLabel && (
           <details className="mt-2 text-[10px] text-slate-600">
             <summary className="cursor-pointer">계산명 보기</summary>
@@ -241,10 +249,10 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[10px] text-slate-500">#{row.rank}</span>
-                  <p className="text-xs font-bold text-white">{row.name}</p>
+                  <p className="text-xs font-bold text-white">{friendlySectorLabel(row.name)}</p>
                 </div>
                 <p className="mt-1 truncate text-[11px] text-slate-300" title={row.tickerName}>
-                  {row.tickerName || row.name}
+                  {friendlyFundName(row.symbol, row.tickerName || row.name)}
                 </p>
                 <p className="font-mono text-[10px] text-slate-500">{row.symbol}</p>
               </div>
@@ -293,9 +301,9 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
             {rows.map((row) => (
               <tr key={row.symbol} className="border-b border-slate-900">
                 <td className="py-2 pr-3 font-mono text-slate-400">{row.rank}</td>
-                <td className="py-2 pr-3 font-semibold text-white">{row.name}</td>
+                <td className="py-2 pr-3 font-semibold text-white">{friendlySectorLabel(row.name)}</td>
                 <td className="max-w-[260px] py-2 pr-3 text-xs text-slate-300" title={row.tickerName}>
-                  {row.tickerName || row.name}
+                  {friendlyFundName(row.symbol, row.tickerName || row.name)}
                 </td>
                 <td className="py-2 pr-3 font-mono">{row.symbol}</td>
                 <td className={`py-2 pr-3 text-right font-mono ${sectorReturnTone(row.return1)}`}>
@@ -391,11 +399,11 @@ function DataQualityPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">
-            {market === 'KR' ? 'KOSPI 200' : 'SPY'} 기준 내부 건강도
+            {market === 'KR' ? '한국 대표 지수' : '미국 대표 지수'} 기준 내부 건강도
           </p>
           <h2 className="mt-1 text-lg font-black text-white">데이터 확인 필요</h2>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
-            현재 지표는 투자 판단용으로 채점되지 않았습니다. 0점은 시장 약세가 아니라 API/인증/데이터 소스 미수신 상태를 의미합니다.
+            현재 지표는 투자 판단용으로 채점되지 않았습니다. 0점은 시장 약세가 아니라 데이터 연결이나 수신 상태를 먼저 확인해야 한다는 뜻입니다.
           </p>
         </div>
         <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-left md:text-right">
@@ -424,7 +432,7 @@ function DataQualityPanel({
                   </span>
                 </td>
                 <td className="hidden px-3 py-2 text-slate-400 md:table-cell">{row.description}</td>
-                <td className="px-3 py-2 text-right font-mono text-[10px] text-slate-500">{row.source}</td>
+                <td className="px-3 py-2 text-right text-[10px] text-slate-500">{friendlyDataSource(row.source)}</td>
               </tr>
             ))}
           </tbody>
@@ -433,12 +441,12 @@ function DataQualityPanel({
 
       <div className="mt-3 grid gap-2 text-xs text-slate-300 md:grid-cols-3">
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-          <p className="font-semibold text-sky-200">1. 인증/세션</p>
-          <p className="mt-1 text-slate-400">API 인증이 정상이어야 실시간 채점이 시작됩니다.</p>
+          <p className="font-semibold text-sky-200">1. 데이터 연결</p>
+          <p className="mt-1 text-slate-400">로그인과 데이터 연결이 정상이어야 실시간 채점이 시작됩니다.</p>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
           <p className="font-semibold text-sky-200">2. 기준 시각</p>
-          <p className="mt-1 text-slate-400">as-of와 지연 상태를 확인한 뒤 당일 판단에 사용합니다.</p>
+          <p className="mt-1 text-slate-400">데이터 기준 시각과 지연 여부를 확인한 뒤 당일 판단에 사용합니다.</p>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
           <p className="font-semibold text-sky-200">3. 재채점</p>
@@ -468,7 +476,7 @@ function AdrEducationPanel({ detail }: { detail: MasterFilterMetricDetail }) {
         <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
           <p className="text-xs font-bold text-sky-200">현재 화면: 20일 평균 하루 변동폭</p>
           <p className="mt-1 text-xs leading-5 text-slate-400">
-            지수의 <strong className="text-slate-200">하루 가격 변동폭</strong>을 20일 평균으로 계산합니다. 기준은 <span className="font-mono text-slate-300">{detail.threshold}</span>이며 시장별로 다릅니다.
+            지수의 <strong className="text-slate-200">하루 가격 변동폭</strong>을 20일 평균으로 계산합니다. 기준은 <span className="text-slate-300">{friendlyMetricThreshold(detail)}</span>이며 시장별로 다릅니다.
           </p>
         </div>
         <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
@@ -540,11 +548,11 @@ export default function MetricsGrid() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-              {data.market === 'KR' ? 'KOSPI 200' : 'SPY'} 기준 내부 건강도
+              {data.market === 'KR' ? '한국 대표 지수' : '미국 대표 지수'} 기준 내부 건강도
             </p>
             <h2 className="mt-1 text-xl font-bold text-white">종합 점수</h2>
             <p className="mt-1 font-mono text-[10px] text-slate-500">
-              {formatDelay(metrics.meta)} · {metrics.meta.provider} · {formatTimestamp(metrics.meta.asOf)}
+              {formatDelay(metrics.meta)} · {friendlyDataSource(`${metrics.meta.provider} · ${metrics.meta.source}`)} · {formatTimestamp(metrics.meta.asOf)}
             </p>
           </div>
           <div className="text-right">
