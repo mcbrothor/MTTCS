@@ -16,12 +16,26 @@ test.describe('TC-MF: 오늘의 결론과 위험 조기경보', () => {
       await expect(page.getByRole('status', { name: '오늘 진입 결정: 정상 진입 가능' })).toBeVisible();
       await expect(page.getByText('종합 점수').first()).toBeVisible();
       await expect(page.getByRole('heading', { name: '위험이 커지는지 먼저 확인' })).toBeVisible();
+      const indexReasonButton = page.getByRole('button', { name: '지수가 50일 평균선 위에 있는가 판정 근거: 정상' });
+      await indexReasonButton.hover();
+      await expect(page.getByRole('tooltip')).toContainText('대표 지수와 QQQ가 모두 50일선 위');
+      await expect(page.getByRole('tooltip')).toContainText('관측값');
+      await expect(page.getByRole('tooltip')).toContainText('판정 기준');
       await expect(page.locator('text=시장 폭').first()).toBeVisible();
       await expect(page.getByText('20일 평균 하루 변동폭').first()).toBeVisible();
       await expect(page.getByRole('heading', { name: '하루 변동폭 바로 읽기' })).toBeVisible();
       await expect(page.getByText('별도 참고: 상승/하락 종목 비율')).toBeVisible();
       await expect(page.getByText('75% 이하', { exact: true })).toBeVisible();
       await expect(page.getByText('120% 이상', { exact: true })).toBeVisible();
+
+      const sectorTable = page.getByRole('table').filter({ hasText: 'State Street Technology Select Sector SPDR ETF' });
+      await expect(sectorTable.getByRole('columnheader', { name: '실제 종목명' })).toBeVisible();
+      await expect(sectorTable.getByRole('columnheader', { name: '주간 수익률' })).toBeVisible();
+      const technologyRow = sectorTable.getByRole('row').filter({ hasText: 'XLK' });
+      await expect(technologyRow.getByText('+1.20%', { exact: true })).toBeVisible();
+      await expect(technologyRow.getByText('+3.40%', { exact: true })).toBeVisible();
+      await expect(technologyRow.getByText('5일선 위', { exact: true })).toBeVisible();
+      await expect(technologyRow.getByText('20일선 위', { exact: true })).toBeVisible();
     });
   });
 

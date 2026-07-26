@@ -1,0 +1,330 @@
+{
+  "generatedAt": "2026-07-25T00:00:00.000Z",
+  "reportingWindow": {
+    "from": "2026-07-18",
+    "to": "2026-07-24"
+  },
+  "dashboardUrl": "https://example.com/recommendations?view=executive",
+  "categories": [
+    {
+      "category": "NASDAQ100",
+      "market": "US",
+      "dataAsOf": "2026-07-24",
+      "horizons": [
+        {
+          "horizon": "D5",
+          "sampleSize": 88,
+          "positiveHitRate": 40.9,
+          "benchmarkWinRate": 55.7,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": -0.5,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D20",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D60",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        }
+      ],
+      "causes": [
+        {
+          "causeCode": "SELECTION",
+          "count": 34,
+          "critical": 0,
+          "confirmed": 0
+        }
+      ],
+      "findings": [
+        {
+          "causeCode": "SELECTION",
+          "findingStatus": "HYPOTHESIS",
+          "severity": "WARN",
+          "sampleSize": 34,
+          "summaryKo": "미국 성장주 선정 기준과 대형 손실 구간을 재검토해야 합니다."
+        }
+      ]
+    },
+    {
+      "category": "SP500",
+      "market": "US",
+      "dataAsOf": "2026-07-24",
+      "horizons": [
+        {
+          "horizon": "D5",
+          "sampleSize": 86,
+          "positiveHitRate": 43.0,
+          "benchmarkWinRate": 46.5,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": -0.5,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D20",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D60",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        }
+      ],
+      "causes": [
+        {
+          "causeCode": "SELECTION",
+          "count": 38,
+          "critical": 0,
+          "confirmed": 0
+        }
+      ],
+      "findings": []
+    },
+    {
+      "category": "KOSPI200",
+      "market": "KR",
+      "dataAsOf": "2026-07-24",
+      "horizons": [
+        {
+          "horizon": "D5",
+          "sampleSize": 73,
+          "positiveHitRate": 21.9,
+          "benchmarkWinRate": 60.3,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": 4.0,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D20",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D60",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        }
+      ],
+      "causes": [
+        {
+          "causeCode": "SELECTION",
+          "count": 21,
+          "critical": 0,
+          "confirmed": 0
+        }
+      ],
+      "findings": [],
+      "policies": [
+        {
+          "engineVersion": "daily-top10-category-balanced-v1",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 73,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": 4.0,
+            "averageMaePct": -10.6,
+            "lowerDecileReturnPct": -23.5,
+            "flowCoveragePct": 69.9
+          }
+        },
+        {
+          "engineVersion": "kr-risk-ranked-v2",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 76,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": 5.9,
+            "averageMaePct": -8.4,
+            "lowerDecileReturnPct": -18.9,
+            "flowCoveragePct": 82.9
+          }
+        },
+        {
+          "engineVersion": "kr-risk-flow-v2.1",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 76,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": 6.3,
+            "averageMaePct": -8.0,
+            "lowerDecileReturnPct": -17.5,
+            "flowCoveragePct": 82.9
+          }
+        }
+      ],
+      "policyDecision": {
+        "cohortCount": 8,
+        "decision": "CONTINUE",
+        "riskComparison": {
+          "sampleSize": 8,
+          "meanDelta": 1.9,
+          "low90": -0.4,
+          "high90": 4.2
+        },
+        "flowComparison": {
+          "sampleSize": 8,
+          "meanDelta": 2.3,
+          "low90": -0.1,
+          "high90": 4.7
+        }
+      }
+    },
+    {
+      "category": "KOSDAQ150",
+      "market": "KR",
+      "dataAsOf": "2026-07-24",
+      "horizons": [
+        {
+          "horizon": "D5",
+          "sampleSize": 60,
+          "positiveHitRate": 31.7,
+          "benchmarkWinRate": 61.7,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": 5.6,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D20",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        },
+        {
+          "horizon": "D60",
+          "sampleSize": 0,
+          "positiveHitRate": null,
+          "benchmarkWinRate": null,
+          "averageReturnPct": null,
+          "averageExcessReturnPct": null,
+          "averageMaePct": null,
+          "lowerDecileReturnPct": null
+        }
+      ],
+      "causes": [
+        {
+          "causeCode": "SELECTION",
+          "count": 18,
+          "critical": 0,
+          "confirmed": 0
+        }
+      ],
+      "findings": [
+        {
+          "causeCode": "SELECTION",
+          "findingStatus": "HYPOTHESIS",
+          "severity": "WARN",
+          "sampleSize": 18,
+          "summaryKo": "코스닥의 반복 손실 종목군과 손실 제한 규칙을 우선 점검해야 합니다."
+        }
+      ],
+      "policies": [
+        {
+          "engineVersion": "daily-top10-category-balanced-v1",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 60,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": 5.6,
+            "averageMaePct": -14.4,
+            "lowerDecileReturnPct": -28.9,
+            "flowCoveragePct": 70.0
+          }
+        },
+        {
+          "engineVersion": "kr-risk-ranked-v2",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 58,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": -0.8,
+            "averageMaePct": -16.3,
+            "lowerDecileReturnPct": -30.9,
+            "flowCoveragePct": 75.9
+          }
+        },
+        {
+          "engineVersion": "kr-risk-flow-v2.1",
+          "d5": {
+            "horizon": "D5",
+            "sampleSize": 61,
+            "positiveHitRate": null,
+            "benchmarkWinRate": null,
+            "averageReturnPct": null,
+            "averageExcessReturnPct": -1.6,
+            "averageMaePct": -16.4,
+            "lowerDecileReturnPct": -30.6,
+            "flowCoveragePct": 73.8
+          }
+        }
+      ],
+      "policyDecision": {
+        "cohortCount": 6,
+        "decision": "CONTINUE",
+        "riskComparison": {
+          "sampleSize": 6,
+          "meanDelta": -6.4,
+          "low90": -9.8,
+          "high90": -3.0
+        },
+        "flowComparison": {
+          "sampleSize": 6,
+          "meanDelta": -7.2,
+          "low90": -10.7,
+          "high90": -3.7
+        }
+      }
+    }
+  ]
+}

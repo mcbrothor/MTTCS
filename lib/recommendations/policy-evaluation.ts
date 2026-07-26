@@ -64,6 +64,10 @@ export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
   const official = byPolicy(RECOMMENDATION_ENGINE_VERSION);
   const risk = byPolicy(KR_RISK_ENGINE_VERSION);
   const flow = byPolicy(KR_RISK_FLOW_ENGINE_VERSION);
+  const officialDates = new Set(official.map((row) => row.runDate));
+  const riskDates = new Set(risk.map((row) => row.runDate));
+  const cohortCount = new Set(flow.map((row) => row.runDate)
+    .filter((runDate) => officialDates.has(runDate) && riskDates.has(runDate))).size;
   const riskComparison = pairedBootstrap({ baseline: official, challenger: risk });
   const flowComparison = pairedBootstrap({ baseline: risk, challenger: flow });
   const flowPairs = pairedRows(risk, flow);
@@ -74,14 +78,13 @@ export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
     >= mean(flowPairs.map((pair) => pair.baseline.averageMaePct));
   const tailNotWorse = flowPairs.length > 0 && mean(flowPairs.map((pair) => pair.challenger.lowerDecileReturnPct))
     >= mean(flowPairs.map((pair) => pair.baseline.lowerDecileReturnPct));
-  const enough = riskComparison.sampleSize >= 20 && flowComparison.sampleSize >= 20;
+  const enough = cohortCount >= 20;
   const riskPassed = enough && (riskComparison.meanDelta || 0) >= 0.5 && (riskComparison.low90 || 0) > 0;
   const flowPassed = riskPassed
     && (flowComparison.low90 || 0) > 0
     && maeNotWorse
     && tailNotWorse
     && coverage >= 90;
-  const cohortCount = Math.min(riskComparison.sampleSize, flowComparison.sampleSize);
   return {
     cohortCount,
     decision: flowPassed ? 'PROMOTE_FLOW' : riskPassed ? 'PROMOTE_RISK' : cohortCount < 40 ? 'CONTINUE' : 'KEEP_OFFICIAL',

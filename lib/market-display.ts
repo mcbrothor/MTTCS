@@ -17,6 +17,12 @@ export function friendlyMarketStateLabel(state: MarketState | null | undefined) 
   return '데이터 확인 필요';
 }
 
+export function friendlyMarketLabel(market: string | null | undefined) {
+  if (market === 'US') return '미국 시장';
+  if (market === 'KR') return '한국 시장';
+  return market || '시장';
+}
+
 export function friendlyMetricLabel(label: string | null | undefined) {
   const source = label ?? '';
   const lower = source.toLowerCase();
@@ -65,6 +71,133 @@ export function friendlyMetricStatus(status: MasterFilterMetricDetail['status'])
   if (status === 'PASS') return '좋음';
   if (status === 'WARNING') return '주의';
   return '위험';
+}
+
+export function friendlyMetricValue(detail: MasterFilterMetricDetail) {
+  const label = friendlyMetricLabel(detail.label);
+  const value = detail.value;
+  const raw = value === null ? '확인 필요' : String(value);
+  const lower = raw.toLowerCase();
+
+  if (label === '지수 평균선 위치' && raw.includes('/')) {
+    const [ma50, ma200] = raw.split('/').map((item) => item.trim());
+    return `50일선 ${ma50} · 200일선 ${ma200}`;
+  }
+  if (label === '강한 반등 확인 여부') {
+    if (lower.includes('unconfirmed')) return '아직 확인되지 않음';
+    if (lower.includes('confirmed')) return '강한 반등 확인';
+  }
+  if (label === '강한 업종' && lower.includes('sector')) {
+    const count = raw.match(/\d+/)?.[0];
+    return count ? `${count}개 업종 비교` : '업종 흐름 비교';
+  }
+
+  const unit = detail.unit?.toLowerCase();
+  if (!unit) return raw;
+  if (unit === '%') return `${raw}%`;
+  if (unit === 'pts' || unit === 'point' || unit === 'points') return `${raw}포인트`;
+  if (unit === 'day' || unit === 'days') return `${raw}일`;
+  if (unit === 'ratio') return `${raw}배`;
+  return raw;
+}
+
+export function friendlyMetricThreshold(detail: MasterFilterMetricDetail) {
+  const label = friendlyMetricLabel(detail.label);
+  const raw = String(detail.threshold);
+
+  if (label === '지수 평균선 위치') {
+    return '현재가가 50일선·200일선 위, 50일선이 200일선 위';
+  }
+  if (label === '시장 폭') return `${raw}% 이상이면 양호`;
+  if (label === '시장 불안도') return `${raw} 이하이면 안정`;
+  if (label === '강한 반등 확인 여부') return '하락 뒤 4일째 이후 거래량을 동반한 강한 반등';
+  if (label === '분산일') return `${raw}일 미만이면 양호`;
+  if (label === '새 고점 종목과 새 저점 종목의 힘겨루기') return `${raw}배 이상이면 양호`;
+  if (label === '강한 업종') return '공격 업종 2개 이상이 최근 20일 상위권';
+  if (label === '20일 평균 하루 변동폭') return '1.8% 이하면 안정 · 2.8% 이상이면 과열';
+  return raw;
+}
+
+export function friendlyDataSource(source: string | null | undefined) {
+  const raw = source?.trim();
+  if (!raw) return '출처 확인 필요';
+  const lower = raw.toLowerCase();
+  const ticker = raw.match(/\b(SPY|QQQ|MAGS|KOSPI 200)\b/i)?.[0]?.toUpperCase();
+
+  if (lower.includes('e2e fixture') || lower === 'mock') return '화면 검증용 데이터';
+  if (lower.includes('mtn aggregator') || lower.includes('market analysis engine')) return '통합 시장 데이터 · 자체 분석';
+  if (lower.includes('cboe')) return '옵션 시장 데이터';
+  if (lower.includes('sector etf')) return '업종 상장지수펀드 대용값';
+  if (lower.includes('breadth proxy') || lower.includes('etf proxy')) return '시장 참여 폭 대용값';
+  if (lower.includes('high/low range')) return `${ticker ?? '대표 지수'} 고가·저가 데이터`;
+  if (lower.includes('volume proxy')) return `${ticker ?? '대표 지수'} 거래량 대용값`;
+  if (lower.includes('yahoo finance') || lower === 'yahoo') return `미국 시장 데이터${ticker ? ` · ${ticker}` : ''}`;
+  if (lower.includes('kis')) return '한국 시장 데이터';
+  if (lower.includes('proxy')) return `${ticker ?? '시장'} 대용값`;
+  return raw;
+}
+
+const SECTOR_LABELS: Record<string, string> = {
+  Technology: '기술',
+  'Consumer Discretionary': '자유소비재',
+  'Communication Services': '커뮤니케이션 서비스',
+  Industrials: '산업재',
+  Financials: '금융',
+  'Health Care': '헬스케어',
+  Energy: '에너지',
+  'Consumer Staples': '필수소비재',
+  Utilities: '유틸리티',
+  Materials: '소재',
+};
+
+const US_FUND_LABELS: Record<string, string> = {
+  XLK: '미국 기술 업종 상장지수펀드',
+  XLY: '미국 자유소비재 업종 상장지수펀드',
+  XLC: '미국 커뮤니케이션 서비스 업종 상장지수펀드',
+  XLI: '미국 산업재 업종 상장지수펀드',
+  XLF: '미국 금융 업종 상장지수펀드',
+  XLV: '미국 헬스케어 업종 상장지수펀드',
+  XLE: '미국 에너지 업종 상장지수펀드',
+  XLP: '미국 필수소비재 업종 상장지수펀드',
+  XLU: '미국 유틸리티 업종 상장지수펀드',
+  XLB: '미국 소재 업종 상장지수펀드',
+};
+
+export function friendlySectorLabel(sector: string | null | undefined) {
+  if (!sector) return '업종 확인 필요';
+  return SECTOR_LABELS[sector] ?? sector;
+}
+
+export function friendlyFundName(symbol: string, name: string | null | undefined) {
+  return US_FUND_LABELS[symbol] ?? name ?? symbol;
+}
+
+export function friendlyIssue(message: string | null | undefined) {
+  if (!message) return null;
+  const lower = message.toLowerCase();
+
+  if (lower.includes('authentication') || lower.includes('unauthorized')) {
+    return '데이터 연결 인증이 필요합니다. 로그인 상태와 서버 연결을 확인해 주세요.';
+  }
+  if (lower.includes('timeout') || lower.includes('aborted')) {
+    return '데이터 응답이 늦어지고 있습니다. 최근 정상 값 또는 다음 갱신을 기다려 주세요.';
+  }
+  if (lower.includes('daily history is stale')) {
+    return '장마감 데이터와 현재 시세의 기준 시각이 달라 오늘 판단을 보수적으로 낮췄습니다.';
+  }
+  if (lower.includes('korea index shock is beyond -5')) {
+    return '국내 지수가 장중 5% 이상 급락해 이동평균선과 관계없이 새 매수를 중단했습니다.';
+  }
+  if (lower.includes('korea index shock is beyond -3')) {
+    return '국내 지수가 장중 3% 이상 하락해 오늘은 진입 가능 판정을 내리지 않습니다.';
+  }
+  if (lower.includes('us intraday risk shock is severe')) {
+    return '미국 증시의 장중 하락 폭이 중단 기준을 넘어 새 매수를 멈췄습니다.';
+  }
+  if (lower.includes('us intraday risk shock detected')) {
+    return '미국 증시의 장중 하락 폭이 주의 기준을 넘어 오늘은 진입 가능 판정을 내리지 않습니다.';
+  }
+  return message;
 }
 
 export function friendlyDecisionHeadline(decision: Decision, isUnscored: boolean) {

@@ -25,9 +25,9 @@ function baseInput(overrides = {}) {
       { symbol: 'RSP', above200: true, return20: 2 },
     ],
     sectorRows: [
-      { symbol: 'XLK', name: 'Technology', return20: 5, riskOn: true, rank: 1 },
-      { symbol: 'XLI', name: 'Industrials', return20: 4, riskOn: true, rank: 2 },
-      { symbol: 'XLY', name: 'Consumer Discretionary', return20: 3, riskOn: true, rank: 3 },
+      { symbol: 'XLK', name: 'Technology', return1: 1.5, return20: 5, riskOn: true, rank: 1 },
+      { symbol: 'XLI', name: 'Industrials', return1: 1.2, return20: 4, riskOn: true, rank: 2 },
+      { symbol: 'XLY', name: 'Consumer Discretionary', return1: 0.8, return20: 3, riskOn: true, rank: 3 },
     ],
     macroQuotes: {
       SPY: quote(105, 0.4, 100),
@@ -54,6 +54,8 @@ function baseInput(overrides = {}) {
   assert.equal(matrix.status, 'OK');
   assert.equal(matrix.rotation.diagnosis, 'BIG_TECH_LEADERSHIP');
   assert.equal(matrix.signals.find((signal) => signal.id === 'index_ma50')?.status, 'OK');
+  assert.match(matrix.signals.find((signal) => signal.id === 'index_ma50')?.reason ?? '', /SPY와 QQQ가 모두 50일선 위/);
+  assert.match(matrix.signals.find((signal) => signal.id === 'big_tech_line')?.reason ?? '', /60달러 이상.*50일선/);
 }
 
 {
@@ -105,7 +107,9 @@ function baseInput(overrides = {}) {
   assert.equal(matrix.status, 'HALT');
   assert.equal(matrix.rotation.diagnosis, 'BROAD_DE_RISKING');
   assert.equal(matrix.signals.find((signal) => signal.id === 'market_breadth')?.status, 'HALT');
+  assert.match(matrix.signals.find((signal) => signal.id === 'market_breadth')?.reason ?? '', /25% 미만.*중단/);
   assert.equal(matrix.signals.find((signal) => signal.id === 'money_flow')?.status, 'HALT');
+  assert.match(matrix.signals.find((signal) => signal.id === 'money_flow')?.reason ?? '', /방어자산.*시장 참여 폭.*중단/);
 }
 
 {
@@ -122,9 +126,9 @@ function baseInput(overrides = {}) {
       { symbol: '069500.KS', above200: true, return20: 3.9 },
     ],
     sectorRows: [
-      { symbol: '455850.KS', name: '반도체', return20: 8.1, riskOn: true, rank: 1 },
-      { symbol: '123310.KS', name: '자동차', return20: 5.4, riskOn: true, rank: 2 },
-      { symbol: '091220.KS', name: '은행', return20: 2.1, riskOn: false, rank: 3 },
+      { symbol: '455850.KS', name: '반도체', return1: 2.1, return20: -8.1, riskOn: true, rank: 1 },
+      { symbol: '123310.KS', name: '자동차', return1: 1.4, return20: -5.4, riskOn: true, rank: 2 },
+      { symbol: '091220.KS', name: '은행', return1: 0.6, return20: -2.1, riskOn: false, rank: 3 },
     ],
     macroQuotes: {
       '^KS200': quote(418, 0.8, 405),
@@ -159,9 +163,9 @@ function baseInput(overrides = {}) {
       { symbol: '229200.KS', above200: false, return20: -7.5 },
     ],
     sectorRows: [
-      { symbol: '244580.KS', name: '바이오', return20: -4, riskOn: true, rank: 1 },
-      { symbol: '455850.KS', name: '반도체', return20: -6, riskOn: true, rank: 2 },
-      { symbol: '305720.KS', name: '2차전지', return20: -8, riskOn: true, rank: 3 },
+      { symbol: '244580.KS', name: '바이오', return1: -3.5, return20: -4, riskOn: true, rank: 1 },
+      { symbol: '455850.KS', name: '반도체', return1: -4.2, return20: -6, riskOn: true, rank: 2 },
+      { symbol: '305720.KS', name: '2차전지', return1: -5.1, return20: -8, riskOn: true, rank: 3 },
     ],
     macroQuotes: {
       '^KQ11': quote(820, -2.5, 850),

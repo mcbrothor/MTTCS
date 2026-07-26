@@ -14,6 +14,7 @@ import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { getKisIndexQuotes, getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { buildEarlyWarningMatrix } from '@/lib/master-filter/early-warning';
+import { buildSectorRows } from '@/lib/master-filter/sector-rows';
 import type { MasterFilterResponse, OHLCData, MasterFilterMetricDetail } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -47,7 +48,7 @@ const US_MACRO_SYMBOLS = [
 
 const KR_MACRO_SYMBOLS = [
   '^KS200', '^KS11', '^KQ11', 'KRW=X', '069500.KS', '233740.KS',
-  '139230.KS', '455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS',
+  '139230.KS', '455850.KS', '305720.KS', '091180.KS', '244580.KS', '091220.KS',
   '117680.KS', '117700.KS', '139260.KS', '139280.KS',
 ];
 
@@ -58,14 +59,36 @@ const US_SECTOR_NAMES: Record<string, string> = {
   XLI: 'Industrials', XLF: 'Financials', XLV: 'Health Care', XLE: 'Energy',
   XLP: 'Consumer Staples', XLU: 'Utilities', XLB: 'Materials',
 };
+const US_SECTOR_TICKER_NAMES: Record<string, string> = {
+  XLK: 'State Street Technology Select Sector SPDR ETF',
+  XLY: 'State Street Consumer Discretionary Select Sector SPDR ETF',
+  XLC: 'State Street Communication Services Select Sector SPDR ETF',
+  XLI: 'State Street Industrial Select Sector SPDR ETF',
+  XLF: 'State Street Financial Select Sector SPDR ETF',
+  XLV: 'State Street Health Care Select Sector SPDR ETF',
+  XLE: 'State Street Energy Select Sector SPDR ETF',
+  XLP: 'State Street Consumer Staples Select Sector SPDR ETF',
+  XLU: 'State Street Utilities Select Sector SPDR ETF',
+  XLB: 'State Street Materials Select Sector SPDR ETF',
+};
 
 // KOSPI 전용
-const KOSPI_SECTOR_ETFS = ['455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
+const KOSPI_SECTOR_ETFS = ['455850.KS', '305720.KS', '091180.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
 const KOSPI_BREADTH_ETFS = ['^KS200', '^KS11', '^KQ11', '069500.KS'];
 const KOSPI_SECTOR_NAMES: Record<string, string> = {
-  '455850.KS': '반도체', '305720.KS': '2차전지', '123310.KS': '자동차',
+  '455850.KS': '반도체', '305720.KS': '2차전지', '091180.KS': '자동차',
   '244580.KS': '바이오', '091220.KS': '은행', '117680.KS': '철강',
-  '117700.KS': '화학/건설', '139260.KS': 'IT',
+  '117700.KS': '건설', '139260.KS': 'IT',
+};
+const KR_SECTOR_TICKER_NAMES: Record<string, string> = {
+  '455850.KS': 'SOL AI반도체소부장',
+  '305720.KS': 'KODEX 2차전지산업',
+  '091180.KS': 'KODEX 자동차',
+  '244580.KS': 'KODEX 바이오',
+  '091220.KS': 'TIGER 은행',
+  '117680.KS': 'KODEX 철강',
+  '117700.KS': 'KODEX 건설',
+  '139260.KS': 'TIGER 200 IT',
 };
 
 // KOSDAQ 전용
@@ -82,7 +105,7 @@ const KR_BREADTH_ETFS = KOSPI_BREADTH_ETFS;
 const KR_SECTOR_NAMES = KOSPI_SECTOR_NAMES;
 
 const US_RISK_ON_SECTORS = new Set(['XLK', 'XLY', 'XLC', 'XLI', 'XLF']);
-const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '123310.KS', '139260.KS']);
+const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '091180.KS', '139260.KS']);
 const KOSDAQ_RISK_ON_SECTORS = new Set(['244580.KS', '455850.KS', '305720.KS', '139260.KS']);
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
@@ -210,6 +233,7 @@ export async function GET(request: Request) {
     const breadthEtfs = isKosdaq ? KOSDAQ_BREADTH_ETFS : isKR ? KR_BREADTH_ETFS : US_BREADTH_ETFS;
     const riskOnSectors = isKosdaq ? KOSDAQ_RISK_ON_SECTORS : isKR ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
     const sectorNames = isKosdaq ? KOSDAQ_SECTOR_NAMES : isKR ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
+    const sectorTickerNames = isKR ? KR_SECTOR_TICKER_NAMES : US_SECTOR_TICKER_NAMES;
     const mainSymbol = isKosdaq ? '^KQ11' : isKR ? '^KS200' : 'SPY';
     const vixSymbol = '^VIX';
 
@@ -319,17 +343,7 @@ export async function GET(request: Request) {
         };
       });
 
-    const sectorRows = sectorSeries
-      .filter(([, data]) => data.length >= 21)
-      .map(([sym, data]) => ({
-        symbol: sym,
-        name: sectorNames[sym] || sym,
-        return20: ((data.at(-1)!.close - data[data.length - 21].close) / data[data.length - 21].close) * 100,
-        riskOn: riskOnSectors.has(sym),
-        rank: 0,
-      }))
-      .sort((a, b) => b.return20 - a.return20)
-      .map((row, idx) => ({ ...row, rank: idx + 1 }));
+    const sectorRows = buildSectorRows(sectorSeries, sectorNames, riskOnSectors, sectorTickerNames);
 
     const semiChangeValues = [macroMap.SMH?.regularMarketChangePercent, macroMap.SOXX?.regularMarketChangePercent]
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));

@@ -109,6 +109,9 @@ function mockEarlyWarnings(status: 'OK' | 'HALT' = 'OK') {
         what: '대표 지수가 최근 50거래일 평균 가격 위에 있는지 봅니다.',
         why: '강한 시장은 중요한 평균선 위에서 버팁니다.',
         status,
+        reason: status === 'OK'
+          ? '대표 지수와 QQQ가 모두 50일선 위에 있어 단기 추세가 유지되는 정상 상태로 판단했습니다.'
+          : '대표 지수와 QQQ가 모두 50일선 아래이고 시장 참여 폭도 낮아 중단으로 판단했습니다.',
         value: status === 'OK' ? 'SPY +2.5%' : 'SPY -3.0%',
         threshold: '대표 지수가 50일 평균선 위',
         action: status === 'OK' ? '새 매수 검토 가능' : '신규 매수 중단',
@@ -120,6 +123,9 @@ function mockEarlyWarnings(status: 'OK' | 'HALT' = 'OK') {
         what: '위험자산 안에서 순환하는지 봅니다.',
         why: '시장 밖 회피는 전체 위험을 키웁니다.',
         status,
+        reason: status === 'OK'
+          ? '빅테크 주도력이 유지되고 방어자산 쏠림이 뚜렷하지 않아 정상으로 판단했습니다.'
+          : '자금이 방어자산으로 이동하는 동시에 시장 참여 폭도 축소돼 중단으로 판단했습니다.',
         value: status === 'OK' ? '빅테크 주도 유지' : '시장 밖으로 회피',
         threshold: '시장 안 순환',
         action: status === 'OK' ? '계획 유지' : '신규 매수 중단',

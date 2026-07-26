@@ -15,6 +15,12 @@ export interface TelegramPhoto {
   caption?: string | null;
 }
 
+interface TelegramDeliveryHooks {
+  shouldSendChat?: (chatId: string) => Promise<boolean>;
+  onChatSent?: (chatId: string) => Promise<void>;
+  onChatError?: (chatId: string, error: unknown) => Promise<void>;
+}
+
 export function chunkTelegramMessage(text: string, maxLength = TELEGRAM_CHUNK_TARGET) {
   if (text.length <= maxLength) return [text];
 
@@ -49,7 +55,7 @@ export function isSuppressedTelegramMessage(text: string) {
   return SUPPRESSED_MESSAGE_MARKERS.some((marker) => text.includes(marker));
 }
 
-export async function sendTelegramMessage(text: string) {
+export async function sendTelegramMessage(text: string, hooks: TelegramDeliveryHooks = {}) {
   if (isSuppressedTelegramMessage(text)) {
     console.log('[Telegram] Suppressed deprecated MTN market/macro report delivery.');
     return { sent: 0, skipped: true, suppressed: true };
@@ -62,24 +68,38 @@ export async function sendTelegramMessage(text: string) {
   const bot = new Bot(token);
   const chunks = chunkTelegramMessage(text);
   let sent = 0;
+  let alreadyDelivered = 0;
   for (const chatId of allowedChatIds) {
-    for (const chunk of chunks) {
-      try {
-        await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
-      } catch (err: unknown) {
-        // LLM이 생성한 텍스트의 마크다운 특수 기호 불량 등으로 발송 실패 시, 유실 방지를 위해 Plain Text로 안전 재시도
-        console.warn(`[Telegram] Markdown sending failed, retrying as Plain Text:`, err);
+    if (hooks.shouldSendChat && !(await hooks.shouldSendChat(chatId))) {
+      alreadyDelivered += 1;
+      continue;
+    }
+    try {
+      for (const chunk of chunks) {
         try {
+          await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+        } catch (err: unknown) {
+          // LLM이 생성한 텍스트의 마크다운 특수 기호 불량 등으로 발송 실패 시, 유실 방지를 위해 Plain Text로 안전 재시도
+          console.warn(`[Telegram] Markdown sending failed, retrying as Plain Text:`, err);
           await bot.api.sendMessage(chatId, chunk);
-        } catch (retryErr: unknown) {
-          console.error(`[Telegram] Retry as Plain Text also failed:`, retryErr);
-          throw retryErr;
         }
       }
+    } catch (error) {
+      console.error('[Telegram] Message delivery failed:', error);
+      await hooks.onChatError?.(chatId, error);
+      throw error;
+    }
+    try {
+      await hooks.onChatSent?.(chatId);
+    } catch (error) {
+      console.error('[Telegram] Delivery succeeded but receipt persistence failed:', error);
+      const uncertain = new Error('Telegram delivery succeeded, but its receipt could not be persisted.');
+      Object.assign(uncertain, { cause: error, deliveryUncertain: true });
+      throw uncertain;
     }
     sent += 1;
   }
-  return { sent, skipped: false, chunks: chunks.length };
+  return { sent, skipped: false, chunks: chunks.length, alreadyDelivered };
 }
 
 export function normalizeTelegramPhotos(value: unknown): TelegramPhoto[] {

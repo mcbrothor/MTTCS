@@ -1,6 +1,6 @@
 # MTN Operator Checklist
 
-Last verified: 2026-07-11
+Last verified: 2026-07-25
 
 ## 1. Production URLs
 
@@ -112,6 +112,16 @@ Run after deployment with an authenticated session:
   - Expected: `score` present, `regime` present, `^KS11.source = KIS`
 - `GET /api/portfolio/risk?market=KR&source=toss`
   - Expected provider: `Toss Securities`, with active positions matching the Toss account holdings
+
+### Weekly recommendation performance report
+
+Before enabling or manually retrying Telegram delivery:
+
+- Call `GET /api/cron/recommendation-weekly?dryRun=true` with `Authorization: Bearer $CRON_SECRET`.
+- Confirm `dryRun=true`, `chunkCount=1`, `messageLength < 3200`, and a non-null `dataAsOf`.
+- Read the returned `preview` and verify the reporting window, executive summary, market scorecards, risks, and actions.
+- Treat a live response with skipped Telegram delivery as a failure; do not retry until the bot token and allowed chat IDs are confirmed.
+- Keep `RECOMMENDATION_WEEKLY_DRY_RUN=false` in production after validation. Setting it to `true` forces all weekly report calls into preview mode.
 
 ## 5. Free Toss Holdings Production Workaround
 
@@ -255,6 +265,13 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.mantori.mtn-local-
 launchctl enable "gui/$(id -u)/com.mantori.mtn-local-analysis-worker"
 launchctl kickstart -k "gui/$(id -u)/com.mantori.mtn-local-analysis-worker"
 ```
+
+Free-plan worker defaults:
+
+- Codex queue: `MTN_CODEX_WORKER_POLL_MS=30000`, idle backoff up to `MTN_CODEX_WORKER_MAX_POLL_MS=300000`.
+- Local analysis queue: `MTN_LOCAL_WORKER_POLL_MS=30000`, idle backoff up to `MTN_LOCAL_WORKER_MAX_POLL_MS=300000`.
+- Stale Daily Screener recovery runs at most every `DAILY_SCREENER_STALE_CHECK_INTERVAL_MS=900000`.
+- Transient Supabase 5xx/network failures keep the workers alive with backoff; non-transient failures still stop after three attempts.
 
 Daily local backup:
 

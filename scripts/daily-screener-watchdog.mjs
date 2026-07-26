@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { getTelegramChatIds } from './lib/codex-cli-worker-utils.mjs';
 import { evaluateDailyDeliveryHealth } from './lib/daily-screener-watchdog-utils.mjs';
+import { createRetryingSupabaseFetch, summarizeSupabaseError } from './lib/supabase-request-utils.mjs';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BASE_URL = 'https://mttcs.vercel.app';
@@ -73,7 +74,7 @@ async function loadState(client, runDate) {
     .select('id, run_date, status, scope, scan_summary, error_summary, telegram_sent_at, completed_at, created_at, updated_at')
     .eq('run_date', runDate)
     .maybeSingle();
-  if (runError) throw new Error(`daily run query failed: ${runError.message}`);
+  if (runError) throw new Error(`daily run query failed: ${summarizeSupabaseError(runError)}`);
   if (!run) return { run: null, publications: [] };
   const { data: publications, error: publicationsError } = await client
     .from('recommendation_publications')
@@ -81,7 +82,7 @@ async function loadState(client, runDate) {
     .eq('screener_run_id', run.id)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED');
-  if (publicationsError) throw new Error(`publication query failed: ${publicationsError.message}`);
+  if (publicationsError) throw new Error(`publication query failed: ${summarizeSupabaseError(publicationsError)}`);
   return { run, publications: publications || [] };
 }
 
@@ -127,7 +128,7 @@ async function requeueRun(client, run, reason) {
     .eq('updated_at', run.updated_at)
     .select('id, run_date, status')
     .maybeSingle();
-  if (error) throw new Error(`requeue failed: ${error.message}`);
+  if (error) throw new Error(`requeue failed: ${summarizeSupabaseError(error)}`);
   if (!data) return { skipped: true, reason: 'run changed during watchdog evaluation' };
   return data;
 }
@@ -146,7 +147,7 @@ async function syncRun(client, run, publications) {
     .is('telegram_sent_at', null)
     .select('id, telegram_sent_at')
     .maybeSingle();
-  if (error) throw new Error(`run synchronization failed: ${error.message}`);
+  if (error) throw new Error(`run synchronization failed: ${summarizeSupabaseError(error)}`);
   return data || { skipped: true, reason: 'run changed during synchronization' };
 }
 
@@ -183,10 +184,21 @@ async function sendAlert(text) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  const supabaseMaxRetries = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_MAX_RETRIES || 3);
+  const supabaseRetryDelayMs = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_RETRY_DELAY_MS || 1_000);
   const supabase = createClient(
     requiredEnv('NEXT_PUBLIC_SUPABASE_URL'),
     requiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: {
+        fetch: createRetryingSupabaseFetch({
+          maxRetries: supabaseMaxRetries,
+          retryDelayMs: supabaseRetryDelayMs,
+          requestTimeoutMs: REQUEST_TIMEOUT_MS,
+        }),
+      },
+    },
   );
   const state = await loadState(supabase, args.date);
   const staleAfterMs = Math.max(30 * 60_000, Number(process.env.DAILY_SCREENER_WATCHDOG_STALE_AFTER_MS || 2 * 60 * 60_000));

@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import {
+  isTransientSupabaseError,
+  nextAdaptivePollMs,
+  reachedConsecutiveFailureLimit,
+} from './lib/adaptive-polling.mjs';
+import { summarizeSupabaseError } from './lib/supabase-request-utils.mjs';
+import {
   buildWorkerConfig,
   claimNextJob,
   markJobFailed,
@@ -30,12 +36,27 @@ const config = buildWorkerConfig({
 const supabase = createClient(supabaseUrl, supabaseKey);
 const pool = new pg.Pool({ connectionString: localPostgresUrl, max: 4 });
 let stopping = false;
+const stopController = new AbortController();
 
-process.on('SIGINT', () => { stopping = true; });
-process.on('SIGTERM', () => { stopping = true; });
+function requestStop() {
+  stopping = true;
+  stopController.abort();
+}
+
+process.on('SIGINT', requestStop);
+process.on('SIGTERM', requestStop);
 
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  if (stopController.signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timeoutId);
+      stopController.signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timeoutId = setTimeout(finish, ms);
+    stopController.signal.addEventListener('abort', finish, { once: true });
+  });
 }
 
 async function tick() {
@@ -63,10 +84,32 @@ async function main() {
   await updateHeartbeat(pool, config, 'STARTING', { jobTypes: config.jobTypes });
 
   try {
+    let nextPollMs = 0;
+    let consecutiveClaimFailures = 0;
     do {
-      const processed = await tick();
+      let processed = false;
+      try {
+        processed = await tick();
+        consecutiveClaimFailures = 0;
+      } catch (error) {
+        const message = summarizeSupabaseError(error);
+        const transientClaimFailure = message.startsWith('claim_analysis_job failed:')
+          && isTransientSupabaseError(error);
+        consecutiveClaimFailures += 1;
+        console.error(`[LocalWorker] Queue claim failed (${consecutiveClaimFailures}): ${message}`);
+        await updateHeartbeat(pool, config, 'ERROR', { lastError: message }).catch(() => {});
+        if (
+          config.once
+          || reachedConsecutiveFailureLimit(consecutiveClaimFailures, { transient: transientClaimFailure })
+        ) throw error;
+      }
       if (config.once) break;
-      if (!processed) await sleep(config.pollMs);
+      nextPollMs = nextAdaptivePollMs(nextPollMs, {
+        baseMs: config.pollMs,
+        maxMs: config.maxPollMs,
+        worked: processed,
+      });
+      if (!processed) await sleep(nextPollMs);
     } while (!stopping);
   } finally {
     await updateHeartbeat(pool, config, 'STOPPING').catch(() => {});
@@ -76,7 +119,7 @@ async function main() {
 }
 
 main().catch(async (error) => {
-  console.error('[LocalWorker] Fatal error:', error);
+  console.error('[LocalWorker] Fatal error:', summarizeSupabaseError(error));
   await pool.end().catch(() => {});
   process.exit(1);
 });

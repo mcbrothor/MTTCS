@@ -31,6 +31,13 @@ import {
   createTelegramReceiptLedger,
   telegramReceiptKey,
 } from './lib/telegram-delivery-receipts.mjs';
+import {
+  isTransientSupabaseError,
+  nextAdaptivePollMs,
+  normalizePollingMs,
+  reachedConsecutiveFailureLimit,
+} from './lib/adaptive-polling.mjs';
+import { summarizeSupabaseError } from './lib/supabase-request-utils.mjs';
 
 // Supabase 2.110 initializes Realtime even when this REST-only worker never subscribes.
 // Node 20 has no native WebSocket; a guard keeps the unused transport dormant.
@@ -82,6 +89,10 @@ const DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY = Number.isInteger(dailyRecomm
   ? Math.min(5, Math.max(1, dailyRecommendationChartGateConcurrency))
   : 3;
 const DAILY_SCREENER_STALE_AFTER_MS = Math.max(10 * 60_000, Number(process.env.DAILY_SCREENER_STALE_AFTER_MS || 30 * 60_000));
+const DAILY_SCREENER_STALE_CHECK_INTERVAL_MS = normalizePollingMs(
+  process.env.DAILY_SCREENER_STALE_CHECK_INTERVAL_MS,
+  { fallbackMs: 15 * 60_000, minMs: 60_000 },
+);
 const DAILY_TELEGRAM_RETRY_DELAY_MS = Math.max(60_000, Number(process.env.DAILY_TELEGRAM_RETRY_DELAY_MS || 5 * 60_000));
 const DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS = Math.max(0, Math.min(7, Number(process.env.DAILY_TELEGRAM_RETRY_LOOKBACK_DAYS || 2)));
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -89,6 +100,14 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const WORKER_LOCK_PATH = process.env.MTN_CODEX_WORKER_LOCK_PATH || '/tmp/mtn-codex-worker.lock';
 const TELEGRAM_RECEIPT_PATH = process.env.MTN_TELEGRAM_RECEIPT_PATH
   || path.join(homedir(), 'Library', 'Application Support', 'MTN', 'telegram-delivery-receipts.jsonl');
+const QUEUE_POLL_MS = normalizePollingMs(
+  process.env.MTN_CODEX_WORKER_POLL_MS,
+  { fallbackMs: 30_000, minMs: 10_000 },
+);
+const QUEUE_MAX_POLL_MS = normalizePollingMs(
+  process.env.MTN_CODEX_WORKER_MAX_POLL_MS,
+  { fallbackMs: 5 * 60_000, minMs: QUEUE_POLL_MS },
+);
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
 const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
@@ -423,7 +442,10 @@ function compactError(error, max = 600) {
     : error && typeof error === 'object'
       ? JSON.stringify(error)
       : String(error);
-  return message.length > max ? `${message.slice(0, max)}...` : message;
+  const compact = /<(?:!doctype|html|head|body)\b/i.test(message)
+    ? summarizeSupabaseError(error)
+    : message.replace(/\s+/g, ' ').trim();
+  return compact.length > max ? `${compact.slice(0, max)}...` : compact;
 }
 
 async function acquireWorkerLock(retrying = false) {
@@ -1440,7 +1462,7 @@ async function touchDailyScreenerRun(runId) {
 
 async function recoverStaleDailyScreenerRuns() {
   const now = Date.now();
-  if (now - lastStaleRecoveryCheckAt < 60_000) return [];
+  if (now - lastStaleRecoveryCheckAt < DAILY_SCREENER_STALE_CHECK_INTERVAL_MS) return [];
   lastStaleRecoveryCheckAt = now;
   const recoveredAt = new Date(now).toISOString();
   const staleBefore = new Date(now - DAILY_SCREENER_STALE_AFTER_MS).toISOString();
@@ -1578,7 +1600,7 @@ async function processPendingRecommendationTelegramQueue() {
   const retryBefore = Date.now() - DAILY_TELEGRAM_RETRY_DELAY_MS;
   const { data, error } = await supabase
     .from('recommendation_publications')
-    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model')
     .eq('is_official', true)
     .eq('status', 'PUBLISHED')
     .in('telegram_status', ['PENDING', 'FAILED'])
@@ -1592,7 +1614,13 @@ async function processPendingRecommendationTelegramQueue() {
   if (!publication) return false;
   if (!await claimRecommendationTelegramPublication(publication)) return true;
   try {
-    await deliverStoredRecommendationPublication(publication);
+    const { data: picks, error: picksError } = await supabase
+      .from('recommendation_picks')
+      .select('ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot')
+      .eq('publication_id', publication.id)
+      .order('rank', { ascending: true });
+    if (picksError) throw new Error(`recommendation picks query failed: ${picksError.message}`);
+    await deliverStoredRecommendationPublication({ ...publication, picks: picks || [] });
   } catch (deliveryError) {
     console.error(`[Worker] Telegram outbox delivery failed: ${publication.run_date} ${publication.category} - ${compactError(deliveryError)}`);
   }
@@ -1678,8 +1706,8 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
 
 async function processQueue() {
   await recoverStaleDailyScreenerRuns();
-  if (await processPendingRecommendationTelegramQueue()) return;
-  if (await processDailyScreenerQueue()) return;
+  if (await processPendingRecommendationTelegramQueue()) return true;
+  if (await processDailyScreenerQueue()) return true;
 
   const { data: pending, error } = await supabase
     .from('beauty_contest_sessions')
@@ -1692,12 +1720,12 @@ async function processQueue() {
     throw new Error(`analysis queue query failed: ${error.message}`);
   }
   
-  if (!pending || pending.length === 0) return;
+  if (!pending || pending.length === 0) return false;
 
   const session = pending[0];
   if (session.ib_provider === 'pending-codex-cli') {
     await processCodexTask(session);
-    return;
+    return true;
   }
 
   console.log(`\n[Worker] 🚀 Found pending Local LLM task for session ${session.id}`);
@@ -1781,6 +1809,7 @@ async function processQueue() {
       })
       .eq('id', session.id);
   }
+  return true;
 }
 
 async function loop() {
@@ -1826,16 +1855,24 @@ async function loop() {
   }
   
   let consecutiveQueueFailures = 0;
+  let nextPollMs = 0;
   while (true) {
+    let processed = false;
     try {
-      await processQueue();
+      processed = await processQueue();
       consecutiveQueueFailures = 0;
     } catch (error) {
       consecutiveQueueFailures += 1;
-      console.error(`[Worker] Queue pass failed (${consecutiveQueueFailures}/3): ${compactError(error, 1200)}`);
-      if (consecutiveQueueFailures >= 3) throw error;
+      const transient = isTransientSupabaseError(error);
+      console.error(`[Worker] Queue pass failed (${consecutiveQueueFailures}${transient ? ', transient' : '/3'}): ${compactError(error, 1200)}`);
+      if (reachedConsecutiveFailureLimit(consecutiveQueueFailures, { transient })) throw error;
     }
-    await new Promise(r => setTimeout(r, 10000));
+    nextPollMs = nextAdaptivePollMs(nextPollMs, {
+      baseMs: QUEUE_POLL_MS,
+      maxMs: QUEUE_MAX_POLL_MS,
+      worked: processed,
+    });
+    await new Promise((resolve) => setTimeout(resolve, processed ? 1_000 : nextPollMs));
   }
 }
 

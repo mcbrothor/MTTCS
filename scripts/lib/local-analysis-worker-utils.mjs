@@ -54,9 +54,11 @@ function compactText(value, fallback = '') {
 }
 
 export function buildWorkerConfig(env = process.env) {
+  const pollMs = Math.max(1_000, envNumber(env, 'MTN_LOCAL_WORKER_POLL_MS', 30_000));
   return {
     workerId: env.MTN_LOCAL_WORKER_ID || `mtn-local-${process.pid}`,
-    pollMs: envNumber(env, 'MTN_LOCAL_WORKER_POLL_MS', 15000),
+    pollMs,
+    maxPollMs: Math.max(pollMs, envNumber(env, 'MTN_LOCAL_WORKER_MAX_POLL_MS', 300_000)),
     staleAfterSeconds: envNumber(env, 'MTN_LOCAL_WORKER_STALE_AFTER_SECONDS', 900),
     jobTypes: envList(env, 'MTN_LOCAL_WORKER_JOB_TYPES', DEFAULT_JOB_TYPES),
     once: env.MTN_LOCAL_WORKER_ONCE?.toLowerCase() === 'true',

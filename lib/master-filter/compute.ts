@@ -135,7 +135,7 @@ export interface P3ComputeInput {
   mainData: OHLCData[];
   vixData: OHLCData[];
   breadthRows: { symbol: string; above200: boolean; return20: number; nearHigh52?: boolean; nearLow52?: boolean }[];
-  sectorRows: { symbol: string; return20: number; riskOn: boolean }[];
+  sectorRows: { symbol: string; return1: number; return20: number; riskOn: boolean }[];
 }
 
 export interface IntradayShockInput {
@@ -206,7 +206,7 @@ export function computeP3(
   mainData: OHLCData[],
   vixData: OHLCData[],
   breadthRows: { symbol: string; above200: boolean; return20: number; nearHigh52?: boolean; nearLow52?: boolean }[],
-  sectorRows: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[],
+  sectorRows: { symbol: string; name: string; return1: number; return20: number; riskOn: boolean; rank: number }[],
   mainSymbol: string,
   breadthEtfs: string[],
   vix3mData?: OHLCData[],
@@ -265,7 +265,11 @@ export function computeP3(
     else if (foreignNetBuy5d < -FOREIGN_NET_BUY_THRESHOLD) foreignNetBuyScore = -3;
     else if (foreignNetBuy5d < 0) foreignNetBuyScore = -1;
   }
-  const leadingSectors = sectorRows.slice(0, 3);
+  // P3의 장기 시계열 계약은 기존 20거래일 섹터 리더십 기준을 유지한다.
+  // sectorRows 자체의 당일 순위는 화면과 조기경보에서 별도로 사용한다.
+  const leadingSectors = [...sectorRows]
+    .sort((left, right) => right.return20 - left.return20)
+    .slice(0, 3);
   const sectorRiskOnCount = leadingSectors.filter((r) => r.riskOn).length;
 
   const trendScore = (lastClose > ma200 ? 1 : 0) + (lastClose > ma50 ? 0.5 : 0) + (ma50 > ma200 ? 0.5 : 0);
@@ -456,10 +460,10 @@ export function computeP3(
     sectorRotation: {
       label: 'Sector Leadership',
       value: sectorRows.length ? `${sectorRows.length} sectors ranked` : 'N/A',
-      threshold: 'Risk-on sectors in leadership',
+      threshold: 'Risk-on sectors in 20-day leadership',
       status: statusFromScore(sectorScore),
       unit: '',
-      description: '전체 섹터를 20거래일 수익률순으로 비교해 성장/경기민감 섹터 주도 여부를 확인합니다.',
+      description: '종합 점수는 20거래일 리더십을 유지하며, 화면의 당일 순위는 단기 업종 흐름 확인에 사용합니다.',
       source: 'Sector ETF proxy',
       score: sectorScore,
       weight: 20,

@@ -10,6 +10,7 @@ import StatusBadge from '@/components/master-filter/StatusBadge';
 import { useMarket } from '@/contexts/MarketContext';
 import { formatDelay, formatTimestamp } from '@/lib/format';
 import { ADVANCE_DECLINE_RATIO_BANDS, getAverageDailyRangeGuidance } from '@/lib/master-filter/adr-presentation';
+import { normalizeSectorReturn } from '@/lib/master-filter/sector-rows';
 import { friendlyMetricDescription, friendlyMetricLabel, friendlyMetricStatus } from '@/lib/market-display';
 import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
@@ -184,6 +185,46 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
   );
 });
 
+function sectorReturnTone(value: unknown) {
+  const normalized = normalizeSectorReturn(value);
+  if (normalized === null) return 'text-slate-500';
+  return normalized >= 0 ? 'text-emerald-300' : 'text-rose-300';
+}
+
+function sectorReturnText(value: unknown) {
+  const normalized = normalizeSectorReturn(value);
+  if (normalized === null) return '—';
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(2)}%`;
+}
+
+type SectorTableRow = NonNullable<MasterFilterMetrics['sectorRows']>[number];
+
+function sectorMovingAverageTitle(row: SectorTableRow, period: 5 | 20) {
+  const price = normalizeSectorReturn(row.price);
+  const average = normalizeSectorReturn(period === 5 ? row.ma5 : row.ma20);
+  if (price === null || average === null) return `${period}일 이동평균 데이터 확인 필요`;
+  return `현재가 ${price.toFixed(2)} / ${period}일선 ${average.toFixed(2)}`;
+}
+
+function MovingAverageBadge({ row, period }: { row: SectorTableRow; period: 5 | 20 }) {
+  const above = period === 5 ? row.aboveMa5 : row.aboveMa20;
+  const label = typeof above === 'boolean' ? `${period}일선 ${above ? '위' : '아래'}` : `${period}일선 —`;
+  const tone = typeof above !== 'boolean'
+    ? 'border-slate-700 bg-slate-900 text-slate-500'
+    : above
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+      : 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${tone}`}
+      title={sectorMovingAverageTitle(row, period)}
+    >
+      {label}
+    </span>
+  );
+}
+
 function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRows']> }) {
   if (rows.length === 0) return null;
 
@@ -191,35 +232,60 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
     <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4">
       <div className="mb-3 flex items-center gap-2 text-slate-300">
         <TrendingUp className="h-4 w-4 text-emerald-300" />
-        <p className="text-sm font-bold">강한 업종 흐름</p>
+        <p className="text-sm font-bold">강한 업종 흐름 <span className="font-normal text-slate-500">(당일 기준)</span></p>
       </div>
       <div className="md:hidden space-y-2">
         {rows.map((row) => (
-          <div key={row.symbol} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-            <div>
-              <p className="text-xs font-bold text-white">{row.name}</p>
-              <p className="font-mono text-[10px] text-slate-500">{row.symbol}</p>
-            </div>
-            <div className="text-right">
-              <p className={`font-mono text-sm font-bold ${row.return20 >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {row.return20 > 0 ? '+' : ''}{row.return20.toFixed(2)}%
-              </p>
-              <span className={`text-[10px] ${row.riskOn ? 'text-emerald-400' : 'text-slate-500'}`}>
+          <div key={row.symbol} className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-slate-500">#{row.rank}</span>
+                  <p className="text-xs font-bold text-white">{row.name}</p>
+                </div>
+                <p className="mt-1 truncate text-[11px] text-slate-300" title={row.tickerName}>
+                  {row.tickerName || row.name}
+                </p>
+                <p className="font-mono text-[10px] text-slate-500">{row.symbol}</p>
+              </div>
+              <span className={`shrink-0 text-[10px] ${row.riskOn ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {row.riskOn ? '공격 업종' : '방어/중립'}
               </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 border-t border-slate-800 pt-2 text-right font-mono">
+              <div>
+                <p className="text-[9px] text-slate-500">당일</p>
+                <p className={`text-xs font-bold ${sectorReturnTone(row.return1)}`}>{sectorReturnText(row.return1)}</p>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-500">주간(5일)</p>
+                <p className={`text-xs font-bold ${sectorReturnTone(row.return5)}`}>{sectorReturnText(row.return5)}</p>
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-500">20일</p>
+                <p className={`text-xs font-bold ${sectorReturnTone(row.return20)}`}>{sectorReturnText(row.return20)}</p>
+              </div>
+            </div>
+            <div className="mt-2 flex justify-end gap-1.5">
+              <MovingAverageBadge row={row} period={5} />
+              <MovingAverageBadge row={row} period={20} />
             </div>
           </div>
         ))}
       </div>
 
       <div className="hidden md:block overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm text-slate-300">
+        <table className="w-full min-w-[1120px] text-left text-sm text-slate-300">
           <thead className="border-b border-slate-800 text-xs uppercase text-slate-500">
             <tr>
-              <th className="py-2 pr-3">순위</th>
+              <th className="py-2 pr-3">당일 순위</th>
               <th className="py-2 pr-3">섹터</th>
-              <th className="py-2 pr-3">심볼</th>
+              <th className="py-2 pr-3">실제 종목명</th>
+              <th className="py-2 pr-3">티커</th>
+              <th className="py-2 pr-3 text-right">당일 수익률</th>
+              <th className="py-2 pr-3 text-right">주간 수익률</th>
               <th className="py-2 pr-3 text-right">20일 수익률</th>
+              <th className="py-2 pr-3">이동평균선</th>
               <th className="py-2 pr-3">성격</th>
             </tr>
           </thead>
@@ -228,9 +294,24 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
               <tr key={row.symbol} className="border-b border-slate-900">
                 <td className="py-2 pr-3 font-mono text-slate-400">{row.rank}</td>
                 <td className="py-2 pr-3 font-semibold text-white">{row.name}</td>
+                <td className="max-w-[260px] py-2 pr-3 text-xs text-slate-300" title={row.tickerName}>
+                  {row.tickerName || row.name}
+                </td>
                 <td className="py-2 pr-3 font-mono">{row.symbol}</td>
-                <td className={`py-2 pr-3 text-right font-mono ${row.return20 >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                  {row.return20 > 0 ? '+' : ''}{row.return20.toFixed(2)}%
+                <td className={`py-2 pr-3 text-right font-mono ${sectorReturnTone(row.return1)}`}>
+                  {sectorReturnText(row.return1)}
+                </td>
+                <td className={`py-2 pr-3 text-right font-mono ${sectorReturnTone(row.return5)}`}>
+                  {sectorReturnText(row.return5)}
+                </td>
+                <td className={`py-2 pr-3 text-right font-mono ${sectorReturnTone(row.return20)}`}>
+                  {sectorReturnText(row.return20)}
+                </td>
+                <td className="py-2 pr-3">
+                  <div className="flex gap-1">
+                    <MovingAverageBadge row={row} period={5} />
+                    <MovingAverageBadge row={row} period={20} />
+                  </div>
                 </td>
                 <td className="py-2 pr-3">
                   <span className={`rounded-lg border px-2 py-1 text-xs ${row.riskOn ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-400'}`}>

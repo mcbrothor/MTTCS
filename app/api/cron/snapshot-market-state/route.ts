@@ -3,7 +3,9 @@ import { validateCronRequest } from '@/lib/contest-cron';
 import { apiError } from '@/lib/api/response';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
+import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
+import { buildSectorRows } from '@/lib/master-filter/sector-rows';
 import { computeMacroScore } from '@/lib/macro/compute';
 import type { OHLCData } from '@/types';
 
@@ -25,13 +27,13 @@ const US_SECTOR_NAMES: Record<string, string> = {
   XLE: 'Energy', XLP: 'Consumer Staples', XLU: 'Utilities', XLB: 'Materials',
 };
 
-const KR_SECTOR_ETFS = ['455850.KS', '305720.KS', '123310.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
-const KR_BREADTH_ETFS = ['^KS200', '^KQ150', '069500.KS'];
-const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '123310.KS', '139260.KS']);
+const KR_SECTOR_ETFS = ['455850.KS', '305720.KS', '091180.KS', '244580.KS', '091220.KS', '117680.KS', '117700.KS', '139260.KS'];
+const KR_BREADTH_ETFS = ['^KS200', '^KS11', '^KQ11', '069500.KS'];
+const KR_RISK_ON_SECTORS = new Set(['455850.KS', '305720.KS', '091180.KS', '139260.KS']);
 const KR_SECTOR_NAMES: Record<string, string> = {
-  '455850.KS': '반도체', '305720.KS': '2차전지', '123310.KS': '자동차',
+  '455850.KS': '반도체', '305720.KS': '2차전지', '091180.KS': '자동차',
   '244580.KS': '바이오', '091220.KS': '은행', '117680.KS': '철강',
-  '117700.KS': '화학/건설', '139260.KS': 'IT',
+  '117700.KS': '건설', '139260.KS': 'IT',
 };
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
@@ -58,11 +60,13 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
   const sectorNames = market === 'KR' ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
   const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
 
-  const [mainData, vixData, breadthSeries, sectorSeries] = await Promise.all([
+  const [mainData, vixData, vix3mData, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
     safeDaily(mainSymbol),
     safeDaily('^VIX'),
+    safeDaily('^VIX3M'),
     Promise.all(breadthEtfs.map(async (s) => [s, await safeDaily(s)] as const)),
     Promise.all(sectorEtfs.map(async (s) => [s, await safeDaily(s)] as const)),
+    market === 'KR' ? getKisMarketForeignNetBuy('KOSPI', 20).catch(() => []) : Promise.resolve([]),
   ]);
 
   if (mainData.length < 200) throw new Error(`${mainSymbol} 200일 데이터 부족`);
@@ -75,19 +79,21 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
       return20: percentReturn(d, 20) ?? 0,
     }));
 
-  const sectorRows = sectorSeries
-    .filter(([, d]) => d.length >= 21)
-    .map(([symbol, d], i) => ({
-      symbol,
-      name: sectorNames[symbol] || symbol,
-      return20: percentReturn(d, 20) ?? 0,
-      riskOn: riskOnSectors.has(symbol),
-      rank: i + 1,
-    }))
-    .sort((a, b) => b.return20 - a.return20)
-    .map((r, i) => ({ ...r, rank: i + 1 }));
+  const sectorRows = buildSectorRows(sectorSeries, sectorNames, riskOnSectors);
+  const foreignNetBuy5d = foreignNetBuy.length
+    ? foreignNetBuy.slice(0, 5).reduce((sum, row) => sum + row.netBuyAmount, 0)
+    : undefined;
 
-  const result = computeP3(mainData, vixData, breadthRows, sectorRows, mainSymbol, breadthEtfs);
+  const result = computeP3(
+    mainData,
+    vixData,
+    breadthRows,
+    sectorRows,
+    mainSymbol,
+    breadthEtfs,
+    vix3mData,
+    foreignNetBuy5d,
+  );
 
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from('master_filter_snapshot').upsert({

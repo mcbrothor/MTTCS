@@ -29,9 +29,9 @@ const breadthRows = [
   { symbol: 'RSP', above200: true, return20: 9, nearHigh52: true, nearLow52: false },
 ];
 const sectorRows = [
-  { symbol: 'XLK', name: 'Technology', return20: 12, riskOn: true, rank: 1 },
-  { symbol: 'XLY', name: 'Consumer Discretionary', return20: 10, riskOn: true, rank: 2 },
-  { symbol: 'XLC', name: 'Communication Services', return20: 8, riskOn: true, rank: 3 },
+  { symbol: 'XLK', name: 'Technology', return1: 1.2, return20: 12, riskOn: true, rank: 1 },
+  { symbol: 'XLY', name: 'Consumer Discretionary', return1: 1, return20: 10, riskOn: true, rank: 2 },
+  { symbol: 'XLC', name: 'Communication Services', return1: 0.8, return20: 8, riskOn: true, rank: 3 },
 ];
 
 {
@@ -56,6 +56,19 @@ const sectorRows = [
   assert.equal(result.state, 'RED');
   assert.equal(result.shockStateCap, 'RED');
   assert.equal(result.metrics.intradayShock?.status, 'FAIL');
+}
+
+{
+  const dailyLeaders = [
+    { symbol: 'DEF1', name: 'Defensive 1', return1: 5, return20: -2, riskOn: false, rank: 1 },
+    { symbol: 'DEF2', name: 'Defensive 2', return1: 4, return20: -3, riskOn: false, rank: 2 },
+    { symbol: 'DEF3', name: 'Defensive 3', return1: 3, return20: -4, riskOn: false, rank: 3 },
+    { symbol: 'RISK1', name: 'Risk 1', return1: -1, return20: 12, riskOn: true, rank: 4 },
+    { symbol: 'RISK2', name: 'Risk 2', return1: -2, return20: 11, riskOn: true, rank: 5 },
+    { symbol: 'RISK3', name: 'Risk 3', return1: -3, return20: 10, riskOn: true, rank: 6 },
+  ];
+  const result = computeP3(mainData, vixData, breadthRows, dailyLeaders, 'SPY', ['SPY', 'QQQ', 'DIA', 'IWM', 'RSP']);
+  assert.equal(result.sectorScore, 20, 'P3 시계열 산식은 기존 20일 섹터 리더십을 유지해야 한다');
 }
 
 console.log('master filter shock tests passed');

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 
 import { isTradingSession } from '../scripts/lib/daily-recommendation-worker-utils.mjs';
 import { evaluateDailyDeliveryHealth } from '../scripts/lib/daily-screener-watchdog-utils.mjs';
+import {
+  createRetryingSupabaseFetch,
+  summarizeSupabaseError,
+} from '../scripts/lib/supabase-request-utils.mjs';
 
 const now = Date.parse('2026-07-23T10:15:00.000Z');
 
@@ -102,5 +106,138 @@ assert.deepEqual(evaluateDailyDeliveryHealth({
 
 assert.equal(isTradingSession(['2026-07-21', '2026-07-22'], '2026-07-22'), true);
 assert.equal(isTradingSession(['2026-07-21', '2026-07-22'], '2026-07-23'), false);
+
+{
+  const statuses = [522, 200];
+  const attempts = [];
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async (_input, init) => {
+      attempts.push(init?.method || 'GET');
+      const status = statuses.shift();
+      return new Response(status === 200 ? '{"data":true}' : '<title>supabase.co | 522: Connection timed out</title>', { status });
+    },
+    retryDelayMs: 0,
+  });
+
+  const response = await retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(attempts, ['GET', 'GET']);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      return new Response('bad request', { status: 400 });
+    },
+    retryDelayMs: 0,
+  });
+
+  const response = await retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' });
+  assert.equal(response.status, 400);
+  assert.equal(attempts, 1);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async (_input, init) => {
+      attempts += 1;
+      if (attempts > 1) return new Response('{"data":true}', { status: 200 });
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      });
+    },
+    maxRetries: 1,
+    retryDelayMs: 0,
+    requestTimeoutMs: 5,
+  });
+
+  const response = await retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' });
+  assert.equal(response.status, 200);
+  assert.equal(attempts, 2);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts > 1) return new Response('{"data":true}', { status: 200 });
+      const error = new TypeError('fetch failed');
+      error.cause = { code: 'ECONNRESET' };
+      throw error;
+    },
+    maxRetries: 1,
+    retryDelayMs: 0,
+  });
+
+  const response = await retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' });
+  assert.equal(response.status, 200);
+  assert.equal(attempts, 2);
+}
+
+{
+  const statuses = [503, 200];
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      return new Response('temporary', { status: statuses.shift() });
+    },
+    maxRetries: 1,
+    retryDelayMs: 0,
+  });
+
+  const response = await retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' });
+  assert.equal(response.status, 200);
+  assert.equal(attempts, 2);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      throw new TypeError('Invalid URL');
+    },
+    maxRetries: 3,
+    retryDelayMs: 0,
+  });
+
+  await assert.rejects(
+    retryingFetch('not-a-url', { method: 'GET' }),
+    /Invalid URL/,
+  );
+  assert.equal(attempts, 1);
+}
+
+{
+  let attempts = 0;
+  const controller = new AbortController();
+  controller.abort(new Error('caller cancelled'));
+  const request = new Request('https://example.supabase.co/rest/v1/runs', {
+    method: 'GET',
+    signal: controller.signal,
+  });
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      return new Response('unexpected', { status: 200 });
+    },
+    retryDelayMs: 0,
+  });
+
+  await assert.rejects(retryingFetch(request), /caller cancelled/);
+  assert.equal(attempts, 0);
+}
+
+assert.equal(
+  summarizeSupabaseError({
+    message: '<!DOCTYPE html><html><head><title>supabase.co | 522: Connection timed out</title></head></html>',
+  }),
+  'Supabase HTTP 522 (connection timed out)',
+);
 
 console.log('daily screener watchdog tests passed');

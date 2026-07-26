@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RecommendationCategory, RecommendationHorizon, RecommendationMarket } from './types';
 
 function numberOrNull(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -22,6 +23,56 @@ export interface FrequentRecommendationPickInput {
   name: string | null;
   rank: number;
   runDate: string;
+}
+
+export interface RecommendationContributionInput {
+  ticker: string;
+  name: string | null;
+  returnPct: number | string | null;
+  excessReturnPct: number | string | null;
+}
+
+export function summarizeTickerContributions(
+  rows: RecommendationContributionInput[],
+  limitPerDirection = 5,
+) {
+  const grouped = new Map<string, RecommendationContributionInput[]>();
+  for (const row of rows) {
+    const ticker = row.ticker.trim().toUpperCase();
+    if (!ticker || numberOrNull(row.excessReturnPct) === null) continue;
+    grouped.set(ticker, [...(grouped.get(ticker) || []), { ...row, ticker }]);
+  }
+
+  const contributions = [...grouped.entries()].map(([ticker, tickerRows]) => {
+    const excessReturns = tickerRows
+      .map((row) => numberOrNull(row.excessReturnPct))
+      .filter((value): value is number => value !== null);
+    const returns = tickerRows
+      .map((row) => numberOrNull(row.returnPct))
+      .filter((value): value is number => value !== null);
+    const excessSum = excessReturns.reduce((sum, value) => sum + value, 0);
+    return {
+      ticker,
+      name: tickerRows.find((row) => row.name?.trim())?.name?.trim() || null,
+      evaluationCount: excessReturns.length,
+      averageReturnPct: returns.length
+        ? round(returns.reduce((sum, value) => sum + value, 0) / returns.length)
+        : null,
+      averageExcessReturnPct: round(excessSum / excessReturns.length),
+      contributionPctPoints: rows.length ? round(excessSum / rows.length) : 0,
+    };
+  });
+
+  const limit = Math.max(1, limitPerDirection);
+  const positive = contributions
+    .filter((row) => row.contributionPctPoints > 0)
+    .sort((left, right) => right.contributionPctPoints - left.contributionPctPoints)
+    .slice(0, limit);
+  const negative = contributions
+    .filter((row) => row.contributionPctPoints < 0)
+    .sort((left, right) => left.contributionPctPoints - right.contributionPctPoints)
+    .slice(0, limit);
+  return [...positive, ...negative];
 }
 
 export function summarizeFrequentRecommendationPicks(rows: FrequentRecommendationPickInput[], limit = 5) {
@@ -93,6 +144,8 @@ interface PerformanceReadRow {
   evaluation_date: string | null;
   recommendation_picks: {
     id: string;
+    ticker: string;
+    name: string | null;
     source: string;
     rank: number;
     confidence: number | string;
@@ -141,26 +194,41 @@ async function readPerformanceRows(input: {
   category?: RecommendationCategory | null;
   from?: string | null;
   to?: string | null;
+  evaluationFrom?: string | null;
+  evaluationTo?: string | null;
   horizon?: RecommendationHorizon | null;
   official?: boolean;
   engineVersion?: string | null;
 }) {
-  let query = input.client
-    .from('recommendation_performance')
-    .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, source, rank, confidence, universe, candidate_snapshot, recommendation_publications!inner(id, run_date, market, category, engine_version, is_official))')
-    .eq('status', 'MATURED')
-    .in('quality_status', ['FULL', 'FALLBACK'])
-    .eq('recommendation_picks.recommendation_publications.market', input.market)
-    .limit(10000);
-  if (input.category) query = query.eq('recommendation_picks.recommendation_publications.category', input.category);
-  if (input.official !== undefined) query = query.eq('recommendation_picks.recommendation_publications.is_official', input.official);
-  if (input.engineVersion) query = query.eq('recommendation_picks.recommendation_publications.engine_version', input.engineVersion);
-  if (input.horizon) query = query.eq('horizon', input.horizon);
-  if (input.from) query = query.gte('recommendation_picks.recommendation_publications.run_date', input.from);
-  if (input.to) query = query.lte('recommendation_picks.recommendation_publications.run_date', input.to);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []) as unknown as PerformanceReadRow[];
+  const pageSize = 1000;
+  const rows: PerformanceReadRow[] = [];
+
+  for (let fromIndex = 0; ; fromIndex += pageSize) {
+    let query = input.client
+      .from('recommendation_performance')
+      .select('id, horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, evaluation_date, recommendation_picks!inner(id, ticker, name, source, rank, confidence, universe, candidate_snapshot, recommendation_publications!inner(id, run_date, market, category, engine_version, is_official))')
+      .eq('status', 'MATURED')
+      .in('quality_status', ['FULL', 'FALLBACK'])
+      .eq('recommendation_picks.recommendation_publications.market', input.market)
+      .order('evaluation_date', { ascending: true })
+      .order('id', { ascending: true });
+    if (input.category) query = query.eq('recommendation_picks.recommendation_publications.category', input.category);
+    if (input.official !== undefined) query = query.eq('recommendation_picks.recommendation_publications.is_official', input.official);
+    if (input.engineVersion) query = query.eq('recommendation_picks.recommendation_publications.engine_version', input.engineVersion);
+    if (input.horizon) query = query.eq('horizon', input.horizon);
+    if (input.from) query = query.gte('recommendation_picks.recommendation_publications.run_date', input.from);
+    if (input.to) query = query.lte('recommendation_picks.recommendation_publications.run_date', input.to);
+    if (input.evaluationFrom) query = query.gte('evaluation_date', input.evaluationFrom);
+    if (input.evaluationTo) query = query.lte('evaluation_date', input.evaluationTo);
+
+    const { data, error } = await query.range(fromIndex, fromIndex + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as unknown as PerformanceReadRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
 }
 
 function summarize(rows: PerformanceReadRow[]) {
@@ -195,14 +263,26 @@ export async function readRecommendationMetrics(input: {
   category?: RecommendationCategory | null;
   from?: string | null;
   to?: string | null;
+  evaluationFrom?: string | null;
+  evaluationTo?: string | null;
+  horizon?: RecommendationHorizon | null;
   official?: boolean;
   engineVersion?: string | null;
 }) {
   const rows = await readPerformanceRows({ ...input, official: input.official ?? (input.engineVersion ? undefined : true) });
-  const horizons = (['D5', 'D20', 'D60'] as RecommendationHorizon[]).map((horizon) => ({
-    horizon,
-    ...summarize(rows.filter((row) => row.horizon === horizon)),
-  }));
+  const horizons = (['D5', 'D20', 'D60'] as RecommendationHorizon[]).map((horizon) => {
+    const horizonRows = rows.filter((row) => row.horizon === horizon);
+    return {
+      horizon,
+      ...summarize(horizonRows),
+      contributors: summarizeTickerContributions(horizonRows.map((row) => ({
+        ticker: row.recommendation_picks.ticker,
+        name: row.recommendation_picks.name,
+        returnPct: row.return_pct,
+        excessReturnPct: row.excess_return_pct,
+      }))),
+    };
+  });
   const segmentMap = new Map<string, PerformanceReadRow[]>();
   for (const row of rows.filter((item) => item.horizon !== 'LIVE')) {
     const key = `${row.horizon}:${row.recommendation_picks.source}`;
@@ -239,6 +319,8 @@ export async function readRecommendationDiagnostics(input: {
   horizon?: RecommendationHorizon | null;
   cause?: string | null;
   status?: string | null;
+  analyzedFrom?: string | null;
+  analyzedTo?: string | null;
 }) {
   let query = input.client
     .from('recommendation_diagnostic_findings')
@@ -250,6 +332,8 @@ export async function readRecommendationDiagnostics(input: {
   if (input.horizon) query = query.eq('horizon', input.horizon);
   if (input.cause) query = query.eq('cause_code', input.cause);
   if (input.status) query = query.eq('finding_status', input.status);
+  if (input.analyzedFrom) query = query.gte('analyzed_at', input.analyzedFrom);
+  if (input.analyzedTo) query = query.lte('analyzed_at', input.analyzedTo);
   const { data, error } = await query;
   if (error) throw error;
   const latestByScope = new Map<string, (typeof data)[number]>();

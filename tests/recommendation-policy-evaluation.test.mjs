@@ -19,6 +19,19 @@ assert.equal(result.riskPassed, true);
 assert.equal(result.flowPassed, true);
 assert.equal(result.decision, 'PROMOTE_FLOW');
 
+{
+  const mismatched = [
+    { ...rows[0], runDate: '2026-01-01', engineVersion: RECOMMENDATION_ENGINE_VERSION },
+    { ...rows[0], runDate: '2026-01-02', engineVersion: RECOMMENDATION_ENGINE_VERSION },
+    { ...rows[1], runDate: '2026-01-01', engineVersion: 'kr-risk-ranked-v2' },
+    { ...rows[1], runDate: '2026-01-02', engineVersion: 'kr-risk-ranked-v2' },
+    { ...rows[1], runDate: '2026-01-03', engineVersion: 'kr-risk-ranked-v2' },
+    { ...rows[2], runDate: '2026-01-01', engineVersion: 'kr-risk-flow-v2.1' },
+    { ...rows[2], runDate: '2026-01-03', engineVersion: 'kr-risk-flow-v2.1' },
+  ];
+  assert.equal(evaluation.evaluateKrPolicyPromotion(mismatched).cohortCount, 1);
+}
+
 const bootstrapA = evaluation.pairedBootstrap({
   baseline: rows.filter((row) => row.engineVersion === RECOMMENDATION_ENGINE_VERSION),
   challenger: rows.filter((row) => row.engineVersion === 'kr-risk-ranked-v2'),

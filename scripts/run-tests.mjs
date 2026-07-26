@@ -17,7 +17,7 @@ const jitiBin = path.join(
 const failures = [];
 const jitiAlias = JSON.stringify({ '@': process.cwd() });
 for (const testFile of tests) {
-  const result = spawnSync(jitiBin, [testFile], {
+  const result = spawnSync(process.execPath, [jitiBin, testFile], {
     stdio: 'inherit',
     env: { ...process.env, JITI_ALIAS: process.env.JITI_ALIAS || jitiAlias, NODE_NO_WARNINGS: '1' },
   });

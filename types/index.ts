@@ -955,6 +955,7 @@ export interface EarlyWarningSignal {
   what: string;
   why: string;
   status: EarlyWarningSeverity;
+  reason: string;
   value: string;
   threshold: string;
   action: string;
@@ -998,7 +999,21 @@ export interface MasterFilterMetrics {
   mainHistory?: { date: string; close: number }[];
   movingAverageHistory?: { date: string; ma50: number | null; ma200: number | null }[];
   vixHistory?: { date: string; close: number }[];
-  sectorRows?: { symbol: string; name: string; return20: number; riskOn: boolean; rank: number }[];
+  sectorRows?: {
+    symbol: string;
+    name: string;
+    tickerName?: string;
+    return1?: number;
+    return5?: number;
+    return20: number;
+    price?: number;
+    ma5?: number;
+    ma20?: number;
+    aboveMa5?: boolean;
+    aboveMa20?: boolean;
+    riskOn: boolean;
+    rank: number;
+  }[];
   ftdReason?: string | null;
   distributionDetails?: { date: string, close: number, volume: number, pctChange: number }[];
   macroData?: Record<string, unknown>;

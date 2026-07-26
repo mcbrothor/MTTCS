@@ -25,6 +25,7 @@ import {
   });
   assert.equal(config.workerId, 'test-worker');
   assert.equal(config.pollMs, 2000);
+  assert.equal(config.maxPollMs, 300000);
   assert.equal(config.staleAfterSeconds, 45);
   assert.deepEqual(config.jobTypes, ['FINANCIAL_AUDIT', 'NEWS_PULSE']);
   assert.equal(config.once, true);
