@@ -69,6 +69,19 @@ function friendlyFailureMessage(message?: string) {
   return '응답을 확인할 수 없어 다른 분석 경로의 결과를 표시합니다.';
 }
 
+function localizeBriefingText(text: string) {
+  return text
+    .replaceAll('Trend Alignment', '지수 평균선 위치')
+    .replaceAll('Above 200D (Breadth)', '시장 폭')
+    .replaceAll('Distribution Pressure', '분산일')
+    .replaceAll('Volatility (VIX)', '시장 불안도')
+    .replaceAll('50D > 200D, price > 50D/200D', '50일선 > 200일선, 현재가 > 50일선·200일선')
+    .replaceAll('50D', '50일선')
+    .replaceAll('200D', '200일선')
+    .replace(/(\d+(?:\.\d+)?)days\b/gi, '$1일')
+    .replace(/(\d+(?:\.\d+)?)pts\b/gi, '$1포인트');
+}
+
 function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
   const rel = formatTimestamp(cachedAt, 'relative');
   if (!cachedAt || rel === '-') {
@@ -163,7 +176,7 @@ export default function InsightLog() {
         : 'border-amber-500/30 bg-amber-500/5';
 
   const providerLabel = aiProviderUsed || (isAiGenerated ? 'gemini' : 'rules');
-  const visibleText = selectedInsight?.text || insightLog;
+  const visibleText = localizeBriefingText(selectedInsight?.text || insightLog);
   const showingRouterPick = !selectedInsight || selectedInsight.selected;
 
   return (
@@ -293,7 +306,7 @@ export default function InsightLog() {
                   {aiFallbackChain.map((attempt, index) => (
                     <span
                       key={`${attempt.provider}-${attempt.model}-${index}`}
-                      title={attempt.message || undefined}
+                      title={attempt.message ? friendlyFailureMessage(attempt.message) : undefined}
                       className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] ${chainTone(attempt.status)}`}
                     >
                       {chainIcon(attempt.status)}
