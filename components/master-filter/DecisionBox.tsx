@@ -6,9 +6,13 @@ import { computeDecision } from '@/lib/decision/rule';
 import {
   friendlyDecisionHeadline,
   friendlyDecisionReason,
+  friendlyDataSource,
+  friendlyIssue,
+  friendlyMarketLabel,
   friendlyMarketStateLabel,
   friendlyMetricLabel,
   friendlyMetricStatus,
+  friendlyMetricValue,
 } from '@/lib/market-display';
 import type { MasterFilterMetricDetail } from '@/types';
 
@@ -72,16 +76,13 @@ function exposureLabel(multiplier: number, isUnscored: boolean) {
   return `${Math.round(multiplier * 100)}% 권장 상한`;
 }
 
-function userFacingIssue(message?: string) {
-  if (!message) return null;
-  const lower = message.toLowerCase();
-  if (lower.includes('authentication') || lower.includes('unauthorized')) {
-    return 'API 인증 필요 · 세션 또는 서버 인증 상태를 확인하세요.';
-  }
-  if (lower.includes('timeout') || lower.includes('aborted')) {
-    return '데이터 요청 시간 초과 · 최근 정상 값 또는 재시도가 필요합니다.';
-  }
-  return message;
+function decisionAction(decision: keyof typeof DECISION_CONFIG, isUnscored: boolean) {
+  if (isUnscored) return '새 매수는 잠시 멈추고 데이터가 다시 확인될 때까지 기다리세요.';
+  if (decision === 'NO_GO') return '새 매수는 멈추고 현금 비중과 보유 종목의 손절선을 먼저 점검하세요.';
+  if (decision === 'NO_GO_HOLD') return '새 매수는 보류하고 보유 종목만 계획한 기준에 맞춰 관리하세요.';
+  if (decision === 'GO_50') return '후보 종목을 절반 이하 비중으로만 검토하고 손절 기준을 짧게 잡으세요.';
+  if (decision === 'GO_75') return '후보 종목을 평소보다 작은 비중으로 나눠 진입하세요.';
+  return '후보 종목의 매수 지점과 손절선을 확인한 뒤 계획한 비중 안에서 진입하세요.';
 }
 
 export default function DecisionBox() {
@@ -148,6 +149,19 @@ export default function DecisionBox() {
       : data.metrics.meta.delay === 'UNKNOWN'
         ? '출처 확인 필요'
         : '지연 데이터';
+  const issue = conflictWarning
+    ?? friendlyIssue(error?.message)
+    ?? friendlyIssue(data.metrics.meta?.warnings?.[0]);
+  const evidence = (isUnscored ? [...weak, ...pass] : [...weak, ...pass])
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.label === item.label) === index)
+    .slice(0, 3);
+  const changeTrigger = isUnscored
+    ? '필수 데이터와 기준 시각이 정상으로 돌아오면 다시 판단합니다.'
+    : warningSignals.length > 0
+      ? warningSignals.map((signal) => signal.action).join(' · ')
+      : data.state === 'GREEN'
+        ? '분산일이 늘거나 시장 불안도와 하락 종목이 급증하면 비중을 줄입니다.'
+        : '시장 폭이 회복되고 강한 반등과 주도 업종 확산이 확인되면 다시 진입을 검토합니다.';
 
   return (
     <section
@@ -155,7 +169,7 @@ export default function DecisionBox() {
       role="status"
       aria-label={`오늘 진입 결정: ${headline}`}
     >
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(380px,0.88fr)]">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold ${cfg.badge}`}>
@@ -163,104 +177,112 @@ export default function DecisionBox() {
               오늘의 결론
             </span>
             <span className="rounded-md border border-slate-700 bg-slate-950/50 px-2 py-1 text-[10px] font-semibold text-slate-300">
-              {data.market} 시장 · {friendlyMarketStateLabel(data.state)}
+              {friendlyMarketLabel(data.market)} · {friendlyMarketStateLabel(data.state)}
             </span>
             <span className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${isUnscored ? 'border-sky-500/35 bg-sky-500/10 text-sky-200' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-200'}`}>
               {dataLabel}
             </span>
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className={`text-2xl font-black leading-tight sm:text-3xl ${cfg.text}`}>
-                {headline}
-              </p>
-              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                {reasonText}
-              </p>
-            </div>
+          <div>
+            <p className="text-[11px] font-bold text-slate-400">오늘 시장에서 할 일</p>
+            <p className={`mt-1 text-2xl font-black leading-tight sm:text-3xl ${cfg.text}`}>
+              {headline}
+            </p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+              {reasonText}
+            </p>
+          </div>
 
-            <div className="grid min-w-[220px] grid-cols-2 gap-2">
-              <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">종합 점수</p>
-                <p className="mt-1 font-mono text-lg font-black text-white">
-                  {formatScore(data.metrics.p3Score ?? data.metrics.score ?? 0, isUnscored)}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase text-slate-500">새 매수 비중</p>
-                <p className="mt-1 text-sm font-black text-white">
-                  {exposureLabel(result.sizeMultiplier, isUnscored)}
+          <div className={`mt-4 rounded-xl border px-4 py-3 ${cfg.badge}`}>
+            <div className="flex items-start gap-3">
+              <Target className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="text-[11px] font-black">지금은 이렇게 하세요</p>
+                <p className="mt-1 text-sm font-semibold leading-6 text-white">
+                  {decisionAction(result.decision, isUnscored)}
                 </p>
               </div>
             </div>
           </div>
 
-          {(conflictWarning || error || (data.metrics.meta?.warnings?.length ?? 0) > 0) && (
-            <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-200">
-              {conflictWarning ?? userFacingIssue(error?.message) ?? data.metrics.meta?.warnings?.[0]}
+          {issue && (
+            <div className="mt-3 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/8 px-4 py-3 text-amber-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <div>
+                <p className="text-[11px] font-black text-amber-300">판단을 보수적으로 낮춘 이유</p>
+                <p className="mt-1 text-xs leading-5">{issue}</p>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-2 xl:grid-cols-1">
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
-              <Activity className="h-3.5 w-3.5 text-sky-300" />
-              주요 근거
-            </div>
-            <div className="space-y-1.5">
-              {(pass.length ? pass : metrics.slice(0, 2)).map((item) => (
-                <p key={item.label} className="flex items-center justify-between gap-2 text-[11px] xl:text-xs">
-                  <span className="truncate text-slate-300">{friendlyMetricLabel(item.label)}</span>
-                  <span className={item.status === 'PASS' ? 'text-emerald-300' : item.status === 'WARNING' ? 'text-amber-300' : 'text-rose-300'}>
-                    {item.value ?? 'N/A'}
-                  </span>
-                </p>
-              ))}
+        <aside className="rounded-xl border border-slate-700/70 bg-slate-950/45 p-4" aria-label="결론을 만든 핵심 근거">
+          <div className="flex items-start gap-2">
+            <Activity className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" />
+            <div>
+              <p className="text-sm font-black text-white">왜 이렇게 판단했나요?</p>
+              <p className="mt-1 text-xs leading-5 text-slate-400">결론에 가장 큰 영향을 준 신호만 먼저 보여드립니다.</p>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
-              <Target className="h-3.5 w-3.5 text-amber-300" />
-              판단 변경 트리거
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2.5">
+              <p className="text-[10px] font-semibold text-slate-500">시장 상태</p>
+              <p className="mt-1 text-xs font-black text-white">{friendlyMarketStateLabel(data.state)}</p>
             </div>
-            <div className="space-y-1 text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
-              {isUnscored ? (
-                <p>데이터 응답과 기준 시각 확인 후 다시 판단</p>
-              ) : warningSignals.length > 0 ? (
-                warningSignals.map((signal) => (
-                  <p key={signal.id} className="text-slate-300">
-                    {signal.title}: {signal.action}
-                  </p>
-                ))
-              ) : data.state === 'GREEN' ? (
-                <p>분산일 증가, 시장 불안도 급등, 시장 폭 악화 시 비중 축소</p>
-              ) : (
-                <p>시장 폭 회복, 강한 반등 확인, 강한 업종 확산 확인</p>
-              )}
-              {weak.slice(0, 2).map((item) => (
-                <p key={item.label} className="text-slate-400">
-                  {friendlyMetricLabel(item.label)}: {friendlyMetricStatus(item.status)}
-                </p>
-              ))}
+            <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2.5">
+              <p className="text-[10px] font-semibold text-slate-500">시장 점수</p>
+              <p className="mt-1 font-mono text-sm font-black text-white">
+                {formatScore(data.metrics.p3Score ?? data.metrics.score ?? 0, isUnscored)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/8 bg-black/15 px-3 py-2.5">
+              <p className="text-[10px] font-semibold text-slate-500">새 매수</p>
+              <p className="mt-1 text-xs font-black text-white">
+                {exposureLabel(result.sizeMultiplier, isUnscored)}
+              </p>
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-700/70 bg-slate-950/45 p-2.5 xl:p-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase text-slate-400">
+          <div className="mt-3 divide-y divide-slate-800 rounded-lg border border-slate-800 bg-slate-900/35 px-3">
+            {evidence.map((item) => (
+              <div key={item.label} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-slate-200">{friendlyMetricLabel(item.label)}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-slate-500">{friendlyMetricValue(item)}</p>
+                </div>
+                <span className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-bold ${
+                  item.status === 'PASS'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : item.status === 'WARNING'
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                      : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                }`}>
+                  {friendlyMetricStatus(item.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-[11px] font-black text-amber-300">
+              <Activity className="h-3.5 w-3.5" />
+              언제 다시 판단하나요?
+            </div>
+            <p className="mt-1 text-xs leading-5 text-slate-300">{changeTrigger}</p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
+            <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-500">
               <Database className="h-3.5 w-3.5 text-sky-300" />
-              데이터 신뢰도
-            </div>
-            <p className="text-[11px] leading-4 text-slate-300 xl:text-xs xl:leading-5">
-              {data.metrics.meta.provider} · {data.metrics.meta.source}
-            </p>
-            <p className="mt-1 font-mono text-[10px] text-slate-500">
-              {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '기준 시각 확인 불가'}
-            </p>
+              {friendlyDataSource(`${data.metrics.meta.provider} · ${data.metrics.meta.source}`)}
+            </span>
+            <span className="font-mono text-[10px] text-slate-500">
+              기준 {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '시각 확인 불가'}
+            </span>
           </div>
-        </div>
+        </aside>
       </div>
     </section>
   );
