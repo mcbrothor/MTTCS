@@ -104,13 +104,13 @@ function StructuredContent({ insight, fallbackText }: { insight: AiModelInsight;
   if (insight.headline) {
     return (
       <div className="space-y-4">
-        <p className="text-lg md:text-xl font-extrabold leading-snug text-white tracking-tight">{insight.headline}</p>
+        <p className="text-lg md:text-xl font-extrabold leading-snug text-white tracking-tight">{localizeBriefingText(insight.headline)}</p>
         {insight.bullets && insight.bullets.length > 0 && (
           <ul className="space-y-2">
             {insight.bullets.map((b, i) => (
               <li key={i} className="flex items-start gap-2.5 text-[13px] md:text-sm text-slate-200">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
-                <span className="leading-relaxed">{b}</span>
+                <span className="leading-relaxed">{localizeBriefingText(b)}</span>
               </li>
             ))}
           </ul>
@@ -118,7 +118,7 @@ function StructuredContent({ insight, fallbackText }: { insight: AiModelInsight;
         {insight.detail && (
           <div className="mt-3 rounded-lg bg-slate-900/50 p-3.5 border border-slate-700/50">
             <div className="prose prose-invert prose-sm max-w-none leading-relaxed text-slate-300">
-              <ReactMarkdown>{insight.detail}</ReactMarkdown>
+              <ReactMarkdown>{localizeBriefingText(insight.detail)}</ReactMarkdown>
             </div>
           </div>
         )}
