@@ -126,6 +126,7 @@ export function friendlyDataSource(source: string | null | undefined) {
 
   if (lower.includes('e2e fixture') || lower === 'mock') return '화면 검증용 데이터';
   if (lower.includes('mtn aggregator') || lower.includes('market analysis engine')) return '통합 시장 데이터 · 자체 분석';
+  if (lower.includes('roundhill') || lower.includes('mags')) return '빅테크 7종목 묶음 데이터';
   if (lower.includes('cboe')) return '옵션 시장 데이터';
   if (lower.includes('sector etf')) return '업종 상장지수펀드 대용값';
   if (lower.includes('breadth proxy') || lower.includes('etf proxy')) return '시장 참여 폭 대용값';

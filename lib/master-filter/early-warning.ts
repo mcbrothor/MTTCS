@@ -331,7 +331,7 @@ function buildKoreaLeadershipSignal(input: EarlyWarningInput): EarlyWarningSigna
       : status === 'WATCH'
         ? '업종 확산 여부를 더 확인'
         : '약한 업종의 신규 비중 축소',
-    source: '국내 업종 ETF 당일 수익률',
+    source: '국내 업종 상장지수펀드 당일 수익률',
   };
 }
 
@@ -344,7 +344,7 @@ function buildKoreaForeignFlowSignal(input: EarlyWarningInput): EarlyWarningSign
   return {
     id: 'foreign_flow',
     title: '외국인 수급이 국내 시장을 지지하는가',
-    what: '국내 대표지수 ETF의 최근 5거래일 외국인 순매수 흐름을 봅니다.',
+    what: '국내 대표지수 상장지수펀드의 최근 5거래일 외국인 순매수 흐름을 봅니다.',
     why: '외국인 수급은 국내 대형주와 지수 방향에 영향을 주므로 추세와 함께 확인할 필요가 있습니다.',
     status,
     reason: !isNumber(netBuy)
@@ -359,7 +359,7 @@ function buildKoreaForeignFlowSignal(input: EarlyWarningInput): EarlyWarningSign
     value: isNumber(netBuy)
       ? `${netBuy > 0 ? '+' : ''}${round(netBuy / 100, 1)}억원 (5거래일 누적)`
       : '외국인 수급 데이터 확인 필요',
-    threshold: '대표지수 ETF 5거래일 누적 ±5억원',
+    threshold: '대표지수 상장지수펀드 5거래일 누적 ±5억원',
     action: status === 'OK'
       ? '외국인 수급 지지 확인'
       : status === 'WATCH'
@@ -367,7 +367,7 @@ function buildKoreaForeignFlowSignal(input: EarlyWarningInput): EarlyWarningSign
         : status === 'REDUCE'
           ? '대형주 신규 비중 축소'
           : '신규 매수 중단',
-    source: 'KIS 국내 대표지수 ETF 외국인 수급',
+    source: '국내 대표지수 상장지수펀드 외국인 수급',
   };
 }
 
@@ -428,14 +428,14 @@ function buildAudJpySignal(input: EarlyWarningInput, rotation: EarlyWarningMatri
     if (price < 108 && rotation.diagnosis === 'BROAD_DE_RISKING') status = 'HALT';
   }
   const reason = !isNumber(price)
-    ? 'AUD/JPY 가격 데이터가 없어 위험 선호 여부를 확정하지 않고 주의로 판단했습니다.'
+    ? '호주달러/엔 환율 데이터가 없어 위험 선호 여부를 확정하지 않고 주의로 판단했습니다.'
     : status === 'HALT'
-      ? `AUD/JPY가 108 아래이고 자금도 방어자산으로 이동해 위험 회피가 강한 중단 상태로 판단했습니다.`
+      ? `호주달러/엔 환율이 108 아래이고 자금도 방어자산으로 이동해 위험 회피가 강한 중단 상태로 판단했습니다.`
       : status === 'REDUCE'
-        ? `AUD/JPY가 110 아래인 가운데 ${input.currentVix >= 20 ? `VIX도 ${round(input.currentVix, 1)}로 높아` : '달러도 50일선 위여서'} 위험 회피가 겹친 축소 상태로 판단했습니다.`
+        ? `호주달러/엔 환율이 110 아래인 가운데 ${input.currentVix >= 20 ? `시장 불안도도 ${round(input.currentVix, 1)}로 높아` : '달러도 50일선 위여서'} 위험 회피가 겹친 축소 상태로 판단했습니다.`
         : status === 'WATCH'
-          ? 'AUD/JPY가 110 아래지만 변동성이나 달러의 추가 위험 신호가 겹치지 않아 주의로 판단했습니다.'
-          : `AUD/JPY가 ${round(price, 2)}로 110선을 지켜 위험 선호가 유지되는 정상 상태로 판단했습니다.`;
+          ? '호주달러/엔 환율이 110 아래지만 시장 불안도나 달러의 추가 위험 신호가 겹치지 않아 주의로 판단했습니다.'
+          : `호주달러/엔 환율이 ${round(price, 2)}로 110선을 지켜 위험 선호가 유지되는 정상 상태로 판단했습니다.`;
 
   return {
     id: 'aud_jpy',
@@ -444,7 +444,7 @@ function buildAudJpySignal(input: EarlyWarningInput, rotation: EarlyWarningMatri
     why: '호주달러는 경기 민감 통화, 엔은 안전 통화로 보는 경우가 많아 이 환율이 밀리면 위험자산 선호가 약해졌다는 단서가 됩니다.',
     status,
     reason,
-    value: isNumber(price) ? `AUD/JPY ${round(price, 2)} · 당일 ${formatPct(change)}` : 'AUD/JPY 데이터 확인 필요',
+    value: isNumber(price) ? `호주달러/엔 ${round(price, 2)} · 당일 ${formatPct(change)}` : '호주달러/엔 데이터 확인 필요',
     threshold: '110 이상 유지',
     action: status === 'OK'
       ? '위험 선호 유지'
@@ -466,7 +466,7 @@ function buildBreadthSignal(input: EarlyWarningInput): EarlyWarningSignal {
   else if (input.above200Pct < 40) status = 'REDUCE';
   else if (input.above200Pct < 60 || (isNumber(avgReturn20) && avgReturn20 < 0)) status = 'WATCH';
   const reason = status === 'HALT'
-    ? `200일선 위에 있는 시장 폭 대용 ETF가 ${round(input.above200Pct, 0)}%로 25% 미만이어서 중단으로 판단했습니다.`
+    ? `200일선 위에 있는 시장 폭 대용 상장지수펀드가 ${round(input.above200Pct, 0)}%로 25% 미만이어서 중단으로 판단했습니다.`
     : status === 'REDUCE'
       ? `200일선 위 비율이 ${round(input.above200Pct, 0)}%로 위험 기준인 40% 미만이어서 축소로 판단했습니다.`
       : status === 'WATCH'
@@ -479,8 +479,8 @@ function buildBreadthSignal(input: EarlyWarningInput): EarlyWarningSignal {
     id: 'market_breadth',
     title: '함께 오르는 종목이 줄고 있는가',
     what: isKoreaMarket(input.market)
-      ? '국내 대표 지수와 시장 폭 대용 ETF가 장기 평균선 위에 얼마나 남아 있는지 봅니다.'
-      : '주요 지수와 시장 폭 대용 ETF가 장기 평균선 위에 얼마나 남아 있는지 봅니다.',
+      ? '국내 대표 지수와 시장 폭 대용 상장지수펀드가 장기 평균선 위에 얼마나 남아 있는지 봅니다.'
+      : '주요 지수와 시장 폭 대용 상장지수펀드가 장기 평균선 위에 얼마나 남아 있는지 봅니다.',
     why: '지수는 몇 개 대형주로 버틸 수 있지만, 함께 오르는 종목이 줄면 상승장의 체력이 약해집니다.',
     status,
     reason,
@@ -493,7 +493,7 @@ function buildBreadthSignal(input: EarlyWarningInput): EarlyWarningSignal {
         : status === 'REDUCE'
           ? '새 매수 수량 축소'
           : '신규 매수 중단',
-    source: isKoreaMarket(input.market) ? '국내 대표지수·ETF 시장 폭 대용치' : 'ETF breadth proxy',
+    source: isKoreaMarket(input.market) ? '국내 대표지수·상장지수펀드 시장 폭 대용치' : 'ETF breadth proxy',
   };
 }
 

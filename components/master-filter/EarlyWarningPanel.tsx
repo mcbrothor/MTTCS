@@ -3,7 +3,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { Activity, AlertTriangle, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
 import { useMarket } from '@/contexts/MarketContext';
-import { friendlyEarlyWarningStatus } from '@/lib/market-display';
+import { friendlyDataSource, friendlyEarlyWarningStatus } from '@/lib/market-display';
 import type { EarlyWarningSeverity, EarlyWarningSignal } from '@/types';
 
 const SEVERITY_ICON: Record<EarlyWarningSeverity, typeof CheckCircle2> = {
@@ -61,7 +61,7 @@ function SignalStatusTooltip({ signal }: { signal: EarlyWarningSignal }) {
             </div>
             <div className="grid grid-cols-[54px_1fr] gap-2">
               <dt className="text-slate-500">데이터</dt>
-              <dd className="text-slate-400">{signal.source}</dd>
+              <dd className="text-slate-400">{friendlyDataSource(signal.source)}</dd>
             </div>
           </dl>
           <Tooltip.Arrow className="fill-slate-700" />
