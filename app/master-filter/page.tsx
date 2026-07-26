@@ -17,7 +17,7 @@ export default function MasterFilterPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border)] pb-4">
         <div>
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-500">
-            STEP 01 · 시장 분석
+            1단계 · 시장 판단
           </p>
           <h1 className="text-[20px] font-extrabold leading-[1.2] text-[var(--text-primary)]">
             오늘의 결론과 위험 조기경보
@@ -31,24 +31,28 @@ export default function MasterFilterPage() {
           <div className="flex items-center gap-1 rounded-[7px] border border-[var(--border)] bg-[var(--surface-soft)] p-1">
             <button
               onClick={() => setMarket('US')}
+              aria-pressed={market === 'US'}
+              aria-label="미국 시장 보기"
               className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
                 market === 'US' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              US 미국
+              미국
             </button>
             <button
               onClick={() => setMarket('KR')}
+              aria-pressed={market === 'KR'}
+              aria-label="한국 시장 보기"
               className={`rounded-[5px] border-none px-3.5 py-1.5 text-[11px] font-semibold cursor-pointer transition-colors ${
                 market === 'KR' ? 'bg-[rgba(122,143,181,0.26)] text-[var(--text-primary)]' : 'bg-transparent text-[var(--text-secondary)]'
               }`}
             >
-              KR 한국
+              한국
             </button>
           </div>
           
           <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">업데이트</p>
+            <p className="text-[10px] font-semibold tracking-[0.12em] text-[var(--text-tertiary)]">데이터 기준 시각</p>
             <p className="mt-1 font-mono text-xs font-semibold text-[var(--text-primary)]">
               {updatedAt ? new Date(updatedAt).toLocaleString('ko-KR') : '--'}
             </p>
@@ -56,21 +60,47 @@ export default function MasterFilterPage() {
         </div>
       </header>
 
-      <DecisionBox />
-      <EarlyWarningPanel />
+      <nav
+        aria-label="마스터필터 화면 읽는 순서"
+        className="flex items-center gap-1.5 overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-1.5 text-[10px] text-[var(--text-secondary)]"
+      >
+        <span className="shrink-0 px-2 font-bold text-[var(--text-primary)]">화면 읽는 순서</span>
+        {[
+          ['#today-decision', '1. 오늘 할 일'],
+          ['#early-warning', '2. 위험 신호'],
+          ['#market-health', '3. 시장 건강'],
+          ['#outside-risk', '4. 시장 밖 위험'],
+          ['#data-briefing', '5. 데이터 설명'],
+        ].map(([href, label]) => (
+          <a
+            key={href}
+            href={href}
+            className="shrink-0 rounded-md px-2.5 py-1.5 transition-colors hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-emerald-400"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <div id="today-decision" className="scroll-mt-24">
+        <DecisionBox />
+      </div>
+      <div id="early-warning" className="scroll-mt-24">
+        <EarlyWarningPanel />
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <section className="space-y-3">
+        <section id="market-health" className="scroll-mt-24 space-y-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-400">시장 내부 건강도</p>
+            <p className="text-[10px] font-bold tracking-[0.12em] text-emerald-400">3. 시장 내부 건강도</p>
             <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">지금 새로 사도 되는지</h2>
           </div>
           <MetricsGrid />
         </section>
 
-        <aside className="space-y-4">
+        <aside id="outside-risk" className="scroll-mt-24 space-y-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">시장 밖 위험</p>
+            <p className="text-[10px] font-bold tracking-[0.12em] text-sky-300">4. 시장 밖 위험</p>
             <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">위험이 커지는지</h2>
           </div>
           <MacroCompactWidget />
@@ -86,9 +116,9 @@ export default function MasterFilterPage() {
         </aside>
       </div>
 
-      <section className="space-y-3">
+      <section id="data-briefing" className="scroll-mt-24 space-y-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-sky-300">데이터 신뢰도</p>
+          <p className="text-[10px] font-bold tracking-[0.12em] text-sky-300">5. 데이터 설명</p>
           <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">브리핑과 데이터 신뢰도</h2>
         </div>
         <InsightLog />

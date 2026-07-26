@@ -86,7 +86,7 @@ export default function EarlyWarningPanel() {
   if (!earlyWarnings) {
     return (
       <section className="rounded-lg border border-sky-500/25 bg-slate-950/55 p-4">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-sky-300">위험 조기경보</p>
+        <p className="text-[10px] font-bold tracking-widest text-sky-300">2. 위험 조기경보</p>
         <h2 className="mt-1 text-lg font-black text-white">데이터 확인 필요</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">
           조기경보 입력 데이터가 아직 준비되지 않았습니다. 기준 시각과 데이터 출처를 먼저 확인하세요.
@@ -99,7 +99,7 @@ export default function EarlyWarningPanel() {
     <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 shadow-[var(--panel-shadow)]" aria-labelledby="early-warning-title">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-300">위험 조기경보</p>
+          <p className="text-[10px] font-bold tracking-widest text-amber-300">2. 위험 조기경보</p>
           <h2 id="early-warning-title" className="mt-1 text-xl font-black text-white">위험이 커지는지 먼저 확인</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">{earlyWarnings.summary}</p>
           <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-500">
