@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { buildEarlyWarningMatrix } from '../lib/master-filter/early-warning.ts';
-import { friendlyDecisionHeadline, friendlyMetricLabel } from '../lib/market-display.ts';
+import {
+  friendlyDataSource,
+  friendlyDecisionHeadline,
+  friendlyFundName,
+  friendlyIssue,
+  friendlyMarketLabel,
+  friendlyMetricLabel,
+  friendlyMetricThreshold,
+  friendlyMetricValue,
+  friendlySectorLabel,
+} from '../lib/market-display.ts';
 
 function quote(price, change, ma50 = price) {
   return {
@@ -183,5 +193,22 @@ assert.equal(friendlyMetricLabel('Average Daily Range (ADR)'), '20일 평균 하
 assert.equal(friendlyMetricLabel('Follow-Through Day'), '강한 반등 확인 여부');
 assert.equal(friendlyDecisionHeadline('GO_FULL', false), '정상 진입 가능');
 assert.doesNotMatch(friendlyDecisionHeadline('GO_50', false), /P3|ADR|FTD/);
+assert.equal(friendlyMarketLabel('US'), '미국 시장');
+assert.equal(friendlySectorLabel('Technology'), '기술');
+assert.equal(friendlyFundName('XLK', 'State Street Technology Select Sector SPDR ETF'), '미국 기술 업종 상장지수펀드');
+assert.equal(friendlyDataSource('MTN Aggregator · Market Analysis Engine'), '통합 시장 데이터 · 자체 분석');
+assert.match(friendlyIssue('US intraday risk shock detected; GREEN is not allowed.') ?? '', /미국 증시.*진입 가능/);
+
+const volatilityMetric = {
+  label: 'Volatility (VIX)',
+  value: 18.58,
+  threshold: 20,
+  status: 'PASS',
+  unit: 'pts',
+  description: '',
+  source: 'CBOE via Yahoo',
+};
+assert.equal(friendlyMetricValue(volatilityMetric), '18.58포인트');
+assert.equal(friendlyMetricThreshold(volatilityMetric), '20 이하이면 안정');
 
 console.log('master filter early-warning tests passed');

@@ -30,19 +30,43 @@ function insightTone(insight: AiModelInsight) {
 }
 
 function labelFor(insight: AiModelInsight) {
-  if (insight.label === 'gemini-primary') return 'Gemini Primary';
-  if (insight.label === 'gemini-fallback') return 'Gemini Fallback';
-  if (insight.provider === 'groq') return 'Groq';
-  if (insight.provider === 'cerebras') return 'Cerebras';
-  if (insight.provider === 'codex-cli') return 'Codex CLI';
-  if (insight.provider === 'local-llm') return 'Local LLM';
-  return 'Rules';
+  if (insight.label === 'gemini-primary') return '주 분석 모델';
+  if (insight.label === 'gemini-fallback') return '보조 분석 모델';
+  if (insight.provider === 'groq') return '고속 분석 모델';
+  if (insight.provider === 'cerebras') return '보조 분석 모델';
+  if (insight.provider === 'codex-cli') return '코드 분석 모델';
+  if (insight.provider === 'local-llm') return '로컬 분석 모델';
+  return '규칙 기반 판단';
 }
 
 function routerSummary(aiProviderUsed: string) {
-  if (aiProviderUsed === 'codex-cli') return 'Codex CLI가 대표 브리핑을 생성했습니다.';
-  if (aiProviderUsed === 'rules') return 'LLM 응답 지연으로 규칙 기반 브리핑을 표시합니다.';
+  if (aiProviderUsed === 'codex-cli') return '코드 분석 모델이 대표 브리핑을 생성했습니다.';
+  if (aiProviderUsed === 'rules') return '자동 분석 응답이 늦어 규칙 기반 브리핑을 표시합니다.';
   return '빠른 클라우드 모델부터 확인해 첫 성공 답변을 즉시 표시합니다.';
+}
+
+function providerDisplayLabel(provider: string) {
+  if (provider === 'rules') return '규칙 기반 판단';
+  if (provider === 'codex-cli') return '코드 분석 모델';
+  if (provider === 'local-llm') return '로컬 분석 모델';
+  return '자동 분석 모델';
+}
+
+function attemptStatusLabel(status: AiFallbackAttempt['status']) {
+  if (status === 'success') return '응답 완료';
+  if (status === 'failed') return '응답 실패';
+  return '건너뜀';
+}
+
+function friendlyFailureMessage(message?: string) {
+  if (!message) return '응답을 받지 못했습니다. 다른 분석 경로의 결과를 표시합니다.';
+  const lower = message.toLowerCase();
+  if (lower.includes('timed out') || lower.includes('timeout')) return '응답 시간이 길어져 다른 분석 경로로 전환했습니다.';
+  if (lower.includes('rate limit') || lower.includes('429')) return '요청이 몰려 잠시 응답하지 못했습니다.';
+  if (lower.includes('model does not exist') || lower.includes('404')) return '현재 사용할 수 없는 분석 모델입니다.';
+  if (lower.includes('not available on vercel')) return '현재 운영 환경에서 사용할 수 없는 분석 방식입니다.';
+  if (lower.includes('evidencekeys') || lower.includes('numeric claims')) return '답변 형식이 기준에 맞지 않아 사용하지 않았습니다.';
+  return '응답을 확인할 수 없어 다른 분석 경로의 결과를 표시합니다.';
 }
 
 function CacheAgeBadge({ cachedAt }: { cachedAt?: string }) {
@@ -126,7 +150,6 @@ export default function InsightLog() {
     state,
     isAiGenerated,
     aiProviderUsed,
-    aiModelUsed,
     aiFallbackChain = [],
     aiModelInsights = [],
     aiErrorSummary,
@@ -170,13 +193,8 @@ export default function InsightLog() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1 text-[10px] font-semibold uppercase text-slate-300">
                   <Cpu className="h-3 w-3 text-indigo-400" />
-                  {providerLabel}
+                  {providerDisplayLabel(providerLabel)}
                 </span>
-                {aiModelUsed && (
-                  <span className="rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1 font-mono text-[10px] text-slate-400">
-                    {aiModelUsed}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -243,7 +261,9 @@ export default function InsightLog() {
                           {labelFor(insight)}
                           {insight.selected && <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100">대표</span>}
                         </span>
-                        <span className="mt-1 block truncate font-mono text-[10px] opacity-80">{insight.model}</span>
+                        <span className="mt-1 block text-[10px] opacity-80">
+                          {insight.status === 'success' ? '응답 완료' : insight.status === 'failed' ? '응답 실패' : '응답 대기'}
+                        </span>
                         <span className="mt-1.5 block">
                           <CacheAgeBadge cachedAt={insight.cachedAt} />
                         </span>
@@ -254,7 +274,13 @@ export default function InsightLog() {
                 {selectedInsight && selectedInsight.status !== 'success' && (
                   <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-100">
                     <p className="font-semibold">{labelFor(selectedInsight)} 응답 수집 실패</p>
-                    <p className="mt-1 break-words">{selectedInsight.message || '실패 사유가 제공되지 않았습니다.'}</p>
+                    <p className="mt-1">{friendlyFailureMessage(selectedInsight.message)}</p>
+                    {selectedInsight.message && (
+                      <details className="mt-2 text-[10px] text-rose-200/70">
+                        <summary className="cursor-pointer">기술 정보 보기</summary>
+                        <p className="mt-1 break-words font-mono">{selectedInsight.message}</p>
+                      </details>
+                    )}
                   </div>
                 )}
               </div>
@@ -262,7 +288,7 @@ export default function InsightLog() {
 
             {aiFallbackChain.length > 0 && (
               <div className="mt-4 border-t border-slate-800/70 pt-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Router Chain</p>
+                <p className="text-[11px] font-semibold tracking-wide text-slate-500">분석 응답 상태</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {aiFallbackChain.map((attempt, index) => (
                     <span
@@ -271,26 +297,41 @@ export default function InsightLog() {
                       className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] ${chainTone(attempt.status)}`}
                     >
                       {chainIcon(attempt.status)}
-                      <span className="font-semibold uppercase">{attempt.provider}</span>
-                      <span className="truncate font-mono opacity-80">{attempt.model}</span>
+                      <span className="font-semibold">{attemptStatusLabel(attempt.status)}</span>
                     </span>
                   ))}
                 </div>
+                <details className="mt-2 text-[10px] text-slate-600">
+                  <summary className="cursor-pointer">분석 모델 기술 정보 보기</summary>
+                  <div className="mt-2 space-y-1 font-mono">
+                    {aiFallbackChain.map((attempt, index) => (
+                      <p key={`${attempt.provider}-${attempt.model}-detail-${index}`}>
+                        {attempt.provider} · {attempt.model}
+                      </p>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
 
             {aiErrorSummary && (
-              <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>{aiErrorSummary}</p>
+                <div>
+                  <p>일부 자동 분석 응답이 지연되었지만, 사용 가능한 결과와 규칙 기반 판단은 정상 표시됩니다.</p>
+                  <details className="mt-1 text-[10px] text-amber-200/70">
+                    <summary className="cursor-pointer">기술 정보 보기</summary>
+                    <p className="mt-1 break-words font-mono">{aiErrorSummary}</p>
+                  </details>
+                </div>
               </div>
             )}
 
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-800/50 pt-4">
               <span className="text-[10px] italic text-slate-500">
-                Gemini → Groq → Cerebras → Local LLM → Codex CLI 순서로 우선순위를 두고, 첫 성공 답변을 대표로 표시합니다.
+                여러 분석 경로를 순서대로 확인해 가장 먼저 성공한 답변을 대표로 표시합니다.
               </span>
-              <span className="text-[10px] uppercase tracking-tight text-slate-500">Navigation Protocol 4.1</span>
+              <span className="text-[10px] tracking-tight text-slate-500">판단 보조 자료</span>
             </div>
           </div>
         </div>
@@ -300,8 +341,7 @@ export default function InsightLog() {
         <div className="flex items-center gap-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 p-3">
           <AlertCircle className="h-4 w-4 shrink-0 text-indigo-400" />
           <p className="text-[11px] text-indigo-300">
-            <strong>Tip:</strong> <code>GEMINI_API_KEY</code>, <code>GROQ_API_KEY</code>, <code>CEREBRAS_API_KEY</code>를 설정하면
-            Centaur가 가능한 모델 답변을 모두 수집합니다.
+            자동 분석 응답이 늦을 때는 검증된 시장 규칙으로 만든 브리핑을 대신 표시합니다.
           </p>
         </div>
       )}

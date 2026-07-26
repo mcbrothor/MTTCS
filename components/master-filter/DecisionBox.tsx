@@ -152,7 +152,7 @@ export default function DecisionBox() {
   const issue = conflictWarning
     ?? friendlyIssue(error?.message)
     ?? friendlyIssue(data.metrics.meta?.warnings?.[0]);
-  const evidence = (isUnscored ? [...weak, ...pass] : [...weak, ...pass])
+  const evidence = [...weak, ...pass]
     .filter((item, index, items) => items.findIndex((candidate) => candidate.label === item.label) === index)
     .slice(0, 3);
   const changeTrigger = isUnscored
