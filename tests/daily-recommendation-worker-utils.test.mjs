@@ -2,8 +2,57 @@ import assert from 'node:assert/strict';
 
 import {
   deliverCategoriesIndependently,
+  resolveMacroSnapshotForRecommendation,
   resolveRecommendationPolicies,
 } from '../scripts/lib/daily-recommendation-worker-utils.mjs';
+
+{
+  const valid = resolveMacroSnapshotForRecommendation({
+    calc_date: '2026-07-23',
+    macro_score: 80,
+    regime: 'RISK_ON',
+    raw_json: { quality: { status: 'VALID' } },
+  }, '2026-07-23');
+  assert.equal(valid.macroQuality, 'FULL');
+  assert.equal(valid.macro?.macro_score, 80);
+  assert.equal('raw_json' in valid.macro, false);
+
+  const degraded = resolveMacroSnapshotForRecommendation({
+    calc_date: '2026-07-23',
+    macro_score: 68,
+    regime: 'NEUTRAL',
+    raw_json: { quality: { status: 'DEGRADED' } },
+  }, '2026-07-23');
+  assert.equal(degraded.macroQuality, 'DEGRADED');
+  assert.equal(degraded.macro?.macro_score, 68);
+
+  const blocked = resolveMacroSnapshotForRecommendation({
+    calc_date: '2026-07-23',
+    macro_score: 50,
+    regime: 'NEUTRAL',
+    raw_json: { quality: { status: 'BLOCKED' } },
+  }, '2026-07-23');
+  assert.equal(blocked.macroQuality, 'BLOCKED');
+  assert.equal(blocked.macro, null);
+
+  const legacyUnknown = resolveMacroSnapshotForRecommendation({
+    calc_date: '2026-07-23',
+    macro_score: 50,
+    regime: 'NEUTRAL',
+    raw_json: { breakdown: [] },
+  }, '2026-07-23');
+  assert.equal(legacyUnknown.macroQuality, 'MISSING');
+  assert.equal(legacyUnknown.macro, null);
+
+  const stale = resolveMacroSnapshotForRecommendation({
+    calc_date: '2026-07-19',
+    macro_score: 80,
+    regime: 'RISK_ON',
+    raw_json: { quality: { status: 'VALID' } },
+  }, '2026-07-23');
+  assert.equal(stale.macroQuality, 'STALE');
+  assert.equal(stale.macro, null);
+}
 
 {
   const result = resolveRecommendationPolicies({

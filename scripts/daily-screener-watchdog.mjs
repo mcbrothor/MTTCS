@@ -5,7 +5,11 @@ import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { getTelegramChatIds } from './lib/codex-cli-worker-utils.mjs';
 import { evaluateDailyDeliveryHealth } from './lib/daily-screener-watchdog-utils.mjs';
-import { createRetryingSupabaseFetch, summarizeSupabaseError } from './lib/supabase-request-utils.mjs';
+import {
+  createRetryingSupabaseFetch,
+  summarizeSupabaseError,
+  waitForSupabaseDns,
+} from './lib/supabase-request-utils.mjs';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BASE_URL = 'https://mttcs.vercel.app';
@@ -73,6 +77,7 @@ async function loadState(client, runDate) {
     .from('daily_screener_runs')
     .select('id, run_date, status, scope, scan_summary, error_summary, telegram_sent_at, completed_at, created_at, updated_at')
     .eq('run_date', runDate)
+    .retry(false)
     .maybeSingle();
   if (runError) throw new Error(`daily run query failed: ${summarizeSupabaseError(runError)}`);
   if (!run) return { run: null, publications: [] };
@@ -81,7 +86,8 @@ async function loadState(client, runDate) {
     .select('id, category, status, telegram_status, telegram_sent_at, updated_at')
     .eq('screener_run_id', run.id)
     .eq('is_official', true)
-    .eq('status', 'PUBLISHED');
+    .eq('status', 'PUBLISHED')
+    .retry(false);
   if (publicationsError) throw new Error(`publication query failed: ${summarizeSupabaseError(publicationsError)}`);
   return { run, publications: publications || [] };
 }
@@ -186,8 +192,19 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const supabaseMaxRetries = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_MAX_RETRIES || 3);
   const supabaseRetryDelayMs = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_RETRY_DELAY_MS || 1_000);
+  const supabaseUrl = requiredEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const dnsReadiness = await waitForSupabaseDns(supabaseUrl, {
+    maxAttempts: Number(process.env.DAILY_SCREENER_WATCHDOG_DNS_MAX_ATTEMPTS || 8),
+    retryDelayMs: Number(process.env.DAILY_SCREENER_WATCHDOG_DNS_RETRY_DELAY_MS || 2_000),
+    maxRetryDelayMs: Number(process.env.DAILY_SCREENER_WATCHDOG_DNS_MAX_RETRY_DELAY_MS || 15_000),
+  });
+  if (dnsReadiness.attempts > 1) {
+    console.warn(
+      `[${new Date().toISOString()}] [DailyScreenerWatchdog] Supabase DNS recovered after ${dnsReadiness.attempts} attempts over ${dnsReadiness.elapsedMs}ms.`,
+    );
+  }
   const supabase = createClient(
-    requiredEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    supabaseUrl,
     requiredEnv('SUPABASE_SERVICE_ROLE_KEY'),
     {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -247,13 +264,13 @@ async function main() {
 
 main().catch(async (error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[DailyScreenerWatchdog] ${message}`);
+  console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${message}`);
   const dryRunRequested = process.argv.includes('--dry-run') || process.env.DRY_RUN?.toLowerCase() === 'true';
   if (!dryRunRequested) {
     try {
       await sendAlert(`[MTN 감시기 자체 오류]\n${kstDateString()}\n${message.slice(0, 1500)}`);
     } catch (alertError) {
-      console.error(`[DailyScreenerWatchdog] ${alertError instanceof Error ? alertError.message : String(alertError)}`);
+      console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${alertError instanceof Error ? alertError.message : String(alertError)}`);
     }
   }
   process.exit(1);

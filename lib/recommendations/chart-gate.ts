@@ -16,6 +16,24 @@ export interface RecommendationChartGate {
   summary: string;
 }
 
+export interface RecommendationPublicationGateFailure {
+  ticker: string;
+  disposition: ChartGateDisposition | 'MISSING';
+  verdict: RecommendationChartGate['verdict'] | 'MISSING';
+  fundamentalVerification: FundamentalVerification | 'MISSING';
+  summary: string;
+}
+
+export interface RecommendationPublicationGate {
+  requiredCount: number;
+  totalCount: number;
+  eligibleCount: number;
+  coverage: number;
+  canPublish: boolean;
+  reason: string | null;
+  failures: RecommendationPublicationGateFailure[];
+}
+
 function hasNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -89,6 +107,46 @@ export function buildUnverifiedRecommendationChartGate(reason: string): Recommen
     fundamentalVerification: 'UNVERIFIED',
     score: -500,
     summary: `통합 검증 보류: ${reason}`,
+  };
+}
+
+export function isOfficiallyEligibleRecommendationGate(gate: RecommendationChartGate | null | undefined) {
+  return Boolean(
+    gate?.eligible === true
+    && (gate.disposition === 'ACTIONABLE' || gate.disposition === 'WATCHLIST')
+    && (gate.verdict === 'BUY' || gate.verdict === 'WATCH')
+    && (gate.fundamentalVerification === 'VERIFIED' || gate.fundamentalVerification === 'PARTIAL'),
+  );
+}
+
+export function assessRecommendationPublicationGate<
+  T extends Pick<DailyCategoryTop10Pick, 'ticker'> & { chartGate?: RecommendationChartGate },
+>(picks: T[], requiredCount = 10): RecommendationPublicationGate {
+  const failures = picks.flatMap((pick): RecommendationPublicationGateFailure[] => {
+    if (isOfficiallyEligibleRecommendationGate(pick.chartGate)) return [];
+    return [{
+      ticker: pick.ticker,
+      disposition: pick.chartGate?.disposition || 'MISSING',
+      verdict: pick.chartGate?.verdict || 'MISSING',
+      fundamentalVerification: pick.chartGate?.fundamentalVerification || 'MISSING',
+      summary: pick.chartGate?.summary || '통합 차트·펀더멘털 검증 결과가 없습니다.',
+    }];
+  });
+  const eligibleCount = picks.length - failures.length;
+  const canPublish = picks.length === requiredCount && eligibleCount === requiredCount;
+  const reason = canPublish
+    ? null
+    : picks.length !== requiredCount
+      ? `공식 발행에는 ${requiredCount}개 종목이 필요하지만 ${picks.length}개만 확인되었습니다.`
+      : `공식 발행 검증 통과 ${eligibleCount}/${requiredCount}: ${failures.map((failure) => failure.ticker).join(', ')}`;
+  return {
+    requiredCount,
+    totalCount: picks.length,
+    eligibleCount,
+    coverage: requiredCount > 0 ? Math.min(1, eligibleCount / requiredCount) : 0,
+    canPublish,
+    reason,
+    failures,
   };
 }
 

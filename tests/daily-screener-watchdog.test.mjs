@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { PostgrestClient } from '@supabase/postgrest-js';
 
 import { isTradingSession } from '../scripts/lib/daily-recommendation-worker-utils.mjs';
 import { evaluateDailyDeliveryHealth } from '../scripts/lib/daily-screener-watchdog-utils.mjs';
 import {
   createRetryingSupabaseFetch,
   summarizeSupabaseError,
+  waitForSupabaseDns,
 } from '../scripts/lib/supabase-request-utils.mjs';
 
 const now = Date.parse('2026-07-23T10:15:00.000Z');
@@ -161,6 +163,106 @@ assert.equal(isTradingSession(['2026-07-21', '2026-07-22'], '2026-07-23'), false
 
 {
   let attempts = 0;
+  const delays = [];
+  const readiness = await waitForSupabaseDns('https://example.supabase.co', {
+    lookupImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const error = new Error('getaddrinfo ENOTFOUND example.supabase.co');
+        error.code = 'ENOTFOUND';
+        throw error;
+      }
+      return [{ address: '192.0.2.1', family: 4 }];
+    },
+    maxAttempts: 3,
+    retryDelayMs: 10,
+    maxRetryDelayMs: 10,
+    randomImpl: () => 0.5,
+    sleepImpl: async (delayMs) => delays.push(delayMs),
+  });
+
+  assert.equal(readiness.attempts, 3);
+  assert.deepEqual(delays, [10, 10]);
+}
+
+{
+  let attempts = 0;
+  await assert.rejects(
+    waitForSupabaseDns('https://example.supabase.co', {
+      lookupImpl: async () => {
+        attempts += 1;
+        const error = new Error('getaddrinfo EAI_AGAIN example.supabase.co');
+        error.code = 'EAI_AGAIN';
+        throw error;
+      },
+      maxAttempts: 2,
+      retryDelayMs: 0,
+      sleepImpl: async () => {},
+    }),
+    (error) => {
+      assert.equal(error.name, 'SupabaseNetworkError');
+      assert.equal(error.code, 'EAI_AGAIN');
+      assert.equal(error.attempts, 2);
+      assert.match(error.message, /Supabase DNS lookup failed \(EAI_AGAIN\).*after 2 attempts/);
+      return true;
+    },
+  );
+  assert.equal(attempts, 2);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      const error = new TypeError('fetch failed');
+      error.cause = { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND example.supabase.co' };
+      throw error;
+    },
+    maxRetries: 3,
+    retryDelayMs: 0,
+  });
+
+  await assert.rejects(
+    retryingFetch('https://example.supabase.co/rest/v1/runs', { method: 'GET' }),
+    (error) => {
+      assert.equal(error.name, 'SupabaseNetworkError');
+      assert.equal(error.code, 'ENOTFOUND');
+      assert.equal(error.attempts, 4);
+      assert.match(error.message, /Supabase DNS lookup failed \(ENOTFOUND\).*after 4 attempts/);
+      return true;
+    },
+  );
+  assert.equal(attempts, 4);
+}
+
+{
+  let attempts = 0;
+  const retryingFetch = createRetryingSupabaseFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      const error = new TypeError('fetch failed');
+      error.cause = { code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND example.supabase.co' };
+      throw error;
+    },
+    maxRetries: 3,
+    retryDelayMs: 0,
+  });
+  const client = new PostgrestClient('https://example.supabase.co/rest/v1', {
+    fetch: retryingFetch,
+  });
+
+  const { error } = await client
+    .from('daily_screener_runs')
+    .select('id')
+    .retry(false);
+
+  assert.equal(attempts, 4);
+  assert.match(error.message, /SupabaseNetworkError: Supabase DNS lookup failed \(ENOTFOUND\).*after 4 attempts/);
+}
+
+{
+  let attempts = 0;
   const retryingFetch = createRetryingSupabaseFetch({
     fetchImpl: async () => {
       attempts += 1;
@@ -238,6 +340,14 @@ assert.equal(
     message: '<!DOCTYPE html><html><head><title>supabase.co | 522: Connection timed out</title></head></html>',
   }),
   'Supabase HTTP 522 (connection timed out)',
+);
+
+assert.equal(
+  summarizeSupabaseError({
+    message: 'TypeError: fetch failed',
+    details: 'TypeError: fetch failed\n\nCaused by: Error: getaddrinfo ENOTFOUND example.supabase.co (ENOTFOUND)\nstack omitted',
+  }),
+  'TypeError: fetch failed; caused by Error: getaddrinfo ENOTFOUND example.supabase.co (ENOTFOUND)',
 );
 
 console.log('daily screener watchdog tests passed');

@@ -6,6 +6,24 @@ export function isTradingSession(tradeDates, runDate) {
   return Array.isArray(tradeDates) && tradeDates.some((tradeDate) => tradeDate === runDate);
 }
 
+export function resolveMacroSnapshotForRecommendation(snapshot, runDate, maxAgeDays = 3) {
+  if (!snapshot) return { macro: null, macroQuality: 'MISSING' };
+  const runAt = Date.parse(`${runDate}T00:00:00Z`);
+  const snapshotAt = Date.parse(`${snapshot.calc_date || ''}T00:00:00Z`);
+  const ageDays = Math.floor((runAt - snapshotAt) / 86_400_000);
+  if (!Number.isFinite(ageDays) || ageDays < 0 || ageDays > maxAgeDays) {
+    return { macro: null, macroQuality: 'STALE' };
+  }
+
+  const decisionStatus = snapshot.raw_json?.quality?.status;
+  const macro = { ...snapshot };
+  delete macro.raw_json;
+  if (decisionStatus === 'VALID') return { macro, macroQuality: 'FULL' };
+  if (decisionStatus === 'DEGRADED') return { macro, macroQuality: 'DEGRADED' };
+  if (decisionStatus === 'BLOCKED') return { macro: null, macroQuality: 'BLOCKED' };
+  return { macro: null, macroQuality: 'MISSING' };
+}
+
 export function resolveRecommendationPolicies({
   basePolicy,
   requestedEngineVersion,

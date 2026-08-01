@@ -25,6 +25,7 @@ import {
 import {
   deliverCategoriesIndependently,
   isTradingSession,
+  resolveMacroSnapshotForRecommendation,
   resolveRecommendationPolicies,
 } from './lib/daily-recommendation-worker-utils.mjs';
 import {
@@ -83,6 +84,7 @@ const DAILY_TELEGRAM_CHARTS_AI_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_AI_EN
 const TECHNICAL_CHART_LOCAL_MODEL = process.env.TECHNICAL_CHART_LOCAL_MODEL || DEFAULT_TECHNICAL_CHART_MODEL;
 const TECHNICAL_CHART_MODEL_FALLBACKS = parseModelFallbacks(process.env.TECHNICAL_CHART_MODEL_FALLBACKS || DEFAULT_TECHNICAL_CHART_FALLBACKS);
 const TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED = process.env.TECHNICAL_CHART_EXTERNAL_FALLBACK_ENABLED?.toLowerCase() === 'true';
+// This flag disables collection only. `false` remains fail-closed: picks are UNVERIFIED and SHADOW-only.
 const DAILY_RECOMMENDATION_CHART_GATE_ENABLED = process.env.DAILY_RECOMMENDATION_CHART_GATE_ENABLED?.toLowerCase() !== 'false';
 const dailyRecommendationChartGateConcurrency = Number(process.env.DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY || 3);
 const DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY = Number.isInteger(dailyRecommendationChartGateConcurrency)
@@ -700,28 +702,40 @@ async function analyzeRecommendationChartGate({ category, pick, candidates }) {
 }
 
 async function applyDailyRecommendationChartGate({ categories, candidates }) {
-  if (!DAILY_RECOMMENDATION_CHART_GATE_ENABLED) return { categories, snapshots: {} };
   const entries = Object.entries(categories).flatMap(([category, picks]) => (picks || []).map((pick) => ({ category, pick })));
-  const checks = await mapWithConcurrency(entries, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async ({ category, pick }) => {
-    const chartGate = await analyzeRecommendationChartGate({ category, pick, candidates });
-    return { category, ticker: pick.ticker, chartGate };
-  });
+  if (!DAILY_RECOMMENDATION_CHART_GATE_ENABLED) {
+    console.warn('[Worker] Recommendation chart gate collection is disabled; fail-closed SHADOW publication remains enforced.');
+  }
+  const checks = DAILY_RECOMMENDATION_CHART_GATE_ENABLED
+    ? await mapWithConcurrency(entries, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async ({ category, pick }) => {
+      const chartGate = await analyzeRecommendationChartGate({ category, pick, candidates });
+      return { category, ticker: pick.ticker, chartGate };
+    })
+    : entries.map(({ category, pick }) => ({
+      category,
+      ticker: pick.ticker,
+      chartGate: recommendationChartGate.buildUnverifiedRecommendationChartGate('통합 차트 게이트가 비활성화되었습니다.'),
+    }));
   const gates = new Map(checks.map((item) => [`${item.category}:${item.ticker}`, item.chartGate]));
   const snapshots = {};
+  const publicationGates = {};
   const gatedCategories = Object.fromEntries(Object.entries(categories).map(([category, picks]) => {
     const gated = recommendationChartGate.rankChartGatedPicks((picks || []).map((pick) => {
       const chartGate = gates.get(`${category}:${pick.ticker}`)
         || recommendationChartGate.buildUnverifiedRecommendationChartGate('통합 검증 결과가 없습니다.');
-      const snapshot = { chart_gate: chartGate };
-      snapshots[`${category}:${pick.ticker}`] = snapshot;
-      snapshots[pick.ticker] = snapshots[pick.ticker] || snapshot;
       return { ...pick, chartGate };
     }));
-    const eligible = gated.filter((pick) => pick.chartGate?.eligible).length;
-    console.log(`[Worker] Recommendation chart gate: ${category} ${eligible}/${gated.length} eligible.`);
+    const publicationGate = recommendationChartGate.assessRecommendationPublicationGate(gated);
+    publicationGates[category] = publicationGate;
+    for (const pick of gated) {
+      const snapshot = { chart_gate: pick.chartGate, publication_gate: publicationGate };
+      snapshots[`${category}:${pick.ticker}`] = snapshot;
+      snapshots[pick.ticker] = snapshots[pick.ticker] || snapshot;
+    }
+    console.log(`[Worker] Recommendation chart gate: ${category} ${publicationGate.eligibleCount}/${publicationGate.requiredCount} eligible; official=${publicationGate.canPublish}.`);
     return [category, gated];
   }));
-  return { categories: gatedCategories, snapshots };
+  return { categories: gatedCategories, snapshots, publicationGates };
 }
 
 async function sendDailyTelegramCharts({ category, picks, candidates }) {
@@ -951,12 +965,13 @@ async function loadRecommendationMarketContext(runDate) {
   };
   const macroQuery = await supabase
     .from('macro_snapshot')
-    .select('calc_date, macro_score, regime, vix_level')
+    .select('calc_date, macro_score, regime, vix_level, raw_json')
     .lte('calc_date', runDate)
     .order('calc_date', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (macroQuery.error) throw macroQuery.error;
+  const macroContext = resolveMacroSnapshotForRecommendation(macroQuery.data, runDate);
 
   const contexts = {};
   for (const market of ['US', 'KR']) {
@@ -972,8 +987,8 @@ async function loadRecommendationMarketContext(runDate) {
     contexts[market] = {
       market_state: isFresh(marketQuery.data?.calc_date) ? marketQuery.data : null,
       market_state_quality: marketQuery.data ? (isFresh(marketQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
-      macro: isFresh(macroQuery.data?.calc_date) ? macroQuery.data : null,
-      macro_quality: macroQuery.data ? (isFresh(macroQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
+      macro: macroContext.macro,
+      macro_quality: macroContext.macroQuality,
     };
   }
   return contexts;
@@ -1188,6 +1203,7 @@ async function processDailyScreenerRun(run) {
       provider: top5Attempt.provider,
       model: top5Attempt.model,
       categories: gatedResult.categories,
+      publication_gates: chartGated.publicationGates,
       report_markdown: top5Attempt.result.reportMarkdown,
       raw_response: top5Attempt.result.rawResponse,
       generated_at: new Date().toISOString(),
@@ -1198,6 +1214,17 @@ async function processDailyScreenerRun(run) {
       .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category] === 'US');
     const krCategories = recommendationConfig.RECOMMENDATION_CATEGORIES
       .filter((category) => recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category] === 'KR');
+    const publicationGateFailures = Object.entries(chartGated.publicationGates)
+      .filter(([category, gate]) => usCategories.includes(category) && !gate.canPublish)
+      .map(([category, gate]) => ({
+        category,
+        phase: 'recommendation_publication_gate',
+        engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
+        eligible_count: gate.eligibleCount,
+        required_count: gate.requiredCount,
+        coverage: gate.coverage,
+        message: gate.reason,
+      }));
     const recommendationPublications = await recommendationPersistence.persistRecommendationPublications({
       client: supabase,
       runId: run.id,
@@ -1210,15 +1237,18 @@ async function processDailyScreenerRun(run) {
       marketContext: {
         scan_summary: scanSummary,
         provider_chain: top5Attempt.chain,
+        publication_gates: chartGated.publicationGates,
       },
       marketContextByMarket: Object.fromEntries(Object.entries(marketContextByMarket).map(([market, context]) => [market, {
         ...context,
         scan_summary: scanSummary,
         provider_chain: top5Attempt.chain,
+        publication_gates: chartGated.publicationGates,
       }])),
       marketContextByCategory: Object.fromEntries(Object.entries(marketContextByCategory).map(([category, context]) => [category, {
         ...context,
         provider_chain: top5Attempt.chain,
+        publication_gate: chartGated.publicationGates[category],
       }])),
       categories: usCategories,
       candidateSnapshotByTicker: { ...flowSnapshotByTicker, ...chartGated.snapshots },
@@ -1303,6 +1333,7 @@ async function processDailyScreenerRun(run) {
           console.warn(`[Worker] KR official policy fallback: ${category} ${activePolicy} -> ${selection.effectiveEngineVersion}`);
         }
         const officialPolicy = selection.policies.find((policy) => policy.isOfficial);
+        let officialPublicationGate = chartGated.publicationGates[category];
         if (officialPolicy?.ranked) {
           const gatedOfficialPolicy = await applyDailyRecommendationChartGate({
             categories: { [category]: officialPolicy.picks },
@@ -1310,8 +1341,24 @@ async function processDailyScreenerRun(run) {
           });
           officialPolicy.picks = gatedOfficialPolicy.categories[category];
           officialPolicy.chartGateSnapshots = gatedOfficialPolicy.snapshots;
+          officialPublicationGate = gatedOfficialPolicy.publicationGates[category];
         }
-        officialResultByCategory[category] = officialPolicy.picks;
+        officialPolicy.publicationGate = officialPublicationGate;
+        top5Result.publication_gates[category] = officialPublicationGate;
+        if (officialPublicationGate?.canPublish) {
+          officialResultByCategory[category] = officialPolicy.picks;
+        } else {
+          delete officialResultByCategory[category];
+          publicationGateFailures.push({
+            category,
+            phase: 'recommendation_publication_gate',
+            engineVersion: officialPolicy.engineVersion,
+            eligible_count: officialPublicationGate?.eligibleCount || 0,
+            required_count: officialPublicationGate?.requiredCount || 10,
+            coverage: officialPublicationGate?.coverage || 0,
+            message: officialPublicationGate?.reason || '공식 발행 검증 결과가 없습니다.',
+          });
+        }
         for (const policy of selection.policies) {
           const deterministicSnapshots = policy.ranked
             ? Object.fromEntries(policy.ranked.flatMap((row) => {
@@ -1351,6 +1398,7 @@ async function processDailyScreenerRun(run) {
                     effective_engine_version: selection.effectiveEngineVersion,
                     failures: selection.failures,
                   },
+                  ...(policy.isOfficial ? { publication_gate: officialPublicationGate } : {}),
                 },
               },
               candidateSnapshotByTicker: { ...deterministicSnapshots, ...chartGated.snapshots, ...(policy.chartGateSnapshots || {}) },
@@ -1405,6 +1453,7 @@ async function processDailyScreenerRun(run) {
     const findings = [
       ...scan.errors,
       ...policyFailures,
+      ...publicationGateFailures,
       ...deliveryResult.failures.map((failure) => ({ ...failure, phase: 'telegram_delivery' })),
       ...deliveryResult.skippedCategories.map((category) => ({ category, phase: 'telegram_delivery', message: 'Delivery was skipped.' })),
       ...deliveryResult.postDeliveryFailures.map((failure) => ({ ...failure, phase: 'telegram_post_delivery' })),

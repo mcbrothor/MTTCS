@@ -7,6 +7,11 @@ import {
 } from './config';
 import type { RecommendationCategory } from './types';
 import type { DailyCategoryTop10Result, DailyScreenerCandidate } from '@/lib/daily-screeners';
+import {
+  assessRecommendationPublicationGate,
+  type RecommendationChartGate,
+  type RecommendationPublicationGate,
+} from './chart-gate';
 
 interface PersistRecommendationInput {
   client: SupabaseClient;
@@ -53,11 +58,51 @@ export function canPromoteShadowPublication(
   requestedOfficial: boolean,
   publicationStatus?: string | null,
 ) {
-  return !existingOfficial && requestedOfficial && publicationStatus === 'SHADOW';
+  return !existingOfficial
+    && requestedOfficial
+    && (publicationStatus === 'SHADOW' || publicationStatus === 'FAILED' || publicationStatus === 'DRAFT');
 }
 
 export function canReplaceIncompleteOfficial(publicationStatus?: string | null) {
   return publicationStatus === 'DRAFT' || publicationStatus === 'FAILED';
+}
+
+export interface RecommendationPublicationDecision extends RecommendationPublicationGate {
+  requestedOfficial: boolean;
+  isOfficial: boolean;
+  status: 'PUBLISHED' | 'SHADOW';
+}
+
+function chartGateFromSnapshot(snapshot?: Record<string, unknown>) {
+  const gate = snapshot?.chart_gate;
+  return gate && typeof gate === 'object' ? gate as RecommendationChartGate : undefined;
+}
+
+export function buildRecommendationPublicationGate(
+  result: DailyCategoryTop10Result,
+  category: RecommendationCategory,
+  candidateSnapshotByTicker?: Record<string, Record<string, unknown>>,
+) {
+  const picks = result.categories[category] || [];
+  return assessRecommendationPublicationGate(picks.map((pick) => ({
+    ticker: pick.ticker,
+    chartGate: chartGateFromSnapshot(candidateSnapshotByTicker?.[`${category}:${pick.ticker}`])
+      || (pick as typeof pick & { chartGate?: RecommendationChartGate }).chartGate
+      || chartGateFromSnapshot(candidateSnapshotByTicker?.[pick.ticker]),
+  })));
+}
+
+export function resolveRecommendationPublicationDecision(
+  requestedOfficial: boolean,
+  publicationGate: RecommendationPublicationGate,
+): RecommendationPublicationDecision {
+  const isOfficial = requestedOfficial && publicationGate.canPublish;
+  return {
+    ...publicationGate,
+    requestedOfficial,
+    isOfficial,
+    status: isOfficial ? 'PUBLISHED' : 'SHADOW',
+  };
 }
 
 function validateCategoryRows(result: DailyCategoryTop10Result, category: RecommendationCategory) {
@@ -116,10 +161,16 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
   const category = input.category;
   const market = RECOMMENDATION_CATEGORY_MARKET[category];
   const picks = validateCategoryRows(input.result, category);
-  const marketContext = input.marketContextByCategory?.[category]
+  const publicationDecision = resolveRecommendationPublicationDecision(
+    input.isOfficial,
+    buildRecommendationPublicationGate(input.result, category, input.candidateSnapshotByTicker),
+  );
+  const isOfficial = publicationDecision.isOfficial;
+  const sourceMarketContext = input.marketContextByCategory?.[category]
     || input.marketContextByMarket?.[market]
     || input.marketContext
     || {};
+  const marketContext = { ...sourceMarketContext, publication_gate: publicationDecision };
   const { data: existing, error: existingError } = await input.client
     .from('recommendation_publications')
     .select('id, version, is_official, status, telegram_status, telegram_sent_at')
@@ -131,59 +182,53 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
 
   let publication;
   if (existing) {
-    if (existing.is_official !== input.isOfficial) {
-      if (canPromoteShadowPublication(existing.is_official, input.isOfficial, existing.status)) {
-        const { data: categoryOfficial, error: categoryOfficialError } = await input.client
-          .from('recommendation_publications')
-          .select('id, engine_version, status')
-          .eq('run_date', input.runDate)
-          .eq('category', category)
-          .eq('is_official', true)
-          .maybeSingle();
-        if (categoryOfficialError) throw categoryOfficialError;
-        if (categoryOfficial && !canReplaceIncompleteOfficial(categoryOfficial.status)) {
-          throw new Error(`Category ${category} already has official publication ${categoryOfficial.engine_version}.`);
-        }
-        if (categoryOfficial) {
-          const { data: demoted, error: demoteError } = await input.client
-            .from('recommendation_publications')
-            .update({
-              is_official: false,
-              telegram_status: 'SKIPPED',
-              telegram_sent_at: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', categoryOfficial.id)
-            .eq('is_official', true)
-            .eq('status', categoryOfficial.status)
-            .select('id')
-            .maybeSingle();
-          if (demoteError) throw demoteError;
-          if (!demoted) throw new Error(`Incomplete official publication ${categoryOfficial.id} changed during recovery.`);
-        }
-        const { data: promoted, error: promoteError } = await input.client
+    if (existing.is_official && existing.status === 'PUBLISHED') {
+      const { data: preserved, error: preservedError } = await input.client
+        .from('recommendation_publications')
+        .select('*, recommendation_picks(*)')
+        .eq('id', existing.id)
+        .single();
+      if (preservedError) throw preservedError;
+      return {
+        ...preserved,
+        picks: [...(preserved.recommendation_picks || [])].sort((left, right) => left.rank - right.rank),
+      };
+    }
+    const promotingShadow = canPromoteShadowPublication(existing.is_official, isOfficial, existing.status);
+    if (existing.is_official !== isOfficial && !promotingShadow) {
+      throw new Error(`Publication policy ${input.engineVersion} cannot change official status.`);
+    }
+    if (promotingShadow) {
+      const { data: categoryOfficial, error: categoryOfficialError } = await input.client
+        .from('recommendation_publications')
+        .select('id, engine_version, status')
+        .eq('run_date', input.runDate)
+        .eq('category', category)
+        .eq('is_official', true)
+        .maybeSingle();
+      if (categoryOfficialError) throw categoryOfficialError;
+      if (categoryOfficial && !canReplaceIncompleteOfficial(categoryOfficial.status)) {
+        throw new Error(`Category ${category} already has official publication ${categoryOfficial.engine_version}.`);
+      }
+      if (categoryOfficial) {
+        const { data: demoted, error: demoteError } = await input.client
           .from('recommendation_publications')
           .update({
-            is_official: true,
-            status: 'PUBLISHED',
-            telegram_status: 'PENDING',
+            is_official: false,
+            telegram_status: 'SKIPPED',
             telegram_sent_at: null,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', existing.id)
-          .eq('is_official', false)
-          .eq('status', 'SHADOW')
-          .select('*, recommendation_picks(*)')
-          .single();
-        if (promoteError) throw promoteError;
-        return {
-          ...promoted,
-          picks: [...(promoted.recommendation_picks || [])].sort((left, right) => left.rank - right.rank),
-        };
+          .eq('id', categoryOfficial.id)
+          .eq('is_official', true)
+          .eq('status', categoryOfficial.status)
+          .select('id')
+          .maybeSingle();
+        if (demoteError) throw demoteError;
+        if (!demoted) throw new Error(`Incomplete official publication ${categoryOfficial.id} changed during recovery.`);
       }
-      throw new Error(`Publication policy ${input.engineVersion} cannot change official status.`);
     }
-    if (shouldPreservePublishedPublication(existing.is_official, existing.status)) {
+    if (!promotingShadow && shouldPreservePublishedPublication(existing.is_official, existing.status)) {
       const { data: preserved, error: preservedError } = await input.client
         .from('recommendation_publications')
         .select('*, recommendation_picks(*)')
@@ -198,14 +243,19 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     const { error: deleteError } = await input.client.from('recommendation_picks').delete().eq('publication_id', existing.id);
     if (deleteError) throw deleteError;
     const { data, error } = await input.client.from('recommendation_publications').update({
+      is_official: isOfficial,
       status: 'DRAFT',
       generated_at: input.generatedAt,
       prompt_version: 'daily-category-top10-2026.07-v1',
       llm_provider: input.provider,
       llm_model: input.model,
-      ...(input.telegramSentAt
-        ? initialTelegramDelivery(input.telegramSentAt)
-        : preservedTelegramDelivery(existing.telegram_status, existing.telegram_sent_at)),
+      ...(isOfficial
+        ? input.telegramSentAt
+          ? initialTelegramDelivery(input.telegramSentAt)
+          : promotingShadow
+            ? initialTelegramDelivery(null)
+            : preservedTelegramDelivery(existing.telegram_status, existing.telegram_sent_at)
+        : { telegram_status: 'SKIPPED' as const, telegram_sent_at: null }),
       market_context: marketContext,
       updated_at: new Date().toISOString(),
     }).eq('id', existing.id).select('*').single();
@@ -227,14 +277,16 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       market,
       category,
       version,
-      is_official: input.isOfficial,
+      is_official: isOfficial,
       status: 'DRAFT',
       generated_at: input.generatedAt,
       engine_version: input.engineVersion,
       prompt_version: 'daily-category-top10-2026.07-v1',
       llm_provider: input.provider,
       llm_model: input.model,
-      ...initialTelegramDelivery(input.telegramSentAt),
+      ...(isOfficial
+        ? initialTelegramDelivery(input.telegramSentAt)
+        : { telegram_status: 'SKIPPED' as const, telegram_sent_at: null }),
       market_context: marketContext,
     }).select('*').single();
     if (error) throw error;
@@ -246,7 +298,10 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       const candidate = pickCandidateSnapshot(
         pick,
         input.candidates,
-        input.candidateSnapshotByTicker?.[`${category}:${pick.ticker}`] || input.candidateSnapshotByTicker?.[pick.ticker],
+        {
+          ...(input.candidateSnapshotByTicker?.[`${category}:${pick.ticker}`] || input.candidateSnapshotByTicker?.[pick.ticker]),
+          publication_gate: publicationDecision,
+        },
       );
       const name = cleanSecurityName(pick.name, pick.ticker)
         ?? cleanSecurityName(candidate.preferred.name, pick.ticker)
@@ -276,13 +331,13 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     });
     const { error: picksError } = await input.client.from('recommendation_picks').insert(rows);
     if (picksError) throw picksError;
-    const status = input.isOfficial ? 'PUBLISHED' : 'SHADOW';
+    const status = publicationDecision.status;
     const { error: statusError } = await input.client
       .from('recommendation_publications')
-      .update({ status, telegram_status: input.isOfficial ? publication.telegram_status : 'SKIPPED', updated_at: new Date().toISOString() })
+      .update({ status, telegram_status: isOfficial ? publication.telegram_status : 'SKIPPED', updated_at: new Date().toISOString() })
       .eq('id', publication.id);
     if (statusError) throw statusError;
-    return { ...publication, status, picks: rows };
+    return { ...publication, is_official: isOfficial, status, picks: rows };
   } catch (error) {
     await input.client.from('recommendation_publications').update({ status: 'FAILED', updated_at: new Date().toISOString() }).eq('id', publication.id);
     throw error;
