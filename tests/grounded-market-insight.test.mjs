@@ -58,6 +58,21 @@ const validPayload = {
 }
 
 {
+  const parsed = parseGroundedInsightResponse(JSON.stringify({
+    ...validPayload,
+    stance: 'CAUTIOUS',
+    commentary: '시장 폭 72와 분배일 3을 함께 주의해야 합니다.',
+  }), evidenceCatalog);
+  assert.equal(parsed.groundedInsight.commentary, '상승 시도와 위험 신호를 함께 확인하며 검증된 기회만 신중하게 다룹니다.');
+  assert.doesNotMatch(parsed.groundedInsight.commentary, /[0-9]/);
+}
+
+{
+  const parsed = parseGroundedInsightResponse(JSON.stringify([validPayload]), evidenceCatalog);
+  assert.equal(parsed.groundedInsight.headline, validPayload.headline);
+}
+
+{
   assert.throws(
     () => parseGroundedInsightResponse('시장 흐름은 좋습니다.', evidenceCatalog),
     /valid JSON object/,

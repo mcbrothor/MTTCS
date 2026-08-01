@@ -8,6 +8,11 @@ import Card from '@/components/ui/Card';
 import { useMarket } from '@/contexts/MarketContext';
 import { formatTimestamp } from '@/lib/format';
 import { friendlyMetricStatus } from '@/lib/market-display';
+import {
+  aiAttemptStatusLabel,
+  friendlyAiFailureMessage,
+  isCountedModelInsight,
+} from '@/lib/ai/market-insight-display';
 import type { AiFallbackAttempt, AiModelInsight } from '@/types';
 
 function chainTone(status: AiFallbackAttempt['status']) {
@@ -50,23 +55,6 @@ function providerDisplayLabel(provider: string) {
   if (provider === 'codex-cli') return '코드 분석 모델';
   if (provider === 'local-llm') return '로컬 분석 모델';
   return '자동 분석 모델';
-}
-
-function attemptStatusLabel(status: AiFallbackAttempt['status']) {
-  if (status === 'success') return '응답 완료';
-  if (status === 'failed') return '응답 실패';
-  return '건너뜀';
-}
-
-function friendlyFailureMessage(message?: string) {
-  if (!message) return '응답을 받지 못했습니다. 다른 분석 경로의 결과를 표시합니다.';
-  const lower = message.toLowerCase();
-  if (lower.includes('timed out') || lower.includes('timeout')) return '응답 시간이 길어져 다른 분석 경로로 전환했습니다.';
-  if (lower.includes('rate limit') || lower.includes('429')) return '요청이 몰려 잠시 응답하지 못했습니다.';
-  if (lower.includes('model does not exist') || lower.includes('404')) return '현재 사용할 수 없는 분석 모델입니다.';
-  if (lower.includes('not available on vercel')) return '현재 운영 환경에서 사용할 수 없는 분석 방식입니다.';
-  if (lower.includes('evidencekeys') || lower.includes('numeric claims')) return '답변 형식이 기준에 맞지 않아 사용하지 않았습니다.';
-  return '응답을 확인할 수 없어 다른 분석 경로의 결과를 표시합니다.';
 }
 
 function localizeBriefingText(text: string) {
@@ -178,6 +166,7 @@ export default function InsightLog() {
   const providerLabel = aiProviderUsed || (isAiGenerated ? 'gemini' : 'rules');
   const visibleText = localizeBriefingText(selectedInsight?.text || insightLog);
   const showingRouterPick = !selectedInsight || selectedInsight.selected;
+  const countedInsights = aiModelInsights.filter(isCountedModelInsight);
 
   return (
     <div className="space-y-4">
@@ -254,7 +243,7 @@ export default function InsightLog() {
                     <p className="text-[11px] text-slate-500">성공한 다른 모델 답변은 클릭해서 비교할 수 있습니다.</p>
                   </div>
                   <span className="text-[10px] text-slate-500">
-                    성공 {aiModelInsights.filter((item) => item.status === 'success').length} / 전체 {aiModelInsights.length}
+                    성공 {countedInsights.filter((item) => item.status === 'success').length} / 수집 {countedInsights.length}
                   </span>
                 </div>
 
@@ -275,7 +264,7 @@ export default function InsightLog() {
                           {insight.selected && <span className="rounded bg-emerald-400/20 px-1.5 py-0.5 text-[9px] uppercase text-emerald-100">대표</span>}
                         </span>
                         <span className="mt-1 block text-[10px] opacity-80">
-                          {insight.status === 'success' ? '응답 완료' : insight.status === 'failed' ? '응답 실패' : '응답 대기'}
+                          {aiAttemptStatusLabel(insight.status, insight.errorCode)}
                         </span>
                         <span className="mt-1.5 block">
                           <CacheAgeBadge cachedAt={insight.cachedAt} />
@@ -285,9 +274,11 @@ export default function InsightLog() {
                 </div>
 
                 {selectedInsight && selectedInsight.status !== 'success' && (
-                  <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs leading-5 text-rose-100">
-                    <p className="font-semibold">{labelFor(selectedInsight)} 응답 수집 실패</p>
-                    <p className="mt-1">{friendlyFailureMessage(selectedInsight.message)}</p>
+                  <div className={`mt-3 rounded-lg border p-3 text-xs leading-5 ${selectedInsight.status === 'skipped' ? 'border-slate-700 bg-slate-900 text-slate-300' : 'border-rose-500/30 bg-rose-500/10 text-rose-100'}`}>
+                    <p className="font-semibold">
+                      {labelFor(selectedInsight)} {selectedInsight.status === 'skipped' ? '운영 환경 제외' : '응답 수집 실패'}
+                    </p>
+                    <p className="mt-1">{friendlyAiFailureMessage(selectedInsight.errorCode, selectedInsight.message)}</p>
                     {selectedInsight.message && (
                       <details className="mt-2 text-[10px] text-rose-200/70">
                         <summary className="cursor-pointer">기술 정보 보기</summary>
@@ -306,11 +297,11 @@ export default function InsightLog() {
                   {aiFallbackChain.map((attempt, index) => (
                     <span
                       key={`${attempt.provider}-${attempt.model}-${index}`}
-                      title={attempt.message ? friendlyFailureMessage(attempt.message) : undefined}
+                      title={attempt.message ? friendlyAiFailureMessage(attempt.errorCode, attempt.message) : undefined}
                       className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] ${chainTone(attempt.status)}`}
                     >
                       {chainIcon(attempt.status)}
-                      <span className="font-semibold">{attemptStatusLabel(attempt.status)}</span>
+                      <span className="font-semibold">{aiAttemptStatusLabel(attempt.status, attempt.errorCode)}</span>
                     </span>
                   ))}
                 </div>

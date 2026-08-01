@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { settleModelInsightsUntilFirstSuccess } from '../lib/ai/gemini.ts';
+import {
+  callCerebrasModel,
+  callGroqModel,
+  classifyAiInsightError,
+  settleModelInsightsUntilFirstSuccess,
+} from '../lib/ai/gemini.ts';
 
 function insight(overrides) {
   return {
@@ -105,5 +110,48 @@ function delayedInsight(delayMs, payload) {
   assert.equal(result.selected, null);
   assert.deepEqual(result.modelInsights.map((item) => item.status), ['failed', 'skipped']);
 }
+
+{
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url, init) => {
+    requests.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: '{"schemaVersion":"1"}' } }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    await callGroqModel('openai/gpt-oss-120b', 'prompt');
+    await callCerebrasModel('gpt-oss-120b', 'prompt');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(requests.length, 2);
+  for (const request of requests) {
+    assert.deepEqual(request.body.response_format, { type: 'json_object' });
+  }
+}
+
+assert.deepEqual(classifyAiInsightError(new Error('gemini timed out after 7000ms')), {
+  errorCode: 'TIMEOUT',
+  message: 'Provider response timed out.',
+});
+assert.deepEqual(classifyAiInsightError(new Error('Cerebras 404: {"code":"model_not_found"}')), {
+  errorCode: 'MODEL_NOT_FOUND',
+  message: 'Provider model is unavailable or access is denied.',
+});
+assert.deepEqual(classifyAiInsightError(new Error('Local LLM 404: <!DOCTYPE html><html>ngrok</html>')), {
+  errorCode: 'PROXY_ERROR',
+  message: 'Provider proxy returned a non-JSON error response.',
+});
+assert.deepEqual(classifyAiInsightError(new Error('Insight must be a JSON object.')), {
+  errorCode: 'INVALID_RESPONSE',
+  message: 'Insight must be a JSON object.',
+});
 
 console.log('market insight router tests passed');

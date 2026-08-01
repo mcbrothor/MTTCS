@@ -29,6 +29,12 @@ const ACTION_TEXT: Record<GroundedMarketInsightActionCode, string> = {
   PAUSE_NEW_BUYS: '신규 매수를 멈추고 현금과 기존 포지션 방어를 우선합니다.',
 };
 
+const SAFE_COMMENTARY_BY_STANCE: Record<GroundedMarketInsight['stance'], string> = {
+  NORMAL: '추세와 시장 참여 흐름을 확인하며 선별적인 기회를 검토합니다.',
+  CAUTIOUS: '상승 시도와 위험 신호를 함께 확인하며 검증된 기회만 신중하게 다룹니다.',
+  DEFENSIVE: '시장 압력을 고려해 공격적인 진입보다 기존 위험을 낮추는 대응을 우선합니다.',
+};
+
 interface MetricCatalogInput {
   trend: MasterFilterMetricDetail;
   breadth: MasterFilterMetricDetail;
@@ -43,6 +49,20 @@ interface MetricCatalogInput {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function normalizeGroundedMarketInsightPayload(payload: unknown): unknown {
+  const candidate = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  if (!isRecord(candidate)) return candidate;
+  if (typeof candidate.commentary !== 'string' || !NUMERIC_TEXT.test(candidate.commentary)) return candidate;
+
+  const stance = typeof candidate.stance === 'string' && STANCES.has(candidate.stance)
+    ? candidate.stance as GroundedMarketInsight['stance']
+    : 'CAUTIOUS';
+  return {
+    ...candidate,
+    commentary: SAFE_COMMENTARY_BY_STANCE[stance],
+  };
 }
 
 function metricEvidence(key: string, metric: MasterFilterMetricDetail): AiInsightEvidence {

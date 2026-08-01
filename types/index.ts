@@ -897,9 +897,22 @@ export interface GroundedMarketInsightValidation {
   rejectionReasons: string[];
 }
 
+export type AiInsightErrorCode =
+  | 'TIMEOUT'
+  | 'INVALID_RESPONSE'
+  | 'MODEL_NOT_FOUND'
+  | 'PROXY_ERROR'
+  | 'RATE_LIMITED'
+  | 'UNAVAILABLE'
+  | 'PROVIDER_ERROR';
 
 export interface AiFallbackAttempt {
-  provider: string; model: string; status: 'success' | 'failed' | 'skipped'; message?: string;
+  provider: string;
+  model: string;
+  status: 'success' | 'failed' | 'skipped';
+  message?: string;
+  errorCode?: AiInsightErrorCode;
+  latencyMs?: number;
 }
 
 export interface AiModelInsight {
@@ -915,6 +928,8 @@ export interface AiModelInsight {
   groundedInsight?: GroundedMarketInsight;
   cachedAt?: string;
   message?: string;
+  errorCode?: AiInsightErrorCode;
+  latencyMs?: number;
   selected: boolean;
   priority: number;
   generatedAt: string;

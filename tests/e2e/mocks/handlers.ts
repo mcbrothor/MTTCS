@@ -188,6 +188,41 @@ export async function setupMasterFilterMock(page: Page): Promise<void> {
   });
 }
 
+export async function setupMasterFilterInsightStatusMock(page: Page): Promise<void> {
+  const generatedAt = '2026-08-01T06:00:00.000Z';
+  await page.route('**/api/master-filter*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...withEarlyWarnings(marketData.master_filter),
+        isAiGenerated: true,
+        aiProviderUsed: 'gemini',
+        aiModelUsed: 'gemini-2.5-flash',
+        aiModelInsights: [
+          {
+            id: 'gemini-success', provider: 'gemini', label: 'gemini-primary', model: 'gemini-2.5-flash',
+            status: 'success', text: 'AI 브리핑 정상 응답', selected: true, priority: 0, generatedAt, latencyMs: 1200,
+          },
+          {
+            id: 'groq-failed', provider: 'groq', label: 'groq', model: 'openai/gpt-oss-120b',
+            status: 'failed', selected: false, priority: 2, generatedAt, errorCode: 'INVALID_RESPONSE', latencyMs: 800,
+          },
+          {
+            id: 'codex-skipped', provider: 'codex-cli', label: 'codex-cli', model: 'codex',
+            status: 'skipped', selected: false, priority: 5, generatedAt, errorCode: 'UNAVAILABLE', latencyMs: 0,
+          },
+        ],
+        aiFallbackChain: [
+          { provider: 'gemini-primary', model: 'gemini-2.5-flash', status: 'success', latencyMs: 1200 },
+          { provider: 'groq', model: 'openai/gpt-oss-120b', status: 'failed', errorCode: 'INVALID_RESPONSE', latencyMs: 800 },
+          { provider: 'codex-cli', model: 'codex', status: 'skipped', errorCode: 'UNAVAILABLE', latencyMs: 0 },
+        ],
+      }),
+    });
+  });
+}
+
 // ─── Trades ───
 
 export async function setupTradesMock(page: Page): Promise<void> {

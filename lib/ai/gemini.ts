@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type {
   AiFallbackAttempt,
+  AiInsightErrorCode,
   AiInsightEvidence,
   AiInsightProvider,
   AiModelInsight,
@@ -13,26 +14,35 @@ import { friendlyMetricLabel } from '../market-display.ts';
 import {
   buildMarketInsightEvidenceCatalog,
   buildRuleBasedGroundedInsight,
+  normalizeGroundedMarketInsightPayload,
   renderGroundedMarketInsight,
   validateGroundedMarketInsight,
   validationResult,
 } from './grounded-market-insight.ts';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || '';
+const GEMINI_PRIMARY_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
-const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-2507';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'gpt-oss-120b';
 const CEREBRAS_CHAT_COMPLETIONS_URL = 'https://api.cerebras.ai/v1/chat/completions';
-const MODEL_TIMEOUT_MS = Number(process.env.CENTAUR_MODEL_TIMEOUT_MS || (process.env.VERCEL === '1' ? 4500 : 9000));
+const LEGACY_MODEL_TIMEOUT_MS = positiveEnvNumber('CENTAUR_MODEL_TIMEOUT_MS', process.env.VERCEL === '1' ? 7000 : 9000);
+const GEMINI_TIMEOUT_MS = positiveEnvNumber('CENTAUR_GEMINI_TIMEOUT_MS', LEGACY_MODEL_TIMEOUT_MS);
+const FAST_MODEL_TIMEOUT_MS = positiveEnvNumber('CENTAUR_FAST_MODEL_TIMEOUT_MS', 5000);
+const LOCAL_MODEL_TIMEOUT_MS = positiveEnvNumber('CENTAUR_LOCAL_MODEL_TIMEOUT_MS', 8000);
 
 export const LOCAL_LLM_ENABLED = process.env.LOCAL_LLM_ENABLED?.toLowerCase() === 'true';
 export const LOCAL_LLM_API_URL = process.env.LOCAL_LLM_API_URL || 'http://localhost:11434/v1';
-export const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen3.6:14b';
+export const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen2.5:7b';
 const LOCAL_LLM_PROXY_SECRET = process.env.LOCAL_LLM_PROXY_SECRET || process.env.TOSS_PROXY_SECRET || '';
+
+function positiveEnvNumber(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 export interface MarketAnalysisInput {
   marketState: string;
@@ -127,7 +137,7 @@ export function parseStructuredJsonResponse<T>(raw: string, validate: (payload: 
   return validate(extractStructuredJson(raw));
 }
 
-function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = MODEL_TIMEOUT_MS): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms.`)), timeoutMs);
@@ -193,6 +203,39 @@ function compactMessage(value: unknown, max = 500) {
   return message.length > max ? `${message.slice(0, max)}...` : message;
 }
 
+export function classifyAiInsightError(value: unknown): { errorCode: AiInsightErrorCode; message: string } {
+  const raw = compactMessage(value);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('timed out') || lower.includes('timeout') || lower.includes('aborterror')) {
+    return { errorCode: 'TIMEOUT', message: 'Provider response timed out.' };
+  }
+  if (lower.includes('429') || lower.includes('rate limit')) {
+    return { errorCode: 'RATE_LIMITED', message: 'Provider rate limit exceeded.' };
+  }
+  if (lower.includes('model does not exist') || lower.includes('model_not_found') || lower.includes('model not found')) {
+    return { errorCode: 'MODEL_NOT_FOUND', message: 'Provider model is unavailable or access is denied.' };
+  }
+  if (lower.includes('not available on vercel') || lower.includes('not enabled') || lower.includes('not configured')) {
+    return { errorCode: 'UNAVAILABLE', message: raw };
+  }
+  if (
+    lower.includes('must be a json object')
+    || lower.includes('valid json object')
+    || lower.includes('schema mismatch')
+    || lower.includes('schemaversion')
+    || lower.includes('evidencekeys')
+    || lower.includes('numeric claims')
+    || lower.includes('empty response')
+  ) {
+    return { errorCode: 'INVALID_RESPONSE', message: raw };
+  }
+  if (lower.includes('<!doctype html') || lower.includes('<html') || lower.includes('ngrok')) {
+    return { errorCode: 'PROXY_ERROR', message: 'Provider proxy returned a non-JSON error response.' };
+  }
+  return { errorCode: 'PROVIDER_ERROR', message: 'Provider request failed.' };
+}
+
 function errorStatus(error: unknown) {
   if (typeof error === 'object' && error !== null && 'status' in error) {
     const status = Number((error as { status?: unknown }).status);
@@ -246,7 +289,8 @@ function buildPrompt(input: MarketAnalysisInput) {
 
 export function parseGroundedInsightResponse(raw: string, evidenceCatalog: AiInsightEvidence[]) {
   const knownKeys = new Set(evidenceCatalog.map((item) => item.key));
-  const groundedInsight = validateGroundedMarketInsight(extractStructuredJson(raw), knownKeys);
+  const normalizedPayload = normalizeGroundedMarketInsightPayload(extractStructuredJson(raw));
+  const groundedInsight = validateGroundedMarketInsight(normalizedPayload, knownKeys);
   const selectedEvidence = groundedInsight.evidenceKeys
     .map((key) => evidenceCatalog.find((item) => item.key === key))
     .filter((item): item is AiInsightEvidence => Boolean(item));
@@ -264,12 +308,15 @@ export async function callGeminiModel(
   modelId: string,
   prompt: string,
   retries = 2,
-  maxOutputTokens?: number,
+  maxOutputTokens = 900,
 ): Promise<string> {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
     model: modelId,
-    ...(maxOutputTokens ? { generationConfig: { maxOutputTokens } } : {}),
+    generationConfig: {
+      maxOutputTokens,
+      responseMimeType: 'application/json',
+    },
   });
 
   for (let index = 0; index <= retries; index += 1) {
@@ -308,6 +355,7 @@ export async function callGroqModel(
         { role: 'user', content: prompt },
       ],
       temperature: 0.2,
+      response_format: { type: 'json_object' },
       max_tokens: maxOutputTokens,
     }),
   });
@@ -342,6 +390,7 @@ export async function callCerebrasModel(
         { role: 'user', content: prompt },
       ],
       temperature: 0.2,
+      response_format: { type: 'json_object' },
       max_tokens: maxOutputTokens,
     }),
   });
@@ -374,6 +423,8 @@ function attemptToInsight(input: {
   groundedInsight?: GroundedMarketInsight;
   cachedAt?: string;
   message?: string;
+  errorCode?: AiInsightErrorCode;
+  latencyMs?: number;
 }): AiModelInsight {
   const now = new Date().toISOString();
   return {
@@ -389,163 +440,208 @@ function attemptToInsight(input: {
     groundedInsight: input.groundedInsight,
     cachedAt: input.cachedAt ?? now,
     message: input.message,
+    errorCode: input.errorCode,
+    latencyMs: input.latencyMs,
     selected: false,
     priority: input.priority,
     generatedAt: now,
   };
 }
 
+function logInsightAttempt(insight: AiModelInsight) {
+  console.info('[market-insight-provider]', JSON.stringify({
+    provider: insight.label,
+    model: insight.model,
+    status: insight.status,
+    latencyMs: insight.latencyMs ?? 0,
+    errorCode: insight.errorCode ?? null,
+  }));
+  return insight;
+}
+
+function fallbackAttempt(insight: AiModelInsight): AiFallbackAttempt {
+  return {
+    provider: insight.label,
+    model: insight.model,
+    status: insight.status,
+    message: insight.message,
+    errorCode: insight.errorCode,
+    latencyMs: insight.latencyMs,
+  };
+}
+
 function withProviderSummaries(insights: AiModelInsight[]) {
-  const hasLocalLlm = insights.some((item) => item.provider === 'local-llm');
-  if (!hasLocalLlm) {
-    insights.push(attemptToInsight({
-      provider: 'local-llm',
-      label: 'local-llm',
-      model: LOCAL_LLM_MODEL,
-      status: 'skipped',
-      message: LOCAL_LLM_ENABLED
-        ? 'Local LLM is enabled; skipped waiting after a higher-priority model succeeded.'
-        : 'Local LLM is not enabled.',
-      priority: 4,
-    }));
-  }
-  return insights.sort((a, b) => a.priority - b.priority);
+  const expected = [
+    { provider: 'gemini' as const, label: 'gemini-primary', model: GEMINI_PRIMARY_MODEL, priority: 0 },
+    { provider: 'gemini' as const, label: 'gemini-fallback', model: GEMINI_FALLBACK_MODEL || '(not configured)', priority: 1 },
+    { provider: 'groq' as const, label: 'groq', model: GROQ_MODEL, priority: 2 },
+    { provider: 'cerebras' as const, label: 'cerebras', model: CEREBRAS_MODEL, priority: 3 },
+    { provider: 'local-llm' as const, label: 'local-llm', model: LOCAL_LLM_MODEL, priority: 4 },
+    { provider: 'codex-cli' as const, label: 'codex-cli', model: 'codex', priority: 5 },
+  ];
+  const byLabel = new Map(insights.map((item) => [item.label, item]));
+  return expected.map((item) => byLabel.get(item.label) || attemptToInsight({
+    ...item,
+    status: 'skipped',
+    message: 'Skipped waiting after a higher-priority model succeeded.',
+    latencyMs: 0,
+  }));
+}
+
+function skippedInsight(input: {
+  provider: AiInsightProvider;
+  label: string;
+  model: string;
+  message: string;
+  priority: number;
+}) {
+  return logInsightAttempt(attemptToInsight({
+    ...input,
+    status: 'skipped',
+    errorCode: 'UNAVAILABLE',
+    latencyMs: 0,
+  }));
+}
+
+function failedInsight(input: {
+  provider: AiInsightProvider;
+  label: string;
+  model: string;
+  error: unknown;
+  priority: number;
+  startedAt: number;
+}) {
+  const normalized = classifyAiInsightError(input.error);
+  return logInsightAttempt(attemptToInsight({
+    ...input,
+    status: 'failed',
+    message: normalized.message,
+    errorCode: normalized.errorCode,
+    latencyMs: Date.now() - input.startedAt,
+  }));
 }
 
 async function collectGemini(
   model: string,
   prompt: string,
   evidenceCatalog: AiInsightEvidence[],
-  chain: AiFallbackAttempt[],
   label: string,
   priority: number
 ): Promise<AiModelInsight> {
   if (!GEMINI_API_KEY) {
-    const message = 'GEMINI_API_KEY is not configured.';
-    chain.push({ provider: label, model, status: 'skipped', message });
-    return attemptToInsight({ provider: 'gemini', label, model, status: 'skipped', message, priority });
+    return skippedInsight({ provider: 'gemini', label, model, message: 'GEMINI_API_KEY is not configured.', priority });
   }
 
+  const startedAt = Date.now();
   try {
-    const raw = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`);
+    const raw = await withTimeout(callGeminiModel(model, prompt), `${label}/${model}`, GEMINI_TIMEOUT_MS);
     const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
-    chain.push({ provider: label, model, status: 'success' });
-    return attemptToInsight({ provider: 'gemini', label, model, status: 'success', ...structured, priority });
+    return logInsightAttempt(attemptToInsight({
+      provider: 'gemini', label, model, status: 'success', ...structured, priority, latencyMs: Date.now() - startedAt,
+    }));
   } catch (error: unknown) {
-    const message = compactMessage(error);
-    chain.push({ provider: label, model, status: 'failed', message });
-    return attemptToInsight({ provider: 'gemini', label, model, status: 'failed', message, priority });
+    return failedInsight({ provider: 'gemini', label, model, error, priority, startedAt });
   }
 }
 
-async function collectGroq(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectGroq(prompt: string, evidenceCatalog: AiInsightEvidence[], priority: number): Promise<AiModelInsight> {
   if (!GROQ_API_KEY) {
-    const message = 'GROQ_API_KEY is not configured.';
-    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'skipped', message });
-    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'skipped', message, priority });
+    return skippedInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, message: 'GROQ_API_KEY is not configured.', priority });
   }
 
+  const startedAt = Date.now();
   try {
-    const raw = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`);
+    const raw = await withTimeout(callGroqModel(GROQ_MODEL, prompt), `groq/${GROQ_MODEL}`, FAST_MODEL_TIMEOUT_MS);
     const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
-    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', ...structured, priority });
+    return logInsightAttempt(attemptToInsight({
+      provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'success', ...structured, priority, latencyMs: Date.now() - startedAt,
+    }));
   } catch (error: unknown) {
-    const message = compactMessage(error);
-    chain.push({ provider: 'groq', model: GROQ_MODEL, status: 'failed', message });
-    return attemptToInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, status: 'failed', message, priority });
+    return failedInsight({ provider: 'groq', label: 'groq', model: GROQ_MODEL, error, priority, startedAt });
   }
 }
 
-async function collectCerebras(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectCerebras(prompt: string, evidenceCatalog: AiInsightEvidence[], priority: number): Promise<AiModelInsight> {
   if (!CEREBRAS_API_KEY) {
-    const message = 'CEREBRAS_API_KEY is not configured.';
-    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message });
-    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'skipped', message, priority });
+    return skippedInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, message: 'CEREBRAS_API_KEY is not configured.', priority });
   }
 
+  const startedAt = Date.now();
   try {
-    const raw = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`);
+    const raw = await withTimeout(callCerebrasModel(CEREBRAS_MODEL, prompt), `cerebras/${CEREBRAS_MODEL}`, FAST_MODEL_TIMEOUT_MS);
     const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
-    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', ...structured, priority });
+    return logInsightAttempt(attemptToInsight({
+      provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'success', ...structured, priority, latencyMs: Date.now() - startedAt,
+    }));
   } catch (error: unknown) {
-    const message = compactMessage(error);
-    chain.push({ provider: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message });
-    return attemptToInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, status: 'failed', message, priority });
+    return failedInsight({ provider: 'cerebras', label: 'cerebras', model: CEREBRAS_MODEL, error, priority, startedAt });
   }
 }
 
-async function collectLocalLlm(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
+async function collectLocalLlm(prompt: string, evidenceCatalog: AiInsightEvidence[], priority: number): Promise<AiModelInsight> {
   if (!LOCAL_LLM_ENABLED) {
-    const message = 'Local LLM is not enabled.';
-    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message });
-    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'skipped', message, priority });
+    return skippedInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, message: 'Local LLM is not enabled.', priority });
   }
 
+  const startedAt = Date.now();
   try {
-    const raw = await withTimeout(callLocalLlmModel(prompt, 'You are a concise Korean market-regime analyst.', 900), `local-llm/${LOCAL_LLM_MODEL}`);
+    const raw = await withTimeout(
+      callLocalLlmModel(prompt, 'You are a concise Korean market-regime analyst.', 900),
+      `local-llm/${LOCAL_LLM_MODEL}`,
+      LOCAL_MODEL_TIMEOUT_MS,
+    );
     const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
-    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success' });
-    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success', ...structured, priority });
+    return logInsightAttempt(attemptToInsight({
+      provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'success', ...structured, priority, latencyMs: Date.now() - startedAt,
+    }));
   } catch (error: unknown) {
-    const message = compactMessage(error);
-    chain.push({ provider: 'local-llm', model: LOCAL_LLM_MODEL, status: 'failed', message });
-    return attemptToInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, status: 'failed', message, priority });
+    return failedInsight({ provider: 'local-llm', label: 'local-llm', model: LOCAL_LLM_MODEL, error, priority, startedAt });
   }
 }
 
-async function collectCodexCli(prompt: string, evidenceCatalog: AiInsightEvidence[], chain: AiFallbackAttempt[], priority: number): Promise<AiModelInsight> {
-  const isVercel = process.env.VERCEL === '1';
-  if (isVercel) {
-    const message = 'Codex CLI is not available on Vercel environment.';
-    chain.push({ provider: 'codex-cli', model: 'codex', status: 'skipped', message });
-    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'skipped', message, priority });
+async function collectCodexCli(prompt: string, evidenceCatalog: AiInsightEvidence[], priority: number): Promise<AiModelInsight> {
+  if (process.env.VERCEL === '1') {
+    return skippedInsight({
+      provider: 'codex-cli', label: 'codex-cli', model: 'codex',
+      message: 'Codex CLI is not available on Vercel environment.', priority,
+    });
   }
 
+  const startedAt = Date.now();
   try {
-    const raw = await withTimeout(callCodexCli(prompt), `codex-cli/codex`, 25000);
+    const raw = await withTimeout(callCodexCli(prompt), 'codex-cli/codex', 25000);
     const structured = parseGroundedInsightResponse(raw, evidenceCatalog);
-    chain.push({ provider: 'codex-cli', model: 'codex', status: 'success' });
-    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'success', ...structured, priority });
+    return logInsightAttempt(attemptToInsight({
+      provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'success', ...structured, priority, latencyMs: Date.now() - startedAt,
+    }));
   } catch (error: unknown) {
-    const message = compactMessage(error);
-    chain.push({ provider: 'codex-cli', model: 'codex', status: 'failed', message });
-    return attemptToInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', status: 'failed', message, priority });
+    return failedInsight({ provider: 'codex-cli', label: 'codex-cli', model: 'codex', error, priority, startedAt });
   }
 }
 
 export async function generateMarketInsight(input: MarketAnalysisInput): Promise<MarketInsightResult> {
   const prompt = buildPrompt(input);
   const evidenceCatalog = buildMarketInsightEvidenceCatalog(input.metrics);
-  const chain: AiFallbackAttempt[] = [];
   const tasks: Promise<AiModelInsight>[] = [
-    collectGemini(GEMINI_PRIMARY_MODEL, prompt, evidenceCatalog, chain, 'gemini-primary', 0),
+    collectGemini(GEMINI_PRIMARY_MODEL, prompt, evidenceCatalog, 'gemini-primary', 0),
   ];
 
   if (GEMINI_FALLBACK_MODEL && GEMINI_FALLBACK_MODEL !== GEMINI_PRIMARY_MODEL) {
-    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, evidenceCatalog, chain, 'gemini-fallback', 1));
+    tasks.push(collectGemini(GEMINI_FALLBACK_MODEL, prompt, evidenceCatalog, 'gemini-fallback', 1));
   } else {
     const model = GEMINI_FALLBACK_MODEL || '(not configured)';
     const message = 'GEMINI_FALLBACK_MODEL is not configured.';
-    chain.push({ provider: 'gemini-fallback', model, status: 'skipped', message });
-    tasks.push(Promise.resolve(attemptToInsight({ provider: 'gemini', label: 'gemini-fallback', model, status: 'skipped', message, priority: 1 })));
+    tasks.push(Promise.resolve(skippedInsight({ provider: 'gemini', label: 'gemini-fallback', model, message, priority: 1 })));
   }
 
   tasks.push(
-    collectGroq(prompt, evidenceCatalog, chain, 2),
-    collectCerebras(prompt, evidenceCatalog, chain, 3),
-    collectLocalLlm(prompt, evidenceCatalog, chain, 4),
-    collectCodexCli(prompt, evidenceCatalog, chain, 5)
+    collectGroq(prompt, evidenceCatalog, 2),
+    collectCerebras(prompt, evidenceCatalog, 3),
+    collectLocalLlm(prompt, evidenceCatalog, 4),
+    collectCodexCli(prompt, evidenceCatalog, 5)
   );
 
   const { selected, modelInsights } = await settleModelInsightsUntilFirstSuccess(tasks);
-  const priorityByChainKey = new Map<string, number>();
-  for (const item of modelInsights) {
-    priorityByChainKey.set(item.label, item.priority);
-    priorityByChainKey.set(item.provider, Math.min(item.priority, priorityByChainKey.get(item.provider) ?? 99));
-  }
-  chain.sort((a, b) => (priorityByChainKey.get(a.provider) ?? 99) - (priorityByChainKey.get(b.provider) ?? 99));
 
   if (selected?.groundedInsight) {
     const selectedInsights = withProviderSummaries(modelInsights)
@@ -558,7 +654,7 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
       isAiGenerated: true,
       providerUsed: selected.provider,
       modelUsed: selected.model,
-      fallbackChain: chain,
+      fallbackChain: selectedInsights.map(fallbackAttempt),
       modelInsights: selectedInsights,
       errorSummary: null,
       aiInsight: selected.groundedInsight,
@@ -567,12 +663,11 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     };
   }
 
-  const failedMessages = chain
+  const failedMessages = modelInsights
     .filter((item) => item.status === 'failed')
-    .map((item) => `${item.provider}/${item.model}: ${item.message}`)
+    .map((item) => `${item.label}/${item.model}: ${item.errorCode || 'PROVIDER_ERROR'}: ${item.message}`)
     .join(' | ');
 
-  chain.push({ provider: 'rules', model: 'mtn-rule-based', status: 'success' });
   const groundedInsight = buildRuleBasedGroundedInsight(input.marketState);
   const selectedEvidence = groundedInsight.evidenceKeys
     .map((key) => evidenceCatalog.find((item) => item.key === key))
@@ -588,14 +683,16 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
     detail: [groundedInsight.commentary, ...text.split('\n\n').slice(2)].join('\n\n'),
     groundedInsight,
     priority: 99,
+    latencyMs: 0,
   });
+  const completedInsights = [...modelInsights, { ...ruleInsight, selected: true }];
   return {
     text: ruleInsight.text || '',
     isAiGenerated: false,
     providerUsed: 'rules',
     modelUsed: 'mtn-rule-based',
-    fallbackChain: chain,
-    modelInsights: [...modelInsights, { ...ruleInsight, selected: true }],
+    fallbackChain: completedInsights.map(fallbackAttempt),
+    modelInsights: completedInsights,
     errorSummary: failedMessages || 'No LLM provider was configured.',
     aiInsight: groundedInsight,
     aiValidation: validationResult('FALLBACK', failedMessages ? failedMessages.split(' | ') : ['No LLM provider was configured.']),
@@ -604,7 +701,7 @@ export async function generateMarketInsight(input: MarketAnalysisInput): Promise
 }
 
 /**
- * 로컬 Ollama LLM(기본 qwen3.6:14b)의 OpenAI 호환 completions 엔드포인트를 호출합니다.
+ * 로컬 Ollama LLM(기본 qwen2.5:7b)의 OpenAI 호환 completions 엔드포인트를 호출합니다.
  */
 export async function callLocalLlmModel(
   prompt: string,
@@ -613,8 +710,8 @@ export async function callLocalLlmModel(
   forceLargeTimeout = false
 ): Promise<string> {
   const isVercel = process.env.VERCEL === '1';
-  // Vercel 환경이고 forceLargeTimeout이 아닐 때만 5.5초 타임아웃 적용 (로컬 전용 강제 호출 시에는 10분/600초 적용)
-  const timeoutMs = (isVercel && !forceLargeTimeout) ? 5500 : 600000;
+  // Vercel 호출은 공급자별 제한을 따르고, 로컬 전용 강제 호출은 장시간 모델 로드를 허용합니다.
+  const timeoutMs = (isVercel && !forceLargeTimeout) ? LOCAL_MODEL_TIMEOUT_MS : 600000;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

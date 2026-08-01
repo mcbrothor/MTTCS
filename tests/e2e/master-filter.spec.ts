@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { login } from './helpers/auth';
-import { setupAllMocks, setupHaltMocks } from './mocks/handlers';
+import { setupAllMocks, setupHaltMocks, setupMasterFilterInsightStatusMock } from './mocks/handlers';
 
 test.describe('TC-MF: 오늘의 결론과 위험 조기경보', () => {
   test.describe('정상 진입 가능 상태', () => {
@@ -40,6 +40,15 @@ test.describe('TC-MF: 오늘의 결론과 위험 조기경보', () => {
       await expect(technologyRow.getByText('+3.40%', { exact: true })).toBeVisible();
       await expect(technologyRow.getByText('5일선 위', { exact: true })).toBeVisible();
       await expect(technologyRow.getByText('20일선 위', { exact: true })).toBeVisible();
+    });
+
+    test('MF-02: 운영 제외 모델을 대기나 실패 집계로 표시하지 않음', async ({ page }) => {
+      await setupMasterFilterInsightStatusMock(page);
+      await page.goto('/master-filter');
+
+      await expect(page.getByText('성공 1 / 수집 2', { exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: /코드 분석 모델 운영 환경 제외/ })).toBeVisible();
+      await expect(page.getByText('응답 대기', { exact: true })).toHaveCount(0);
     });
   });
 

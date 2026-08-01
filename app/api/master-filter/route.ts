@@ -1,6 +1,7 @@
 import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
-import { generateMarketInsight } from '@/lib/ai/gemini';
+import { classifyAiInsightError, generateMarketInsight } from '@/lib/ai/gemini';
+import { isMarketInsightCacheFresh } from '@/lib/ai/market-insight-cache';
 import type {
   AiFallbackAttempt,
   AiInsightEvidence,
@@ -19,6 +20,7 @@ import type { MasterFilterResponse, OHLCData, MasterFilterMetricDetail } from '@
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600; // Cache for 1 hour
+export const maxDuration = 30;
 
 interface CachedInsight {
   text: string;
@@ -34,10 +36,14 @@ interface CachedInsight {
   cachedAt: number;
 }
 const insightCache = new Map<string, CachedInsight>();
-const INSIGHT_CACHE_TTL_MS = Number(process.env.MARKET_INSIGHT_CACHE_TTL_MS || 60 * 60 * 1000);
-const INSIGHT_RESPONSE_TIMEOUT_MS = process.env.VERCEL === '1'
-  ? 9000 // Vercel 서버리스 기본 타임아웃(10초) 직전까지 대기
-  : Number(process.env.MARKET_INSIGHT_TIMEOUT_MS || 30000);
+const INSIGHT_CACHE_TTL_MS = positiveEnvNumber('MARKET_INSIGHT_CACHE_TTL_MS', 60 * 60 * 1000);
+const INSIGHT_FAILURE_CACHE_TTL_MS = positiveEnvNumber('MARKET_INSIGHT_FAILURE_CACHE_TTL_MS', 60 * 1000);
+const INSIGHT_RESPONSE_TIMEOUT_MS = positiveEnvNumber('MARKET_INSIGHT_TIMEOUT_MS', process.env.VERCEL === '1' ? 12000 : 30000);
+
+function positiveEnvNumber(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
 
 const US_MACRO_SYMBOLS = [
   '^VIX', 'UUP', 'DX-Y.NYB', 'KRW=X', '^TNX', '^IRX', 'SHY', 'TLT', 'HYG', 'IEF',
@@ -115,7 +121,11 @@ async function safeDaily(symbol: string): Promise<OHLCData[]> {
   });
 }
 
-function fallbackInsight(message: string, staleInsight?: CachedInsight): CachedInsight {
+function fallbackInsight(
+  message: string,
+  staleInsight?: CachedInsight,
+  errorCode: AiFallbackAttempt['errorCode'] = 'TIMEOUT',
+): CachedInsight {
   if (staleInsight?.isAiGenerated) {
     return {
       ...staleInsight,
@@ -130,7 +140,8 @@ function fallbackInsight(message: string, staleInsight?: CachedInsight): CachedI
     modelUsed: 'mtn-rule-timeout',
     isAiGenerated: false,
     fallbackChain: [
-      { provider: 'rules', model: 'mtn-rule-timeout', status: 'success', message: 'LLM insight timed out.' },
+      { provider: 'insight-router', model: 'market-insight', status: 'failed', message, errorCode, latencyMs: INSIGHT_RESPONSE_TIMEOUT_MS },
+      { provider: 'rules', model: 'mtn-rule-timeout', status: 'success', latencyMs: 0 },
     ],
     modelInsights: [
       {
@@ -160,7 +171,10 @@ async function generateInsightWithTimeout(input: Parameters<typeof generateMarke
 
   const generated = generateMarketInsight(input)
     .then((fresh) => ({ ...fresh, cachedAt: Date.now() }))
-    .catch((error: unknown) => fallbackInsight(error instanceof Error ? error.message : 'LLM insight generation failed.'));
+    .catch((error: unknown) => {
+      const normalized = classifyAiInsightError(error);
+      return fallbackInsight(normalized.message, staleInsight, normalized.errorCode);
+    });
 
   return Promise.race([generated, timeout]).finally(() => clearTimeout(timer));
 }
@@ -399,15 +413,11 @@ export async function GET(request: Request) {
     const cached = insightCache.get(cacheKey);
     const now = Date.now();
     let insight: CachedInsight;
-    if (cached && now - cached.cachedAt < INSIGHT_CACHE_TTL_MS) {
+    if (cached && isMarketInsightCacheFresh(cached, INSIGHT_CACHE_TTL_MS, INSIGHT_FAILURE_CACHE_TTL_MS, now)) {
       insight = cached;
     } else {
       insight = await generateInsightWithTimeout(insightInput, cached);
-      if (insight.isAiGenerated) {
-        insightCache.set(cacheKey, insight);
-      } else {
-        insightCache.delete(cacheKey);
-      }
+      insightCache.set(cacheKey, insight);
     }
 
     // 3. 최종 응답 구조 생성 (기존 호환성 유지)

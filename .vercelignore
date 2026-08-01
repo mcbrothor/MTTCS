@@ -1,3 +1,5 @@
+.next/
+.next-*/
 .next-verify/
 playwright-report/
 playwright-report-smoke/
