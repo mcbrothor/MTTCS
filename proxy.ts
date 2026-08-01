@@ -38,7 +38,8 @@ export async function proxy(request: NextRequest) {
     !pathname.startsWith('/api/cron/') &&
     !pathname.startsWith('/api/local-llm-proxy/') &&
     !pathname.startsWith('/api/toss-proxy/') &&
-    !pathname.startsWith('/api/telegram-webhook')
+    !pathname.startsWith('/api/telegram-webhook') &&
+    pathname !== '/api/internal/kis-rate-limit'
   ) {
     const token = request.cookies.get('mtn_session')?.value;
     const session = await verifySessionToken(token);

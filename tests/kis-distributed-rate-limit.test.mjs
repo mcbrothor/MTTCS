@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createJiti } from 'jiti';
@@ -34,7 +35,7 @@ const route = await readFile(
   'utf8'
 );
 assert.match(route, /validateKisCoordinatorRequest/);
-assert.match(route, /KIS_RATE_LIMIT_COORDINATOR_SECRET/);
+assert.match(route, /kisCoordinatorSecret/);
 assert.match(route, /scope !== 'rest'[\s\S]*scope !== 'token'/);
 assert.match(route, /distributedOnly:\s*true/);
 
@@ -43,6 +44,10 @@ const coordinatorAuth = await readFile(
   'utf8'
 );
 assert.match(coordinatorAuth, /secretsMatch/);
+assert.match(coordinatorAuth, /createHmac/);
+
+const proxy = await readFile(new URL('../proxy.ts', import.meta.url), 'utf8');
+assert.match(proxy, /pathname !== ['"]\/api\/internal\/kis-rate-limit['"]/);
 
 process.env.NEXT_PHASE = 'phase-production-build';
 process.env.KIS_APP_KEY = 'test-app-key';
@@ -56,6 +61,12 @@ const jiti = createJiti(import.meta.url, {
   alias: { '@': path.resolve('.') },
 });
 const rateLimiter = jiti('../lib/finance/providers/kis-rate-limit.ts');
+const coordinatorAuthModule = jiti('../lib/auth/kis-coordinator.ts');
+delete process.env.KIS_RATE_LIMIT_COORDINATOR_SECRET;
+const derivedSecret = createHmac('sha256', 'test-app-secret')
+  .update('mtn:kis-rate-limit-coordinator:v1', 'utf8')
+  .digest('hex');
+assert.equal(coordinatorAuthModule.kisCoordinatorSecret(), derivedSecret);
 const key = rateLimiter.kisRateLimiterKey('rest', process.env.KIS_BASE_URL, 'test-app-key');
 assert.match(key, /^kis:rest:[0-9a-f]{64}$/);
 assert.equal(key.includes('test-app-key'), false);

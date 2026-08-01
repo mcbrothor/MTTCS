@@ -3,13 +3,15 @@ import {
   reserveKisRequestSlot,
   type KisRateLimitScope,
 } from '@/lib/finance/providers/kis-rate-limit';
-import { validateKisCoordinatorRequest } from '@/lib/auth/kis-coordinator';
+import {
+  kisCoordinatorSecret,
+  validateKisCoordinatorRequest,
+} from '@/lib/auth/kis-coordinator';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
-  const expectedSecret = process.env.KIS_RATE_LIMIT_COORDINATOR_SECRET;
-  if (!expectedSecret) {
+  if (!kisCoordinatorSecret()) {
     return NextResponse.json({ error: 'KIS 공유 제한기가 설정되지 않았습니다.' }, { status: 503 });
   }
   if (!validateKisCoordinatorRequest(request)) {
