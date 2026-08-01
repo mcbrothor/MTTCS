@@ -1,13 +1,19 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { getKisToken } from './kis-auth';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { sanitizeExternalError } from '@/lib/security/external-errors';
 import type { OHLCData } from '@/types';
 import { normalizeChartDate, toCompactChartDate } from '@/lib/finance/core/chart-time';
+import { cacheKey, tieredCacheGetOrLoad } from '@/lib/cache';
+import { waitForKisRequestSlot } from './kis-rate-limit';
 
-/** 지정 ms만큼 대기합니다. KIS API 초당 20건 제한 대응용. */
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+const KIS_DAILY_CACHE_TTL_MS = 15 * 60 * 1000;
+const KIS_QUOTE_CACHE_TTL_MS = 10 * 1000;
+const KIS_REFERENCE_CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function kisGet(url: string, config: AxiosRequestConfig) {
+  await waitForKisRequestSlot('rest');
+  return axios.get(url, config);
 }
 
 interface KisDailyPriceRow {
@@ -85,7 +91,7 @@ async function getOverseasDailyPricePage(
   const isVirtual = KIS_BASE_URL.includes('openapivts');
   const tr_id = isVirtual ? 'VHJFS76240000' : 'HHDFS76240000';
 
-  const response = await axios.get(`${KIS_BASE_URL}/uapi/overseas-price/v1/quotations/dailyprice`, {
+  const response = await kisGet(`${KIS_BASE_URL}/uapi/overseas-price/v1/quotations/dailyprice`, {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       authorization: `Bearer ${token}`,
@@ -139,9 +145,6 @@ export async function getOverseasDailyPrice(
   let baseDate = '';
 
   for (let page = 0; page < maxPages; page += 1) {
-    // KIS API 초당 20건 제한 대응: 페이지 간 200ms 딜레이
-    if (page > 0) await sleep(200);
-
     const pageData = await getOverseasDailyPricePage(ticker, exchange, baseDate);
     if (pageData.length === 0) break;
 
@@ -183,7 +186,7 @@ async function getDomesticDailyPricePage(
   const isVirtual = KIS_BASE_URL.includes('openapivts');
   const tr_id = isVirtual ? 'FHKST03010100' : 'FHKST03010100';
 
-  const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`, {
+  const response = await kisGet(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`, {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       authorization: `Bearer ${token}`,
@@ -227,7 +230,7 @@ async function getDomesticDailyPricePage(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function getMarketDailyPrice(
+async function fetchMarketDailyPrice(
   ticker: string,
   exchange: string,
   targetBars: number = DEFAULT_TARGET_BARS
@@ -240,8 +243,6 @@ export async function getMarketDailyPrice(
     
     // 타겟 데이터(300개)를 확보할 때까지 루프를 돕니다. (보통 3페이지면 완료)
     for (let page = 0; page < 6; page++) {
-      if (page > 0) await sleep(200);
-      
       const pageData = await getDomesticDailyPricePage(ticker, startDate, endDate);
       if (pageData.length === 0) break;
       
@@ -269,15 +270,33 @@ export async function getMarketDailyPrice(
   return getOverseasDailyPrice(ticker, exchange, targetBars);
 }
 
+export async function getMarketDailyPrice(
+  ticker: string,
+  exchange: string,
+  targetBars: number = DEFAULT_TARGET_BARS,
+): Promise<OHLCData[]> {
+  const normalizedTicker = ticker.trim().toUpperCase();
+  const normalizedExchange = exchange.trim().toUpperCase();
+  const requestedBars = Math.max(1, Math.floor(targetBars));
+  const cacheBars = Math.ceil(requestedBars / KIS_PAGE_SIZE) * KIS_PAGE_SIZE;
+  const key = cacheKey('kis', 'daily-v1', kisBaseUrl(), normalizedExchange, normalizedTicker, cacheBars);
+  const rows = await tieredCacheGetOrLoad(
+    key,
+    () => fetchMarketDailyPrice(normalizedTicker, normalizedExchange, cacheBars),
+    KIS_DAILY_CACHE_TTL_MS,
+  );
+  return rows.slice(-requestedBars);
+}
+
 /** 국내 주식 현재가 시세를 조회합니다 (FHKST01010100) */
-export async function getKisDomesticPrice(ticker: string): Promise<number | null> {
+async function fetchKisDomesticPrice(ticker: string): Promise<number | null> {
   try {
     const token = await getKisToken();
     const KIS_APP_KEY = kisAppKey();
     const KIS_APP_SECRET = kisAppSecret();
     const KIS_BASE_URL = kisBaseUrl();
 
-    const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price`, {
+    const response = await kisGet(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price`, {
       headers: {
         'content-type': 'application/json; charset=utf-8',
         authorization: `Bearer ${token}`,
@@ -306,6 +325,15 @@ export async function getKisDomesticPrice(ticker: string): Promise<number | null
   }
 }
 
+export async function getKisDomesticPrice(ticker: string): Promise<number | null> {
+  const normalized = ticker.trim();
+  return tieredCacheGetOrLoad(
+    cacheKey('kis', 'domestic-price-v1', kisBaseUrl(), normalized),
+    () => fetchKisDomesticPrice(normalized),
+    KIS_QUOTE_CACHE_TTL_MS,
+  );
+}
+
 function normalizeKisMarketCapRows(rows: KisMarketCapRow[], rankOffset = 0): KisMarketCapRankingRow[] {
   return rows
     .map((item, index) => {
@@ -324,7 +352,7 @@ function normalizeKisMarketCapRows(rows: KisMarketCapRow[], rankOffset = 0): Kis
     .filter((item) => /^\d{6}$/.test(item.ticker) && item.name);
 }
 
-export async function getKisKospiMarketCapRanking(limit = 100): Promise<KisMarketCapRankingRow[]> {
+async function fetchKisKospiMarketCapRanking(limit = 100): Promise<KisMarketCapRankingRow[]> {
   const token = await getKisToken();
   const KIS_APP_KEY = kisAppKey();
   const KIS_APP_SECRET = kisAppSecret();
@@ -335,9 +363,7 @@ export async function getKisKospiMarketCapRanking(limit = 100): Promise<KisMarke
   let trCont = '';
 
   for (let page = 0; page < 6 && rows.length < limit; page += 1) {
-    if (page > 0) await sleep(200);
-
-    const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/ranking/market-cap`, {
+    const response = await kisGet(`${KIS_BASE_URL}/uapi/domestic-stock/v1/ranking/market-cap`, {
       headers: {
         'content-type': 'application/json; charset=utf-8',
         authorization: `Bearer ${token}`,
@@ -391,6 +417,14 @@ export async function getKisKospiMarketCapRanking(limit = 100): Promise<KisMarke
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }
 
+export async function getKisKospiMarketCapRanking(limit = 100): Promise<KisMarketCapRankingRow[]> {
+  return tieredCacheGetOrLoad(
+    cacheKey('kis', 'market-cap-ranking-v1', kisBaseUrl(), limit),
+    () => fetchKisKospiMarketCapRanking(limit),
+    KIS_REFERENCE_CACHE_TTL_MS,
+  );
+}
+
 // ─── 외국인 순매수 (시장별 투자자 매매동향) ────────────────────────────────
 
 export interface KisForeignNetBuyRow {
@@ -429,7 +463,7 @@ export async function getKisMarketForeignNetBuy(
       return d.toISOString().slice(0, 10).replace(/-/g, '');
     })();
 
-    const response = await axios.get(
+    const response = await kisGet(
       `${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice`,
       {
         headers: {
@@ -481,7 +515,7 @@ export interface KisIndexQuote {
   regularMarketChangePercent: number;
 }
 
-export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>> {
+async function fetchKisIndexQuotes(): Promise<Record<string, KisIndexQuote>> {
   const token = await getKisToken();
   const KIS_APP_KEY = kisAppKey();
   const KIS_APP_SECRET = kisAppSecret();
@@ -492,7 +526,7 @@ export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>
   // 국내 지수 조회 (KOSPI: 0001, KOSDAQ: 1001)
   const fetchDomesticIndex = async (iscd: string, yahooSymbol: string) => {
     try {
-      const response = await axios.get(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-index-price`, {
+      const response = await kisGet(`${KIS_BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-index-price`, {
         headers: {
           'content-type': 'application/json; charset=utf-8',
           authorization: `Bearer ${token}`,
@@ -539,4 +573,12 @@ export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>
   ]);
 
   return results;
+}
+
+export async function getKisIndexQuotes(): Promise<Record<string, KisIndexQuote>> {
+  return tieredCacheGetOrLoad(
+    cacheKey('kis', 'index-quotes-v1', kisBaseUrl()),
+    fetchKisIndexQuotes,
+    KIS_QUOTE_CACHE_TTL_MS,
+  );
 }

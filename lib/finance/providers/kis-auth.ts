@@ -2,6 +2,7 @@ import axios from 'axios';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { supabaseServer } from '@/lib/supabase/server';
 import { sanitizeExternalError } from '@/lib/security/external-errors';
+import { waitForKisRequestSlot } from './kis-rate-limit';
 
 interface KisTokenCache {
   cachedToken: string | null;
@@ -107,12 +108,15 @@ export async function getKisToken(): Promise<string> {
   const KIS_BASE_URL = kisBaseUrl();
   const cacheKey = tokenCacheKey(KIS_BASE_URL, KIS_APP_KEY);
 
-  const storedToken = await readStoredToken(cacheKey, now);
-  if (storedToken) return storedToken;
-
   tokenCache.pendingTokenRequest = (async () => {
-    const storedTokenAfterWait = await readStoredToken(cacheKey, Date.now());
-    if (storedTokenAfterWait) return storedTokenAfterWait;
+    const storedToken = await readStoredToken(cacheKey, Date.now());
+    if (storedToken) return storedToken;
+
+    await waitForKisRequestSlot('token');
+    // 다른 인스턴스가 앞선 공유 슬롯에서 토큰을 발급했을 수 있으므로
+    // 대기 후 영속 캐시를 다시 확인해 중복 발급 자체를 피합니다.
+    const tokenIssuedByAnotherInstance = await readStoredToken(cacheKey, Date.now());
+    if (tokenIssuedByAnotherInstance) return tokenIssuedByAnotherInstance;
 
     const response = await axios.post(`${KIS_BASE_URL}/oauth2/tokenP`, {
       grant_type: 'client_credentials',

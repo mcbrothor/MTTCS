@@ -17,6 +17,7 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10분
 const MAX_ENTRIES = 300;
 
 const store = new Map<string, CacheEntry<unknown>>();
+const pendingLoads = new Map<string, Promise<unknown>>();
 
 /** L1: 캐시에서 값을 가져옵니다. 만료되었거나 없으면 null 반환. LRU: 히트 시 최신으로 이동. */
 export function cacheGet<T>(key: string): T | null {
@@ -153,3 +154,35 @@ export function tieredCacheSet<T>(key: string, value: T, ttlMs: number = DEFAULT
   persistentCacheSet(key, value, ttlMs).catch(() => {});
 }
 
+/**
+ * 동일 키의 동시 cache miss를 하나의 loader 호출로 합칩니다.
+ * 공급자 API처럼 비용이 큰 읽기에서 serverless 인스턴스 내부의 thundering herd를 막습니다.
+ */
+export async function tieredCacheGetOrLoad<T>(
+  key: string,
+  loader: () => Promise<T>,
+  ttlMs: number = DEFAULT_TTL_MS,
+  l1TtlMs: number = ttlMs,
+): Promise<T> {
+  const l1 = cacheGet<T>(key);
+  if (l1 !== null) return l1;
+
+  const pending = pendingLoads.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const load = (async () => {
+    const cached = await tieredCacheGet<T>(key, l1TtlMs);
+    if (cached !== null) return cached;
+
+    const value = await loader();
+    tieredCacheSet(key, value, ttlMs);
+    return value;
+  })();
+
+  pendingLoads.set(key, load);
+  try {
+    return await load;
+  } finally {
+    if (pendingLoads.get(key) === load) pendingLoads.delete(key);
+  }
+}

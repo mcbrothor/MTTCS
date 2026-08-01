@@ -23,7 +23,7 @@ for (const file of files(root)) {
   const source = fs.readFileSync(file, 'utf8');
   const methods = [...source.matchAll(/export async function (GET|POST|PATCH|PUT|DELETE)/g)].map((match) => match[1]);
   if (methods.length === 0) continue;
-  const guards = (source.match(/(?:rejectUnauthenticatedRequest|getRequestSession|requireContext)\(/g) || []).length;
+  const guards = (source.match(/(?:rejectUnauthenticatedRequest|getRequestSession|requireContext|validateCronRequest|validateKisCoordinatorRequest)\(/g) || []).length;
   if (guards < methods.length) failures.push(`${path.relative(process.cwd(), file)} (${guards}/${methods.length})`);
 }
 
