@@ -296,7 +296,11 @@ try {
     repoRoot: projectRoot,
     allowDirty: true,
   });
-  assert.equal(repositoryStructure.releaseEligible, false);
+  // Repository cleanliness is intentionally environment-dependent here: local
+  // development may be dirty while CI checks out an exact clean SHA. The
+  // fixture assertions above cover both clean and dirty eligibility behavior;
+  // this block only verifies the real repository's release structure.
+  assert.equal(typeof repositoryStructure.releaseEligible, 'boolean');
   assert.equal(repositoryStructure.vercel.cronCount, 0);
   assert.equal(repositoryStructure.scheduler.jobCount, 25);
   assert.equal(repositoryStructure.scheduler.scheduleMigrations.length, 2);
