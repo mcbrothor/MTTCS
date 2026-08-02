@@ -48,6 +48,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           MTN_BACKUP_AGE_RECIPIENT: ${{ secrets.MTN_BACKUP_AGE_RECIPIENT }}
+          MTN_POSTGRES_BIN_DIR: /usr/lib/postgresql/17/bin
           MTN_BACKUP_OUTPUT_DIR: backup-output
           RESTORE_DRILL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mtn_restore_drill
           MTN_RESTORE_DRILL_CONFIRM: EMPTY_TARGET_ONLY

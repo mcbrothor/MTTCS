@@ -7,6 +7,7 @@ const compatibilitySql = readFileSync(new URL('../scripts/restore-drill-supabase
 
 assert.match(workflow, /MTN_BACKUP_AGE_RECIPIENT/);
 assert.match(workflow, /postgresql-client-17/);
+assert.match(workflow, /MTN_POSTGRES_BIN_DIR:\s*\/usr\/lib\/postgresql\/17\/bin/);
 assert.match(workflow, /backup-supabase-encrypted\.sh/);
 assert.match(workflow, /\.dump\.age/);
 assert.match(workflow, /RESTORE_DRILL_DATABASE_URL/);
