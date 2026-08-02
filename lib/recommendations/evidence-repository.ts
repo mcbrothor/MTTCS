@@ -116,28 +116,63 @@ export function extractRecommendationMarketRegime(value: unknown) {
 export async function registerRecommendationEvidenceManifest(
   client: SupabaseClient,
   evidence: RecommendationEvidenceManifest,
+  signal?: AbortSignal,
 ) {
-  const readExisting = async () => client
-    .from('recommendation_evidence_manifests')
-    .select('id, manifest_hash')
-    .eq('manifest_hash', evidence.manifestHash)
-    .maybeSingle();
-  const existing = await readExisting();
-  if (existing.error) throw existing.error;
-  if (existing.data?.id) return existing.data.id as string;
+  const registered = await registerRecommendationEvidenceManifests(client, [evidence], signal);
+  const id = registered.get(evidence.manifestHash);
+  if (!id) throw new Error('Evidence manifest insert did not return an identifier.');
+  return id;
+}
 
-  const { data, error } = await client
-    .from('recommendation_evidence_manifests')
-    .insert(recommendationEvidenceManifestInsertRow(evidence))
-    .select('id')
-    .single();
-  if (!error && data?.id) return data.id as string;
-  if (error && 'code' in error && error.code === '23505') {
-    const raced = await readExisting();
-    if (raced.error) throw raced.error;
-    if (raced.data?.id) return raced.data.id as string;
+export async function registerRecommendationEvidenceManifests(
+  client: SupabaseClient,
+  evidences: RecommendationEvidenceManifest[],
+  signal?: AbortSignal,
+) {
+  const unique = new Map<string, RecommendationEvidenceManifest>();
+  for (const evidence of evidences) {
+    recommendationEvidenceManifestInsertRow(evidence);
+    unique.set(evidence.manifestHash, evidence);
   }
-  throw error || new Error('Evidence manifest insert did not return an identifier.');
+  const entries = [...unique.values()];
+  const ids = new Map<string, string>();
+
+  // A manifest includes the exact price slice, so keep request bodies and hash
+  // filter URLs comfortably below free-tier gateway limits.
+  for (let index = 0; index < entries.length; index += 20) {
+    if (signal?.aborted) {
+      throw signal.reason || new DOMException('Recommendation evidence registration cancelled.', 'AbortError');
+    }
+    const chunk = entries.slice(index, index + 20);
+    const upsertRequest = client
+      .from('recommendation_evidence_manifests')
+      .upsert(chunk.map(recommendationEvidenceManifestInsertRow), {
+        onConflict: 'manifest_hash',
+        ignoreDuplicates: true,
+      });
+    const { error: upsertError } = await (
+      signal ? upsertRequest.abortSignal(signal) : upsertRequest
+    );
+    if (upsertError) throw upsertError;
+
+    const hashes = chunk.map((evidence) => evidence.manifestHash);
+    const readRequest = client
+      .from('recommendation_evidence_manifests')
+      .select('id, manifest_hash')
+      .in('manifest_hash', hashes);
+    const { data, error: readError } = await (
+      signal ? readRequest.abortSignal(signal) : readRequest
+    );
+    if (readError) throw readError;
+    for (const row of data || []) {
+      if (row.id && row.manifest_hash) ids.set(String(row.manifest_hash), String(row.id));
+    }
+  }
+
+  if (ids.size !== unique.size) {
+    throw new Error(`Evidence manifest batch registration returned ${ids.size} of ${unique.size} identifiers.`);
+  }
+  return ids;
 }
 
 function toObservation(row: PerformanceEvidenceRow): RecommendationEvidenceObservation | null {
@@ -258,11 +293,12 @@ export function buildRecommendationEvidenceEvaluationRows(
 export async function refreshRecommendationEvidenceEvaluations(
   client: SupabaseClient,
   market: RecommendationMarket,
+  signal?: AbortSignal,
 ) {
   const pageSize = 1_000;
   const rows: PerformanceEvidenceRow[] = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await client
+    const request = client
       .from('recommendation_performance')
       .select('horizon, net_return_pct, net_excess_return_pct, mae_pct, data_evidence_tier, evidence_status, evidence_manifest_id, market_regime, recommendation_picks!inner(recommendation_publications!inner(run_date, market, category, engine_version, is_official))')
       .eq('status', 'MATURED')
@@ -272,16 +308,19 @@ export async function refreshRecommendationEvidenceEvaluations(
       .in('horizon', ['D5', 'D20', 'D60'])
       .order('evaluation_date', { ascending: true })
       .range(from, from + pageSize - 1);
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
     const page = (data || []) as unknown as PerformanceEvidenceRow[];
     rows.push(...page);
     if (page.length < pageSize) break;
   }
   const evaluations = buildRecommendationEvidenceEvaluationRows(rows, market);
+  if (signal?.aborted) throw signal.reason || new DOMException('Recommendation evidence refresh cancelled.', 'AbortError');
   if (evaluations.length > 0) {
-    const { error } = await client
+    const request = client
       .from('recommendation_evidence_evaluations')
       .upsert(evaluations, { onConflict: 'evaluation_hash', ignoreDuplicates: true });
+    const { error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
   }
   return {

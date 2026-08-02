@@ -10,10 +10,34 @@ import { waitForKisRequestSlot } from './kis-rate-limit';
 const KIS_DAILY_CACHE_TTL_MS = 15 * 60 * 1000;
 const KIS_QUOTE_CACHE_TTL_MS = 10 * 1000;
 const KIS_REFERENCE_CACHE_TTL_MS = 10 * 60 * 1000;
+const KIS_HTTP_TIMEOUT_MS = 12_000;
 
-async function kisGet(url: string, config: AxiosRequestConfig) {
-  await waitForKisRequestSlot('rest');
-  return axios.get(url, config);
+export interface KisHttpRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+function waitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason || new DOMException('KIS request cancelled.', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason || new DOMException('KIS request cancelled.', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+async function kisGet(
+  url: string,
+  config: AxiosRequestConfig,
+  options: KisHttpRequestOptions = {},
+) {
+  await waitForKisRequestSlot('rest', { signal: options.signal });
+  return axios.get(url, {
+    ...config,
+    timeout: options.timeoutMs ?? config.timeout ?? KIS_HTTP_TIMEOUT_MS,
+    signal: options.signal ?? config.signal,
+  });
 }
 
 interface KisDailyPriceRow {
@@ -81,9 +105,10 @@ function sortAndDedupe(data: OHLCData[]) {
 async function getOverseasDailyPricePage(
   ticker: string,
   exchange: string,
-  baseDate = ''
+  baseDate = '',
+  options: KisHttpRequestOptions = {},
 ): Promise<OHLCData[]> {
-  const token = await getKisToken();
+  const token = await getKisToken(options);
   const KIS_APP_KEY = kisAppKey();
   const KIS_APP_SECRET = kisAppSecret();
   const KIS_BASE_URL = kisBaseUrl();
@@ -107,7 +132,7 @@ async function getOverseasDailyPricePage(
       BYMD: baseDate,
       MODP: '1',
     },
-  });
+  }, options);
 
   if (response.data.rt_cd !== '0') {
     throw new Error(response.data.msg1 || 'KIS 해외주식 일봉 조회 오류');
@@ -138,14 +163,15 @@ async function getOverseasDailyPricePage(
 export async function getOverseasDailyPrice(
   ticker: string,
   exchange: string = 'NAS',
-  targetBars: number = DEFAULT_TARGET_BARS
+  targetBars: number = DEFAULT_TARGET_BARS,
+  options: KisHttpRequestOptions = {},
 ): Promise<OHLCData[]> {
   const maxPages = Math.ceil(targetBars / KIS_PAGE_SIZE) + 2;
   const collected: OHLCData[] = [];
   let baseDate = '';
 
   for (let page = 0; page < maxPages; page += 1) {
-    const pageData = await getOverseasDailyPricePage(ticker, exchange, baseDate);
+    const pageData = await getOverseasDailyPricePage(ticker, exchange, baseDate, options);
     if (pageData.length === 0) break;
 
     collected.push(...pageData);
@@ -176,9 +202,10 @@ function getTodayString() {
 async function getDomesticDailyPricePage(
   ticker: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  options: KisHttpRequestOptions = {},
 ): Promise<OHLCData[]> {
-  const token = await getKisToken();
+  const token = await getKisToken(options);
   const KIS_APP_KEY = kisAppKey();
   const KIS_APP_SECRET = kisAppSecret();
   const KIS_BASE_URL = kisBaseUrl();
@@ -203,7 +230,7 @@ async function getDomesticDailyPricePage(
       FID_PERIOD_DIV_CODE: 'D',
       FID_ORG_ADJ_PRC: '0',
     },
-  });
+  }, options);
 
   if (response.data.rt_cd !== '0') {
     throw new Error(response.data.msg1 || 'KIS 국내주식 일봉 조회 오류');
@@ -233,7 +260,8 @@ async function getDomesticDailyPricePage(
 async function fetchMarketDailyPrice(
   ticker: string,
   exchange: string,
-  targetBars: number = DEFAULT_TARGET_BARS
+  targetBars: number = DEFAULT_TARGET_BARS,
+  options: KisHttpRequestOptions = {},
 ): Promise<OHLCData[]> {
   if (exchange === 'KOSPI' || exchange === 'KOSDAQ') {
     const collected: OHLCData[] = [];
@@ -243,7 +271,7 @@ async function fetchMarketDailyPrice(
     
     // 타겟 데이터(300개)를 확보할 때까지 루프를 돕니다. (보통 3페이지면 완료)
     for (let page = 0; page < 6; page++) {
-      const pageData = await getDomesticDailyPricePage(ticker, startDate, endDate);
+      const pageData = await getDomesticDailyPricePage(ticker, startDate, endDate, options);
       if (pageData.length === 0) break;
       
       collected.push(...pageData);
@@ -267,24 +295,25 @@ async function fetchMarketDailyPrice(
     return sortAndDedupe(collected);
   }
   
-  return getOverseasDailyPrice(ticker, exchange, targetBars);
+  return getOverseasDailyPrice(ticker, exchange, targetBars, options);
 }
 
 export async function getMarketDailyPrice(
   ticker: string,
   exchange: string,
   targetBars: number = DEFAULT_TARGET_BARS,
+  options: KisHttpRequestOptions = {},
 ): Promise<OHLCData[]> {
   const normalizedTicker = ticker.trim().toUpperCase();
   const normalizedExchange = exchange.trim().toUpperCase();
   const requestedBars = Math.max(1, Math.floor(targetBars));
   const cacheBars = Math.ceil(requestedBars / KIS_PAGE_SIZE) * KIS_PAGE_SIZE;
   const key = cacheKey('kis', 'daily-v1', kisBaseUrl(), normalizedExchange, normalizedTicker, cacheBars);
-  const rows = await tieredCacheGetOrLoad(
+  const rows = await waitWithSignal(tieredCacheGetOrLoad(
     key,
-    () => fetchMarketDailyPrice(normalizedTicker, normalizedExchange, cacheBars),
+    () => fetchMarketDailyPrice(normalizedTicker, normalizedExchange, cacheBars, options),
     KIS_DAILY_CACHE_TTL_MS,
-  );
+  ), options.signal);
   return rows.slice(-requestedBars);
 }
 

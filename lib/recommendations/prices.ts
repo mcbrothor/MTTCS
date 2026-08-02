@@ -12,6 +12,24 @@ export interface RecommendationPriceSeries {
   bars: RecommendationBar[];
 }
 
+export interface RecommendationPriceRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
+const DEFAULT_RECOMMENDATION_PRICE_TIMEOUT_MS = 12_000;
+
+function providerSignal(options: RecommendationPriceRequestOptions) {
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_RECOMMENDATION_PRICE_TIMEOUT_MS);
+  return options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+}
+
+function throwIfShardCancelled(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw signal.reason || new DOMException('Recommendation price refresh cancelled.', 'AbortError');
+  }
+}
+
 function yahooTicker(ticker: string, exchange: string) {
   if (exchange === 'KOSPI') return `${ticker}.KS`;
   if (exchange === 'KOSDAQ') return `${ticker}.KQ`;
@@ -33,9 +51,12 @@ export async function fetchRecommendationSecurityBars(input: {
   exchange: string;
   market: RecommendationMarket;
   targetBars?: number;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }): Promise<RecommendationPriceSeries> {
   try {
-    const bars = await getMarketDailyPrice(input.ticker, input.exchange, input.targetBars || 120);
+    const options = { signal: providerSignal(input), timeoutMs: input.timeoutMs };
+    const bars = await getMarketDailyPrice(input.ticker, input.exchange, input.targetBars || 120, options);
     if (bars.length > 0) {
       return {
         instrument: input.ticker,
@@ -46,10 +67,14 @@ export async function fetchRecommendationSecurityBars(input: {
       };
     }
   } catch {
+    throwIfShardCancelled(input.signal);
     // Yahoo fallback below.
   }
   const symbol = yahooTicker(input.ticker, input.exchange);
-  const bars = await getYahooDailyPrice(symbol);
+  const bars = await getYahooDailyPrice(symbol, {
+    signal: providerSignal(input),
+    timeoutMs: input.timeoutMs,
+  });
   return {
     instrument: input.ticker,
     source: `Yahoo Finance ${symbol}`,
@@ -59,11 +84,17 @@ export async function fetchRecommendationSecurityBars(input: {
   };
 }
 
-export async function fetchRecommendationBenchmarkBars(symbol: string): Promise<RecommendationPriceSeries> {
+export async function fetchRecommendationBenchmarkBars(
+  symbol: string,
+  options: RecommendationPriceRequestOptions = {},
+): Promise<RecommendationPriceSeries> {
   const koreanEtf = symbol === '^KS200' ? '069500' : symbol === '^KQ150' ? '229200' : null;
   if (koreanEtf) {
     try {
-      const bars = await getMarketDailyPrice(koreanEtf, 'KOSPI', 120);
+      const bars = await getMarketDailyPrice(koreanEtf, 'KOSPI', 120, {
+        signal: providerSignal(options),
+        timeoutMs: options.timeoutMs,
+      });
       if (bars.length > 0) {
         return {
           instrument: symbol,
@@ -74,13 +105,17 @@ export async function fetchRecommendationBenchmarkBars(symbol: string): Promise<
         };
       }
     } catch {
+      throwIfShardCancelled(options.signal);
       // Yahoo index/ETF candidates below remain available as a fallback.
     }
   }
   const available: RecommendationPriceSeries[] = [];
   for (const candidate of [symbol, BENCHMARK_FALLBACKS[symbol as keyof typeof BENCHMARK_FALLBACKS]].filter(Boolean)) {
     try {
-      const bars = await getYahooDailyPrice(candidate);
+      const bars = await getYahooDailyPrice(candidate, {
+        signal: providerSignal(options),
+        timeoutMs: options.timeoutMs,
+      });
       if (bars.length > 0) {
         available.push({
           instrument: symbol,
@@ -91,6 +126,7 @@ export async function fetchRecommendationBenchmarkBars(symbol: string): Promise<
         });
       }
     } catch {
+      throwIfShardCancelled(options.signal);
       // Try the configured fallback.
     }
   }

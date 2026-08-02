@@ -30,8 +30,27 @@ const state = previousState?.nextAllowedAtByKey instanceof Map
     };
 globalThis.__mtnKisRateLimitState = state;
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function abortReason(signal: AbortSignal) {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('KIS request cancelled.', 'AbortError');
+}
+
+function sleep(ms: number, signal?: AbortSignal) {
+  if (!signal) return new Promise<void>((resolve) => setTimeout(resolve, ms));
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function nonNegativeNumber(value: string | undefined) {
@@ -73,19 +92,22 @@ function distributedLimiterConfigured() {
 
 async function distributedReservation(
   limiterKey: string,
-  intervalMs: number
+  intervalMs: number,
+  signal?: AbortSignal,
 ): Promise<KisRateLimitReservation | null> {
   const now = Date.now();
   if (!distributedLimiterConfigured() || now < state.distributedRetryAt) return null;
+  if (signal?.aborted) throw abortReason(signal);
 
   try {
-    const { data, error } = await getSupabaseAdmin().rpc(
+    const request = getSupabaseAdmin().rpc(
       'reserve_provider_rate_limit_slot',
       {
         p_limiter_key: limiterKey,
         p_interval_ms: Math.round(intervalMs),
       }
     );
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
 
     const reservedAt = new Date(String(data)).getTime();
@@ -99,6 +121,7 @@ async function distributedReservation(
       waitMs: Math.max(0, reservedAt - Date.now()),
     };
   } catch (error) {
+    if (signal?.aborted) throw abortReason(signal);
     const retryMs = nonNegativeNumber(process.env.KIS_DISTRIBUTED_RATE_LIMIT_RETRY_MS) ?? 60_000;
     state.distributedRetryAt = Date.now() + retryMs;
     if (Date.now() >= state.distributedWarningAt) {
@@ -111,18 +134,22 @@ async function distributedReservation(
 
 export async function reserveKisRequestSlot(
   scope: KisRateLimitScope,
-  options: { distributedOnly?: boolean } = {}
+  options: { distributedOnly?: boolean; signal?: AbortSignal } = {}
 ): Promise<KisRateLimitReservation | null> {
+  if (options.signal?.aborted) throw abortReason(options.signal);
   const baseUrl = kisBaseUrl();
   const limiterKey = kisRateLimiterKey(scope, baseUrl, kisAppKey());
   const intervalMs = kisRequestIntervalMs(scope, baseUrl);
-  const distributed = await distributedReservation(limiterKey, intervalMs);
+  const distributed = await distributedReservation(limiterKey, intervalMs, options.signal);
   if (distributed || options.distributedOnly) return distributed;
   return localReservation(limiterKey, intervalMs);
 }
 
-export async function waitForKisRequestSlot(scope: KisRateLimitScope = 'rest') {
-  const reservation = await reserveKisRequestSlot(scope);
-  if (reservation && reservation.waitMs > 0) await sleep(reservation.waitMs);
+export async function waitForKisRequestSlot(
+  scope: KisRateLimitScope = 'rest',
+  options: { signal?: AbortSignal } = {},
+) {
+  const reservation = await reserveKisRequestSlot(scope, options);
+  if (reservation && reservation.waitMs > 0) await sleep(reservation.waitMs, options.signal);
   return reservation?.mode ?? 'local';
 }

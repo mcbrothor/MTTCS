@@ -35,6 +35,31 @@ const now = new Date('2026-08-02T03:00:00.000Z');
   const result = evaluateOperationsHealth({
     now,
     schedulerRows: [
+      { job_name: 'daily', health_status: 'HEALTHY', last_success_at: '2026-08-02T02:55:00.000Z' },
+      { job_name: 'weekly', health_status: 'PENDING', last_success_at: null },
+      { job_name: 'collector', health_status: 'RUNNING', last_success_at: '2026-08-02T02:50:00.000Z' },
+    ],
+    expectedSchedulerJobs: ['daily', 'weekly', 'collector'],
+    workerRows: [
+      { component: 'local-analysis', status: 'IDLE', observed_at: '2026-08-02T02:58:00.000Z' },
+      { component: 'codex-llm', status: 'IDLE', observed_at: '2026-08-02T02:58:00.000Z' },
+    ],
+    backupRows: [{ status: 'SUCCESS', completed_at: '2026-08-01T20:00:00.000Z' }],
+    capacity: {
+      used_bytes: 150_000_000,
+      captured_at: '2026-08-02T02:50:00.000Z',
+      warning_bytes: 350_000_000,
+      block_bytes: 400_000_000,
+    },
+  });
+  assert.equal(result.status, 'HEALTHY');
+  assert.deepEqual(result.checks.scheduler.pendingJobs, ['collector', 'weekly']);
+}
+
+{
+  const result = evaluateOperationsHealth({
+    now,
+    schedulerRows: [
       { job_name: 'daily', health_status: 'FAILED', last_success_at: '2026-08-01T02:00:00.000Z', error_message: 'HTTP 500' },
     ],
     expectedSchedulerJobs: ['daily'],

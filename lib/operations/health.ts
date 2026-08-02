@@ -103,7 +103,7 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     || failedJobs.length > 0
     || invalidJobs.length > 0
     ? 'FAILED'
-    : pendingJobs.length > 0 ? 'DEGRADED' : 'HEALTHY';
+    : 'HEALTHY';
 
   const latestWorkerByComponent = new Map<string, WorkerRow>();
   for (const row of input.workerRows) {

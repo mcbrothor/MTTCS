@@ -68,13 +68,19 @@ export async function claimRecommendationPerformanceShard(input: {
   batchDate: string;
   market: RecommendationMarket;
   shard: number;
+  signal?: AbortSignal;
 }) {
-  const { data, error } = await input.client.rpc('claim_recommendation_performance_shard', {
+  const request = input.client.rpc('claim_recommendation_performance_shard', {
     p_batch_date: input.batchDate,
     p_market: input.market,
     p_shard: input.shard,
     p_shards: RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS,
   });
+  const { data, error } = await (
+    input.signal && 'abortSignal' in request
+      ? request.abortSignal(input.signal)
+      : request
+  );
   if (error) throw error;
   const payload = requireRpcPayload(data, 'Shard claim');
   return {
@@ -114,11 +120,17 @@ async function claimRecommendationPerformanceFinalization(input: {
   client: RpcClient;
   batchDate: string;
   market: RecommendationMarket;
+  signal?: AbortSignal;
 }) {
-  const { data, error } = await input.client.rpc('claim_recommendation_performance_finalization', {
+  const request = input.client.rpc('claim_recommendation_performance_finalization', {
     p_batch_date: input.batchDate,
     p_market: input.market,
   });
+  const { data, error } = await (
+    input.signal && 'abortSignal' in request
+      ? request.abortSignal(input.signal)
+      : request
+  );
   if (error) throw error;
   return normalizeBarrierClaim(data, 'Finalization claim');
 }
@@ -146,6 +158,7 @@ export async function finalizeRecommendationPerformanceBatchIfReady<TEvidence>(i
   client: RpcClient;
   batchDate: string;
   market: RecommendationMarket;
+  signal?: AbortSignal;
   refreshDiagnostics: () => Promise<number>;
   refreshEvidence: () => Promise<TEvidence>;
 }) {

@@ -39,6 +39,16 @@ export async function GET(request: Request) {
       shards,
       batchDate,
     });
+    if (!result.skipped && result.shardStatus === 'DEGRADED') {
+      return apiError(
+        result.deadlineReached
+          ? 'Recommendation performance shard stopped at its safe work deadline.'
+          : 'Recommendation performance shard completed with data-source failures.',
+        'RECOMMENDATION_PERFORMANCE_DEGRADED',
+        503,
+        result,
+      );
+    }
     return apiSuccess(result, { source: 'MTN recommendation performance', provider: 'KIS/Yahoo', delay: 'EOD' });
   } catch (error) {
     return apiError(getErrorMessage(error, 'Recommendation performance refresh failed.'), 'API_ERROR', 500);

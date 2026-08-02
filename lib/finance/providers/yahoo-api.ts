@@ -2,16 +2,37 @@ import axios from 'axios';
 import type { FundamentalSnapshot, OHLCData } from '@/types';
 
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const YAHOO_HTTP_TIMEOUT_MS = 12_000;
+
+export interface YahooRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
 
 let _crumbCache: { crumb: string; cookie: string; fetchedAt: number } | null = null;
 let _crumbPromise: Promise<{ crumb: string; cookie: string }> | null = null;
 const CRUMB_TTL_MS = 25 * 60 * 1000;
 
-async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
+function requestSignal(parent: AbortSignal | undefined, timeoutMs: number) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  return parent ? AbortSignal.any([parent, timeoutSignal]) : timeoutSignal;
+}
+
+function waitWithSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason || new DOMException('Yahoo request cancelled.', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason || new DOMException('Yahoo request cancelled.', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+async function getYahooCrumb(options: YahooRequestOptions = {}): Promise<{ crumb: string; cookie: string }> {
   if (_crumbCache && Date.now() - _crumbCache.fetchedAt < CRUMB_TTL_MS) {
     return _crumbCache;
   }
-  if (_crumbPromise) return _crumbPromise;
+  if (_crumbPromise) return waitWithSignal(_crumbPromise, options.signal);
 
   _crumbPromise = (async () => {
     try {
@@ -22,6 +43,7 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
           'Accept-Language': 'en-US,en;q=0.5',
         },
         redirect: 'manual',
+        signal: requestSignal(options.signal, options.timeoutMs ?? YAHOO_HTTP_TIMEOUT_MS),
       });
 
       const setCookieHeader = cookieRes.headers.get('set-cookie') || '';
@@ -35,12 +57,14 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
           'Accept': '*/*',
           'Referer': 'https://finance.yahoo.com/',
         },
+        signal: requestSignal(options.signal, options.timeoutMs ?? YAHOO_HTTP_TIMEOUT_MS),
       });
 
       const crumb = (await crumbRes.text()).trim();
       _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
       return _crumbCache;
     } catch (err) {
+      if (options.signal?.aborted) throw options.signal.reason || err;
       // Crumb fetch 실패 시 빈 crumb으로 fallback.
       // Yahoo API는 crumb 없이도 일부 엔드포인트에서 동작합니다.
       console.warn('[Yahoo API] Crumb fetch failed, using empty crumb fallback:', err instanceof Error ? err.message : err);
@@ -52,7 +76,7 @@ async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
   })();
 
   try {
-    return await _crumbPromise;
+    return await waitWithSignal(_crumbPromise, options.signal);
   } finally {
     _crumbPromise = null;
   }
@@ -80,9 +104,9 @@ export interface YahooAdjustedOHLCData extends OHLCData {
 
 export async function getYahooDailyPrice(
   ticker: string,
-  options: { range?: YahooChartRange } = {}
+  options: { range?: YahooChartRange } & YahooRequestOptions = {}
 ): Promise<OHLCData[]> {
-  const { crumb, cookie } = await getYahooCrumb();
+  const { crumb, cookie } = await getYahooCrumb(options);
   const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
     params: {
       range: options.range || '2y',
@@ -97,6 +121,8 @@ export async function getYahooDailyPrice(
       'Accept': 'application/json',
       'Referer': 'https://finance.yahoo.com/',
     },
+    timeout: options.timeoutMs ?? YAHOO_HTTP_TIMEOUT_MS,
+    signal: requestSignal(options.signal, options.timeoutMs ?? YAHOO_HTTP_TIMEOUT_MS),
   });
 
   const result = response.data?.chart?.result?.[0];

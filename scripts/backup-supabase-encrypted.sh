@@ -117,6 +117,7 @@ mkfifo "$SNAPSHOT_PIPE"
   --set ON_ERROR_STOP=1 \
   > "$SNAPSHOT_PIPE" <<'SQL' &
 begin transaction isolation level repeatable read read only;
+set local statement_timeout = 0;
 select pg_catalog.pg_export_snapshot();
 select pg_catalog.pg_sleep(900);
 rollback;
@@ -135,6 +136,7 @@ collect_public_row_counts "$SOURCE_DB_SERVICE" "$SOURCE_ROWS_PATH" "$SNAPSHOT_ID
 "$PG_DUMP_BIN" "$SOURCE_DB_SERVICE" \
   --format=custom \
   --schema=public \
+  --schema=mtn_internal \
   --snapshot="$SNAPSHOT_ID" \
   --no-owner \
   --no-acl \

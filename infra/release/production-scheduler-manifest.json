@@ -213,6 +213,7 @@
     "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql",
     "supabase/migrations/20260802140000_operations_health_control_plane.sql",
     "supabase/migrations/20260802153000_recommendation_evidence_backend.sql",
-    "supabase/migrations/20260802160000_recommendation_performance_scheduler_barrier.sql"
+    "supabase/migrations/20260802160000_recommendation_performance_scheduler_barrier.sql",
+    "supabase/migrations/20260802170000_recommendation_performance_retry_budget.sql"
   ]
 }

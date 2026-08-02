@@ -10,7 +10,7 @@ import {
 import {
   extractRecommendationMarketRegime,
   refreshRecommendationEvidenceEvaluations,
-  registerRecommendationEvidenceManifest,
+  registerRecommendationEvidenceManifests,
 } from './evidence-repository';
 import {
   RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS,
@@ -19,6 +19,12 @@ import {
   finalizeRecommendationPerformanceBatchIfReady,
   recommendationPerformanceUtcBatchDate,
 } from './performance-barrier';
+import {
+  classifyRecommendationShardOutcome,
+  createRecommendationPerformanceRuntime,
+  isRecommendationPerformanceDeadlineError,
+  RECOMMENDATION_PERFORMANCE_MIN_FINALIZATION_MS,
+} from './performance-runtime';
 import { fetchRecommendationBenchmarkBars, fetchRecommendationSecurityBars, recommendationPriceRows } from './prices';
 import type { DiagnosticInput, RecommendationCategory, RecommendationHorizon, RecommendationMarket } from './types';
 
@@ -52,11 +58,37 @@ function hash(value: string) {
   return Math.abs(result);
 }
 
-export async function loadActivePicks(client: SupabaseClient, market: RecommendationMarket) {
+function deferredRecommendationPerformanceFinalization(
+  payload: Record<string, unknown>,
+  claimStatus: string,
+) {
+  const numberArray = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is number => Number.isInteger(item)).map(Number)
+    : [];
+  return {
+    finalized: false,
+    findings: 0,
+    evidence: null,
+    claimed: false,
+    claimStatus,
+    claimToken: null,
+    barrierStatus: String(payload.barrier_status || 'WAITING'),
+    successfulShards: Number(payload.successful_shards || 0),
+    requiredShards: Number(payload.required_shards || RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS),
+    degradedShards: numberArray(payload.degraded_shards),
+    missingShards: numberArray(payload.missing_shards),
+  };
+}
+
+export async function loadActivePicks(
+  client: SupabaseClient,
+  market: RecommendationMarket,
+  signal?: AbortSignal,
+) {
   const cutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const rows: PickRow[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await client
+    const request = client
       .from('recommendation_picks')
       .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, action_state, recommendation_publications!inner(run_date, market, category, generated_at, engine_version, prompt_version, market_context, is_official, status)')
       .eq('action_state', 'ACTIVE')
@@ -65,6 +97,7 @@ export async function loadActivePicks(client: SupabaseClient, market: Recommenda
       .gte('recommendation_publications.run_date', cutoff)
       .order('created_at', { ascending: false })
       .range(from, from + 999);
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
     rows.push(...((data || []) as unknown as PickRow[]));
     if ((data || []).length < 1000) break;
@@ -72,11 +105,16 @@ export async function loadActivePicks(client: SupabaseClient, market: Recommenda
   return rows;
 }
 
-async function upsertPriceSeries(client: SupabaseClient, rows: Record<string, unknown>[]) {
+async function upsertPriceSeries(
+  client: SupabaseClient,
+  rows: Record<string, unknown>[],
+  signal?: AbortSignal,
+) {
   for (let index = 0; index < rows.length; index += 500) {
-    const { error } = await client
+    const request = client
       .from('recommendation_market_prices')
       .upsert(rows.slice(index, index + 500), { onConflict: 'market,instrument,trade_date' });
+    const { error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
   }
 }
@@ -98,45 +136,62 @@ export async function runRecommendationPerformanceBatch(input: {
     throw new Error(`Recommendation performance shard must be between 0 and ${shards - 1}.`);
   }
 
-  const shardClaim = await claimRecommendationPerformanceShard({
-    client: input.client,
-    batchDate,
-    market: input.market,
-    shard,
-  });
-  if (!shardClaim.claimed) {
-    const finalization = await finalizeRecommendationPerformanceBatchIfReady({
+  const runtime = createRecommendationPerformanceRuntime();
+  let shardClaim: Awaited<ReturnType<typeof claimRecommendationPerformanceShard>>;
+  try {
+    shardClaim = await claimRecommendationPerformanceShard({
       client: input.client,
       batchDate,
       market: input.market,
-      refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market),
-      refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market),
-    });
-    return {
-      market: input.market,
-      batchDate,
       shard,
-      shards,
-      skipped: true,
-      skipReason: shardClaim.claimStatus,
-      barrier: finalization,
-      picks: 0,
-      securities: 0,
-      updated: 0,
-      evidenceRows: 0,
-      evidence: finalization.evidence,
-      findings: finalization.findings,
-      errors: [],
-    };
+      signal: runtime.signal,
+    });
+  } catch (error) {
+    runtime.dispose();
+    throw error;
   }
-  if (!shardClaim.claimToken) throw new Error('Recommendation performance shard claim did not return a token.');
+  if (!shardClaim.claimed) {
+    try {
+      const finalization = await finalizeRecommendationPerformanceBatchIfReady({
+        client: input.client,
+        batchDate,
+        market: input.market,
+        signal: runtime.signal,
+        refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market, runtime.signal),
+        refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market, runtime.signal),
+      });
+      return {
+        market: input.market,
+        batchDate,
+        shard,
+        shards,
+        skipped: true,
+        skipReason: shardClaim.claimStatus,
+        barrier: finalization,
+        picks: 0,
+        securities: 0,
+        updated: 0,
+        evidenceRows: 0,
+        evidence: finalization.evidence,
+        findings: finalization.findings,
+        errors: [],
+      };
+    } finally {
+      runtime.dispose();
+    }
+  }
+  if (!shardClaim.claimToken) {
+    runtime.dispose();
+    throw new Error('Recommendation performance shard claim did not return a token.');
+  }
 
   let shardCompletionRecorded = false;
   let recordedShardStatus: 'SUCCESS' | 'DEGRADED' | 'FAILED' | null = null;
   let pipelineRunRecorded = false;
   let barrierStatus = shardClaim.barrierStatus;
   try {
-  const allPicks = await loadActivePicks(input.client, input.market);
+  const allPicks = await loadActivePicks(input.client, input.market, runtime.signal);
+  runtime.throwIfExpired();
   const picks = allPicks.filter((pick) => hash(`${pick.exchange}:${pick.ticker}`) % shards === shard);
   const bySecurity = new Map<string, PickRow[]>();
   for (const pick of picks) {
@@ -145,24 +200,64 @@ export async function runRecommendationPerformanceBatch(input: {
   }
   const benchmarkCache = new Map<string, Awaited<ReturnType<typeof fetchRecommendationBenchmarkBars>>>();
   const evidenceManifestCache = new Map<string, string>();
+  const updatedPublications = new Set<string>();
   let updated = 0;
   let evidenceRows = 0;
+  let attemptedSecurities = 0;
+  let processedSecurities = 0;
+  let stoppedByDeadline = false;
   const errors: { ticker: string; message: string }[] = [];
 
   for (const securityPicks of bySecurity.values()) {
     const first = securityPicks[0];
+    attemptedSecurities += 1;
     try {
-      const security = await fetchRecommendationSecurityBars({ ticker: first.ticker, exchange: first.exchange, market: input.market, targetBars: 160 });
-      await upsertPriceSeries(input.client, recommendationPriceRows(input.market, security, 'SECURITY'));
+      runtime.throwIfExpired();
+      const security = await fetchRecommendationSecurityBars({
+        ticker: first.ticker,
+        exchange: first.exchange,
+        market: input.market,
+        targetBars: 160,
+        signal: runtime.signal,
+        timeoutMs: runtime.providerTimeoutMs(),
+      });
+      runtime.throwIfExpired();
+      await upsertPriceSeries(
+        input.client,
+        recommendationPriceRows(input.market, security, 'SECURITY'),
+        runtime.signal,
+      );
+      const performanceRows: {
+        manifestHash: string;
+        evidenceReady: boolean;
+        row: Record<string, unknown>;
+      }[] = [];
+      const evidenceManifests = new Map<
+        string,
+        ReturnType<typeof buildRecommendationEvidenceManifest>
+      >();
+      const publicationUpdates = new Map<
+        string,
+        { firstTradableDate: string; entryStatus: 'READY' | 'ERROR' }
+      >();
       for (const pick of securityPicks) {
+        runtime.throwIfExpired();
         let benchmark = benchmarkCache.get(pick.benchmark_symbol);
         if (!benchmark) {
-          benchmark = await fetchRecommendationBenchmarkBars(pick.benchmark_symbol);
+          benchmark = await fetchRecommendationBenchmarkBars(pick.benchmark_symbol, {
+            signal: runtime.signal,
+            timeoutMs: runtime.providerTimeoutMs(),
+          });
           benchmarkCache.set(pick.benchmark_symbol, benchmark);
-          await upsertPriceSeries(input.client, recommendationPriceRows(input.market, benchmark, 'BENCHMARK'));
+          await upsertPriceSeries(
+            input.client,
+            recommendationPriceRows(input.market, benchmark, 'BENCHMARK'),
+            runtime.signal,
+          );
         }
         const marketRegime = extractRecommendationMarketRegime(pick.recommendation_publications.market_context);
         for (const horizon of ['LIVE', 'D5', 'D20', 'D60'] as RecommendationHorizon[]) {
+          runtime.throwIfExpired();
           const calculation = buildRecommendationPriceEvidence({
             pickId: pick.id,
             generatedAt: pick.recommendation_publications.generated_at,
@@ -179,11 +274,7 @@ export async function runRecommendationPerformanceBatch(input: {
             calculation,
             marketRegime,
           });
-          let evidenceManifestId = evidenceManifestCache.get(evidenceManifest.manifestHash);
-          if (!evidenceManifestId) {
-            evidenceManifestId = await registerRecommendationEvidenceManifest(input.client, evidenceManifest);
-            evidenceManifestCache.set(evidenceManifest.manifestHash, evidenceManifestId);
-          }
+          evidenceManifests.set(evidenceManifest.manifestHash, evidenceManifest);
           const net = calculateNetRecommendationPerformance({
             market: input.market,
             grossReturnPct: result.returnPct,
@@ -194,58 +285,134 @@ export async function runRecommendationPerformanceBatch(input: {
             && net.costEvidenceStatus !== 'MISSING'
             ? 'READY'
             : 'INCOMPLETE';
-          const { error } = await input.client.from('recommendation_performance').upsert({
-            pick_id: pick.id,
-            horizon,
-            status: result.status,
-            session_count: result.sessionCount,
-            entry_date: result.entryDate,
-            entry_price: result.entryPrice,
-            evaluation_date: result.evaluationDate,
-            evaluation_price: result.evaluationPrice,
-            benchmark_entry_price: result.benchmarkEntryPrice,
-            benchmark_evaluation_price: result.benchmarkEvaluationPrice,
-            return_pct: result.returnPct,
-            benchmark_return_pct: result.benchmarkReturnPct,
-            excess_return_pct: result.excessReturnPct,
-            net_return_pct: net.netReturnPct,
-            net_excess_return_pct: net.netExcessReturnPct,
-            total_cost_pct: net.totalCostPct,
-            commission_cost_pct: net.commissionCostPct,
-            tax_cost_pct: net.taxCostPct,
-            slippage_cost_pct: net.slippageCostPct,
-            fx_cost_pct: net.fxCostPct,
-            cost_model_version: net.costModelVersion,
-            cost_evidence_status: net.costEvidenceStatus,
-            account_evidence_status: net.accountEvidenceStatus,
-            data_evidence_tier: dataManifest.evidenceTier,
-            evidence_status: evidenceStatus,
-            evidence_manifest_id: evidenceManifestId,
-            market_regime: marketRegime,
-            mfe_pct: result.mfePct,
-            mae_pct: result.maePct,
-            quality_status: result.qualityStatus,
-            error_message: result.errorMessage,
-            calculated_at: new Date().toISOString(),
-          }, { onConflict: 'pick_id,horizon' });
-          if (error) throw error;
+          performanceRows.push({
+            manifestHash: evidenceManifest.manifestHash,
+            evidenceReady: evidenceStatus === 'READY',
+            row: {
+              pick_id: pick.id,
+              horizon,
+              status: result.status,
+              session_count: result.sessionCount,
+              entry_date: result.entryDate,
+              entry_price: result.entryPrice,
+              evaluation_date: result.evaluationDate,
+              evaluation_price: result.evaluationPrice,
+              benchmark_entry_price: result.benchmarkEntryPrice,
+              benchmark_evaluation_price: result.benchmarkEvaluationPrice,
+              return_pct: result.returnPct,
+              benchmark_return_pct: result.benchmarkReturnPct,
+              excess_return_pct: result.excessReturnPct,
+              net_return_pct: net.netReturnPct,
+              net_excess_return_pct: net.netExcessReturnPct,
+              total_cost_pct: net.totalCostPct,
+              commission_cost_pct: net.commissionCostPct,
+              tax_cost_pct: net.taxCostPct,
+              slippage_cost_pct: net.slippageCostPct,
+              fx_cost_pct: net.fxCostPct,
+              cost_model_version: net.costModelVersion,
+              cost_evidence_status: net.costEvidenceStatus,
+              account_evidence_status: net.accountEvidenceStatus,
+              data_evidence_tier: dataManifest.evidenceTier,
+              evidence_status: evidenceStatus,
+              market_regime: marketRegime,
+              mfe_pct: result.mfePct,
+              mae_pct: result.maePct,
+              quality_status: result.qualityStatus,
+              error_message: result.errorMessage,
+              calculated_at: new Date().toISOString(),
+            },
+          });
           if (result.entryDate) {
-            await input.client.from('recommendation_publications').update({
-              first_tradable_date: result.entryDate,
-              entry_status: result.status === 'ERROR' ? 'ERROR' : 'READY',
-              updated_at: new Date().toISOString(),
-            }).eq('id', pick.publication_id);
+            publicationUpdates.set(pick.publication_id, {
+              firstTradableDate: result.entryDate,
+              entryStatus: result.status === 'ERROR' ? 'ERROR' : 'READY',
+            });
           }
-          updated += 1;
-          if (evidenceStatus === 'READY') evidenceRows += 1;
         }
       }
+
+      runtime.throwIfExpired();
+      const unregisteredManifests = [...evidenceManifests.values()].filter(
+        (manifest) => !evidenceManifestCache.has(manifest.manifestHash),
+      );
+      if (unregisteredManifests.length > 0) {
+        const registered = await registerRecommendationEvidenceManifests(
+          input.client,
+          unregisteredManifests,
+          runtime.signal,
+        );
+        for (const [manifestHash, id] of registered) evidenceManifestCache.set(manifestHash, id);
+      }
+
+      const persistedPerformanceRows = performanceRows.map((pending) => {
+        const evidenceManifestId = evidenceManifestCache.get(pending.manifestHash);
+        if (!evidenceManifestId) {
+          throw new Error(`Evidence manifest ${pending.manifestHash} was not registered.`);
+        }
+        return { ...pending.row, evidence_manifest_id: evidenceManifestId };
+      });
+      for (let index = 0; index < persistedPerformanceRows.length; index += 500) {
+        runtime.throwIfExpired();
+        const performanceRequest = input.client
+          .from('recommendation_performance')
+          .upsert(persistedPerformanceRows.slice(index, index + 500), {
+            onConflict: 'pick_id,horizon',
+          });
+        const { error } = await performanceRequest.abortSignal(runtime.signal);
+        if (error) throw error;
+      }
+
+      const publicationUpdateGroups = new Map<
+        string,
+        { firstTradableDate: string; entryStatus: 'READY' | 'ERROR'; ids: string[] }
+      >();
+      for (const [publicationId, publicationUpdate] of publicationUpdates) {
+        if (updatedPublications.has(publicationId)) continue;
+        const groupKey = JSON.stringify([
+          publicationUpdate.firstTradableDate,
+          publicationUpdate.entryStatus,
+        ]);
+        const group = publicationUpdateGroups.get(groupKey) || { ...publicationUpdate, ids: [] };
+        group.ids.push(publicationId);
+        publicationUpdateGroups.set(groupKey, group);
+      }
+      for (const group of publicationUpdateGroups.values()) {
+        runtime.throwIfExpired();
+        const publicationRequest = input.client.from('recommendation_publications').update({
+          first_tradable_date: group.firstTradableDate,
+          entry_status: group.entryStatus,
+          updated_at: new Date().toISOString(),
+        }).in('id', group.ids);
+        const { error: publicationError } = await publicationRequest.abortSignal(runtime.signal);
+        if (publicationError) throw publicationError;
+        for (const publicationId of group.ids) updatedPublications.add(publicationId);
+      }
+
+      updated += performanceRows.length;
+      evidenceRows += performanceRows.filter((row) => row.evidenceReady).length;
+      processedSecurities += 1;
     } catch (error) {
-      errors.push({ ticker: first.ticker, message: error instanceof Error ? error.message : 'Unknown price refresh failure' });
+      const deadlineFailure = runtime.deadlineReached()
+        || isRecommendationPerformanceDeadlineError(error);
+      if (deadlineFailure) stoppedByDeadline = true;
+      errors.push({
+        ticker: first.ticker,
+        message: deadlineFailure
+          ? 'Recommendation performance shard work deadline reached.'
+          : error instanceof Error ? error.message : 'Unknown price refresh failure',
+      });
+      if (deadlineFailure) break;
     }
   }
 
-  const shardStatus = errors.length ? 'DEGRADED' as const : 'SUCCESS' as const;
+  const remainingSecurities = Math.max(0, bySecurity.size - processedSecurities);
+  const deadlineReached = stoppedByDeadline || runtime.deadlineReached();
+  const shardStatus = classifyRecommendationShardOutcome({
+    deadlineReached,
+    errorCount: errors.length,
+    processedSecurities,
+    totalSecurities: bySecurity.size,
+  });
   const shardMetadata = {
     batch_date: batchDate,
     market: input.market,
@@ -253,6 +420,12 @@ export async function runRecommendationPerformanceBatch(input: {
     shards,
     picks: picks.length,
     securities: bySecurity.size,
+    attempted_securities: attemptedSecurities,
+    processed_securities: processedSecurities,
+    remaining_securities: remainingSecurities,
+    deadline_reached: deadlineReached,
+    work_budget_ms: runtime.deadlineAt - runtime.startedAt,
+    work_elapsed_ms: Date.now() - runtime.startedAt,
     performance_rows: updated,
     evidence_rows: evidenceRows,
     errors,
@@ -265,19 +438,28 @@ export async function runRecommendationPerformanceBatch(input: {
     claimToken: shardClaim.claimToken,
     status: shardStatus,
     metadata: shardMetadata,
-    errorMessage: errors.length ? `${errors.length} securities failed` : null,
+    errorMessage: deadlineReached
+      ? `Shard deadline reached with ${remainingSecurities} securities not attempted`
+      : errors.length ? `${errors.length} securities failed` : null,
   });
   shardCompletionRecorded = true;
   recordedShardStatus = shardStatus;
   barrierStatus = String(shardCompletion.barrier_status || barrierStatus);
 
-  const finalization = await finalizeRecommendationPerformanceBatchIfReady({
-    client: input.client,
-    batchDate,
-    market: input.market,
-    refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market),
-    refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market),
-  });
+  const finalization = shardStatus === 'SUCCESS'
+    && runtime.remainingMs() >= RECOMMENDATION_PERFORMANCE_MIN_FINALIZATION_MS
+    ? await finalizeRecommendationPerformanceBatchIfReady({
+        client: input.client,
+        batchDate,
+        market: input.market,
+        signal: runtime.signal,
+        refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market, runtime.signal),
+        refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market, runtime.signal),
+      })
+    : deferredRecommendationPerformanceFinalization(
+        shardCompletion,
+        shardStatus === 'DEGRADED' ? 'SHARD_DEGRADED' : 'DEFERRED_RUNTIME_BUDGET',
+      );
   barrierStatus = finalization.barrierStatus;
   const findingCount = finalization.findings;
   const evidence = finalization.evidence
@@ -291,7 +473,9 @@ export async function runRecommendationPerformanceBatch(input: {
     observed_at: new Date().toISOString(),
     completed_at: new Date().toISOString(),
     fallback_used: errors.length > 0,
-    fallback_reason: errors.length ? `${errors.length} securities failed` : null,
+    fallback_reason: deadlineReached
+      ? `Shard deadline reached with ${remainingSecurities} securities not attempted`
+      : errors.length ? `${errors.length} securities failed` : null,
     metadata: {
       batch_date: batchDate,
       batch_key: `${batchDate}:${input.market}`,
@@ -309,6 +493,12 @@ export async function runRecommendationPerformanceBatch(input: {
       finalization_claimed: finalization.claimed,
       picks: picks.length,
       securities: bySecurity.size,
+      attempted_securities: attemptedSecurities,
+      processed_securities: processedSecurities,
+      remaining_securities: remainingSecurities,
+      deadline_reached: deadlineReached,
+      work_budget_ms: runtime.deadlineAt - runtime.startedAt,
+      work_elapsed_ms: Date.now() - runtime.startedAt,
       performance_rows: updated,
       evidence_rows: evidenceRows,
       evidence_evaluations: evidence.evaluated,
@@ -326,9 +516,14 @@ export async function runRecommendationPerformanceBatch(input: {
     shard,
     shards,
     skipped: false,
+    shardStatus,
+    deadlineReached,
     barrier: finalization,
     picks: picks.length,
     securities: bySecurity.size,
+    attemptedSecurities,
+    processedSecurities,
+    remainingSecurities,
     updated,
     evidenceRows,
     evidence,
@@ -383,16 +578,23 @@ export async function runRecommendationPerformanceBatch(input: {
       }
     }
     throw error;
+  } finally {
+    runtime.dispose();
   }
 }
 
-export async function refreshRecommendationDiagnostics(client: SupabaseClient, market: RecommendationMarket) {
-  const { data, error } = await client
+export async function refreshRecommendationDiagnostics(
+  client: SupabaseClient,
+  market: RecommendationMarket,
+  signal?: AbortSignal,
+) {
+  const request = client
     .from('recommendation_performance')
     .select('horizon, status, return_pct, benchmark_return_pct, excess_return_pct, mfe_pct, mae_pct, quality_status, entry_price, recommendation_picks!inner(id, publication_id, source, sector, rank, confidence, signal_price, recommendation_publications!inner(run_date, market, category, is_official))')
     .eq('recommendation_picks.recommendation_publications.market', market)
     .eq('recommendation_picks.recommendation_publications.is_official', true)
     .limit(10000);
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error) throw error;
 
   const diagnosticRows: DiagnosticInput[] = (data || []).map((row) => {
@@ -430,11 +632,12 @@ export async function refreshRecommendationDiagnostics(client: SupabaseClient, m
     };
   });
   const findings = buildDiagnosticFindings(diagnosticRows);
-  const { error: deleteError } = await client
+  const deleteRequest = client
     .from('recommendation_diagnostic_findings')
     .delete()
     .eq('market', market)
     .eq('analyzer_version', RECOMMENDATION_ANALYZER_VERSION);
+  const { error: deleteError } = await (signal ? deleteRequest.abortSignal(signal) : deleteRequest);
   if (deleteError) throw deleteError;
   if (findings.length === 0) return 0;
 
@@ -459,7 +662,8 @@ export async function refreshRecommendationDiagnostics(client: SupabaseClient, m
     affected_pick_ids: finding.affectedPickIds,
     analyzed_at: new Date().toISOString(),
   }));
-  const { error: insertError } = await client.from('recommendation_diagnostic_findings').insert(rows);
+  const insertRequest = client.from('recommendation_diagnostic_findings').insert(rows);
+  const { error: insertError } = await (signal ? insertRequest.abortSignal(signal) : insertRequest);
   if (insertError) throw insertError;
   return rows.length;
 }
