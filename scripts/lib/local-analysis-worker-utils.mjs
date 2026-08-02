@@ -55,11 +55,21 @@ function compactText(value, fallback = '') {
 
 export function buildWorkerConfig(env = process.env) {
   const pollMs = Math.max(1_000, envNumber(env, 'MTN_LOCAL_WORKER_POLL_MS', 30_000));
+  const instance = String(env.MTN_LOCAL_WORKER_INSTANCE || 'primary')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'primary';
   return {
-    workerId: env.MTN_LOCAL_WORKER_ID || `mtn-local-${process.pid}`,
+    workerId: env.MTN_LOCAL_WORKER_ID || `mtn-local-${instance}`,
     pollMs,
     maxPollMs: Math.max(pollMs, envNumber(env, 'MTN_LOCAL_WORKER_MAX_POLL_MS', 300_000)),
     staleAfterSeconds: envNumber(env, 'MTN_LOCAL_WORKER_STALE_AFTER_SECONDS', 900),
+    heartbeatMs: Math.max(10_000, envNumber(env, 'MTN_LOCAL_WORKER_HEARTBEAT_MS', 60_000)),
+    jobTimeoutMs: Math.min(
+      15 * 60_000,
+      Math.max(60_000, envNumber(env, 'MTN_LOCAL_WORKER_JOB_TIMEOUT_MS', 15 * 60_000)),
+    ),
     jobTypes: envList(env, 'MTN_LOCAL_WORKER_JOB_TYPES', DEFAULT_JOB_TYPES),
     once: env.MTN_LOCAL_WORKER_ONCE?.toLowerCase() === 'true',
   };
@@ -372,6 +382,45 @@ export async function updateHeartbeat(localDb, config, status, metadata = {}, cu
          metadata = excluded.metadata`,
     [config.workerId, status, currentJobId, JSON.stringify(metadata)],
   );
+}
+
+export async function updateOperationsHeartbeat(
+  supabase,
+  config,
+  component,
+  status,
+  metadata = {},
+  currentJobId = null,
+) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('operations_component_heartbeats')
+    .upsert({
+      component,
+      worker_id: config.workerId,
+      status,
+      current_job_id: currentJobId,
+      observed_at: now,
+      updated_at: now,
+      metadata,
+    }, { onConflict: 'component' });
+  if (error) throw new Error(`operations heartbeat update failed: ${error.message}`);
+}
+
+export async function withJobDeadline(work, timeoutMs) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`Worker job exceeded ${timeoutMs}ms deadline.`);
+      error.code = 'WORKER_JOB_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([Promise.resolve().then(work), timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export async function writeJobLog(localDb, config, jobId, level, message, metadata = {}) {

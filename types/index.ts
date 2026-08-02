@@ -684,6 +684,8 @@ export interface StockMetric {
   ticker: string;
   market: MarketCode;
   calc_date: string;
+  close_price: number | null;
+  above_200d: boolean | null;
   ibd_proxy_score: number | null;
   rs_rating: number | null;
   rs_rank: number | null;
@@ -696,6 +698,67 @@ export interface StockMetric {
   error_message: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export type RiskBarometerIndicatorKey =
+  | 'sp500_concentration'
+  | 'household_equity_exposure'
+  | 'margin_debt'
+  | 'market_participation'
+  | 'valuation_driven_returns'
+  | 'hyperscaler_fcf'
+  | 'hyperscaler_leverage'
+  | 'corporate_cross_holdings'
+  | 'capital_market_frenzy'
+  | 'equity_risk_premium';
+
+export type RiskBarometerStatus = 'SAFE' | 'TRIGGERED' | 'UNKNOWN';
+export type RiskBarometerMethod = 'DIRECT' | 'PROXY' | 'MANUAL';
+export type RiskBarometerQuality = 'VALID' | 'DEGRADED' | 'BLOCKED';
+export type RiskBarometerBand = 'LOW' | 'CAUTION' | 'HIGH' | 'UNAVAILABLE';
+
+export interface RiskBarometerIndicator {
+  key: RiskBarometerIndicatorKey;
+  label: string;
+  value: number | null;
+  displayValue: string;
+  unit: string;
+  threshold: string;
+  status: RiskBarometerStatus;
+  contribution: 0 | 1;
+  method: RiskBarometerMethod;
+  provider: string;
+  sourceUrl: string;
+  observedAt: string | null;
+  freshness: {
+    limitHours: number;
+    ageHours: number | null;
+    stale: boolean;
+  };
+  detail: string;
+}
+
+export interface RiskBarometerResponse {
+  score: number | null;
+  rawScore: number;
+  band: RiskBarometerBand;
+  quality: RiskBarometerQuality;
+  coverage: {
+    valid: number;
+    total: 10;
+  };
+  asOf: string;
+  modelVersion: 'ai-fomo-us-2026.07-v1';
+  modelStatus: 'RESEARCH_ONLY';
+  indicators: RiskBarometerIndicator[];
+}
+
+export interface RiskBarometerHistoryPoint {
+  date: string;
+  score: number | null;
+  rawScore: number;
+  quality: RiskBarometerQuality;
+  coverage: number;
 }
 
 export interface MacroTrend {

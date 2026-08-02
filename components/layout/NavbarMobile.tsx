@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Activity, X, TrendingUp, Search, BarChart2, BarChart3, Target, Star, HelpCircle, ArrowUpRight, Database } from 'lucide-react';
-import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
+import {
+  FLOW_STEPS,
+  STRATEGY_LINKS,
+  UTILITY_LINKS,
+  findActiveFlowStep,
+  findActiveStrategyLink,
+  isActiveTab,
+} from '@/components/layout/navigation';
 
 // 하단 탭바 — 핵심 5개 Flow
 const BOTTOM_TABS = [
@@ -35,28 +42,77 @@ const UTILITY_ICON_MAP: Record<string, React.ElementType> = {
 
 export default function NavbarMobile() {
   const pathname = usePathname();
-  const activeStep = getActiveFlowStep(pathname);
+  const activeStep = findActiveFlowStep(pathname);
+  const activeStrategyLink = findActiveStrategyLink(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!drawerOpen) return;
 
     const menuButton = menuButtonRef.current;
+    const drawer = drawerRef.current;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusableSelector = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',');
+    const getFocusable = () => Array.from(
+      drawer?.querySelectorAll<HTMLElement>(focusableSelector) || [],
+    ).filter((element) => !element.hasAttribute('hidden'));
+    const focusFrame = window.requestAnimationFrame(() => {
+      const closeButton = drawer?.querySelector<HTMLElement>('[aria-label="메뉴 닫기"]');
+      (closeButton || getFocusable()[0])?.focus({ preventScroll: true });
+    });
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
         setDrawerOpen(false);
         return;
       }
-      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) {
+
+      if (event.key === 'Tab') {
+        const focusable = getFocusable();
+        if (focusable.length === 0) {
+          event.preventDefault();
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !drawer?.contains(active))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (active === last || !drawer?.contains(active))) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+
+      if ((event.key === 'PageDown' || event.key === 'PageUp') && drawer?.contains(document.activeElement)) {
+        const scroller = drawer.querySelector<HTMLElement>('[data-drawer-scroll]');
+        if (!scroller) return;
         event.preventDefault();
+        scroller.scrollBy({
+          top: event.key === 'PageDown' ? scroller.clientHeight * 0.8 : -scroller.clientHeight * 0.8,
+          behavior: 'smooth',
+        });
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
       menuButton?.focus({ preventScroll: true });
     };
   }, [drawerOpen]);
@@ -76,7 +132,7 @@ export default function NavbarMobile() {
           ref={menuButtonRef}
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)]"
+          className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
           aria-label="메뉴 열기"
           aria-controls="mobile-menu-drawer"
           aria-expanded={drawerOpen}
@@ -86,7 +142,7 @@ export default function NavbarMobile() {
       </header>
 
       {/* 서브 탭 (해당 Flow에 탭이 있을 때만) */}
-      {activeStep.tabs.length > 0 && (
+      {activeStep && activeStep.tabs.length > 0 && (
         <div className="no-scrollbar flex gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface-strong)]/85 px-4 py-2">
           {activeStep.tabs.map((tab) => (
             <Link
@@ -108,11 +164,12 @@ export default function NavbarMobile() {
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[rgba(4,8,16,0.97)] backdrop-blur">
         <div className="flex">
           {BOTTOM_TABS.map(({ key, href, label, icon: Icon }) => {
-            const isActive = activeStep.key === key;
+            const isActive = activeStep?.key === key;
             return (
               <Link
                 key={key}
                 href={href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition-colors ${
                   isActive ? 'text-emerald-300' : 'text-[var(--text-tertiary)]'
                 }`}
@@ -135,6 +192,7 @@ export default function NavbarMobile() {
             aria-hidden="true"
           />
           <aside
+            ref={drawerRef}
             id="mobile-menu-drawer"
             role="dialog"
             aria-modal="true"
@@ -146,26 +204,27 @@ export default function NavbarMobile() {
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="rounded-md p-1 text-[var(--text-secondary)]"
+                className="rounded-md p-1 text-[var(--text-secondary)] outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
                 aria-label="메뉴 닫기"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-3 py-4">
+            <div data-drawer-scroll className="flex-1 overflow-y-auto px-3 py-4">
           <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
             트레이딩 플로우
           </p>
           {FLOW_STEPS.map((step) => {
             const Icon = FLOW_ICON_MAP[step.key] ?? Activity;
-            const isActive = step.key === activeStep.key;
+            const isActive = step.key === activeStep?.key;
             return (
               <Link
                 key={step.key}
                 href={step.href}
                 onClick={() => setDrawerOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-emerald-300 ${
                   isActive
                     ? 'bg-emerald-500/12 text-emerald-300'
                     : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
@@ -174,6 +233,32 @@ export default function NavbarMobile() {
                 <Icon className="h-4 w-4 shrink-0" />
                 <span>{step.label}</span>
                 <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">{step.sub}</span>
+              </Link>
+            );
+          })}
+
+          <div className="my-3 border-t border-[var(--border)]" />
+
+          <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
+            투자 전략
+          </p>
+          {STRATEGY_LINKS.map((item) => {
+            const isActive = item.href === activeStrategyLink?.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setDrawerOpen(false)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                  isActive
+                    ? 'bg-amber-500/12 text-amber-200'
+                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Star className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
+                <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">{item.sub}</span>
               </Link>
             );
           })}
@@ -190,7 +275,7 @@ export default function NavbarMobile() {
                 key={item.href}
                 href={item.href}
                 onClick={() => setDrawerOpen(false)}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-secondary)] outline-none transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-emerald-300"
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
@@ -203,7 +288,7 @@ export default function NavbarMobile() {
               <form action="/api/auth/logout" method="post">
                 <button
                   type="submit"
-                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] outline-none transition-colors hover:text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-emerald-300"
                 >
                   로그아웃
                 </button>

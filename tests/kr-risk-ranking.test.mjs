@@ -65,10 +65,11 @@ assert.equal(selected.some((row) => row.pick.ticker === '888888'), false);
 assert.equal(selected.some((row) => row.pick.ticker === '777777'), false);
 assert.equal(selected.find((row) => row.pick.ticker === '100004')?.flowScore, 12);
 
-assert.throws(() => ranking.selectKrRiskAdjustedTop10({
+const redMomentumOnly = ranking.selectKrRiskAdjustedTop10({
   candidates: candidates.slice(0, 3),
   marketState: 'RED',
-}), /requires 10 eligible picks/);
+});
+assert.equal(redMomentumOnly.length, 0);
 
 const softConstraintCandidates = Array.from({ length: 12 }, (_, index) => candidate(`KQ${index}`, 'leader', index + 1, {
   universe: 'KOSDAQ150',
@@ -79,7 +80,7 @@ const softConstraintSelected = ranking.selectKrRiskAdjustedTop10({
   category: 'KOSDAQ150',
   marketState: 'YELLOW',
 });
-assert.equal(softConstraintSelected.length, 10);
-assert.ok(softConstraintSelected.some((row) => row.riskFlags.includes('soft_constraint_relaxed')));
+assert.equal(softConstraintSelected.length, 3);
+assert.equal(softConstraintSelected.some((row) => row.riskFlags.includes('soft_constraint_relaxed')), false);
 
 console.log('KR risk ranking tests passed');

@@ -24,6 +24,13 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
 
     test('RESP-03: 스캐너 모바일 카드 뷰 자동 전환', async ({ page }) => {
       await page.goto('/scanner');
+
+      const initialWidth = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      expect(initialWidth.scroll).toBeLessThanOrEqual(initialWidth.client);
+
       await page.getByRole('button', { name: /스캔 시작/ }).click();
       // In mobile, table view is usually hidden and card view is shown
       // Check if grid structure exists or table is hidden
@@ -33,6 +40,12 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
       // Filter buttons should still be accessible
       const filterBtn = page.locator('button:has-text("Recommended")');
       await expect(filterBtn).toBeVisible();
+
+      const resultWidth = await page.evaluate(() => ({
+        client: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      expect(resultWidth.scroll).toBeLessThanOrEqual(resultWidth.client);
     });
 
     test('RESP-04: 모바일 내비게이션 바 메뉴 확인', async ({ page }) => {
@@ -47,10 +60,19 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
       const drawer = page.getByRole('dialog', { name: '전체 메뉴' });
       await expect(drawer).toBeVisible();
       await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
-      expect(await page.locator('main').boundingBox()).toEqual(mainBefore);
+      await expect(drawer.getByRole('button', { name: '메뉴 닫기' })).toBeFocused();
+      const mainAfter = await page.locator('main').boundingBox();
+      expect(mainAfter && { x: mainAfter.x, y: mainAfter.y, width: mainAfter.width }).toEqual(
+        mainBefore && { x: mainBefore.x, y: mainBefore.y, width: mainBefore.width },
+      );
       expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
       await page.keyboard.press('PageDown');
       expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+      await page.keyboard.press('Shift+Tab');
+      expect(await drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+      await page.keyboard.press('Tab');
+      expect(await drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
 
       await page.keyboard.press('Escape');
 

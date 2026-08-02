@@ -10,6 +10,7 @@ export async function recordPipelineRun(input: {
   fallbackReason?: string | null;
   errorMessage?: string | null;
   metadata?: Record<string, unknown>;
+  throwOnError?: boolean;
 }) {
   const { error } = await supabaseServer.from('data_pipeline_runs').insert({
     pipeline: input.pipeline,
@@ -23,7 +24,10 @@ export async function recordPipelineRun(input: {
     error_message: input.errorMessage || null,
     metadata: input.metadata || {},
   });
-  if (error && !String(error.message).includes('data_pipeline_runs')) {
-    console.warn('[pipeline-health] 기록 실패:', error.message);
+  if (error) {
+    if (input.throwOnError) throw error;
+    if (!String(error.message).includes('data_pipeline_runs')) {
+      console.warn('[pipeline-health] 기록 실패:', error.message);
+    }
   }
 }

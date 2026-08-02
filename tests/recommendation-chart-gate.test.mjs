@@ -3,6 +3,7 @@ import {
   assessRecommendationPublicationGate,
   buildRecommendationChartGate,
   buildUnverifiedRecommendationChartGate,
+  isActionableRecommendationGate,
   isOfficiallyEligibleRecommendationGate,
   rankChartGatedPicks,
 } from '../lib/recommendations/chart-gate.ts';
@@ -23,6 +24,7 @@ const missingFundamentals = buildRecommendationChartGate({ ...base, fundamentals
 
 assert.equal(actionable.disposition, 'ACTIONABLE');
 assert.equal(actionable.eligible, true);
+assert.equal(isActionableRecommendationGate(actionable), true);
 assert.equal(avoid.eligible, false);
 assert.equal(missingFundamentals.eligible, false);
 assert.equal(buildRecommendationChartGate({ ...base, fundamentals: { ...base.fundamentals, debtToEquityPct: null } }, {
@@ -70,5 +72,13 @@ assert.equal(isOfficiallyEligibleRecommendationGate({
   ...actionable,
   eligible: true,
   verdict: 'AVOID',
+}), false);
+assert.equal(isActionableRecommendationGate({
+  ...actionable,
+  disposition: 'WATCHLIST',
+}), false);
+assert.equal(isActionableRecommendationGate({
+  ...actionable,
+  setupGrade: 'B',
 }), false);
 console.log('recommendation chart gate tests passed');

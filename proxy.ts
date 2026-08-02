@@ -5,6 +5,23 @@ import { verifySessionToken, isAuthEnabled } from '@/lib/auth/session';
 // In-memory rate limiter (per Edge isolate)
 const loginAttempts = new Map<string, { count: number; expiresAt: number }>();
 
+function isPathOrChild(pathname: string, root: string) {
+  return pathname === root || pathname.startsWith(`${root}/`);
+}
+
+export function isApiSessionBypassPath(pathname: string) {
+  return (
+    isPathOrChild(pathname, '/api/auth') ||
+    isPathOrChild(pathname, '/api/cron') ||
+    isPathOrChild(pathname, '/api/local-llm-proxy') ||
+    isPathOrChild(pathname, '/api/toss-proxy') ||
+    isPathOrChild(pathname, '/api/telegram-webhook') ||
+    pathname === '/api/internal/kis-rate-limit' ||
+    pathname === '/api/internal/operations-health' ||
+    pathname === '/api/release'
+  );
+}
+
 export async function proxy(request: NextRequest) {
   // If auth is disabled, allow all
   if (!isAuthEnabled()) {
@@ -34,12 +51,7 @@ export async function proxy(request: NextRequest) {
   // Protect API routes
   if (
     pathname.startsWith('/api/') &&
-    !pathname.startsWith('/api/auth') &&
-    !pathname.startsWith('/api/cron/') &&
-    !pathname.startsWith('/api/local-llm-proxy/') &&
-    !pathname.startsWith('/api/toss-proxy/') &&
-    !pathname.startsWith('/api/telegram-webhook') &&
-    pathname !== '/api/internal/kis-rate-limit'
+    !isApiSessionBypassPath(pathname)
   ) {
     const token = request.cookies.get('mtn_session')?.value;
     const session = await verifySessionToken(token);

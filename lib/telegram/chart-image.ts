@@ -61,10 +61,6 @@ function number(value: number | null | undefined, digits = 2) {
     : '-';
 }
 
-function percent(value: number | null | undefined, digits = 1) {
-  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(digits)}%` : '-';
-}
-
 function movingAverage(values: number[], period: number) {
   return values.map((_, index) => {
     if (index < period - 1) return null;

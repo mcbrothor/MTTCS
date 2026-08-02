@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
-import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
+import { getKisDomesticPrice } from '@/lib/finance/providers/kis-api';
 import { validateCronRequest } from '@/lib/contest-cron';
 import { evaluatePriceAlert } from '@/lib/alerts/evaluate';
 
@@ -12,118 +14,362 @@ interface OHLCData {
   volume: number;
 }
 
+interface PriceObservation {
+  current: number;
+  previous: number | null;
+}
+
+interface ClaimedAlertEvent {
+  id: string;
+  title: string;
+  message: string;
+  event_type: string;
+  ticker: string | null;
+  severity: 'INFO' | 'WATCH' | 'RISK';
+  delivery_batch_key: string;
+}
+
 function calculateDistributionDays(data: OHLCData[], lookback = 25) {
   let count = 0;
   for (let index = Math.max(1, data.length - lookback); index < data.length; index += 1) {
     const prev = data[index - 1];
     const curr = data[index];
-    if (curr.close < prev.close && curr.volume > prev.volume) {
-      count += 1;
-    }
+    if (curr.close < prev.close && curr.volume > prev.volume) count += 1;
   }
   return count;
 }
 
-async function fetchLatestPrice(ticker: string, market: string): Promise<number | null> {
+async function fetchPriceObservation(ticker: string, market: string): Promise<PriceObservation | null> {
   try {
     if (market === 'KR') {
-      const exchange = /^\d{6}$/.test(ticker) ? (ticker.startsWith('0') || ticker.startsWith('1') || ticker.startsWith('2') || ticker.startsWith('3') ? 'KOSPI' : 'KOSDAQ') : 'KOSPI'; // Simplification, usually just fetch using KIS
+      let current: number | null = null;
       try {
-        const data = await getMarketDailyPrice(ticker, exchange, 2);
-        if (data.length > 0) return data[data.length - 1].close;
+        current = await getKisDomesticPrice(ticker);
       } catch {
-        const formatted = `${ticker}.KS`; // fallback
-        const yData = await getYahooDailyPrice(formatted);
-        if (yData.length > 0) return yData[yData.length - 1].close;
+        // Yahoo fallback below also provides a previous close for rule evaluation.
       }
-    } else {
-      const yData = await getYahooDailyPrice(ticker);
-      if (yData.length > 0) return yData[yData.length - 1].close;
+
+      for (const suffix of ['KS', 'KQ']) {
+        try {
+          const data = await getYahooDailyPrice(`${ticker}.${suffix}`);
+          if (data.length === 0) continue;
+          const latest = data[data.length - 1]?.close;
+          const previous = data.length > 1 ? data[data.length - 2]?.close : null;
+          const resolvedCurrent = current ?? latest;
+          if (Number.isFinite(resolvedCurrent) && Number(resolvedCurrent) > 0) {
+            return {
+              current: Number(resolvedCurrent),
+              previous: Number.isFinite(previous) && Number(previous) > 0 ? Number(previous) : null,
+            };
+          }
+        } catch {
+          // Try the other Korean exchange suffix.
+        }
+      }
+      return current && current > 0 ? { current, previous: null } : null;
     }
+
+    const data = await getYahooDailyPrice(ticker);
+    if (data.length === 0) return null;
+    const current = data[data.length - 1]?.close;
+    const previous = data.length > 1 ? data[data.length - 2]?.close : null;
+    if (!Number.isFinite(current) || Number(current) <= 0) return null;
+    return {
+      current: Number(current),
+      previous: Number.isFinite(previous) && Number(previous) > 0 ? Number(previous) : null,
+    };
   } catch (error) {
     console.error(`Error fetching price for ${ticker}:`, error);
+    return null;
   }
-  return null;
+}
+
+function deliveryStatus(channels: unknown) {
+  return Array.isArray(channels) && channels.includes('TELEGRAM') ? 'PENDING' : 'SKIPPED';
+}
+
+async function insertAlertEvent(
+  client: SupabaseClient,
+  payload: Record<string, unknown>
+) {
+  const { error } = await client.from('alert_events').insert({
+    ...payload,
+    read_at: null,
+  });
+  if (error?.code === '23505') return false;
+  if (error) throw error;
+  return true;
+}
+
+function alertMessage(events: ClaimedAlertEvent[]) {
+  const items = events.map((event) => {
+    const ticker = event.ticker ? ` ${event.ticker}` : '';
+    return `*[${event.event_type}]${ticker}*\n${event.message}`;
+  });
+  return `*MTN 알림 리포트*\n\n${items.join('\n\n')}`;
+}
+
+function recipientKey(chatId: string) {
+  return createHash('sha256').update(`telegram:${chatId}`).digest('hex');
+}
+
+function createAlertDeliveryHooks(input: {
+  client: SupabaseClient;
+  batchKey: string;
+  eventIds: string[];
+  messageHash: string;
+}) {
+  const key = (chatId: string) => recipientKey(chatId);
+  return {
+    shouldSendChat: async (chatId: string) => {
+      const { data, error } = await input.client.rpc('claim_alert_delivery_receipt', {
+        p_batch_key: input.batchKey,
+        p_recipient_key: key(chatId),
+        p_event_ids: input.eventIds,
+        p_message_hash: input.messageHash,
+      });
+      if (error) throw error;
+      return data === true;
+    },
+    onChatSent: async (chatId: string) => {
+      const { error } = await input.client
+        .from('alert_delivery_receipts')
+        .update({
+          status: 'SENT',
+          delivered_at: new Date().toISOString(),
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('batch_key', input.batchKey)
+        .eq('recipient_key', key(chatId))
+        .eq('message_hash', input.messageHash);
+      if (error) throw error;
+    },
+    onChatError: async (chatId: string, error: unknown) => {
+      const { error: updateError } = await input.client
+        .from('alert_delivery_receipts')
+        .update({
+          status: 'FAILED',
+          last_error: (error instanceof Error ? error.message : String(error)).slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('batch_key', input.batchKey)
+        .eq('recipient_key', key(chatId));
+      if (updateError) throw updateError;
+    },
+  };
+}
+
+async function updateClaimedEvents(
+  client: SupabaseClient,
+  eventIds: string[],
+  status: 'SENT' | 'FAILED',
+  errorMessage: string | null = null
+) {
+  const now = new Date().toISOString();
+  const { error } = await client
+    .from('alert_events')
+    .update({
+      delivery_status: status,
+      delivered_at: status === 'SENT' ? now : null,
+      delivery_error: errorMessage?.slice(0, 1000) ?? null,
+      updated_at: now,
+    })
+    .in('id', eventIds)
+    .eq('delivery_status', 'SENDING');
+  if (error) throw error;
 }
 
 export async function GET(request: Request) {
-  
   if (!validateCronRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const supabaseServer = getSupabaseAdmin();
-    const alerts: string[] = [];
+    const client = getSupabaseAdmin();
+    const now = Date.now();
+    let eventsCreated = 0;
+    const priceCache = new Map<string, Promise<PriceObservation | null>>();
+    const getPrice = (ticker: string, market: string) => {
+      const key = `${market}:${ticker}`;
+      const cached = priceCache.get(key);
+      if (cached) return cached;
+      const pending = fetchPriceObservation(ticker, market);
+      priceCache.set(key, pending);
+      return pending;
+    };
 
-    // 1. PLANNED / ACTIVE 종목 가져오기
-    const { data: trades, error } = await supabaseServer
+    const { data: trades, error: tradeError } = await client
       .from('trades')
-      .select('id, ticker, status, market, entry_pivot, initial_stop, current_stop')
+      .select('id, user_id, ticker, status, market, entry_price, stoploss_price, updated_at')
       .in('status', ['PLANNED', 'ACTIVE']);
+    if (tradeError) throw tradeError;
 
-    if (error) throw error;
-
+    const ownerIds = new Set<string>();
     for (const trade of trades || []) {
-      const price = await fetchLatestPrice(trade.ticker, trade.market);
-      if (!price) continue;
+      if (!trade.user_id) continue;
+      ownerIds.add(String(trade.user_id));
+      const observation = await getPrice(trade.ticker, trade.market);
+      if (!observation) continue;
 
-      if (trade.status === 'PLANNED' && trade.entry_pivot) {
-        // 피벗 ±5% 이내 접근 시 알림
-        const distance = ((price - trade.entry_pivot) / trade.entry_pivot) * 100;
+      if (trade.status === 'PLANNED' && Number(trade.entry_price) > 0) {
+        const entryPrice = Number(trade.entry_price);
+        const distance = ((observation.current - entryPrice) / entryPrice) * 100;
         if (Math.abs(distance) <= 5) {
-          alerts.push(`🎯 [PLANNED] *${trade.ticker}* 피벗가 접근!\n- 현재가: ${price}\n- 피벗가: ${trade.entry_pivot} (${distance > 0 ? '+' : ''}${distance.toFixed(2)}%)`);
+          eventsCreated += Number(await insertAlertEvent(client, {
+            user_id: trade.user_id,
+            rule_id: null,
+            event_key: `trade:${trade.id}:PIVOT_NEAR:${Math.floor(now / (12 * 60 * 60 * 1000))}`,
+            event_type: 'PIVOT_NEAR',
+            title: `${trade.ticker} 계획 진입가 접근`,
+            message: `현재가 ${observation.current.toLocaleString()} · 계획 진입가 ${entryPrice.toLocaleString()} · 거리 ${distance.toFixed(2)}%`,
+            ticker: trade.ticker,
+            severity: 'WATCH',
+            payload: { price: observation.current, tradeId: trade.id, channels: ['IN_APP', 'TELEGRAM'] },
+            delivery_status: 'PENDING',
+          }));
         }
       }
 
-      if (trade.status === 'ACTIVE') {
-        // 현재 스탑리밋 3% 이내 접근 시 알림
-        const stopLimit = trade.current_stop || trade.initial_stop;
-        if (stopLimit) {
-          const distance = ((price - stopLimit) / stopLimit) * 100;
-          if (distance <= 3 && distance >= -5) {
-            alerts.push(`⚠️ [ACTIVE] *${trade.ticker}* 손절가 근접!\n- 현재가: ${price}\n- 손절가: ${stopLimit} (+${distance.toFixed(2)}% 남음)`);
-          }
+      if (trade.status === 'ACTIVE' && Number(trade.stoploss_price) > 0) {
+        const stopPrice = Number(trade.stoploss_price);
+        const distance = ((observation.current - stopPrice) / stopPrice) * 100;
+        if (distance <= 3 && distance >= -5) {
+          eventsCreated += Number(await insertAlertEvent(client, {
+            user_id: trade.user_id,
+            rule_id: null,
+            event_key: `trade:${trade.id}:STOP_NEAR:${Math.floor(now / (2 * 60 * 60 * 1000))}`,
+            event_type: 'STOP_NEAR',
+            title: `${trade.ticker} 손절가 근접`,
+            message: `현재가 ${observation.current.toLocaleString()} · 손절가 ${stopPrice.toLocaleString()} · 거리 ${distance.toFixed(2)}%`,
+            ticker: trade.ticker,
+            severity: 'RISK',
+            payload: { price: observation.current, tradeId: trade.id, channels: ['IN_APP', 'TELEGRAM'] },
+            delivery_status: 'PENDING',
+          }));
         }
       }
     }
 
-    const { data: rules, error: ruleError } = await supabaseServer.from('alert_rules').select('*').eq('enabled', true).eq('scope', 'SYMBOL');
+    const { data: rules, error: ruleError } = await client
+      .from('alert_rules')
+      .select('*')
+      .eq('enabled', true)
+      .eq('scope', 'SYMBOL');
     if (ruleError) throw ruleError;
+
     for (const rule of rules || []) {
-      if (['FILING','EARNINGS','SCREEN_ENTER','SCREEN_EXIT'].includes(rule.event_type)) continue;
+      ownerIds.add(String(rule.user_id));
+      if (['FILING', 'EARNINGS', 'SCREEN_ENTER', 'SCREEN_EXIT'].includes(rule.event_type)) continue;
       const market = /^\d{6}$/.test(rule.scope_id) ? 'KR' : 'US';
-      const price = await fetchLatestPrice(rule.scope_id, market);
-      if (!price) continue;
-      const signal = evaluatePriceAlert(rule, price, null);
+      const observation = await getPrice(rule.scope_id, market);
+      if (!observation) continue;
+      const signal = evaluatePriceAlert(rule, observation.current, observation.previous);
       if (!signal) continue;
-      const bucket = Math.floor(Date.now() / (Math.max(1, rule.cooldown_minutes) * 60000));
-      const eventKey = `${rule.id}:${bucket}`;
-      const { error: eventError } = await supabaseServer.from('alert_events').insert({ user_id: rule.user_id, rule_id: rule.id, event_key: eventKey, event_type: rule.event_type, title: `${rule.scope_id} ${rule.name}`, message: signal.message, ticker: rule.scope_id, severity: signal.severity, payload: { price } });
-      if (eventError?.code !== '23505') { if (eventError) throw eventError; alerts.push(`*[${rule.event_type}] ${rule.scope_id}*\n${signal.message}`); }
-      await supabaseServer.from('alert_rules').update({ last_triggered_at: new Date().toISOString() }).eq('id', rule.id);
+
+      const cooldownMs = Math.max(1, Number(rule.cooldown_minutes) || 1) * 60_000;
+      const eventKey = `alert:${rule.id}:${Math.floor(now / cooldownMs)}`;
+      const channels = Array.isArray(rule.channels) ? rule.channels : ['IN_APP'];
+      const inserted = await insertAlertEvent(client, {
+        user_id: rule.user_id,
+        rule_id: rule.id,
+        event_key: eventKey,
+        event_type: rule.event_type,
+        title: `${rule.scope_id} ${rule.name}`,
+        message: signal.message,
+        ticker: rule.scope_id,
+        severity: signal.severity,
+        payload: { price: observation.current, previous: observation.previous, channels },
+        delivery_status: deliveryStatus(channels),
+      });
+      eventsCreated += Number(inserted);
+      if (inserted) {
+        const { error: updateError } = await client
+          .from('alert_rules')
+          .update({ last_triggered_at: new Date(now).toISOString() })
+          .eq('id', rule.id);
+        if (updateError) throw updateError;
+      }
     }
 
-    // 2. 매크로 DD 카운트 체크
     for (const symbol of ['^KS200', 'QQQ']) {
       try {
         const data = await getYahooDailyPrice(symbol);
-        const dd = calculateDistributionDays(data, 25);
-        if (dd >= 5) {
-          alerts.push(`🚨 [MACRO] *${symbol}* Distribution Days 주의!\n- 최근 25일 내 기관 매도일: ${dd}일`);
+        const distributionDays = calculateDistributionDays(data, 25);
+        if (distributionDays < 5) continue;
+        const eventDate = new Date(now).toISOString().slice(0, 10);
+        for (const userId of ownerIds) {
+          eventsCreated += Number(await insertAlertEvent(client, {
+            user_id: userId,
+            rule_id: null,
+            event_key: `macro:${symbol}:DISTRIBUTION_DAYS:${eventDate}`,
+            event_type: 'PRICE_MOVE',
+            title: `${symbol} Distribution Days 주의`,
+            message: `최근 25일 내 기관 매도일 ${distributionDays}일`,
+            ticker: symbol,
+            severity: 'RISK',
+            payload: { distributionDays, lookback: 25, channels: ['IN_APP', 'TELEGRAM'] },
+            delivery_status: 'PENDING',
+          }));
         }
-      } catch (e) {
-        console.error('Failed macro stats fetching', e);
+      } catch (error) {
+        console.error(`Failed macro stats fetching for ${symbol}:`, error);
       }
     }
 
-    if (alerts.length > 0) {
-      const message = `*MTN 알림 리포트*\n\n${alerts.join('\n\n')}`;
-      await sendTelegramMessage(message);
+    const { data: claimed, error: claimError } = await client.rpc('claim_alert_delivery_batch', {
+      p_limit: 100,
+    });
+    if (claimError) throw claimError;
+    const events = (claimed || []) as ClaimedAlertEvent[];
+    if (events.length === 0) {
+      return NextResponse.json({ success: true, events_created: eventsCreated, alerts_sent: 0, delivery_status: 'IDLE' });
     }
 
-    return NextResponse.json({ success: true, alerts_sent: alerts.length });
+    const eventIds = events.map((event) => event.id);
+    const batchKey = events[0].delivery_batch_key;
+    if (!batchKey || events.some((event) => event.delivery_batch_key !== batchKey)) {
+      await updateClaimedEvents(client, eventIds, 'FAILED', 'Claim returned an invalid delivery batch.');
+      throw new Error('Claim returned an invalid alert delivery batch.');
+    }
 
+    const message = alertMessage(events);
+    const messageHash = createHash('sha256').update(message).digest('hex');
+    try {
+      const delivery = await sendTelegramMessage(message, createAlertDeliveryHooks({
+        client,
+        batchKey,
+        eventIds,
+        messageHash,
+      }));
+      if (delivery.skipped) {
+        await updateClaimedEvents(client, eventIds, 'FAILED', 'Telegram delivery is not configured.');
+        return NextResponse.json({
+          success: false,
+          events_created: eventsCreated,
+          alerts_sent: 0,
+          delivery_status: 'FAILED',
+          error: 'Telegram delivery is not configured.',
+        }, { status: 503 });
+      }
+      await updateClaimedEvents(client, eventIds, 'SENT');
+      return NextResponse.json({
+        success: true,
+        events_created: eventsCreated,
+        alerts_sent: events.length,
+        delivery_status: 'SENT',
+        recipients_sent: delivery.sent,
+        recipients_already_delivered: delivery.alreadyDelivered,
+      });
+    } catch (error) {
+      await updateClaimedEvents(
+        client,
+        eventIds,
+        'FAILED',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
   } catch (error) {
     console.error('Cron job error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

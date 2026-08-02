@@ -20,6 +20,7 @@ import {
   friendlyMetricThreshold,
   friendlyMetricValue,
   friendlySectorLabel,
+  formatMovingAverageValue,
 } from '@/lib/market-display';
 import type { MasterFilterMetricDetail, MasterFilterMetrics, MarketState } from '@/types';
 
@@ -147,6 +148,7 @@ const MetricCard = memo(function MetricCard({ detail, chartData, movingAverageDa
               <Tooltip
                 contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
                 labelStyle={{ color: '#94a3b8', fontSize: 11 }}
+                formatter={(value) => formatMovingAverageValue(value as number | string)}
               />
             </LineChart>
           </StableResponsiveContainer>

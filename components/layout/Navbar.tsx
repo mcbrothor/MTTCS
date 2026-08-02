@@ -4,12 +4,19 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Activity } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
-import { FLOW_STEPS, UTILITY_LINKS, getActiveFlowStep } from '@/components/layout/navigation';
+import {
+  FLOW_STEPS,
+  STRATEGY_LINKS,
+  UTILITY_LINKS,
+  findActiveFlowStep,
+  findActiveStrategyLink,
+} from '@/components/layout/navigation';
 import GlobalSecuritySearch from '@/components/layout/GlobalSecuritySearch';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const activeStep = getActiveFlowStep(pathname);
+  const activeStep = findActiveFlowStep(pathname);
+  const activeStrategyLink = findActiveStrategyLink(pathname);
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[rgba(4,8,16,0.94)] backdrop-blur">
@@ -42,12 +49,13 @@ export default function Navbar() {
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1">
             {FLOW_STEPS.map((step) => {
-              const isActive = step.key === activeStep.key;
+              const isActive = step.key === activeStep?.key;
 
               return (
                 <Link
                   key={step.key}
                   href={step.href}
+                  aria-current={isActive ? 'page' : undefined}
                   className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
                     isActive
                       ? 'border-emerald-400/35 bg-emerald-500/12 text-[var(--text-primary)]'
@@ -55,6 +63,25 @@ export default function Navbar() {
                   }`}
                 >
                   {step.label}
+                </Link>
+              );
+            })}
+            <span aria-hidden="true" className="my-1 w-px shrink-0 bg-[var(--border)]" />
+            {STRATEGY_LINKS.map((item) => {
+              const isActive = item.href === activeStrategyLink?.href;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
+                      : 'border-amber-400/15 bg-amber-500/5 text-amber-200/80 hover:border-amber-400/35 hover:text-amber-100'
+                  }`}
+                >
+                  {item.label}
                 </Link>
               );
             })}

@@ -1,9 +1,11 @@
+import Link from 'next/link';
 import Card from '@/components/ui/Card';
 import {
   Activity,
   AlertTriangle,
   BarChart2,
   BookOpen,
+  CheckCircle2,
   Crosshair,
   Database,
   Flame,
@@ -163,6 +165,52 @@ const lifecycleRows = [
   ['전량 청산', '최종 R multiple과 exit reason이 기록됩니다. 수익 거래라도 계획 위반이면 discipline에서 불이익을 줍니다.'],
 ];
 
+const strategyMenuRows = [
+  ['입력 금액 단위', 'KRW(원화) 또는 USD(달러)를 먼저 선택합니다. 원금·외부 보유 평가액과 실행표가 모두 선택 통화로 표시됩니다. 통화를 바꿔도 입력 숫자는 자동 환산되지 않으므로 새 단위에 맞게 금액을 확인합니다.'],
+  ['전략 계산 원금', '내가 실제로 운용할 원금을 직접 입력합니다. 비우거나 0을 입력하면 통합 포트폴리오 자산을 사용합니다. 이 값이 목표 금액과 분할 금액의 계산 기준입니다.'],
+  ['기존 보유 평가액', '이미 보유한 금·QQQ·QLD·TQQQ와 외부·실물 보유액을 목표에서 차감합니다. 목표까지 부족하면 매수 계획, 초과하면 축소 계획이 만들어집니다.'],
+  ['오늘의 의사결정', '가장 위의 브리핑에서 지금 할 일, 하지 말 일, 다음 전환 조건을 먼저 확인합니다. 아래 지표를 보기 전에 결론부터 읽습니다.'],
+  ['언제 진입하나요?', 'READY는 현재 데이터와 종가 조건이 충족된 단계, WAIT는 아직 기다려야 하는 단계입니다. 장중 예상으로 먼저 매수하지 않습니다.'],
+  ['분할 실행표', '금액·예상 수량·조건을 단계별로 표시합니다. READY인 단계만 다음 거래 가능 시점에 검토하며, 자동 주문은 실행하지 않습니다.'],
+  ['데이터 품질', 'VALID만 정상 신호로 사용합니다. DEGRADED·BLOCKED 또는 데이터 기준시각이 오래되면 신규 전술 진입을 중단합니다.'],
+];
+
+const entryStateRows = [
+  ['READY', '종가·추세·위험 조건이 충족되었습니다. 해당 단계의 금액과 예상 수량만 검토합니다. READY가 매수 강제 지시는 아닙니다.'],
+  ['WAIT', '조건이 아직 충족되지 않았습니다. 가격이 가까워 보여도 선진입하거나 예상 돌파를 매수하지 않습니다.'],
+  ['PAUSED / RISK_PAUSED', '사용자가 신규 위험 투입을 일시중지했습니다. 기존 보유를 점검하되 신규 매수는 하지 않습니다.'],
+  ['DEGRADED / BLOCKED', '데이터가 누락·지연되었거나 계산에 필요한 관측치가 부족합니다. 마지막 값만 보고 진입하지 않습니다.'],
+  ['축소·매도 READY', '목표 비중 초과, 추세 이탈, 유효 노출 초과 등 방어 조건이 발생했습니다. 축소 실행표의 50% → 30% → 20% 순서를 확인합니다.'],
+];
+
+const goldStrategyRows = [
+  ['코어 진입', '장기 보유용 4%입니다. 가격 데이터가 유효하고 위험 일시중지가 아니면 목표 부족액을 3회로 나눕니다. 전술 신호가 없어도 코어는 별도로 관리합니다.'],
+  ['빠른 재진입', '선택한 금 상품의 일봉 종가가 직전 20거래일 최고가를 돌파하고 완전한 매크로 점수가 +1 이상일 때 전술 한도의 절반만 먼저 검토합니다.'],
+  ['월말 추세 진입', '선택 상품의 최신 월말 종가가 최근 6개 월말 평균보다 높아 ON이 되고 다음 거래일에 유효해진 뒤, 매크로 한도 안에서 잔여 전술 비중을 검토합니다.'],
+  ['전술 비중', '완전한 매크로 점수 +2~+3은 최대 6%, 0~+1은 최대 3%, −1 이하는 0%입니다. 매크로 입력이 불완전하면 0%로 차단합니다.'],
+  ['손절·추적', '선택 상품 자체 OHLC의 진입가 − 2ATR을 초기 손절로 사용합니다. 최고 종가가 올라가면 최고 종가 − 2ATR로 추적합니다.'],
+  ['주의', 'XAU/USD 참고 레벨을 GLD나 국내 ETF로 환산하지 않습니다. 실물 금은 총 노출에 포함하지만 트레이딩 신호 대상이 아닙니다.'],
+];
+
+const nasdaqStrategyRows = [
+  ['QQQ 코어 진입', '월말 10개월 추세가 ON으로 유효하고 QQQ가 200일선 위에서 2거래일 확인되면 부족액을 40% → 30% → 30%로 나눕니다.'],
+  ['QLD 전술 진입', 'QQQ 월말 추세 ON, 200일선 2일 확인, RV20 30% 미만, 데이터 VALID가 동시에 필요합니다. 계획 금액은 50%씩 두 번 나눕니다.'],
+  ['TQQQ 전술 진입', 'QLD 조건에 더해 50일선 > 200일선, QQQ 20일 돌파, RV20 18% 이하, 사용자의 TQQQ 위험 확인이 모두 필요합니다.'],
+  ['축소 조건', '월말 추세 OFF, QQQ 200일선 재이탈, 선택 ETF의 2ATR 추적 손절 또는 전체 유효 노출 30% 초과 시 디레버리징을 우선합니다.'],
+  ['상품 운용', 'QQQ는 1배 코어, QLD는 일일 2배, TQQQ는 일일 3배 목표입니다. QLD와 TQQQ를 동시에 선택·운용하지 않습니다.'],
+  ['주의', '레버리지 ETF는 매일 재설정되므로 장기 누적 수익이 QQQ의 단순 2배·3배와 다릅니다. 실행 가격과 손절은 선택 ETF 자체 OHLC를 사용합니다.'],
+];
+
+const currentUpdateRows = [
+  ['상단 의사결정 브리핑', '금·나스닥100 메뉴는 상세 지표보다 먼저 오늘 할 일, 금지 행동, 다음 전환 조건을 보여줍니다.'],
+  ['직접 입력 원금', '통합 포트폴리오 값이 0이거나 별도 자금을 운용할 때 사용자가 원금을 저장해 전략을 재계산할 수 있습니다.'],
+  ['KRW·USD 입력 단위', '금·나스닥100 화면에서 동일한 통화 선택기를 사용하며 원금, 보유 평가액, 목표·분할 금액을 선택 통화로 통일했습니다.'],
+  ['원금 기반 실행표', '목표 비중을 실제 금액과 예상 수량으로 바꾸고 매수·매도 단계를 분리했습니다.'],
+  ['진입 시점 안내', 'READY/WAIT를 사용해 현재 충족된 조건과 부족한 조건을 한글로 설명합니다.'],
+  ['금·나스닥 독립 메뉴', '기존 주식 발굴 8단계와 분리된 투자 전략 메뉴이며 데스크톱 상단·모바일 전체 메뉴에서 접근합니다.'],
+  ['연구 전용 정책', '두 전략 모두 결정론적 규칙 엔진을 사용하며 주문 버튼과 자동매매는 연결하지 않습니다.'],
+];
+
 // ─── 공통 컴포넌트 ───────────────────────────────────────────────
 
 function InfoTable({ rows, cols = ['항목', '설명'] }: { rows: string[][]; cols?: string[] }) {
@@ -225,11 +273,11 @@ export default function GuidePage() {
 
       {/* 헤더 */}
       <div>
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Algorithm Guide</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 알고리즘 가이드</h1>
+        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-400">Product & Strategy Guide</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">MTN 사용 가이드</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
           MTN은 미너비니 SEPA·VCP/HTF, 오닐 CAN SLIM, 주도주·모멘텀·쿨라매기 규칙을 결합한 추세 추종 의사결정 시스템입니다.
-          오늘 확인 → 시장 분석 → 종목 발굴 → 콘테스트 → 관심종목 → 매매 계획 → 포트폴리오 → 성과 복기의 8단계로 운영됩니다.
+          기본 주식 투자는 8단계로 운영되며, 금과 나스닥100은 원금·목표 비중·분할 실행을 관리하는 독립 투자 전략 메뉴로 제공합니다.
         </p>
       </div>
 
@@ -260,6 +308,103 @@ export default function GuidePage() {
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <div id="investment-strategies" className="scroll-mt-24">
+        <Card>
+          <SectionHeader
+            icon={<Activity className="h-6 w-6 text-amber-300" />}
+            title="금·나스닥100 투자 전략 메뉴"
+            subtitle="처음 사용할 때는 원금 입력 → 오늘의 판단 → READY 단계 확인 → 분할 실행표 순서로 읽습니다."
+          />
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-4">
+            {[
+              ['1', '통화·원금', 'KRW/USD와 실제 운용 자금'],
+              ['2', '상단 결론', '지금 할 일·금지 행동'],
+              ['3', '진입 상태', 'READY 또는 WAIT'],
+              ['4', '실행표', '금액·수량·조건'],
+            ].map(([step, title, description]) => (
+              <div key={step} className="rounded-lg border border-slate-700 bg-slate-950/50 p-4">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-xs font-black text-emerald-300">{step}</span>
+                <p className="mt-3 text-sm font-bold text-white">{title}</p>
+                <p className="mt-1 text-xs text-slate-400">{description}</p>
+              </div>
+            ))}
+          </div>
+
+          <InfoTable rows={strategyMenuRows} />
+
+          <div className="mt-6">
+            <h3 className="flex items-center gap-2 text-base font-bold text-white">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              상태 표시를 이렇게 읽으세요
+            </h3>
+            <InfoTable rows={entryStateRows} cols={['화면 상태', '의미와 행동']} />
+          </div>
+
+          <div className="mt-6 rounded-lg border border-rose-500/25 bg-rose-500/8 p-4 text-sm leading-6 text-rose-100">
+            <strong>공통 원칙:</strong> 화면이 <span className="font-bold text-white">RESEARCH_ONLY</span>이면 투자 판단을 돕는 연구 신호입니다.
+            MTN은 주문을 실행하지 않으며, READY도 수익을 보장하거나 매수를 강제하는 뜻이 아닙니다.
+          </div>
+        </Card>
+      </div>
+
+      <div id="gold-strategy" className="scroll-mt-24">
+        <Card>
+          <SectionHeader
+            icon={<Database className="h-6 w-6 text-amber-300" />}
+            title="금 투자 메뉴 사용법"
+            subtitle="코어 4%와 전술 최대 6%를 분리하고, 선택한 금 상품 자체 가격으로만 진입·손절을 계산합니다."
+          />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge text="코어 4%" color="amber" />
+            <Badge text="전술 최대 6%" color="sky" />
+            <Badge text="전체 최대 10%" color="rose" />
+            <Badge text="RESEARCH_ONLY" color="slate" />
+          </div>
+          <InfoTable rows={goldStrategyRows} cols={['판단 단계', '언제 무엇을 하는가']} />
+          <Link
+            href="/gold"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-amber-300"
+          >
+            금 투자 메뉴 열기
+            <span aria-hidden="true">→</span>
+          </Link>
+        </Card>
+      </div>
+
+      <div id="nasdaq-strategy" className="scroll-mt-24">
+        <Card>
+          <SectionHeader
+            icon={<TrendingUp className="h-6 w-6 text-violet-300" />}
+            title="나스닥100 메뉴 사용법"
+            subtitle="QQQ 코어와 QLD·TQQQ 전술을 분리하고 월말 추세·200일선·변동성으로 진입 시점을 확인합니다."
+          />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge text="QQQ 코어 10%" color="sky" />
+            <Badge text="QLD 최대 5%" color="indigo" />
+            <Badge text="TQQQ 최대 3.33%" color="rose" />
+            <Badge text="RESEARCH_ONLY" color="slate" />
+          </div>
+          <InfoTable rows={nasdaqStrategyRows} cols={['판단 단계', '언제 무엇을 하는가']} />
+          <Link
+            href="/nasdaq"
+            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-400"
+          >
+            나스닥100 메뉴 열기
+            <span aria-hidden="true">→</span>
+          </Link>
+        </Card>
+      </div>
+
+      <Card>
+        <SectionHeader
+          icon={<BookOpen className="h-6 w-6 text-cyan-300" />}
+          title="현재 버전에 반영된 주요 업데이트"
+          subtitle="기존 8단계 가이드와 신규 투자 전략 기능을 함께 반영했습니다."
+        />
+        <InfoTable rows={currentUpdateRows} cols={['업데이트', '사용자 관점의 변화']} />
       </Card>
 
       {/* 2. 시장 분석 */}

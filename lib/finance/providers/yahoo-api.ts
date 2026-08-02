@@ -4,53 +4,57 @@ import type { FundamentalSnapshot, OHLCData } from '@/types';
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 let _crumbCache: { crumb: string; cookie: string; fetchedAt: number } | null = null;
+let _crumbPromise: Promise<{ crumb: string; cookie: string }> | null = null;
 const CRUMB_TTL_MS = 25 * 60 * 1000;
 
 async function getYahooCrumb(): Promise<{ crumb: string; cookie: string }> {
   if (_crumbCache && Date.now() - _crumbCache.fetchedAt < CRUMB_TTL_MS) {
     return _crumbCache;
   }
+  if (_crumbPromise) return _crumbPromise;
+
+  _crumbPromise = (async () => {
+    try {
+      const cookieRes = await fetch('https://fc.yahoo.com', {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        },
+        redirect: 'manual',
+      });
+
+      const setCookieHeader = cookieRes.headers.get('set-cookie') || '';
+      const rawCookies = setCookieHeader.split(/,(?=\s*[^;,]+=)/);
+      const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: {
+          'User-Agent': BROWSER_UA,
+          'Cookie': cookieString,
+          'Accept': '*/*',
+          'Referer': 'https://finance.yahoo.com/',
+        },
+      });
+
+      const crumb = (await crumbRes.text()).trim();
+      _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
+      return _crumbCache;
+    } catch (err) {
+      // Crumb fetch 실패 시 빈 crumb으로 fallback.
+      // Yahoo API는 crumb 없이도 일부 엔드포인트에서 동작합니다.
+      console.warn('[Yahoo API] Crumb fetch failed, using empty crumb fallback:', err instanceof Error ? err.message : err);
+      const fallback = { crumb: '', cookie: '' };
+      // 실패한 경우에도 짧은 TTL(5분)로 캐싱하여 반복 실패 시도를 방지
+      _crumbCache = { ...fallback, fetchedAt: Date.now() - CRUMB_TTL_MS + 5 * 60 * 1000 };
+      return fallback;
+    }
+  })();
 
   try {
-    // Yahoo 홈페이지는 수십 개의 Set-Cookie 헤더를 반환하여
-    // Node.js undici의 기본 헤더 한도(16KB)를 초과할 수 있습니다.
-    // axios는 Node.js http 모듈을 사용하므로 이 제한을 받지 않습니다.
-    const cookieRes = await axios.get('https://finance.yahoo.com/', {
-      headers: {
-        'User-Agent': BROWSER_UA,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-      },
-      maxRedirects: 5,
-      // 응답 본문은 불필요하므로 최소한만 수신
-      maxContentLength: 512 * 1024,
-      validateStatus: () => true,
-    });
-
-    const setCookieHeader = cookieRes.headers['set-cookie'] || [];
-    const rawCookies: string[] = Array.isArray(setCookieHeader) ? setCookieHeader : [setCookieHeader];
-    const cookieString = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
-
-    const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-      headers: {
-        'User-Agent': BROWSER_UA,
-        'Cookie': cookieString,
-        'Accept': '*/*',
-        'Referer': 'https://finance.yahoo.com/',
-      },
-    });
-
-    const crumb = (await crumbRes.text()).trim();
-    _crumbCache = { crumb, cookie: cookieString, fetchedAt: Date.now() };
-    return _crumbCache;
-  } catch (err) {
-    // Crumb fetch 실패 시 빈 crumb으로 fallback.
-    // Yahoo API는 crumb 없이도 일부 엔드포인트에서 동작합니다.
-    console.warn('[Yahoo API] Crumb fetch failed, using empty crumb fallback:', err instanceof Error ? err.message : err);
-    const fallback = { crumb: '', cookie: '' };
-    // 실패한 경우에도 짧은 TTL(5분)로 캐싱하여 반복 실패 시도를 방지
-    _crumbCache = { ...fallback, fetchedAt: Date.now() - CRUMB_TTL_MS + 5 * 60 * 1000 };
-    return fallback;
+    return await _crumbPromise;
+  } finally {
+    _crumbPromise = null;
   }
 }
 
@@ -68,11 +72,20 @@ function toPct(value: number | null) {
   return Number((value * 100).toFixed(2));
 }
 
-export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
+export type YahooChartRange = '1y' | '2y' | '5y' | '10y' | 'max';
+
+export interface YahooAdjustedOHLCData extends OHLCData {
+  adjusted: true;
+}
+
+export async function getYahooDailyPrice(
+  ticker: string,
+  options: { range?: YahooChartRange } = {}
+): Promise<OHLCData[]> {
   const { crumb, cookie } = await getYahooCrumb();
   const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
     params: {
-      range: '2y',
+      range: options.range || '2y',
       interval: '1d',
       includePrePost: false,
       events: 'history',
@@ -129,6 +142,85 @@ export async function getYahooDailyPrice(ticker: string): Promise<OHLCData[]> {
       Number.isFinite(row.volume) &&
       row.close > 0
     );
+}
+
+/**
+ * Split/dividend-adjusted daily series for signal research and backtests.
+ * Execution prices must continue to use `getYahooDailyPrice`; this function
+ * deliberately marks every row so callers cannot silently mix the two series.
+ */
+export async function getYahooAdjustedDailyPrice(
+  ticker: string,
+  options: { range?: YahooChartRange } = {},
+): Promise<YahooAdjustedOHLCData[]> {
+  const { crumb, cookie } = await getYahooCrumb();
+  const range = options.range || 'max';
+  const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`, {
+    params: {
+      ...(range === 'max'
+        ? {
+            period1: 0,
+            period2: Math.floor(Date.now() / 1000),
+          }
+        : { range }),
+      interval: '1d',
+      includePrePost: false,
+      events: 'div,splits',
+      crumb,
+    },
+    headers: {
+      'User-Agent': BROWSER_UA,
+      'Cookie': cookie,
+      'Accept': 'application/json',
+      'Referer': 'https://finance.yahoo.com/',
+    },
+  });
+
+  const result = response.data?.chart?.result?.[0];
+  const timestamps: number[] = result?.timestamp || [];
+  const quote = result?.indicators?.quote?.[0];
+  const adjustedCloses = result?.indicators?.adjclose?.[0]?.adjclose;
+  if (
+    !result
+    || !quote
+    || timestamps.length === 0
+    || !Array.isArray(quote.close)
+    || !Array.isArray(adjustedCloses)
+  ) {
+    throw new Error('Yahoo Finance 조정주가 시계열을 확인할 수 없습니다.');
+  }
+
+  return timestamps
+    .map((timestamp, index) => {
+      const rawOpen = Number(quote.open?.[index]);
+      const rawHigh = Number(quote.high?.[index]);
+      const rawLow = Number(quote.low?.[index]);
+      const rawClose = Number(quote.close?.[index]);
+      const adjustedClose = Number(adjustedCloses[index]);
+      const volume = Number(quote.volume?.[index] ?? 0);
+      if (
+        !Number.isFinite(rawOpen)
+        || !Number.isFinite(rawHigh)
+        || !Number.isFinite(rawLow)
+        || !Number.isFinite(rawClose)
+        || !Number.isFinite(adjustedClose)
+        || rawClose <= 0
+        || adjustedClose <= 0
+      ) {
+        return null;
+      }
+      const factor = adjustedClose / rawClose;
+      return {
+        date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+        open: rawOpen * factor,
+        high: rawHigh * factor,
+        low: rawLow * factor,
+        close: adjustedClose,
+        volume: Number.isFinite(volume) ? volume : 0,
+        adjusted: true as const,
+      };
+    })
+    .filter((row): row is YahooAdjustedOHLCData => row !== null);
 }
 
 export async function getYahooFundamentals(ticker: string): Promise<FundamentalSnapshot | null> {

@@ -6,15 +6,11 @@ import { AlertTriangle, CheckCircle2, Clipboard, ShieldAlert, ShieldCheck } from
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
-import type { ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
+import SystemEvidencePanel, { SystemFailurePanel } from '@/components/ui/SystemEvidencePanel';
+import { toDisplayFailure, type DisplayFailure, type EvidenceState } from '@/components/ui/system-evidence';
+import type { ApiFailure, ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
 
 type PortfolioActionSeverity = 'BLOCK' | 'REDUCE' | 'WARN';
-
-async function parseResponse<T>(response: Response) {
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
-  return body as ApiSuccess<T>;
-}
 
 function money(value: number, market: 'US' | 'KR') {
   return new Intl.NumberFormat(market === 'KR' ? 'ko-KR' : 'en-US', {
@@ -121,18 +117,27 @@ export default function PortfolioPage() {
   const [summary, setSummary] = useState<PortfolioRiskSummary | null>(null);
   const [meta, setMeta] = useState<DataSourceMeta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<DisplayFailure | null>(null);
 
   const load = useCallback(async (nextMarket: 'US' | 'KR') => {
     setLoading(true);
-    setError(null);
+    setFailure(null);
     try {
       const response = await fetch(`/api/portfolio/risk?market=${nextMarket}`);
-      const result = await parseResponse<PortfolioRiskSummary>(response);
+      const body = await response.json() as ApiSuccess<PortfolioRiskSummary> | ApiFailure;
+      if (!response.ok) {
+        setSummary(null);
+        setMeta(null);
+        setFailure(toDisplayFailure(body, '포트폴리오 리스크를 불러오지 못했습니다.'));
+        return;
+      }
+      const result = body as ApiSuccess<PortfolioRiskSummary>;
       setSummary(result.data);
       setMeta(result.meta);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '포트폴리오 리스크를 불러오지 못했습니다.');
+      setSummary(null);
+      setMeta(null);
+      setFailure(toDisplayFailure(err, '포트폴리오 리스크를 불러오지 못했습니다.'));
     } finally {
       setLoading(false);
     }
@@ -144,10 +149,10 @@ export default function PortfolioPage() {
 
   // 장 시간 중 3분 자동 갱신
   useEffect(() => {
-    if (loading || error) return;
+    if (loading || failure) return;
     const interval = setInterval(() => load(market), 3 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [load, market, loading, error]);
+  }, [load, market, loading, failure]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 pb-12">
@@ -192,16 +197,29 @@ export default function PortfolioPage() {
         >
           <PortfolioSkeleton />
         </AsyncStatePanel>
-      ) : error ? (
-        <AsyncStatePanel
-          state="error"
-          title="포트폴리오 리스크를 불러오지 못했습니다"
-          message={`원인: ${error}. 잠시 후 다시 시도하거나 새 매매 계획을 먼저 작성하세요.`}
-          onRetry={() => load(market)}
-          primaryAction={{ label: '새 매매 계획 작성', href: '/plan', variant: 'outline' }}
-        />
+      ) : failure ? (
+        <div className="space-y-3">
+          <SystemFailurePanel
+            title="포트폴리오 리스크를 불러오지 못했습니다"
+            failure={failure}
+            nextAction="신규 진입 판단을 중단하고 데이터 상태를 확인한 뒤 다시 불러오세요."
+            onRetry={() => load(market)}
+          />
+          <Link href="/plan" className="inline-flex rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 outline-none hover:border-slate-500 focus-visible:ring-2 focus-visible:ring-emerald-300">
+            새 매매 계획 작성
+          </Link>
+        </div>
       ) : summary ? (
         <>
+          <SystemEvidencePanel
+            ariaLabel="포트폴리오 데이터 신뢰도"
+            title="포트폴리오 데이터 신뢰도"
+            meta={meta}
+            nextAction="기준시각과 대체 데이터 여부를 확인한 뒤 위험한도 판정과 함께 사용하세요."
+          />
+
+          <PortfolioRiskEvidence summary={summary} />
+
           <PortfolioCommandCenter summary={summary} market={market} />
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -407,6 +425,61 @@ function PortfolioCommandCenter({ summary, market }: { summary: PortfolioRiskSum
         <QuickRule label="기준 시장" value={market === 'KR' ? '한국' : '미국'} detail="시장별 계좌 규모 제한을 별도로 적용" />
       </div>
     </section>
+  );
+}
+
+function PortfolioRiskEvidence({ summary }: { summary: PortfolioRiskSummary }) {
+  const hasBlockAction = summary.actions?.some((item) => item.severity === 'BLOCK') ?? false;
+  const hasReduceAction = summary.actions?.some((item) => item.severity === 'REDUCE') ?? false;
+  const isBlocked = summary.riskGate?.status === 'BLOCK' || hasBlockAction;
+  const isReduced = summary.riskGate?.status === 'REDUCE' || hasReduceAction;
+  const state: EvidenceState = isBlocked
+    ? 'blocked'
+    : isReduced
+      ? 'limited'
+      : summary.riskGate?.status === 'PASS'
+        ? 'ready'
+        : 'waiting';
+  const reasons = Array.from(new Set([
+    ...(summary.riskGate?.reasons || []).map((reason) => reason.message),
+    ...(summary.actions || [])
+      .filter((item) => item.severity === 'BLOCK' || item.severity === 'REDUCE')
+      .map((item) => item.detail || item.title),
+  ].filter(Boolean)));
+  const statusLabel = summary.riskGate?.status === 'BLOCK'
+    ? '차단'
+    : summary.riskGate?.status === 'REDUCE'
+      ? '축소'
+      : summary.riskGate?.status === 'PASS'
+        ? '통과'
+        : hasBlockAction
+          ? '차단'
+          : hasReduceAction
+            ? '축소'
+            : '미측정';
+  const nextAction = isBlocked
+    ? '신규 진입을 중단하고 차단 근거를 해소하세요.'
+    : isReduced
+      ? '신규 후보의 수량을 줄이고 기존 오픈 리스크부터 낮추세요.'
+      : state === 'ready'
+        ? '현재 위험한도를 유지하며 손절선과 섹터 노출을 계속 점검하세요.'
+        : '위험한도 판정 근거가 제공될 때까지 신규 진입 판단을 보류하세요.';
+
+  return (
+    <SystemEvidencePanel
+      ariaLabel="포트폴리오 위험한도 판정"
+      title="포트폴리오 위험한도 판정"
+      state={state}
+      showStandardMeta={false}
+      items={[
+        { label: '위험한도 상태', value: statusLabel, detail: 'API riskGate 및 운영 조치 기준' },
+        { label: '판정 근거', value: reasons.length > 0 ? reasons.join(' · ') : '미측정', detail: reasons.length > 0 ? `${reasons.length}건` : 'API가 판정 사유를 제공하지 않았습니다.' },
+        { label: '포지션 한도', value: `${summary.activePositions}/${summary.maxPositions}`, detail: '현재 활성 / 권장 최대' },
+        { label: '오픈 리스크', value: `${summary.openRiskPct}%`, detail: '손절 도달 시 예상 손실 비율' },
+        { label: '미측정 포지션', value: typeof summary.unknownRiskPositions === 'number' ? `${summary.unknownRiskPositions}개` : '미측정', detail: '오픈 리스크 계산 불가 포지션' },
+      ]}
+      nextAction={nextAction}
+    />
   );
 }
 

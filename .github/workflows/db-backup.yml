@@ -1,33 +1,201 @@
 name: MTN Database Backup Verification
 
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: '30 16 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: mtn-db-backup-writer
+  cancel-in-progress: false
+
 jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mtn_restore_drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d mtn_restore_drill"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - name: Create and verify encrypted-at-rest backup artifact
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL 17 client and age
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age ca-certificates curl gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+      - name: Create encrypted backup and perform restore drill
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          MTN_BACKUP_AGE_RECIPIENT: ${{ secrets.MTN_BACKUP_AGE_RECIPIENT }}
+          MTN_BACKUP_OUTPUT_DIR: backup-output
+          RESTORE_DRILL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mtn_restore_drill
+          MTN_RESTORE_DRILL_CONFIRM: EMPTY_TARGET_ONLY
         run: |
           test -n "$DATABASE_URL"
-          pg_dump "$DATABASE_URL" --format=custom --no-owner --no-acl --file=mtn.dump
-          pg_restore --list mtn.dump > mtn.restore-list.txt
-          test -s mtn.restore-list.txt
-          sha256sum mtn.dump > mtn.dump.sha256
-      - name: Upload backup
+          test -n "$MTN_BACKUP_AGE_RECIPIENT"
+          bash scripts/backup-supabase-encrypted.sh
+          test "$(find backup-output -type f -name '*.dump.age' | wc -l)" -eq 1
+          test "$(find backup-output -type f ! -name '*.dump.age' ! -name '*.sha256' | wc -l)" -eq 0
+      - name: Upload ciphertext only
         uses: actions/upload-artifact@v4
         with:
           name: mtn-db-backup-${{ github.run_id }}
           path: |
-            mtn.dump
-            mtn.dump.sha256
-            mtn.restore-list.txt
+            backup-output/*.dump.age
+            backup-output/*.dump.age.sha256
           retention-days: 7
           if-no-files-found: error
+      - name: Check optional R2 configuration
+        id: r2_config
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_BACKUP_PREFIX: ${{ secrets.R2_BACKUP_PREFIX }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          required=(
+            R2_ENDPOINT_URL
+            R2_BUCKET_NAME
+            R2_BACKUP_PREFIX
+            R2_ACCESS_KEY_ID
+            R2_SECRET_ACCESS_KEY
+          )
+          configured=0
+          for name in "${required[@]}"; do
+            if [[ -n "${!name}" ]]; then
+              configured=$((configured + 1))
+            fi
+          done
+          if [[ "$configured" -eq 0 ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$configured" -eq "${#required[@]}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "R2 is partially configured; set all five required secrets or none." >&2
+            exit 1
+          fi
+      - name: Upload ciphertext to R2 with fail-closed retention
+        id: r2_upload
+        if: steps.r2_config.outputs.enabled == 'true'
+        env:
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_BACKUP_PREFIX: ${{ secrets.R2_BACKUP_PREFIX }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_SESSION_TOKEN: ${{ secrets.R2_SESSION_TOKEN }}
+        run: |
+          aws_version="$(aws --version 2>&1)"
+          [[ "$aws_version" == aws-cli/2.* ]]
+          mapfile -t backup_paths < <(find backup-output -type f -name 'mtn-public-*.dump.age' -print)
+          test "${#backup_paths[@]}" -eq 1
+          backup_path="${backup_paths[0]}"
+          APPLY_BACKUP_RETENTION=DELETE_EXPIRED_CIPHERTEXT \
+            node scripts/r2-backup-retention.mjs retention --apply-retention
+          node scripts/r2-backup-retention.mjs plan-upload --file="$backup_path"
+          node scripts/r2-backup-retention.mjs upload --file="$backup_path"
+          APPLY_BACKUP_RETENTION=DELETE_EXPIRED_CIPHERTEXT \
+            node scripts/r2-backup-retention.mjs retention --apply-retention
+          encrypted_name="$(basename "$backup_path")"
+          encrypted_bytes="$(stat --format=%s "$backup_path")"
+          checksum="$(sha256sum "$backup_path" | awk '{print $1}')"
+          echo "object_key=${R2_BACKUP_PREFIX}${encrypted_name}" >> "$GITHUB_OUTPUT"
+          echo "bytes=$encrypted_bytes" >> "$GITHUB_OUTPUT"
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+      - name: Record successful R2 backup
+        if: steps.r2_upload.outcome == 'success'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          R2_OBJECT_KEY: ${{ steps.r2_upload.outputs.object_key }}
+          R2_OBJECT_BYTES: ${{ steps.r2_upload.outputs.bytes }}
+          R2_OBJECT_CHECKSUM: ${{ steps.r2_upload.outputs.checksum }}
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          payload="$(jq -n \
+            --arg object_key "$R2_OBJECT_KEY" \
+            --arg checksum "$R2_OBJECT_CHECKSUM" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --argjson bytes "$R2_OBJECT_BYTES" \
+            '[{storage_provider:"R2",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,restore_drill:true,row_count_reconciliation:true,retention:{daily:7,weekly:8,monthly:12},hard_cap_bytes:8000000000}}]')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data "$payload"
+      - name: Record successful encrypted restore drill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          encrypted_path="$(find backup-output -type f -name '*.dump.age' -print -quit)"
+          test -n "$encrypted_path"
+          encrypted_name="$(basename "$encrypted_path")"
+          encrypted_bytes="$(stat --format=%s "$encrypted_path")"
+          checksum="$(sha256sum "$encrypted_path" | awk '{print $1}')"
+          payload="$(jq -n \
+            --arg object_key "github-artifact/${GITHUB_RUN_ID}/${encrypted_name}" \
+            --arg checksum "$checksum" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --argjson bytes "$encrypted_bytes" \
+            '[{storage_provider:"GITHUB_ARTIFACT",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,restore_drill:true,row_count_reconciliation:true,retention_days:7}}]')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data "$payload"
+      - name: Record failed backup or restore drill
+        if: failure()
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
+            echo "Backup failure could not be recorded because the operations ledger is not configured." >&2
+            exit 0
+          fi
+          payload="$(jq -n \
+            --arg object_key "github-actions/${GITHUB_RUN_ID}/backup-failed" \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            '[{storage_provider:"GITHUB_ARTIFACT",object_key:$object_key,status:"FAILED",encrypted:true,metadata:{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,restore_drill:true}}]')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=minimal" \
+            --data "$payload"

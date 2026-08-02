@@ -305,6 +305,30 @@ function candidate(overrides) {
 }
 
 {
+  const allocationMessage = daily.formatDailyCategoryTop10TelegramMessage({
+    runDate: '2026-08-01',
+    category: 'NASDAQ100',
+    top10: [
+      {
+        rank: 1, category: 'NASDAQ100', market: 'US', ticker: 'ACTIVE', name: 'Active', universe: 'NASDAQ100',
+        score: 90, grade: 'A', source: 'leader', reason: 'confirmed', confidence: 0.9, actionState: 'ACTIVE',
+        targetWeight: 0.1, cashWeight: 0.9,
+      },
+      {
+        rank: 2, category: 'NASDAQ100', market: 'US', ticker: 'WATCH', name: 'Watch', universe: 'NASDAQ100',
+        score: 80, grade: 'B', source: 'momentum', reason: 'wait', confidence: 0.7, actionState: 'WATCHLIST',
+        actionReason: 'CHART_GATE_NOT_ACTIONABLE', targetWeight: 0, cashWeight: 0.9,
+      },
+    ],
+    provider: 'policy-v2',
+  });
+  assert.match(allocationMessage, /실행: \*1\/2\* \| 현금: \*90%\*/);
+  assert.match(allocationMessage, /실행 상태: \*ACTIVE\* \| 목표 비중 10%/);
+  assert.match(allocationMessage, /실행 상태: \*WATCHLIST\*/);
+  assert.match(allocationMessage, /대기 사유: 차트 진입조건 미충족/);
+}
+
+{
   const prompt = daily.buildDailyCategoryTop10Prompt({
     runDate: '2026-06-12',
     candidates: [

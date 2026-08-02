@@ -1,9 +1,9 @@
 import type { RecommendationCategory, RecommendationMarket } from './types';
 
 export const RECOMMENDATION_ANALYZER_VERSION = 'recommendation-diagnostics-2026.06-v1';
-export const RECOMMENDATION_ENGINE_VERSION = 'daily-top10-category-balanced-v1';
-export const KR_RISK_ENGINE_VERSION = 'kr-risk-ranked-v2';
-export const KR_RISK_FLOW_ENGINE_VERSION = 'kr-risk-flow-v2.1';
+export const RECOMMENDATION_ENGINE_VERSION = 'daily-top10-active-allocation-v2';
+export const KR_RISK_ENGINE_VERSION = 'kr-risk-ranked-v3';
+export const KR_RISK_FLOW_ENGINE_VERSION = 'kr-risk-flow-v3';
 export const KR_RECOMMENDATION_POLICY = process.env.KR_RECOMMENDATION_POLICY || RECOMMENDATION_ENGINE_VERSION;
 
 export const RECOMMENDATION_CATEGORIES: RecommendationCategory[] = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];

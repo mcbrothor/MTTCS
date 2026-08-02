@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createJiti } from 'jiti';
 
@@ -11,6 +12,7 @@ const {
   persistRecommendationPolicy,
   preservedTelegramDelivery,
   resolveRecommendationPublicationDecision,
+  resolveRecommendationActionState,
   shouldPreservePublishedPublication,
   shouldPreserveSentPublication,
   pickCandidateSnapshot,
@@ -103,6 +105,51 @@ const unverifiedChartGate = {
   score: -500,
   summary: '데이터 누락',
 };
+const watchlistChartGate = {
+  disposition: 'WATCHLIST',
+  verdict: 'WATCH',
+  setupGrade: 'B',
+  readiness: 'NEAR_TRIGGER',
+  eligible: true,
+  fundamentalVerification: 'PARTIAL',
+  score: 480,
+  summary: '관찰 후보',
+};
+
+{
+  const missingAllocation = resolveRecommendationActionState({ chart_gate: eligibleChartGate }, sentAt);
+  assert.equal(missingAllocation.action_state, 'WATCHLIST');
+  assert.equal(missingAllocation.activated_at, null);
+  assert.equal(missingAllocation.activation_source, null);
+  assert.equal(missingAllocation.activation_metadata.decision_source, 'ALLOCATION_REQUIRED');
+  assert.equal(missingAllocation.activation_metadata.chart_gate_actionable, true);
+
+  const allocationActive = resolveRecommendationActionState({
+    chart_gate: eligibleChartGate,
+    allocation_action: 'ACTIVE',
+  }, sentAt);
+  assert.equal(allocationActive.action_state, 'ACTIVE');
+  assert.equal(allocationActive.activation_source, 'ALLOCATION_AND_CHART_GATE');
+
+  const allocationVeto = resolveRecommendationActionState({
+    chart_gate: eligibleChartGate,
+    allocation_action: 'WATCHLIST',
+  }, sentAt);
+  assert.equal(allocationVeto.action_state, 'WATCHLIST');
+  assert.equal(allocationVeto.activated_at, null);
+  assert.equal(allocationVeto.activation_metadata.allocation_action, 'WATCHLIST');
+
+  const unsafeOverride = resolveRecommendationActionState({
+    chart_gate: unverifiedChartGate,
+    allocation_action: 'ACTIVE',
+  }, sentAt);
+  assert.equal(unsafeOverride.action_state, 'WATCHLIST', 'ACTIVE allocation still requires an actionable chart gate');
+
+  assert.equal(
+    resolveRecommendationActionState({ chart_gate: watchlistChartGate }, sentAt).action_state,
+    'WATCHLIST',
+  );
+}
 const picks = Array.from({ length: 10 }, (_, index) => ({
   rank: index + 1,
   category: 'NASDAQ100',
@@ -123,7 +170,7 @@ const result = {
 };
 const snapshots = Object.fromEntries(picks.map((pick, index) => [
   `NASDAQ100:${pick.ticker}`,
-  { chart_gate: index === 9 ? unverifiedChartGate : eligibleChartGate },
+  { chart_gate: index === 9 ? unverifiedChartGate : eligibleChartGate, allocation_action: 'ACTIVE' },
 ]));
 const publicationGate = buildRecommendationPublicationGate(result, 'NASDAQ100', snapshots);
 assert.equal(publicationGate.canPublish, false);
@@ -248,11 +295,86 @@ assert.equal(publicationInsert.payload.telegram_status, 'SKIPPED');
 assert.equal(publicationInsert.payload.market_context.publication_gate.eligibleCount, 9);
 const picksInsert = client.writes.find((write) => write.table === 'recommendation_picks' && write.operation === 'insert');
 assert.equal(picksInsert.payload[0].candidate_snapshot.publication_gate.canPublish, false);
+assert.equal(picksInsert.payload.length, 10, 'candidate Top10 is preserved regardless of action state');
+assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'ACTIVE').length, 9);
+assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'WATCHLIST').length, 1);
+assert.equal(picksInsert.payload[0].activated_at, '2026-06-22T12:00:00.000Z');
+assert.equal(picksInsert.payload[0].activation_source, 'ALLOCATION_AND_CHART_GATE');
+assert.equal(picksInsert.payload[9].activated_at, null);
+assert.equal(picksInsert.payload[9].activation_metadata.chart_gate_disposition, 'UNVERIFIED');
 
 const safeSnapshots = Object.fromEntries(picks.map((pick) => [
   `NASDAQ100:${pick.ticker}`,
-  { chart_gate: eligibleChartGate },
+  { chart_gate: eligibleChartGate, allocation_action: 'ACTIVE' },
 ]));
+
+const allWatchlistSnapshots = Object.fromEntries(picks.map((pick) => [
+  `NASDAQ100:${pick.ticker}`,
+  { chart_gate: watchlistChartGate },
+]));
+const allWatchlistClient = createPersistenceClient();
+const allWatchlist = await persistRecommendationPolicy({
+  client: allWatchlistClient,
+  runId: 'run-watchlist',
+  runDate: '2026-06-23',
+  generatedAt: '2026-06-23T12:00:00.000Z',
+  provider: 'test',
+  model: 'test',
+  result,
+  candidates,
+  category: 'NASDAQ100',
+  engineVersion: 'test-v1',
+  isOfficial: true,
+  candidateSnapshotByTicker: allWatchlistSnapshots,
+});
+assert.equal(allWatchlist.is_official, true, 'WATCHLIST candidates remain eligible for candidate publication');
+assert.equal(allWatchlist.status, 'PUBLISHED');
+const allWatchlistPicks = allWatchlistClient.writes.find((write) => (
+  write.table === 'recommendation_picks' && write.operation === 'insert'
+));
+assert.equal(allWatchlistPicks.payload.length, 10);
+assert.equal(allWatchlistPicks.payload.every((pick) => pick.action_state === 'WATCHLIST'), true);
+assert.equal(allWatchlistPicks.payload.every((pick) => pick.activated_at === null), true);
+
+const singlePick = picks.slice(0, 1);
+const singlePickClient = createPersistenceClient();
+const singlePickPublication = await persistRecommendationPolicy({
+  client: singlePickClient,
+  runId: 'run-single',
+  runDate: '2026-06-24',
+  generatedAt: '2026-06-24T12:00:00.000Z',
+  provider: 'test',
+  model: 'test',
+  result: { ...result, categories: { NASDAQ100: singlePick } },
+  candidates: candidates.slice(0, 1),
+  category: 'NASDAQ100',
+  engineVersion: 'test-v1',
+  isOfficial: true,
+  candidateSnapshotByTicker: {
+    [`NASDAQ100:${singlePick[0].ticker}`]: { chart_gate: watchlistChartGate },
+  },
+});
+assert.equal(singlePickPublication.status, 'SHADOW', 'fewer than 10 candidates can be stored but cannot be official');
+const singlePickInsert = singlePickClient.writes.find((write) => (
+  write.table === 'recommendation_picks' && write.operation === 'insert'
+));
+assert.equal(singlePickInsert.payload.length, 1);
+assert.equal(singlePickInsert.payload[0].action_state, 'WATCHLIST');
+
+await assert.rejects(() => persistRecommendationPolicy({
+  client: createPersistenceClient(),
+  runId: 'run-empty',
+  runDate: '2026-06-25',
+  generatedAt: '2026-06-25T12:00:00.000Z',
+  provider: 'test',
+  model: 'test',
+  result: { ...result, categories: { NASDAQ100: [] } },
+  candidates: [],
+  category: 'NASDAQ100',
+  engineVersion: 'test-v1',
+  isOfficial: true,
+}), /between 1 and 10 picks/);
+
 const promotionClient = createPersistenceClient({
   existingPublication: {
     id: 'shadow-publication-1',
@@ -352,5 +474,15 @@ assert.equal(failedShadowClient.writes.some((write) => (
   && write.payload.is_official === true
   && write.payload.status === 'DRAFT'
 )), true);
+
+const actionStateMigration = await readFile(
+  new URL('../supabase/migrations/20260802090000_recommendation_action_state.sql', import.meta.url),
+  'utf8',
+);
+assert.match(actionStateMigration, /add column if not exists action_state text not null default 'ACTIVE'/i);
+assert.match(actionStateMigration, /alter column action_state set default 'WATCHLIST'/i);
+assert.match(actionStateMigration, /check \(action_state in \('ACTIVE', 'WATCHLIST'\)\)/i);
+assert.match(actionStateMigration, /add column if not exists activation_metadata jsonb not null default '\{\}'::jsonb/i);
+assert.match(actionStateMigration, /where action_state = 'ACTIVE'/i);
 
 console.log('recommendation persistence tests passed');

@@ -2,21 +2,15 @@ import { NextResponse } from 'next/server';
 import { validateCronRequest } from '@/lib/contest-cron';
 import { apiError } from '@/lib/api/response';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import { getYahooDailyPrice, getYahooQuotes } from '@/lib/finance/providers/yahoo-api';
+import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { buildSectorRows } from '@/lib/master-filter/sector-rows';
-import { computeMacroScore } from '@/lib/macro/compute';
+import { buildMacroSnapshotRow, fetchMacroAssessment } from '@/lib/macro/service';
 import type { OHLCData } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-const US_MACRO_SYMBOLS = [
-  '^VIX', 'UUP', 'SHY', 'TLT', 'HYG', 'IEF',
-  'QQQ', 'SPY', 'DIA', 'IWM', 'RSP',
-  'GLD', 'CPER',
-];
 
 const US_SECTOR_ETFS = ['XLK', 'XLY', 'XLC', 'XLI', 'XLF', 'XLV', 'XLE', 'XLP', 'XLU', 'XLB'];
 const US_BREADTH_ETFS = ['SPY', 'QQQ', 'DIA', 'IWM', 'RSP'];
@@ -34,6 +28,44 @@ const KR_SECTOR_NAMES: Record<string, string> = {
   '455850.KS': '반도체', '305720.KS': '2차전지', '091180.KS': '자동차',
   '244580.KS': '바이오', '091220.KS': '은행', '117680.KS': '철강',
   '117700.KS': '건설', '139260.KS': 'IT',
+};
+
+type RecommendationStateCategory = 'NASDAQ100' | 'SP500' | 'KOSPI200' | 'KOSDAQ150';
+
+interface CategorySnapshotConfig {
+  category: RecommendationStateCategory;
+  market: 'US' | 'KR';
+  benchmarkSymbol: string;
+  mainSymbols: string[];
+  breadthEtfs: string[];
+  sectorEtfs: string[];
+  riskOnSectors: Set<string>;
+  sectorNames: Record<string, string>;
+  kisMarket?: 'KOSPI' | 'KOSDAQ';
+}
+
+const CATEGORY_SNAPSHOT_CONFIG: Record<RecommendationStateCategory, CategorySnapshotConfig> = {
+  NASDAQ100: {
+    category: 'NASDAQ100', market: 'US', benchmarkSymbol: '^NDX', mainSymbols: ['^NDX', 'QQQ'],
+    breadthEtfs: ['QQQ', 'XLK', 'XLC', 'IWM', 'RSP'], sectorEtfs: US_SECTOR_ETFS,
+    riskOnSectors: US_RISK_ON_SECTORS, sectorNames: US_SECTOR_NAMES,
+  },
+  SP500: {
+    category: 'SP500', market: 'US', benchmarkSymbol: '^GSPC', mainSymbols: ['^GSPC', 'SPY'],
+    breadthEtfs: US_BREADTH_ETFS, sectorEtfs: US_SECTOR_ETFS,
+    riskOnSectors: US_RISK_ON_SECTORS, sectorNames: US_SECTOR_NAMES,
+  },
+  KOSPI200: {
+    category: 'KOSPI200', market: 'KR', benchmarkSymbol: '^KS200', mainSymbols: ['^KS200', '069500.KS'],
+    breadthEtfs: KR_BREADTH_ETFS, sectorEtfs: KR_SECTOR_ETFS,
+    riskOnSectors: KR_RISK_ON_SECTORS, sectorNames: KR_SECTOR_NAMES, kisMarket: 'KOSPI',
+  },
+  KOSDAQ150: {
+    category: 'KOSDAQ150', market: 'KR', benchmarkSymbol: '^KQ150', mainSymbols: ['^KQ150', '^KQ11', '229200.KS'],
+    breadthEtfs: ['^KQ11', '^KS11', '229200.KS'], sectorEtfs: ['244580.KS', '455850.KS', '305720.KS', '139260.KS', '091220.KS'],
+    riskOnSectors: new Set(['244580.KS', '455850.KS', '305720.KS', '139260.KS']),
+    sectorNames: KR_SECTOR_NAMES, kisMarket: 'KOSDAQ',
+  },
 };
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
@@ -54,51 +86,73 @@ function movingAverage(data: { close: number }[], period: number) {
 }
 
 async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
-  const sectorEtfs = market === 'KR' ? KR_SECTOR_ETFS : US_SECTOR_ETFS;
-  const breadthEtfs = market === 'KR' ? KR_BREADTH_ETFS : US_BREADTH_ETFS;
-  const riskOnSectors = market === 'KR' ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
-  const sectorNames = market === 'KR' ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
-  const mainSymbol = market === 'KR' ? '^KS200' : 'SPY';
-
-  const [mainData, vixData, vix3mData, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
-    safeDaily(mainSymbol),
+  const categories: RecommendationStateCategory[] = market === 'KR'
+    ? ['KOSPI200', 'KOSDAQ150']
+    : ['SP500', 'NASDAQ100'];
+  const configs = categories.map((category) => CATEGORY_SNAPSHOT_CONFIG[category]);
+  const allSymbols = [...new Set(configs.flatMap((config) => [
+    ...config.mainSymbols,
+    ...config.breadthEtfs,
+    ...config.sectorEtfs,
+  ]))];
+  const [priceEntries, vixData, vix3mData, foreignEntries] = await Promise.all([
+    Promise.all(allSymbols.map(async (symbol) => [symbol, await safeDaily(symbol)] as const)),
     safeDaily('^VIX'),
     safeDaily('^VIX3M'),
-    Promise.all(breadthEtfs.map(async (s) => [s, await safeDaily(s)] as const)),
-    Promise.all(sectorEtfs.map(async (s) => [s, await safeDaily(s)] as const)),
-    market === 'KR' ? getKisMarketForeignNetBuy('KOSPI', 20).catch(() => []) : Promise.resolve([]),
+    Promise.all(configs.map(async (config) => [
+      config.category,
+      config.kisMarket ? await getKisMarketForeignNetBuy(config.kisMarket, 20).catch(() => []) : [],
+    ] as const)),
   ]);
+  const prices = new Map(priceEntries);
+  const foreignByCategory = new Map(foreignEntries);
+  const results = [];
+  const failures: Array<{ category: RecommendationStateCategory; message: string }> = [];
 
-  if (mainData.length < 200) throw new Error(`${mainSymbol} 200일 데이터 부족`);
-
-  const breadthRows = breadthSeries
-    .filter(([, d]) => d.length >= 200)
-    .map(([symbol, d]) => ({
-      symbol,
-      above200: d.at(-1)!.close > (movingAverage(d, 200) ?? Infinity),
-      return20: percentReturn(d, 20) ?? 0,
-    }));
-
-  const sectorRows = buildSectorRows(sectorSeries, sectorNames, riskOnSectors);
-  const foreignNetBuy5d = foreignNetBuy.length
-    ? foreignNetBuy.slice(0, 5).reduce((sum, row) => sum + row.netBuyAmount, 0)
-    : undefined;
-
-  const result = computeP3(
-    mainData,
-    vixData,
-    breadthRows,
-    sectorRows,
-    mainSymbol,
-    breadthEtfs,
-    vix3mData,
-    foreignNetBuy5d,
-  );
+  for (const config of configs) {
+    try {
+      const mainSymbol = config.mainSymbols.find((symbol) => (prices.get(symbol)?.length || 0) >= 200);
+      if (!mainSymbol) throw new Error(`${config.benchmarkSymbol} 200일 데이터 부족`);
+      const mainData = prices.get(mainSymbol)!;
+      const breadthSeries = config.breadthEtfs.map((symbol) => [symbol, prices.get(symbol) || []] as const);
+      const sectorSeries = config.sectorEtfs.map((symbol) => [symbol, prices.get(symbol) || []] as const);
+      const breadthRows = breadthSeries
+        .filter(([, data]) => data.length >= 200)
+        .map(([symbol, data]) => ({
+          symbol,
+          above200: data.at(-1)!.close > (movingAverage(data, 200) ?? Infinity),
+          return20: percentReturn(data, 20) ?? 0,
+        }));
+      const sectorRows = buildSectorRows(sectorSeries, config.sectorNames, config.riskOnSectors);
+      const foreignNetBuy = foreignByCategory.get(config.category) || [];
+      const foreignNetBuy5d = foreignNetBuy.length
+        ? foreignNetBuy.slice(0, 5).reduce((sum, row) => sum + row.netBuyAmount, 0)
+        : undefined;
+      const result = computeP3(
+        mainData,
+        vixData,
+        breadthRows,
+        sectorRows,
+        mainSymbol,
+        config.breadthEtfs,
+        vix3mData,
+        foreignNetBuy5d,
+      );
+      results.push({ config, mainSymbol, result });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push({ category: config.category, message });
+      if (config.category === categories[0]) throw error;
+    }
+  }
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from('master_filter_snapshot').upsert({
+  const categoryRows = results.map(({ config, mainSymbol, result }) => ({
     calc_date: calcDate,
-    market,
+    category: config.category,
+    market: config.market,
+    benchmark_symbol: config.benchmarkSymbol,
+    source_symbol: mainSymbol,
     p3_score: result.p3Score,
     state: result.state,
     trend_score: result.trendScore,
@@ -110,42 +164,71 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
     nhnl_score: result.newHighLowScore,
     above200_score: result.above200Score,
     sector_score: result.sectorScore,
-  }, { onConflict: 'calc_date,market' });
+  }));
+  const { error: categoryError } = await supabase
+    .from('recommendation_category_market_state')
+    .upsert(categoryRows, { onConflict: 'calc_date,category' });
+  if (categoryError) throw new Error(`recommendation_category_market_state upsert error: ${categoryError.message}`);
 
-  if (error) throw new Error(`master_filter_snapshot upsert error: ${error.message}`);
+  const primary = results.find(({ config }) => config.category === categories[0]);
+  if (!primary) throw new Error(`${market} primary master filter result missing`);
+  const primaryRow = categoryRows.find((row) => row.category === primary.config.category)!;
+  const legacyRow = {
+    calc_date: primaryRow.calc_date,
+    market: primaryRow.market,
+    p3_score: primaryRow.p3_score,
+    state: primaryRow.state,
+    trend_score: primaryRow.trend_score,
+    breadth_score: primaryRow.breadth_score,
+    volatility_score: primaryRow.volatility_score,
+    liquidity_score: primaryRow.liquidity_score,
+    ftd_score: primaryRow.ftd_score,
+    distribution_score: primaryRow.distribution_score,
+    nhnl_score: primaryRow.nhnl_score,
+    above200_score: primaryRow.above200_score,
+    sector_score: primaryRow.sector_score,
+  };
+  const { error: legacyError } = await supabase
+    .from('master_filter_snapshot')
+    .upsert(legacyRow, { onConflict: 'calc_date,market' });
+  if (legacyError) throw new Error(`master_filter_snapshot upsert error: ${legacyError.message}`);
 
-  return { p3Score: result.p3Score, state: result.state };
+  return {
+    p3Score: primary.result.p3Score,
+    state: primary.result.state,
+    categories: Object.fromEntries(results.map(({ config, mainSymbol, result }) => [config.category, {
+      p3Score: result.p3Score,
+      state: result.state,
+      benchmarkSymbol: config.benchmarkSymbol,
+      sourceSymbol: mainSymbol,
+    }])),
+    failures,
+  };
 }
 
 async function snapshotMacro(calcDate: string) {
-  const quotes = await getYahooQuotes(US_MACRO_SYMBOLS).catch(() => []);
-  const quotesMap = quotes.reduce((acc, q) => {
-    acc[q.symbol] = q;
-    return acc;
-  }, {} as Record<string, typeof quotes[number]>);
-
-  const result = computeMacroScore(quotesMap);
-
+  // macro_snapshot은 현재 calc_date 단일 키인 US 스냅샷 테이블입니다.
+  // KR 매크로는 live API에서 동일 서비스를 사용하되 이 테이블을 덮어쓰지 않습니다.
+  const assessment = await fetchMacroAssessment('US');
+  const row = buildMacroSnapshotRow(assessment, calcDate);
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from('macro_snapshot').upsert({
-    calc_date: calcDate,
-    macro_score: result.macroScore,
-    regime: result.regime,
-    spy_above_50ma: result.spyAbove50ma,
-    hyg_ief_diff: result.hygIefDiff,
-    vix_level: result.vixLevel,
-    trend_score: result.componentScores.trendScore,
-    credit_score: result.componentScores.creditScore,
-    volatility_score: result.componentScores.volatilityScore,
-    dollar_rate_score: result.componentScores.dollarRateScore,
-    econ_sensitivity_score: result.componentScores.econSensitivityScore,
-    breadth_score: result.componentScores.breadthScore,
-    raw_json: { breakdown: result.breakdown },
-  }, { onConflict: 'calc_date' });
+  const { error } = await supabase
+    .from('macro_snapshot')
+    .upsert(row, { onConflict: 'calc_date' });
 
   if (error) throw new Error(`macro_snapshot upsert error: ${error.message}`);
 
-  return { macroScore: result.macroScore, regime: result.regime };
+  return {
+    macroScore: assessment.result.macroScore,
+    rawScore: assessment.rawScore,
+    regime: assessment.result.regime,
+    decisionStatus: assessment.quality.status,
+    quality: assessment.quality,
+    observedAt: assessment.observedAt,
+    fetchedAt: assessment.fetchedAt,
+    modelVersion: assessment.modelVersion,
+    market: assessment.market,
+  };
 }
 
 export async function GET(request: Request) {

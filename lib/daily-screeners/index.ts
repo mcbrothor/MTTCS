@@ -59,6 +59,10 @@ export interface DailyTop5Pick {
   reason: string;
   confidence: number;
   risk?: string | null;
+  actionState?: 'ACTIVE' | 'WATCHLIST';
+  actionReason?: string | null;
+  targetWeight?: number;
+  cashWeight?: number;
   chartGate?: {
     disposition: 'ACTIONABLE' | 'WATCHLIST' | 'EXCLUDED' | 'UNVERIFIED';
     verdict: 'BUY' | 'WATCH' | 'AVOID' | 'UNVERIFIED';
@@ -1330,6 +1334,22 @@ export function formatDailyMarketTop10TelegramMessage(input: {
   ].join('\n');
 }
 
+function recommendationActionReasonLabel(reason?: string | null) {
+  if (!reason) return null;
+  return ({
+    MARKET_STATE_RED: '시장 RED',
+    MARKET_STATE_GRAY: '시장상태 판정 보류',
+    MARKET_STATE_MISSING: '시장상태 누락',
+    CATEGORY_STATE_REQUIRED: '전용 지수 상태 미확인',
+    INVALID_CATEGORY_STATE: '전용 지수 상태 오류',
+    CHART_GATE_NOT_ACTIONABLE: '차트 진입조건 미충족',
+    CATEGORY_ACTIVE_CAP: '카테고리 활성 한도',
+    RECENT_ACTIVE_REPEAT: '최근 ACTIVE 추천 쿨다운',
+    POLICY_WATCHLIST_BACKFILL: '안전필터 보충 후보',
+    REQUESTED_POLICY_UNAVAILABLE: '요청 정책 산출 실패',
+  } as Record<string, string>)[reason] || reason;
+}
+
 export function formatDailyCategoryTop10TelegramMessage(input: {
   runDate: string;
   category: DailyScreenerCategory;
@@ -1337,9 +1357,19 @@ export function formatDailyCategoryTop10TelegramMessage(input: {
   provider: string;
 }) {
   const rows = input.top10.slice(0, 10);
+  const actionAware = rows.some((pick) => pick.actionState === 'ACTIVE' || pick.actionState === 'WATCHLIST');
+  const activeCount = rows.filter((pick) => pick.actionState === 'ACTIVE').length;
+  const reportedCashWeight = rows.find((pick) => Number.isFinite(pick.cashWeight))?.cashWeight;
+  const allocationSummary = actionAware
+    ? `실행: *${activeCount}/${rows.length}*${Number.isFinite(reportedCashWeight) ? ` | 현금: *${formatPercent(reportedCashWeight!)}*` : ''}`
+    : null;
   const body = rows.map((pick) => [
     `${pick.rank}. *${md(pick.ticker)}* — ${md(pick.name || pick.ticker)}`,
     `   ${md(sourceLabel(pick.source))} | 신뢰도 ${formatPercent(pick.confidence)} | MTN ${formatNumber(pick.score, 0)} | ${md(pick.universe)}`,
+    pick.actionState ? `   실행 상태: *${md(pick.actionState)}*${pick.actionState === 'ACTIVE' && Number.isFinite(pick.targetWeight) ? ` | 목표 비중 ${formatPercent(pick.targetWeight!)}` : ''}` : null,
+    pick.actionState === 'WATCHLIST' && recommendationActionReasonLabel(pick.actionReason)
+      ? `   대기 사유: ${md(recommendationActionReasonLabel(pick.actionReason)!)}`
+      : null,
     `   근거: ${md(compactSentence(pick.reason, 620))}`,
     pick.chartGate ? `   통합 게이트: ${md(pick.chartGate.summary)}` : null,
     pick.risk ? `   리스크: ${md(compactSentence(pick.risk, 360))}` : null,
@@ -1349,9 +1379,10 @@ export function formatDailyCategoryTop10TelegramMessage(input: {
     `*MTN Daily ${md(categoryLabel(input.category))} 추천 Top10*`,
     `기준일: *${md(input.runDate)}* | 엔진: \`${md(input.provider)}\``,
     `후보: 스크리너별 카테고리 Top10 통합 → LLM 최종 ${rows.length}개`,
+    allocationSummary,
     '',
     rows.length ? body : '전송할 후보가 없습니다.',
-  ].join('\n');
+  ].filter((line) => line !== null).join('\n');
 }
 
 export function formatDailyTop5TelegramMessage(input: {

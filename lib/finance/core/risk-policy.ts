@@ -152,3 +152,24 @@ export function buildRiskPolicyForStrategy(
     pyramidSpacingAtr: config.pyramidSpacingAtr,
   } as RiskPolicy;
 }
+
+export function buildAuthoritativeRiskPolicy(
+  market: 'US' | 'KR',
+  strategy: AppliedRiskStrategy,
+  baseRiskPct = 0.01
+): RiskPolicy {
+  const selected = buildRiskPolicyForStrategy(market, strategy, baseRiskPct);
+  const standardCeiling = getDefaultRiskPolicy(market);
+  return {
+    ...selected,
+    baseRiskPct: Math.min(selected.baseRiskPct, standardCeiling.baseRiskPct),
+    maxSingleTradeRiskPct: Math.min(selected.maxSingleTradeRiskPct, standardCeiling.maxSingleTradeRiskPct),
+    maxPortfolioHeatPct: Math.min(selected.maxPortfolioHeatPct, standardCeiling.maxPortfolioHeatPct),
+    maxSectorExposurePct: Math.min(selected.maxSectorExposurePct, standardCeiling.maxSectorExposurePct),
+    maxSectorRiskPct: Math.min(selected.maxSectorRiskPct, standardCeiling.maxSectorRiskPct),
+    drawdownSoftLimitPct: Math.min(selected.drawdownSoftLimitPct, standardCeiling.drawdownSoftLimitPct),
+    drawdownHardLimitPct: Math.min(selected.drawdownHardLimitPct, standardCeiling.drawdownHardLimitPct),
+    dailyLossLimitPct: Math.min(selected.dailyLossLimitPct, standardCeiling.dailyLossLimitPct),
+    weeklyLossLimitPct: Math.min(selected.weeklyLossLimitPct, standardCeiling.weeklyLossLimitPct),
+  };
+}

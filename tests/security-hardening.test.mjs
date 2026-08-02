@@ -91,9 +91,8 @@ assert.match(migration, /to service_role/);
 assert.match(migration, /if not p_dry_run then/);
 
 const workflow = await readFile(new URL('../.github/workflows/db-maintenance.yml', import.meta.url), 'utf8');
-assert.match(workflow, /rpc\/maintain_stock_metrics_retention_v2/);
-assert.match(workflow, /"p_dry_run":false/);
-assert.match(workflow, /--fail-with-body/);
+assert.match(workflow, /mtn_internal\.apply_retention_policies\(true,\s*null\)/i);
+assert.doesNotMatch(workflow, /maintain_stock_metrics_retention_v2/i);
 
 const webhookRoute = await readFile(new URL('../app/api/telegram-webhook/route.ts', import.meta.url), 'utf8');
 assert.match(webhookRoute, /readTelegramWebhookConfig/);

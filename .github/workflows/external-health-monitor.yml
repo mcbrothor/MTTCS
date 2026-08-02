@@ -1,0 +1,28 @@
+name: MTN External Health Deadman
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: mtn-external-health-deadman
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check aggregate operations health
+        env:
+          MTN_HEALTH_URL: ${{ secrets.MTN_HEALTH_URL }}
+          MTN_HEALTH_TOKEN: ${{ secrets.MTN_HEALTH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MTN_ALERT_DEDUPE_SECONDS: '1800'
+        run: node scripts/check-operations-health.mjs

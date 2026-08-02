@@ -5,6 +5,7 @@ import MetricsGrid from '@/components/master-filter/MetricsGrid';
 import DecisionBox from '@/components/master-filter/DecisionBox';
 import EarlyWarningPanel from '@/components/master-filter/EarlyWarningPanel';
 import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
+import RiskBarometerCompactWidget from '@/components/master-filter/RiskBarometerCompactWidget';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import { useMarket } from '@/contexts/MarketContext';
 
@@ -104,6 +105,7 @@ export default function MasterFilterPage() {
             <h2 className="mt-1 text-base font-bold text-[var(--text-primary)]">위험이 커지는지</h2>
           </div>
           <MacroCompactWidget />
+          <RiskBarometerCompactWidget />
           <LLMBriefing />
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4 shadow-[var(--panel-shadow)]">
             <h3 className="mb-3 text-sm font-semibold text-[var(--text-primary)]">운용 가이드라인</h3>

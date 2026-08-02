@@ -1,0 +1,9 @@
+name = "mtn-health-deadman"
+main = "worker.mjs"
+compatibility_date = "2026-08-01"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Configure with `wrangler secret put`; never commit the values:
+# MTN_HEALTH_URL, MTN_HEALTH_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID

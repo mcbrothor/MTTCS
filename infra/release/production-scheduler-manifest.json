@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 2,
+  "schedulerOwner": "supabase-pg-cron",
+  "provenanceEndpoint": "/api/release",
+  "scheduleMigrations": [
+    "supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql",
+    "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql"
+  ],
+  "expectedJobCount": 25,
+  "jobs": [
+    {
+      "name": "mtn-snapshot-macro",
+      "path": "/api/cron/snapshot-market-state?type=macro",
+      "schedule": "0 21 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-snapshot-master-us",
+      "path": "/api/cron/snapshot-market-state?market=US&type=master-filter",
+      "schedule": "5 21 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-snapshot-master-kr",
+      "path": "/api/cron/snapshot-market-state?market=KR&type=master-filter",
+      "schedule": "10 07 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-contest-review-us",
+      "path": "/api/cron/contest-review-us",
+      "schedule": "0 04 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-contest-review-kr",
+      "path": "/api/cron/contest-review-kr",
+      "schedule": "0 08 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-daily-screeners",
+      "path": "/api/cron/daily-screeners",
+      "schedule": "0 09 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-us-0",
+      "path": "/api/cron/recommendation-performance?market=US&shard=0&shards=4",
+      "schedule": "30 06 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-us-1",
+      "path": "/api/cron/recommendation-performance?market=US&shard=1&shards=4",
+      "schedule": "35 06 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-us-2",
+      "path": "/api/cron/recommendation-performance?market=US&shard=2&shards=4",
+      "schedule": "40 06 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-us-3",
+      "path": "/api/cron/recommendation-performance?market=US&shard=3&shards=4",
+      "schedule": "45 06 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-kr-0",
+      "path": "/api/cron/recommendation-performance?market=KR&shard=0&shards=4",
+      "schedule": "10 08 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-kr-1",
+      "path": "/api/cron/recommendation-performance?market=KR&shard=1&shards=4",
+      "schedule": "15 08 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-kr-2",
+      "path": "/api/cron/recommendation-performance?market=KR&shard=2&shards=4",
+      "schedule": "20 08 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-performance-kr-3",
+      "path": "/api/cron/recommendation-performance?market=KR&shard=3&shards=4",
+      "schedule": "25 08 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-recommendation-weekly",
+      "path": "/api/cron/recommendation-weekly",
+      "schedule": "0 07 * * 6",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 691200
+    },
+    {
+      "name": "mtn-rs-metrics-us",
+      "path": "/api/cron/rs-metrics?market=US",
+      "schedule": "15 21 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-risk-barometer",
+      "path": "/api/cron/risk-barometer?dryRun=false",
+      "schedule": "30 22 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-rs-metrics-kr",
+      "path": "/api/cron/rs-metrics?market=KR",
+      "schedule": "15 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-edgar-backfill-a",
+      "path": "/api/cron/edgar-backfill?wave=A&size=80",
+      "schedule": "30 02 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-edgar-backfill-b",
+      "path": "/api/cron/edgar-backfill?wave=B&size=80",
+      "schedule": "0 03 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-gold-strategy",
+      "path": "/api/cron/gold-strategy?dryRun=false",
+      "schedule": "30 23 * * *",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-nasdaq-strategy",
+      "path": "/api/cron/nasdaq-strategy?dryRun=false",
+      "schedule": "45 23 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-market-intelligence-feeds",
+      "path": "/api/cron/market-intelligence?mode=feeds",
+      "schedule": "*/30 * * * *",
+      "slotMinutes": 30,
+      "expectedDelaySeconds": 2700
+    },
+    {
+      "name": "mtn-market-intelligence-indicators",
+      "path": "/api/cron/market-intelligence?mode=indicators",
+      "schedule": "35,45,55 12,13 * * *",
+      "slotMinutes": 10,
+      "expectedDelaySeconds": 93600
+    },
+    {
+      "name": "mtn-check-alerts",
+      "path": "/api/cron/check-alerts",
+      "schedule": "*/30 * * * *",
+      "slotMinutes": 30,
+      "expectedDelaySeconds": 2700
+    }
+  ],
+  "intentionallyUnscheduledRoutes": [
+    {
+      "route": "/api/cron/chart-analysis",
+      "reason": "Operator-triggered chart analysis is queued by the daily worker rather than a periodic scheduler."
+    },
+    {
+      "route": "/api/cron/purge-metrics",
+      "reason": "Destructive metrics retention is an explicit maintenance action rather than an HTTP schedule."
+    }
+  ],
+  "requiredMigrations": [
+    "supabase/migrations/20260726090000_gold_strategy_v1.sql",
+    "supabase/migrations/20260727103000_nasdaq_strategy_v1.sql",
+    "supabase/migrations/20260728090000_manual_strategy_capital.sql",
+    "supabase/migrations/20260728143000_risk_barometer_v1.sql",
+    "supabase/migrations/20260731123727_market_intelligence_v1.sql",
+    "supabase/migrations/20260731123927_risk_barometer_rls_cleanup.sql",
+    "supabase/migrations/20260801085212_free_infrastructure_scheduler.sql",
+    "supabase/migrations/20260801123027_repair_market_intelligence_remote_drift.sql",
+    "supabase/migrations/20260801132500_allow_market_intelligence_revisions.sql",
+    "supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql",
+    "supabase/migrations/20260801134500_fix_cron_slot_claim.sql",
+    "supabase/migrations/20260801135500_remove_legacy_cron_invoker.sql",
+    "supabase/migrations/20260801142755_reduce_market_intelligence_frequency.sql",
+    "supabase/migrations/20260802090000_recommendation_action_state.sql",
+    "supabase/migrations/20260802093000_recommendation_category_market_state.sql",
+    "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql",
+    "supabase/migrations/20260802140000_operations_health_control_plane.sql",
+    "supabase/migrations/20260802153000_recommendation_evidence_backend.sql",
+    "supabase/migrations/20260802160000_recommendation_performance_scheduler_barrier.sql"
+  ]
+}

@@ -29,9 +29,27 @@ interface SecCompanyFacts {
   };
 }
 
+export interface SecBarometerFinancials {
+  ticker: string;
+  ttmFreeCashFlow: number | null;
+  priorTtmFreeCashFlow: number | null;
+  ttmOperatingIncome: number | null;
+  ttmInterestExpense: number | null;
+  cash: number | null;
+  debt: number | null;
+  ttmEps: number | null;
+  priorTtmEps: number | null;
+  observedAt: string | null;
+  sourceUrl: string;
+}
+
 let tickerMapCache: Map<string, string> | null = null;
 let tickerMapFetchedAt = 0;
+let tickerMapPromise: Promise<Map<string, string>> | null = null;
 const TICKER_MAP_TTL_MS = 24 * 60 * 60 * 1000;
+const BAROMETER_FACTS_TTL_MS = 15 * 60 * 1000;
+const barometerFactsCache = new Map<string, { value: SecBarometerFinancials; fetchedAt: number }>();
+const barometerFactsPromises = new Map<string, Promise<SecBarometerFinancials | null>>();
 const ANNUAL_FORMS = new Set(['10-K', '10-K/A', '20-F', '20-F/A', '40-F', '40-F/A']);
 const QUARTERLY_FORMS = new Set(['10-Q', '10-Q/A', '10-QT', '10-QT/A', '10-K', '10-K/A', '20-F', '20-F/A', '40-F', '40-F/A']);
 const QUARTER_ORDER: Record<string, number> = { Q1: 1, Q2: 2, Q3: 3, Q4: 4 };
@@ -170,25 +188,106 @@ function latestInstantValue(companyFacts: SecCompanyFacts, tags: string[], units
   return rows[0]?.val ?? null;
 }
 
+function latestInstantFact(companyFacts: SecCompanyFacts, tags: string[], units: string[]) {
+  return extractUnits(companyFacts, tags, units)
+    .filter((row) => !row.start && row.end)
+    .sort(sortByPeriodDesc)[0] ?? null;
+}
+
+function addNullable(values: Array<number | null>) {
+  if (values.some((value) => value === null)) return null;
+  return values.reduce<number>((sum, value) => sum + Number(value), 0);
+}
+
+export function extractSecFlowTtmPair(companyFacts: SecCompanyFacts, tags: string[], units: string[]) {
+  const annual = annualFacts(companyFacts, tags, units);
+  const annualByYear = new Map(annual.map((row) => [Number(row.fy), row]));
+  const ytd = extractUnits(companyFacts, tags, units)
+    .filter((row) => {
+      if (!row.fy || !row.form || !QUARTERLY_FORMS.has(row.form)) return false;
+      const duration = durationDays(row);
+      return duration !== null && duration > 120 && duration < 300 && (row.fp === 'Q2' || row.fp === 'Q3');
+    })
+    .sort(sortByPeriodDesc);
+
+  const latestAnnual = annual[0] ?? null;
+  const latestYtd = ytd[0] ?? null;
+  if (!latestAnnual) return { current: null, prior: null, observedAt: latestYtd?.filed || latestYtd?.end || null };
+
+  if (!latestYtd || String(latestAnnual.end || '') >= String(latestYtd.end || '')) {
+    return {
+      current: latestAnnual.val ?? null,
+      prior: annual[1]?.val ?? null,
+      observedAt: latestAnnual.filed || latestAnnual.end || null,
+    };
+  }
+
+  const currentFy = Number(latestYtd.fy);
+  const previousYtd = ytd.find((row) => Number(row.fy) === currentFy - 1 && row.fp === latestYtd.fp) ?? null;
+  const priorPreviousYtd = ytd.find((row) => Number(row.fy) === currentFy - 2 && row.fp === latestYtd.fp) ?? null;
+  const precedingAnnual = annualByYear.get(currentFy - 1) ?? latestAnnual;
+  const priorAnnual = annualByYear.get(currentFy - 2) ?? annual[1] ?? null;
+
+  return {
+    current: addNullable([
+      precedingAnnual?.val ?? null,
+      latestYtd.val ?? null,
+      previousYtd?.val === undefined ? null : -previousYtd.val,
+    ]),
+    prior: addNullable([
+      priorAnnual?.val ?? null,
+      previousYtd?.val ?? null,
+      priorPreviousYtd?.val === undefined ? null : -priorPreviousYtd.val,
+    ]),
+    observedAt: latestYtd.filed || latestYtd.end || null,
+  };
+}
+
 async function getTickerMap() {
   const now = Date.now();
   if (tickerMapCache && now - tickerMapFetchedAt < TICKER_MAP_TTL_MS) return tickerMapCache;
+  if (tickerMapPromise) return tickerMapPromise;
 
-  const response = await axios.get<Record<string, SecTickerRow>>('https://www.sec.gov/files/company_tickers.json', {
-    headers: secHeaders(),
-    timeout: 10_000,
-  });
+  tickerMapPromise = (async () => {
+    const response = await axios.get<Record<string, SecTickerRow>>('https://www.sec.gov/files/company_tickers.json', {
+      headers: secHeaders(),
+      timeout: 10_000,
+    });
 
-  const map = new Map<string, string>();
-  for (const row of Object.values(response.data || {})) {
-    if (row?.ticker && row?.cik_str) {
-      map.set(row.ticker.toUpperCase(), padCik(String(row.cik_str)));
+    const map = new Map<string, string>();
+    for (const row of Object.values(response.data || {})) {
+      if (row?.ticker && row?.cik_str) {
+        map.set(row.ticker.toUpperCase(), padCik(String(row.cik_str)));
+      }
+    }
+
+    tickerMapCache = map;
+    tickerMapFetchedAt = Date.now();
+    return map;
+  })();
+
+  try {
+    return await tickerMapPromise;
+  } finally {
+    tickerMapPromise = null;
+  }
+}
+
+async function fetchSecCompanyFacts(cik: string) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await axios.get<SecCompanyFacts>(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
+        headers: secHeaders(),
+        timeout: 15_000,
+      });
+      return response.data;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 300));
     }
   }
-
-  tickerMapCache = map;
-  tickerMapFetchedAt = now;
-  return map;
+  throw lastError;
 }
 
 export async function getCikForTicker(ticker: string) {
@@ -219,12 +318,7 @@ export async function getSecFundamentals(ticker: string): Promise<FundamentalSna
     const cik = await getCikForTicker(ticker);
     if (!cik) return null;
 
-    const response = await axios.get<SecCompanyFacts>(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
-      headers: secHeaders(),
-      timeout: 10_000,
-    });
-
-    const facts = response.data;
+    const facts = await fetchSecCompanyFacts(cik);
     const epsGrowthLast3Qtrs = quarterlyGrowthSeries(
       facts,
       ['EarningsPerShareDiluted', 'EarningsPerShareBasic'],
@@ -298,5 +392,113 @@ export async function getSecFundamentals(ticker: string): Promise<FundamentalSna
   } catch (error) {
     console.warn('SEC fundamentals fallback failed:', error);
     return null;
+  }
+}
+
+async function fetchSecBarometerFinancials(ticker: string): Promise<SecBarometerFinancials | null> {
+  try {
+    const normalizedTicker = ticker.toUpperCase();
+    const cik = await getCikForTicker(normalizedTicker);
+    if (!cik) return null;
+
+    const facts = await fetchSecCompanyFacts(cik);
+    const operatingCashFlow = extractSecFlowTtmPair(
+      facts,
+      ['NetCashProvidedByUsedInOperatingActivities', 'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations'],
+      ['USD'],
+    );
+    const capex = extractSecFlowTtmPair(
+      facts,
+      ['PaymentsToAcquirePropertyPlantAndEquipment', 'PaymentsToAcquireProductiveAssets'],
+      ['USD'],
+    );
+    const operatingIncome = extractSecFlowTtmPair(facts, ['OperatingIncomeLoss'], ['USD']);
+    const interestExpense = extractSecFlowTtmPair(
+      facts,
+      [
+        'InterestExpense',
+        'InterestExpenseNonoperating',
+        'InterestExpenseNonOperating',
+        'InterestExpenseDebt',
+        'InterestAndDebtExpense',
+      ],
+      ['USD'],
+    );
+    const eps = extractSecFlowTtmPair(
+      facts,
+      ['EarningsPerShareDiluted', 'EarningsPerShareBasic'],
+      ['USD-per-shares', 'USD/shares'],
+    );
+    const cashFact = latestInstantFact(
+      facts,
+      ['CashAndCashEquivalentsAtCarryingValue', 'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents'],
+      ['USD'],
+    );
+    const debtCurrent = latestInstantFact(
+      facts,
+      ['LongTermDebtCurrent', 'ShortTermBorrowings', 'LongTermDebtAndFinanceLeaseObligationsCurrent'],
+      ['USD'],
+    );
+    const debtNoncurrent = latestInstantFact(
+      facts,
+      ['LongTermDebtNoncurrent', 'LongTermDebtAndFinanceLeaseObligationsNoncurrent'],
+      ['USD'],
+    );
+    const observedAt = [
+      operatingCashFlow.observedAt,
+      capex.observedAt,
+      operatingIncome.observedAt,
+      interestExpense.observedAt,
+      eps.observedAt,
+      cashFact?.filed || cashFact?.end,
+      debtCurrent?.filed || debtCurrent?.end,
+      debtNoncurrent?.filed || debtNoncurrent?.end,
+    ].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
+    const sourceUrl = `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`;
+    const debt = debtCurrent || debtNoncurrent
+      ? Number(debtCurrent?.val ?? 0) + Number(debtNoncurrent?.val ?? 0)
+      : null;
+
+    return {
+      ticker: normalizedTicker,
+      ttmFreeCashFlow: addNullable([
+        operatingCashFlow.current,
+        capex.current === null ? null : -Math.abs(capex.current),
+      ]),
+      priorTtmFreeCashFlow: addNullable([
+        operatingCashFlow.prior,
+        capex.prior === null ? null : -Math.abs(capex.prior),
+      ]),
+      ttmOperatingIncome: operatingIncome.current,
+      ttmInterestExpense: interestExpense.current === null ? null : Math.abs(interestExpense.current),
+      cash: cashFact?.val ?? null,
+      debt,
+      ttmEps: eps.current,
+      priorTtmEps: eps.prior,
+      observedAt: observedAt ? `${observedAt}T23:59:59.000Z` : null,
+      sourceUrl,
+    };
+  } catch (error) {
+    console.warn('SEC risk barometer fundamentals fallback failed:', error);
+    return null;
+  }
+}
+
+export async function getSecBarometerFinancials(ticker: string): Promise<SecBarometerFinancials | null> {
+  const normalizedTicker = ticker.toUpperCase();
+  const cached = barometerFactsCache.get(normalizedTicker);
+  if (cached && Date.now() - cached.fetchedAt < BAROMETER_FACTS_TTL_MS) return cached.value;
+
+  const inFlight = barometerFactsPromises.get(normalizedTicker);
+  if (inFlight) return inFlight;
+
+  const request = fetchSecBarometerFinancials(normalizedTicker);
+  barometerFactsPromises.set(normalizedTicker, request);
+  try {
+    const value = await request;
+    if (value) barometerFactsCache.set(normalizedTicker, { value, fetchedAt: Date.now() });
+    return value;
+  } finally {
+    barometerFactsPromises.delete(normalizedTicker);
   }
 }

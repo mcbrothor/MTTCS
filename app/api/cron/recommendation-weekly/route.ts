@@ -1,6 +1,17 @@
 import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { validateCronRequest } from '@/lib/contest-cron';
-import { evaluateKrPolicyPromotion, type PolicyCohortMetric } from '@/lib/recommendations/policy-evaluation';
+import {
+  DEFAULT_POLICY_PROMOTION_MIN_COHORTS,
+  evaluateKrLongTermPolicyPromotion,
+  evaluateKrPolicyPromotion,
+  type LongTermPolicyPromotionCategory,
+  type LongTermPolicyPromotionHorizon,
+  type PolicyCohortMetric,
+} from '@/lib/recommendations/policy-evaluation';
+import {
+  formatRecommendationPromotionAlert,
+  recommendationPromotionAlertKey,
+} from '@/lib/recommendations/promotion-alert';
 import { readRecommendationDiagnostics, readRecommendationMetrics } from '@/lib/recommendations/read';
 import {
   formatRecommendationWeeklyReport,
@@ -17,6 +28,7 @@ import {
 import {
   KR_RISK_ENGINE_VERSION,
   KR_RISK_FLOW_ENGINE_VERSION,
+  KR_RECOMMENDATION_POLICY,
   RECOMMENDATION_CATEGORIES,
   RECOMMENDATION_CATEGORY_MARKET,
   RECOMMENDATION_ENGINE_VERSION,
@@ -39,10 +51,11 @@ function isDryRun(request: Request) {
 function toPolicyCohorts(
   engineVersion: string,
   cohorts: Awaited<ReturnType<typeof readRecommendationMetrics>>['cohorts'],
+  horizon: 'D5' | LongTermPolicyPromotionHorizon = 'D5',
 ): PolicyCohortMetric[] {
   return cohorts.flatMap((row) => {
     if (
-      row.horizon !== 'D5'
+      row.horizon !== horizon
       || row.averageExcessReturnPct === null
       || row.averageMaePct === null
       || row.lowerDecileReturnPct === null
@@ -93,7 +106,6 @@ export async function GET(request: Request) {
             market,
             category,
             engineVersion,
-            horizon: 'D5',
           }))
           : []),
       ]);
@@ -101,6 +113,14 @@ export async function GET(request: Request) {
       const policyCohorts = policyMetrics.flatMap((policy) => (
         toPolicyCohorts(policy.engineVersion as string, policy.cohorts)
       ));
+      const longTermPolicyCohorts = Object.fromEntries(
+        (['D20', 'D60'] as const).map((horizon) => [
+          horizon,
+          policyMetrics.flatMap((policy) => (
+            toPolicyCohorts(policy.engineVersion as string, policy.cohorts, horizon)
+          )),
+        ]),
+      ) as Record<LongTermPolicyPromotionHorizon, PolicyCohortMetric[]>;
 
       categories.push({
         category,
@@ -122,8 +142,27 @@ export async function GET(request: Request) {
           d5: policy.horizons.find((row) => row.horizon === 'D5') || null,
         })),
         policyDecision: market === 'KR' ? evaluateKrPolicyPromotion(policyCohorts) : null,
+        longTermPolicyCohorts: market === 'KR' ? longTermPolicyCohorts : null,
       });
     }
+
+    const promotionMinCohorts = Math.max(
+      1,
+      Math.floor(Number(process.env.RECOMMENDATION_PROMOTION_MIN_COHORTS || DEFAULT_POLICY_PROMOTION_MIN_COHORTS)),
+    );
+    const promotionReadiness = evaluateKrLongTermPolicyPromotion({
+      activeEngineVersion: KR_RECOMMENDATION_POLICY,
+      minCohorts: Number.isFinite(promotionMinCohorts)
+        ? promotionMinCohorts
+        : DEFAULT_POLICY_PROMOTION_MIN_COHORTS,
+      categories: categories
+        .filter((category) => category.market === 'KR' && category.longTermPolicyCohorts)
+        .map((category) => ({
+          category: category.category as LongTermPolicyPromotionCategory,
+          cohorts: category.longTermPolicyCohorts as Record<LongTermPolicyPromotionHorizon, PolicyCohortMetric[]>,
+        })),
+    });
+    const promotionAlertMessage = formatRecommendationPromotionAlert(promotionReadiness);
 
     const origin = process.env.NEXT_PUBLIC_APP_URL || process.env.MTN_BASE_URL || null;
     const message = formatRecommendationWeeklyReport({
@@ -146,9 +185,6 @@ export async function GET(request: Request) {
       },
     );
     const dataAsOf = readiness.dataAsOf;
-    if (message.length >= 3_200 || chunks.length !== 1) {
-      throw new Error(`Weekly report exceeds the single-message limit (${message.length} chars, ${chunks.length} chunks).`);
-    }
 
     console.info(JSON.stringify({
       event: 'recommendation_weekly_report_ready',
@@ -170,9 +206,45 @@ export async function GET(request: Request) {
         dataAsOf,
         readiness,
         categories,
+        promotionReadiness,
+        promotionAlertPreview: promotionAlertMessage,
       }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
     }
 
+    let promotionAlertDelivery = null;
+    let promotionAlertError: Error | null = null;
+    if (promotionAlertMessage && promotionReadiness.recommendedEngineVersion) {
+      try {
+        promotionAlertDelivery = await sendTelegramMessage(promotionAlertMessage, createWeeklyDeliveryHooks({
+          client,
+          reportKey: recommendationPromotionAlertKey({
+            activeEngineVersion: promotionReadiness.activeEngineVersion,
+            recommendedEngineVersion: promotionReadiness.recommendedEngineVersion,
+          }),
+          messageHash: weeklyReportMessageHash(promotionAlertMessage),
+        }));
+        if (promotionAlertDelivery.skipped) throw new Error('Promotion alert Telegram delivery was skipped.');
+        console.info(JSON.stringify({
+          event: 'recommendation_policy_promotion_alert_delivered',
+          activeEngineVersion: promotionReadiness.activeEngineVersion,
+          recommendedEngineVersion: promotionReadiness.recommendedEngineVersion,
+          deliveredChats: promotionAlertDelivery.sent,
+          alreadyDelivered: promotionAlertDelivery.alreadyDelivered,
+        }));
+      } catch (error) {
+        promotionAlertError = error instanceof Error ? error : new Error(String(error));
+        console.error(JSON.stringify({
+          event: 'recommendation_policy_promotion_alert_failed',
+          activeEngineVersion: promotionReadiness.activeEngineVersion,
+          recommendedEngineVersion: promotionReadiness.recommendedEngineVersion,
+          error: promotionAlertError.message,
+        }));
+      }
+    }
+
+    if (message.length >= 3_200 || chunks.length !== 1) {
+      throw new Error(`Weekly report exceeds the single-message limit (${message.length} chars, ${chunks.length} chunks).`);
+    }
     if (!readiness.ready) {
       throw new Error(`Weekly report data is incomplete: ${readiness.failures.join('; ')}`);
     }
@@ -194,6 +266,7 @@ export async function GET(request: Request) {
       chunkCount: chunks.length,
       deliveredChats: delivery.sent,
     }));
+    if (promotionAlertError) throw promotionAlertError;
     return apiSuccess({
       dryRun: false,
       categories,
@@ -201,6 +274,8 @@ export async function GET(request: Request) {
       messageLength: message.length,
       chunkCount: chunks.length,
       dataAsOf,
+      promotionReadiness,
+      promotionAlertDelivery,
     }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
   } catch (error) {
     console.error(JSON.stringify({

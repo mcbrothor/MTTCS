@@ -208,24 +208,24 @@ export default function ScannerPage() {
   const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
   const scanBlocked = macroTrend?.action_level === 'HALT';
   return (
-    <div className="space-y-6 pb-12">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-12">
       {limitMessage && (
-        <div className="fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
+        <div className="fixed bottom-6 left-1/2 z-[100] max-w-[calc(100vw-2rem)] -translate-x-1/2 break-words rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-center text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
           {limitMessage}
         </div>
       )}
       {telegramMessage && (
-        <div className="fixed bottom-20 left-1/2 z-[100] -translate-x-1/2 rounded-xl border border-emerald-500/40 bg-emerald-950/90 px-5 py-3 text-sm font-semibold text-emerald-100 shadow-2xl backdrop-blur-md">
+        <div className="fixed bottom-20 left-1/2 z-[100] max-w-[calc(100vw-2rem)] -translate-x-1/2 break-words rounded-xl border border-emerald-500/40 bg-emerald-950/90 px-5 py-3 text-center text-sm font-semibold text-emerald-100 shadow-2xl backdrop-blur-md">
           {telegramMessage}
         </div>
       )}
-      <section className="panel-grid space-y-5 p-5 sm:p-6">
+      <section className="panel-grid min-w-0 space-y-5 p-5 sm:p-6">
         <MarketBanner compact={true} />
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
-          <div className="space-y-4">
-            <div>
-              <h1 className="flex items-center gap-3 text-3xl font-black tracking-tightest text-[var(--text-primary)]">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
+          <div className="min-w-0 space-y-4">
+            <div className="min-w-0">
+              <h1 className="flex min-w-0 flex-wrap items-center gap-3 text-3xl font-black tracking-tightest text-[var(--text-primary)]">
                 <div className="rounded-2xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
                   <ScanSearch className="h-6 w-6 text-emerald-300" />
                 </div>
@@ -249,7 +249,7 @@ export default function ScannerPage() {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface-accent)] p-4 shadow-[var(--panel-shadow)]">
+          <div className="min-w-0 rounded-[24px] border border-[var(--border)] bg-[var(--surface-accent)] p-4 shadow-[var(--panel-shadow)]">
             <div className="grid gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
@@ -339,7 +339,7 @@ export default function ScannerPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <StatCard
             label="Recommended"
             value={stats.recommended}
@@ -585,13 +585,13 @@ export default function ScannerPage() {
       </AnimatePresence>
 
       {selectedTickers.size > 0 && (
-        <div className="fixed bottom-8 left-1/2 z-50 flex w-[min(92vw,640px)] -translate-x-1/2 items-center justify-between gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl">
-          <div>
+        <div className="fixed bottom-20 left-1/2 z-50 flex w-[min(92vw,640px)] min-w-0 -translate-x-1/2 flex-col items-stretch gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl sm:bottom-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Contest Pool</p>
             <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{selectedTickers.size} / 15 종목 선택</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
             <button
               type="button"
               onClick={() => clearSelection()}

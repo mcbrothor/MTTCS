@@ -227,9 +227,18 @@ export default function ManualStrategyForm({
         <div className={`mt-5 rounded-lg border px-4 py-3 text-sm ${invalidMessage ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : 'border-sky-500/30 bg-sky-500/10 text-sky-100'}`}>
           <div className="flex items-start gap-3">
             <Target className="mt-0.5 h-4 w-4 shrink-0" />
-            <p>
-              {invalidMessage || `계획 수량 ${riskPlan.totalShares.toLocaleString()}주 · R/R ${riskPlan.rewardRiskRatio?.toFixed(2)}R · 주당 리스크 ${riskPlan.riskPerShare.toLocaleString()}`}
-            </p>
+            <div>
+              <p>
+                {invalidMessage || `계획 수량 ${riskPlan.totalShares.toLocaleString()}주 · R/R ${riskPlan.rewardRiskRatio?.toFixed(2)}R · 주당 리스크 ${riskPlan.riskPerShare.toLocaleString()}`}
+              </p>
+              {!invalidMessage ? (
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs text-sky-200" aria-label="수동 전략 입력값 요약">
+                  <span>Entry: {entryPrice.toLocaleString()}</span>
+                  <span>Stop: {stopPrice.toLocaleString()}</span>
+                  <span>Target: {targetPrice.toLocaleString()}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </Card>

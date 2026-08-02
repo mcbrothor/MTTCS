@@ -12,6 +12,8 @@ import {
   markJobFailed,
   processJob,
   updateHeartbeat,
+  updateOperationsHeartbeat,
+  withJobDeadline,
   writeJobLog,
 } from './lib/local-analysis-worker-utils.mjs';
 
@@ -59,29 +61,67 @@ function sleep(ms) {
   });
 }
 
+async function recordHeartbeat(status, metadata = {}, currentJobId = null) {
+  await Promise.all([
+    updateHeartbeat(pool, config, status, metadata, currentJobId),
+    updateOperationsHeartbeat(
+      supabase,
+      config,
+      'local-analysis',
+      status,
+      metadata,
+      currentJobId,
+    ),
+  ]);
+}
+
+async function renewJobLease(job) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('analysis_jobs')
+    .update({ locked_at: now, updated_at: now })
+    .eq('id', job.id)
+    .eq('locked_by', config.workerId)
+    .eq('status', 'running');
+  if (error) throw new Error(`analysis job lease renewal failed: ${error.message}`);
+  await recordHeartbeat('RUNNING', { jobType: job.job_type }, job.id);
+}
+
 async function tick() {
-  await updateHeartbeat(pool, config, 'IDLE', { jobTypes: config.jobTypes });
+  await recordHeartbeat('IDLE', { jobTypes: config.jobTypes });
   const job = await claimNextJob(supabase, config);
   if (!job) return false;
 
+  let leaseTimer;
   try {
-    await updateHeartbeat(pool, config, 'RUNNING', { jobType: job.job_type }, job.id);
-    await processJob({ job, config, supabase, localDb: pool });
-    await updateHeartbeat(pool, config, 'IDLE', { lastJobId: job.id });
+    await renewJobLease(job);
+    leaseTimer = setInterval(() => {
+      renewJobLease(job).catch((error) => {
+        console.error(`[LocalWorker] Lease heartbeat failed for ${job.id}: ${summarizeSupabaseError(error)}`);
+      });
+    }, config.heartbeatMs);
+    await withJobDeadline(
+      () => processJob({ job, config, supabase, localDb: pool }),
+      config.jobTimeoutMs,
+    );
+    await recordHeartbeat('IDLE', { lastJobId: job.id });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[LocalWorker] Job ${job.id} failed: ${message}`);
     await writeJobLog(pool, config, job.id, 'ERROR', message).catch(() => {});
     await markJobFailed(supabase, job, message);
-    await updateHeartbeat(pool, config, 'ERROR', { lastError: message }, job.id).catch(() => {});
+    await recordHeartbeat('ERROR', { lastError: message }, job.id).catch(() => {});
+    if (error?.code === 'WORKER_JOB_TIMEOUT') throw error;
     return true;
+  } finally {
+    if (leaseTimer) clearInterval(leaseTimer);
   }
 }
 
 async function main() {
   console.log(`[LocalWorker] Starting worker ${config.workerId}.`);
-  await updateHeartbeat(pool, config, 'STARTING', { jobTypes: config.jobTypes });
+  await recordHeartbeat('STARTING', { jobTypes: config.jobTypes });
 
   try {
     let nextPollMs = 0;
@@ -97,7 +137,8 @@ async function main() {
           && isTransientSupabaseError(error);
         consecutiveClaimFailures += 1;
         console.error(`[LocalWorker] Queue claim failed (${consecutiveClaimFailures}): ${message}`);
-        await updateHeartbeat(pool, config, 'ERROR', { lastError: message }).catch(() => {});
+        await recordHeartbeat('ERROR', { lastError: message }).catch(() => {});
+        if (error?.code === 'WORKER_JOB_TIMEOUT') throw error;
         if (
           config.once
           || reachedConsecutiveFailureLimit(consecutiveClaimFailures, { transient: transientClaimFailure })
@@ -112,7 +153,7 @@ async function main() {
       if (!processed) await sleep(nextPollMs);
     } while (!stopping);
   } finally {
-    await updateHeartbeat(pool, config, 'STOPPING').catch(() => {});
+    await recordHeartbeat('STOPPING').catch(() => {});
     await pool.end();
     console.log('[LocalWorker] Stopped.');
   }

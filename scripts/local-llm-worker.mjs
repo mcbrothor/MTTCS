@@ -23,8 +23,10 @@ import {
   parseModelFallbacks,
 } from './lib/technical-chart-model-router.mjs';
 import {
+  applyRecommendationRepeatCooldown,
   deliverCategoriesIndependently,
   isTradingSession,
+  resolveActiveRecommendationDecision,
   resolveMacroSnapshotForRecommendation,
   resolveRecommendationPolicies,
 } from './lib/daily-recommendation-worker-utils.mjs';
@@ -62,6 +64,10 @@ const CODEX_CLI_ENABLED = process.env.CODEX_CLI_ENABLED?.toLowerCase() !== 'fals
 const CODEX_CLI_BIN = process.env.CODEX_CLI_BIN || 'codex';
 const CODEX_CLI_MODEL = process.env.CODEX_CLI_MODEL || '';
 const CODEX_CLI_TIMEOUT_MS = Number(process.env.CODEX_CLI_TIMEOUT_MS || 15 * 60 * 1000);
+const configuredLocalLlmRequestTimeoutMs = Number(process.env.LOCAL_LLM_REQUEST_TIMEOUT_MS || 15 * 60 * 1000);
+const LOCAL_LLM_REQUEST_TIMEOUT_MS = Number.isFinite(configuredLocalLlmRequestTimeoutMs)
+  ? Math.min(15 * 60 * 1000, Math.max(60_000, configuredLocalLlmRequestTimeoutMs))
+  : 15 * 60 * 1000;
 const DAILY_TOP5_TIMEOUT_MS = Number(process.env.DAILY_TOP5_TIMEOUT_MS || 10 * 60 * 1000);
 const DAILY_TOP5_MAX_TOKENS = Number(process.env.DAILY_TOP5_MAX_TOKENS || 8000);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
@@ -69,7 +75,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
-const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'qwen-3-235b-a22b-instruct-2507';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'gpt-oss-120b';
 const CRON_SECRET = process.env.CRON_SECRET || '';
 const MTN_BASE_URL = (process.env.MTN_CHART_ANALYSIS_BASE_URL || process.env.MTN_BASE_URL || 'https://mttcs.vercel.app').replace(/\/$/, '');
 const DAILY_TELEGRAM_CHARTS_ENABLED = process.env.DAILY_TELEGRAM_CHARTS_ENABLED?.toLowerCase() === 'true';
@@ -90,6 +96,10 @@ const dailyRecommendationChartGateConcurrency = Number(process.env.DAILY_RECOMME
 const DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY = Number.isInteger(dailyRecommendationChartGateConcurrency)
   ? Math.min(5, Math.max(1, dailyRecommendationChartGateConcurrency))
   : 3;
+const dailyRecommendationRepeatCooldownDays = Number(process.env.DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS || 7);
+const DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS = Number.isInteger(dailyRecommendationRepeatCooldownDays)
+  ? Math.min(30, Math.max(1, dailyRecommendationRepeatCooldownDays))
+  : 7;
 const DAILY_SCREENER_STALE_AFTER_MS = Math.max(10 * 60_000, Number(process.env.DAILY_SCREENER_STALE_AFTER_MS || 30 * 60_000));
 const DAILY_SCREENER_STALE_CHECK_INTERVAL_MS = normalizePollingMs(
   process.env.DAILY_SCREENER_STALE_CHECK_INTERVAL_MS,
@@ -110,6 +120,11 @@ const QUEUE_MAX_POLL_MS = normalizePollingMs(
   process.env.MTN_CODEX_WORKER_MAX_POLL_MS,
   { fallbackMs: 5 * 60_000, minMs: QUEUE_POLL_MS },
 );
+const CODEX_WORKER_ID = process.env.MTN_CODEX_WORKER_ID || 'mtn-codex-primary';
+const configuredCodexHeartbeatMs = Number(process.env.MTN_CODEX_WORKER_HEARTBEAT_MS || 60_000);
+const CODEX_WORKER_HEARTBEAT_MS = Number.isFinite(configuredCodexHeartbeatMs)
+  ? Math.max(10_000, configuredCodexHeartbeatMs)
+  : 60_000;
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': PROJECT_ROOT } });
 const dailyScreeners = jiti('../lib/daily-screeners/index.ts');
 const recommendationPersistence = jiti('../lib/recommendations/persistence.ts');
@@ -118,6 +133,7 @@ const krInvestorFlow = jiti('../lib/recommendations/kr-investor-flow.ts');
 const krRiskRanking = jiti('../lib/recommendations/kr-risk-ranking.ts');
 const recommendationConfig = jiti('../lib/recommendations/config.ts');
 const recommendationChartGate = jiti('../lib/recommendations/chart-gate.ts');
+const recommendationMarketRegime = jiti('../lib/recommendations/market-regime.ts');
 const technicalChartAnalysis = jiti('../lib/ai/technical-chart-analysis.ts');
 const telegramChartImage = jiti('../lib/telegram/chart-image.ts');
 const CODEX_CLI_CWD = process.env.CODEX_CLI_CWD || path.join(process.env.TMPDIR || '/tmp', 'mtn-codex-worker');
@@ -136,6 +152,24 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const telegramReceipts = createTelegramReceiptLedger(TELEGRAM_RECEIPT_PATH);
+let currentCodexWorkerStatus = 'STARTING';
+let currentCodexWorkerMetadata = {};
+
+async function recordCodexWorkerHeartbeat(status = currentCodexWorkerStatus, metadata = currentCodexWorkerMetadata) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('operations_component_heartbeats')
+    .upsert({
+      component: 'codex-llm',
+      worker_id: CODEX_WORKER_ID,
+      status,
+      current_job_id: null,
+      observed_at: now,
+      updated_at: now,
+      metadata,
+    }, { onConflict: 'component' });
+  if (error) throw new Error(`operations heartbeat update failed: ${error.message}`);
+}
 
 async function postTelegramPayload(url, payload) {
   const curlArgs = [
@@ -701,14 +735,17 @@ async function analyzeRecommendationChartGate({ category, pick, candidates }) {
   }
 }
 
-async function applyDailyRecommendationChartGate({ categories, candidates }) {
+async function applyDailyRecommendationChartGate({ categories, candidates, gateCache = new Map() }) {
   const entries = Object.entries(categories).flatMap(([category, picks]) => (picks || []).map((pick) => ({ category, pick })));
   if (!DAILY_RECOMMENDATION_CHART_GATE_ENABLED) {
     console.warn('[Worker] Recommendation chart gate collection is disabled; fail-closed SHADOW publication remains enforced.');
   }
   const checks = DAILY_RECOMMENDATION_CHART_GATE_ENABLED
     ? await mapWithConcurrency(entries, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async ({ category, pick }) => {
-      const chartGate = await analyzeRecommendationChartGate({ category, pick, candidates });
+      const cacheKey = `${category}:${pick.ticker}`;
+      const cached = gateCache.get(cacheKey);
+      const chartGate = cached || await analyzeRecommendationChartGate({ category, pick, candidates });
+      gateCache.set(cacheKey, chartGate);
       return { category, ticker: pick.ticker, chartGate };
     })
     : entries.map(({ category, pick }) => ({
@@ -738,9 +775,83 @@ async function applyDailyRecommendationChartGate({ categories, candidates }) {
   return { categories: gatedCategories, snapshots, publicationGates };
 }
 
+function mergeCandidateSnapshotMaps(...maps) {
+  const merged = {};
+  for (const map of maps) {
+    for (const [key, value] of Object.entries(map || {})) {
+      merged[key] = { ...(merged[key] || {}), ...(value || {}) };
+    }
+  }
+  return merged;
+}
+
+function allocateRecommendationCategory({
+  category,
+  picks,
+  regime,
+  runDate,
+  recentRecommendations = [],
+  requireActionable = true,
+}) {
+  const cooldown = applyRecommendationRepeatCooldown({
+    picks,
+    recentRecommendations,
+    runDate,
+    cooldownDays: DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS,
+  });
+  const decision = resolveActiveRecommendationDecision({
+    picks: cooldown.picks,
+    category,
+    market: recommendationConfig.RECOMMENDATION_CATEGORY_MARKET[category],
+    marketState: regime.effectiveState,
+    marketStateQuality: regime.quality,
+    requireActionable,
+    ...(!regime.canSelect ? { forceNoTradeReason: regime.reason } : {}),
+  });
+  const grossWeight = Math.max(0, 1 - decision.cashWeight);
+  const activeWeight = decision.activeCount > 0 ? grossWeight / decision.activeCount : 0;
+  const decidedPicks = decision.picks.map((pick) => ({
+    ...pick,
+    targetWeight: pick.actionState === 'ACTIVE' ? activeWeight : 0,
+    cashWeight: decision.cashWeight,
+  }));
+  const snapshots = {};
+  for (const pick of decidedPicks) {
+    const snapshot = {
+      allocation_action: pick.actionState,
+      allocation: {
+        action_state: pick.actionState,
+        action_reason: pick.actionReason,
+        target_weight: pick.targetWeight,
+        cash_weight: decision.cashWeight,
+        active_count: decision.activeCount,
+        active_cap: decision.activeCap,
+        actionable_count: decision.actionableCount,
+        status: decision.status,
+        reason: decision.reason,
+        category_regime: regime,
+        repeat_cooldown_days: DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS,
+      },
+    };
+    snapshots[`${category}:${pick.ticker}`] = snapshot;
+    snapshots[pick.ticker] = snapshots[pick.ticker] || snapshot;
+  }
+  return {
+    ...decision,
+    picks: decidedPicks,
+    snapshots,
+    repeatBlockedTickers: cooldown.blockedTickers,
+  };
+}
+
 async function sendDailyTelegramCharts({ category, picks, candidates }) {
   if (!DAILY_TELEGRAM_CHARTS_ENABLED) return { skipped: true, attempted: 0, sent: 0 };
-  const selected = telegramChartImage.selectTelegramChartPicks(picks || [], 10);
+  const rows = picks || [];
+  const actionAware = rows.some((pick) => pick.actionState === 'ACTIVE' || pick.actionState === 'WATCHLIST');
+  const selected = telegramChartImage.selectTelegramChartPicks(
+    actionAware ? rows.filter((pick) => pick.actionState === 'ACTIVE') : rows,
+    10,
+  );
   let attempted = 0;
   let sent = 0;
   for (const pick of selected) {
@@ -973,8 +1084,7 @@ async function loadRecommendationMarketContext(runDate) {
   if (macroQuery.error) throw macroQuery.error;
   const macroContext = resolveMacroSnapshotForRecommendation(macroQuery.data, runDate);
 
-  const contexts = {};
-  for (const market of ['US', 'KR']) {
+  const marketEntries = await Promise.all(['US', 'KR'].map(async (market) => {
     const marketQuery = await supabase
       .from('master_filter_snapshot')
       .select('calc_date, p3_score, state, trend_score, breadth_score, volatility_score, sector_score')
@@ -984,23 +1094,45 @@ async function loadRecommendationMarketContext(runDate) {
       .limit(1)
       .maybeSingle();
     if (marketQuery.error) throw marketQuery.error;
-    contexts[market] = {
+    return [market, {
       market_state: isFresh(marketQuery.data?.calc_date) ? marketQuery.data : null,
       market_state_quality: marketQuery.data ? (isFresh(marketQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
       macro: macroContext.macro,
       macro_quality: macroContext.macroQuality,
-    };
-  }
+    }];
+  }));
+  const categoryEntries = await Promise.all(recommendationConfig.RECOMMENDATION_CATEGORIES.map(async (category) => {
+    const categoryQuery = await supabase
+      .from('recommendation_category_market_state')
+      .select('calc_date, category, market, benchmark_symbol, source_symbol, p3_score, state, trend_score, breadth_score, volatility_score, sector_score')
+      .eq('category', category)
+      .lte('calc_date', runDate)
+      .order('calc_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (categoryQuery.error) {
+      const missingRelation = categoryQuery.error.code === '42P01' || categoryQuery.error.code === 'PGRST205';
+      if (!missingRelation) throw categoryQuery.error;
+      console.warn('[Worker] Category market-state table is unavailable; incompatible categories will fail closed.');
+    }
+    return [category, {
+      market_state: isFresh(categoryQuery.data?.calc_date) ? categoryQuery.data : null,
+      market_state_quality: categoryQuery.data ? (isFresh(categoryQuery.data.calc_date) ? 'FULL' : 'STALE') : 'MISSING',
+      macro: macroContext.macro,
+      macro_quality: macroContext.macroQuality,
+    }];
+  }));
+  const contexts = Object.fromEntries([...marketEntries, ...categoryEntries]);
   return contexts;
 }
 
-async function loadRecentKrRecommendations(runDate, category) {
+async function loadRecentActiveRecommendations(runDate, category) {
   const from = new Date(`${runDate}T00:00:00Z`);
   from.setUTCDate(from.getUTCDate() - 30);
   let query = supabase
     .from('recommendation_picks')
-    .select('ticker, signal_price, recommendation_publications!inner(run_date, market, category, is_official, status)')
-    .eq('recommendation_publications.market', 'KR')
+    .select('ticker, signal_price, action_state, recommendation_publications!inner(run_date, market, category, is_official, status)')
+    .eq('action_state', 'ACTIVE')
     .eq('recommendation_publications.is_official', true)
     .eq('recommendation_publications.status', 'PUBLISHED')
     .gte('recommendation_publications.run_date', from.toISOString().slice(0, 10))
@@ -1172,12 +1304,25 @@ async function processDailyScreenerRun(run) {
         investor_flow_errors: flowCollection.errors.size,
       };
     }
+    const marketRegimeStates = Object.fromEntries(
+      [...recommendationConfig.RECOMMENDATION_CATEGORIES, 'US', 'KR'].flatMap((key) => {
+        const context = marketContextByMarket[key];
+        if (context?.market_state) return [[key, context.market_state]];
+        if (recommendationConfig.RECOMMENDATION_CATEGORIES.includes(key) && context?.market_state_quality === 'STALE') {
+          return [[key, { state: 'STALE' }]];
+        }
+        return [];
+      }),
+    );
+    const categoryRegimes = recommendationMarketRegime.resolveAllCategoryMarketRegimes(marketRegimeStates);
     const marketContextByCategory = Object.fromEntries(dailyScreeners.DAILY_SCREENER_CATEGORIES.map((category) => {
       const market = dailyScreeners.marketForDailyCategory(category);
       return [category, {
         ...marketContextByMarket[market],
+        ...marketContextByMarket[category],
         category,
         category_label: dailyScreeners.categoryLabel(category),
+        recommendation_regime: categoryRegimes[category],
         scan_summary: scanSummary,
       }];
     }));
@@ -1191,19 +1336,52 @@ async function processDailyScreenerRun(run) {
       },
     });
     const top5Attempt = await runDailyTop5Chain(prompt, topCandidates, () => touchDailyScreenerRun(run.id));
+    const recommendationChartGateCache = new Map();
     const chartGated = await applyDailyRecommendationChartGate({
       categories: top5Attempt.result.categories,
       candidates: topCandidates,
+      gateCache: recommendationChartGateCache,
     });
+    const recentActiveByCategory = Object.fromEntries(await Promise.all(
+      recommendationConfig.RECOMMENDATION_CATEGORIES.map(async (category) => [
+        category,
+        await loadRecentActiveRecommendations(run.run_date, category),
+      ]),
+    ));
+    const baseAllocations = Object.fromEntries(recommendationConfig.RECOMMENDATION_CATEGORIES.map((category) => [
+      category,
+      allocateRecommendationCategory({
+        category,
+        picks: chartGated.categories[category] || [],
+        regime: categoryRegimes[category],
+        runDate: run.run_date,
+        recentRecommendations: recentActiveByCategory[category],
+      }),
+    ]));
+    const allocationSnapshots = mergeCandidateSnapshotMaps(
+      ...Object.values(baseAllocations).map((allocation) => allocation.snapshots),
+    );
     const gatedResult = {
       ...top5Attempt.result,
-      categories: chartGated.categories,
+      categories: Object.fromEntries(Object.entries(baseAllocations).map(([category, allocation]) => [category, allocation.picks])),
     };
     const top5Result = {
       provider: top5Attempt.provider,
       model: top5Attempt.model,
       categories: gatedResult.categories,
       publication_gates: chartGated.publicationGates,
+      allocations: Object.fromEntries(Object.entries(baseAllocations).map(([category, allocation]) => [category, {
+        status: allocation.status,
+        active_count: allocation.activeCount,
+        watchlist_count: allocation.watchlistCount,
+        active_cap: allocation.activeCap,
+        cash_weight: allocation.cashWeight,
+        reason: allocation.reason,
+        safety_state: allocation.safetyState,
+        repeat_cooldown_days: DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS,
+        repeat_blocked_count: allocation.repeatBlockedTickers.length,
+        category_regime: categoryRegimes[category],
+      }])),
       report_markdown: top5Attempt.result.reportMarkdown,
       raw_response: top5Attempt.result.rawResponse,
       generated_at: new Date().toISOString(),
@@ -1249,16 +1427,21 @@ async function processDailyScreenerRun(run) {
         ...context,
         provider_chain: top5Attempt.chain,
         publication_gate: chartGated.publicationGates[category],
+        allocation: top5Result.allocations[category],
       }])),
       categories: usCategories,
-      candidateSnapshotByTicker: { ...flowSnapshotByTicker, ...chartGated.snapshots },
+      candidateSnapshotByTicker: mergeCandidateSnapshotMaps(
+        flowSnapshotByTicker,
+        chartGated.snapshots,
+        allocationSnapshots,
+      ),
     });
     const officialResultByCategory = Object.fromEntries(recommendationPublications
       .filter((publication) => publication.is_official)
       .map((publication) => [publication.category, storedRecommendationPicks(publication)]));
     const { data: existingKrPublications, error: existingKrPublicationsError } = await supabase
       .from('recommendation_publications')
-      .select('*, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+      .select('*, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, action_state, candidate_snapshot)')
       .eq('screener_run_id', run.id)
       .eq('is_official', true)
       .eq('status', 'PUBLISHED')
@@ -1268,7 +1451,6 @@ async function processDailyScreenerRun(run) {
       .map((publication) => [publication.category, publication]));
     const policyFailures = [];
     if (krSessionOpen) {
-      const marketState = marketContextByMarket.KR?.market_state || 'YELLOW';
       const allowedPolicies = [
         recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
         recommendationConfig.KR_RISK_ENGINE_VERSION,
@@ -1278,6 +1460,7 @@ async function processDailyScreenerRun(run) {
         ? recommendationConfig.KR_RECOMMENDATION_POLICY
         : recommendationConfig.RECOMMENDATION_ENGINE_VERSION;
       for (const category of krCategories) {
+        const categoryRegime = categoryRegimes[category];
         const existingOfficialPublication = existingKrPublicationByCategory.get(category);
         if (existingOfficialPublication) {
           recommendationPublications.push(existingOfficialPublication);
@@ -1286,8 +1469,13 @@ async function processDailyScreenerRun(run) {
           await touchDailyScreenerRun(run.id);
           continue;
         }
-        const recentRecommendations = await loadRecentKrRecommendations(run.run_date, category);
+        const recentRecommendations = recentActiveByCategory[category] || [];
         const selection = resolveRecommendationPolicies({
+          category,
+          market: 'KR',
+          marketState: categoryRegime.effectiveState,
+          marketStateQuality: categoryRegime.quality,
+          requireActionable: false,
           basePolicy: {
             engineVersion: recommendationConfig.RECOMMENDATION_ENGINE_VERSION,
             picks: gatedResult.categories[category],
@@ -1302,7 +1490,7 @@ async function processDailyScreenerRun(run) {
                   candidates: topCandidates,
                   category,
                   recentRecommendations,
-                  marketState,
+                  marketState: categoryRegime.effectiveState,
                   useFlow: false,
                 });
                 return { picks: ranked.map((row) => row.pick), ranked };
@@ -1315,7 +1503,7 @@ async function processDailyScreenerRun(run) {
                   candidates: topCandidates,
                   category,
                   recentRecommendations,
-                  marketState,
+                  marketState: categoryRegime.effectiveState,
                   flowFeatures,
                   useFlow: true,
                 });
@@ -1327,24 +1515,49 @@ async function processDailyScreenerRun(run) {
         for (const failure of selection.failures) {
           const finding = { category, phase: 'policy_selection', ...failure };
           policyFailures.push(finding);
-          console.warn(`[Worker] KR policy unavailable; continuing with fallback: ${category} ${failure.engineVersion} - ${failure.message}`);
+          console.warn(`[Worker] KR policy unavailable; recommendation remains no-trade: ${category} ${failure.engineVersion} - ${failure.message}`);
         }
         if (selection.effectiveEngineVersion !== activePolicy) {
-          console.warn(`[Worker] KR official policy fallback: ${category} ${activePolicy} -> ${selection.effectiveEngineVersion}`);
+          console.warn(`[Worker] KR policy selection changed: ${category} ${activePolicy} -> ${selection.effectiveEngineVersion}`);
         }
         const officialPolicy = selection.policies.find((policy) => policy.isOfficial);
+        if (!officialPolicy) throw new Error(`${category} official recommendation policy resolution is missing.`);
         let officialPublicationGate = chartGated.publicationGates[category];
-        if (officialPolicy?.ranked) {
+        if (officialPolicy.ranked) {
           const gatedOfficialPolicy = await applyDailyRecommendationChartGate({
             categories: { [category]: officialPolicy.picks },
             candidates: topCandidates,
+            gateCache: recommendationChartGateCache,
           });
           officialPolicy.picks = gatedOfficialPolicy.categories[category];
           officialPolicy.chartGateSnapshots = gatedOfficialPolicy.snapshots;
           officialPublicationGate = gatedOfficialPolicy.publicationGates[category];
         }
+        const officialAllocation = allocateRecommendationCategory({
+          category,
+          picks: officialPolicy.picks,
+          regime: categoryRegime,
+          runDate: run.run_date,
+          recentRecommendations,
+        });
+        officialPolicy.picks = officialAllocation.picks;
+        officialPolicy.allocationSnapshots = officialAllocation.snapshots;
+        officialPolicy.recommendationDecision = officialAllocation;
         officialPolicy.publicationGate = officialPublicationGate;
+        top5Result.categories[category] = officialPolicy.picks;
         top5Result.publication_gates[category] = officialPublicationGate;
+        top5Result.allocations[category] = {
+          status: officialAllocation.status,
+          active_count: officialAllocation.activeCount,
+          watchlist_count: officialAllocation.watchlistCount,
+          active_cap: officialAllocation.activeCap,
+          cash_weight: officialAllocation.cashWeight,
+          reason: officialAllocation.reason,
+          safety_state: officialAllocation.safetyState,
+          repeat_cooldown_days: DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS,
+          repeat_blocked_count: officialAllocation.repeatBlockedTickers.length,
+          category_regime: categoryRegime,
+        };
         if (officialPublicationGate?.canPublish) {
           officialResultByCategory[category] = officialPolicy.picks;
         } else {
@@ -1360,6 +1573,25 @@ async function processDailyScreenerRun(run) {
           });
         }
         for (const policy of selection.policies) {
+          if (!policy.isOfficial && policy.ranked && policy.picks.length > 0) {
+            const gatedShadowPolicy = await applyDailyRecommendationChartGate({
+              categories: { [category]: policy.picks },
+              candidates: topCandidates,
+              gateCache: recommendationChartGateCache,
+            });
+            policy.picks = gatedShadowPolicy.categories[category];
+            policy.chartGateSnapshots = gatedShadowPolicy.snapshots;
+          }
+          const policyAllocation = policy.isOfficial
+            ? officialAllocation
+            : allocateRecommendationCategory({
+              category,
+              picks: policy.picks,
+              regime: categoryRegime,
+              runDate: run.run_date,
+              recentRecommendations,
+            });
+          policy.picks = policyAllocation.picks;
           const deterministicSnapshots = policy.ranked
             ? Object.fromEntries(policy.ranked.flatMap((row) => {
               const snapshot = {
@@ -1398,10 +1630,28 @@ async function processDailyScreenerRun(run) {
                     effective_engine_version: selection.effectiveEngineVersion,
                     failures: selection.failures,
                   },
+                  allocation: {
+                    status: policyAllocation.status,
+                    active_count: policyAllocation.activeCount,
+                    watchlist_count: policyAllocation.watchlistCount,
+                    active_cap: policyAllocation.activeCap,
+                    cash_weight: policyAllocation.cashWeight,
+                    reason: policyAllocation.reason,
+                    safety_state: policyAllocation.safetyState,
+                    repeat_cooldown_days: DAILY_RECOMMENDATION_REPEAT_COOLDOWN_DAYS,
+                    repeat_blocked_count: policyAllocation.repeatBlockedTickers.length,
+                    category_regime: categoryRegime,
+                  },
                   ...(policy.isOfficial ? { publication_gate: officialPublicationGate } : {}),
                 },
               },
-              candidateSnapshotByTicker: { ...deterministicSnapshots, ...chartGated.snapshots, ...(policy.chartGateSnapshots || {}) },
+              candidateSnapshotByTicker: mergeCandidateSnapshotMaps(
+                deterministicSnapshots,
+                flowSnapshotByTicker,
+                chartGated.snapshots,
+                policy.chartGateSnapshots,
+                policyAllocation.snapshots,
+              ),
             });
             recommendationPublications.push(publication);
           } catch (error) {
@@ -1544,6 +1794,12 @@ function storedRecommendationPicks(publication) {
       category: publication.category,
       market: publication.market,
       chartGate: pick.candidate_snapshot?.chart_gate,
+      actionState: pick.action_state || pick.candidate_snapshot?.allocation_action || 'WATCHLIST',
+      actionReason: pick.candidate_snapshot?.allocation?.action_reason || null,
+      targetWeight: pick.candidate_snapshot?.allocation?.target_weight === undefined
+        ? undefined : Number(pick.candidate_snapshot.allocation.target_weight),
+      cashWeight: pick.candidate_snapshot?.allocation?.cash_weight === undefined
+        ? undefined : Number(pick.candidate_snapshot.allocation.cash_weight),
     }));
 }
 
@@ -1665,7 +1921,7 @@ async function processPendingRecommendationTelegramQueue() {
   try {
     const { data: picks, error: picksError } = await supabase
       .from('recommendation_picks')
-      .select('ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot')
+      .select('ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, action_state, candidate_snapshot')
       .eq('publication_id', publication.id)
       .order('rank', { ascending: true });
     if (picksError) throw new Error(`recommendation picks query failed: ${picksError.message}`);
@@ -1697,7 +1953,7 @@ async function replayDailyTelegrams(runDate, categories = []) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) throw new Error('Replay date must be YYYY-MM-DD.');
   const { data, error } = await supabase
     .from('recommendation_publications')
-    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, candidate_snapshot)')
+    .select('id, screener_run_id, run_date, market, category, telegram_status, updated_at, llm_provider, llm_model, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, action_state, candidate_snapshot)')
     .eq('run_date', runDate)
     .eq('is_official', true)
     .eq('status', 'PUBLISHED')
@@ -1737,9 +1993,10 @@ async function replayDailyTelegramCharts(runDate, categories = [], tickers = [])
     const picks = await mapWithConcurrency(storedPicks, DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY, async (pick) => {
       const chartGate = await analyzeRecommendationChartGate({ category: publication.category, pick, candidates: [] });
       const candidateSnapshot = { ...(pick.candidate_snapshot || {}), chart_gate: chartGate };
+      const actionDecision = recommendationPersistence.resolveRecommendationActionState(candidateSnapshot, new Date().toISOString());
       const { error: updateError } = await supabase
         .from('recommendation_picks')
-        .update({ candidate_snapshot: candidateSnapshot })
+        .update({ candidate_snapshot: candidateSnapshot, ...actionDecision })
         .eq('id', pick.id);
       if (updateError) {
         console.warn(`[Worker] Replay chart gate persistence failed: ${publication.category} ${pick.ticker} - ${updateError.message}`);
@@ -1793,7 +2050,7 @@ async function processQueue() {
     
     const url = `${LOCAL_LLM_API_URL.replace(/\/$/, '')}/chat/completions`;
     
-    // axios를 사용하여 Node.js 내장 fetch의 5분 타임아웃(HeadersTimeoutError)을 무력화
+    // A bounded request prevents one stalled model call from blocking the serial queue forever.
     const response = await axios.post(url, {
       model: LOCAL_LLM_MODEL,
       messages: [
@@ -1804,7 +2061,7 @@ async function processQueue() {
       max_tokens: 8192,
       options: { num_ctx: 16384, num_predict: 8192 } // Ollama 엔진 토큰 제한 명시적 해제
     }, {
-      timeout: 0 // Timeout 무제한
+      timeout: LOCAL_LLM_REQUEST_TIMEOUT_MS,
     });
     
     const rawResponse = response.data.choices?.[0]?.message?.content?.trim();
@@ -1863,6 +2120,13 @@ async function processQueue() {
 
 async function loop() {
   await acquireWorkerLock();
+  await recordCodexWorkerHeartbeat('STARTING', { queuePollMs: QUEUE_POLL_MS });
+  const heartbeatTimer = setInterval(() => {
+    recordCodexWorkerHeartbeat().catch((error) => {
+      console.error(`[Worker] Operations heartbeat failed: ${compactError(error)}`);
+    });
+  }, CODEX_WORKER_HEARTBEAT_MS);
+  heartbeatTimer.unref();
   console.log('============================================');
   console.log('[Worker] 🟢 MTN Codex/Local LLM Queue Worker Started');
   console.log(`[Worker] Codex CLI: ${CODEX_CLI_ENABLED ? CODEX_CLI_BIN : 'disabled'}`);
@@ -1898,7 +2162,11 @@ async function loop() {
   }
 
   if (process.env.WORKER_ONCE === 'true') {
+    currentCodexWorkerStatus = 'RUNNING';
     await processQueue();
+    currentCodexWorkerStatus = 'IDLE';
+    currentCodexWorkerMetadata = { lastQueuePassAt: new Date().toISOString() };
+    await recordCodexWorkerHeartbeat();
     console.log('[Worker] WORKER_ONCE=true, exiting after one queue pass.');
     return;
   }
@@ -1908,9 +2176,19 @@ async function loop() {
   while (true) {
     let processed = false;
     try {
+      currentCodexWorkerStatus = 'RUNNING';
       processed = await processQueue();
+      currentCodexWorkerStatus = 'IDLE';
+      currentCodexWorkerMetadata = {
+        lastQueuePassAt: new Date().toISOString(),
+        processed,
+      };
+      await recordCodexWorkerHeartbeat();
       consecutiveQueueFailures = 0;
     } catch (error) {
+      currentCodexWorkerStatus = 'ERROR';
+      currentCodexWorkerMetadata = { lastError: compactError(error) };
+      await recordCodexWorkerHeartbeat().catch(() => {});
       consecutiveQueueFailures += 1;
       const transient = isTransientSupabaseError(error);
       console.error(`[Worker] Queue pass failed (${consecutiveQueueFailures}${transient ? ', transient' : '/3'}): ${compactError(error, 1200)}`);

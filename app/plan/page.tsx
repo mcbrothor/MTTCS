@@ -19,8 +19,6 @@ import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib
 import { buildCapitalSnapshot } from '@/lib/finance/core/capital-basis';
 import type { ApiSuccess, CapitalSnapshot, PlanMode, PortfolioRiskSummary, RiskStrategy } from '@/types';
 
-const DEFAULT_PLAN_TOTAL_EQUITY = 50000;
-
 // useSearchParams는 Suspense 바운더리 내에서만 사용 가능 (Next.js 14+)
 export default function PlanPage() {
   return (
@@ -42,7 +40,7 @@ function PlanPageContent() {
   );
   const autoAnalyzeStarted = useRef(false);
   const [contestQueue, setContestQueue] = useState<ContestPlanQueueItem[]>([]);
-  const [defaultTotalEquity, setDefaultTotalEquity] = useState(DEFAULT_PLAN_TOTAL_EQUITY);
+  const [defaultTotalEquity, setDefaultTotalEquity] = useState(0);
   const [portfolioRisk, setPortfolioRisk] = useState<PortfolioRiskSummary | null>(null);
   const [capitalCapturedAt, setCapitalCapturedAt] = useState('');
   const [equityLoadError, setEquityLoadError] = useState<string | null>(null);
@@ -76,11 +74,15 @@ function PlanPageContent() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleAnalyze = useCallback((ticker: string, exchange: string, totalEquity: number, riskPercent: number, riskStrategy: RiskStrategy = 'AUTO', capitalSnapshot?: CapitalSnapshot) => {
+    if (!portfolioRisk || equityLoadError || !capitalSnapshot || capitalSnapshot.fallbackUsed) {
+      setSaveError('검증된 계좌 자본을 불러온 뒤 다시 분석해 주세요. 대체 자본값은 실거래 계획에 사용할 수 없습니다.');
+      return;
+    }
     setChecklist(null);
     setSaveError(null);
     setAnalysisCapitalSnapshot(capitalSnapshot ?? null);
     fetchMarketData(ticker, exchange, totalEquity, riskPercent, riskStrategy);
-  }, [fetchMarketData]);
+  }, [equityLoadError, fetchMarketData, portfolioRisk]);
 
   const handleModeChange = (mode: PlanMode) => {
     setPlanMode(mode);
@@ -108,25 +110,31 @@ function PlanPageContent() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setDefaultTotalEquity(DEFAULT_PLAN_TOTAL_EQUITY);
+    setDefaultTotalEquity(0);
     setPortfolioRisk(null);
-    setCapitalCapturedAt(new Date().toISOString());
+    setCapitalCapturedAt('');
     setEquityLoadError(null);
 
     const loadPortfolioEquity = async () => {
       try {
-        const response = await fetch(`/api/portfolio/risk?market=${planMarket}&totalEquity=${DEFAULT_PLAN_TOTAL_EQUITY}`, {
+        const response = await fetch(`/api/portfolio/risk?market=${planMarket}&source=supabase`, {
           signal: controller.signal,
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.message || body.error || `Request failed (${response.status})`);
         const result = body as ApiSuccess<PortfolioRiskSummary>;
         const totalEquity = Number(result.data.totalEquity);
-        if (Number.isFinite(totalEquity) && totalEquity > 0) setDefaultTotalEquity(totalEquity);
+        if (!Number.isFinite(totalEquity) || totalEquity <= 0) {
+          throw new Error('서버에서 검증 가능한 계좌 자본을 반환하지 않았습니다.');
+        }
+        setDefaultTotalEquity(totalEquity);
         setPortfolioRisk(result.data);
         setCapitalCapturedAt(new Date().toISOString());
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return;
+        setDefaultTotalEquity(0);
+        setPortfolioRisk(null);
+        setCapitalCapturedAt('');
         setEquityLoadError(err instanceof Error ? err.message : '포트폴리오 자본 기준을 불러오지 못했습니다.');
       }
     };
@@ -136,7 +144,7 @@ function PlanPageContent() {
   }, [planMarket]);
 
   useEffect(() => {
-    if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker || defaultTotalEquity <= 0) return;
+    if (!shouldAutoAnalyze || autoAnalyzeStarted.current || !initialTicker || !portfolioRisk || equityLoadError || defaultTotalEquity <= 0) return;
     autoAnalyzeStarted.current = true;
     setPlanMode('SYSTEM_ANALYSIS');
     const snapshot = buildCapitalSnapshot({
@@ -149,10 +157,24 @@ function PlanPageContent() {
       capturedAt: capitalCapturedAt,
     });
     handleAnalyze(initialTicker, initialExchange, snapshot.amount, 1, 'AUTO', snapshot);
-  }, [capitalCapturedAt, defaultTotalEquity, handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, planMarket, portfolioRisk]);
+  }, [capitalCapturedAt, defaultTotalEquity, equityLoadError, handleAnalyze, shouldAutoAnalyze, initialTicker, initialExchange, planMarket, portfolioRisk]);
 
   const handleSavePlan = async () => {
     if (!checklist) return;
+
+    const capitalSnapshot = planMode === 'MANUAL_STRATEGY'
+      ? manualDraft?.capitalSnapshot
+      : analysisCapitalSnapshot;
+    if (
+      !portfolioRisk ||
+      equityLoadError ||
+      !capitalSnapshot ||
+      capitalSnapshot.fallbackUsed ||
+      capitalSnapshot.market !== planMarket
+    ) {
+      setSaveError('현재 시장의 검증된 계좌 자본이 없습니다. 계좌 정보를 다시 불러오고 계획을 재분석해 주세요.');
+      return;
+    }
 
     setSaving(true);
     setSaveError(null);
@@ -238,6 +260,16 @@ function PlanPageContent() {
   };
 
   const manualRiskPlan = manualDraft?.riskPlan ?? null;
+  const activeCapitalSnapshot = planMode === 'MANUAL_STRATEGY'
+    ? manualDraft?.capitalSnapshot
+    : analysisCapitalSnapshot;
+  const riskContextUnavailable = Boolean(
+    equityLoadError ||
+    !portfolioRisk ||
+    !activeCapitalSnapshot ||
+    activeCapitalSnapshot.fallbackUsed ||
+    activeCapitalSnapshot.market !== planMarket
+  );
   const saveBlocked = planMode === 'MANUAL_STRATEGY'
     ? !manualDraft ||
       !manualDraft.ticker ||
@@ -245,13 +277,15 @@ function PlanPageContent() {
       (manualRiskPlan?.totalShares ?? 0) <= 0 ||
       (manualRiskPlan?.riskPerShare ?? 0) <= 0 ||
       manualRiskPlan?.rewardRiskRatio === null ||
-      manualRiskPlan?.riskGate?.status === 'BLOCK' ||
+      manualRiskPlan?.riskGate?.status !== 'PASS' ||
+      riskContextUnavailable ||
       saving
     : !analysis ||
       !checklist ||
       analysis.sepaEvidence.status === 'fail' ||
       analysis.riskPlan.totalShares <= 0 ||
-      analysis.riskPlan.riskGate?.status === 'BLOCK' ||
+      analysis.riskPlan.riskGate?.status !== 'PASS' ||
+      riskContextUnavailable ||
       saving;
   const canShowSavePanel = planMode === 'MANUAL_STRATEGY'
     ? Boolean(manualDraft && manualRiskPlan && manualRiskPlan.totalShares > 0 && manualRiskPlan.riskPerShare > 0 && manualRiskPlan.rewardRiskRatio !== null)
@@ -311,8 +345,8 @@ function PlanPageContent() {
       {equityLoadError && (
         <div className="rounded-lg border-2 border-rose-500/50 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100">
           <span className="mr-2">⚠️</span>
-          포트폴리오 자본 기준 조회 실패 — 기본값 <span className="font-mono font-bold text-rose-200">${DEFAULT_PLAN_TOTAL_EQUITY.toLocaleString()}</span>로 포지션 사이징이 계산됩니다.
-          실제 투자금과 다르면 수량 산출이 부정확해질 수 있습니다.
+          포트폴리오 자본 기준 조회 실패 — 안전을 위해 포지션 분석과 계획 저장을 차단했습니다.
+          임의 기본값은 사용하지 않습니다.
           <p className="mt-1 text-xs text-rose-300/80">원인: {equityLoadError}</p>
         </div>
       )}

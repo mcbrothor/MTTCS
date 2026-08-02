@@ -47,7 +47,8 @@ assert.match(coordinatorAuth, /secretsMatch/);
 assert.match(coordinatorAuth, /createHmac/);
 
 const proxy = await readFile(new URL('../proxy.ts', import.meta.url), 'utf8');
-assert.match(proxy, /pathname !== ['"]\/api\/internal\/kis-rate-limit['"]/);
+assert.match(proxy, /pathname === ['"]\/api\/internal\/kis-rate-limit['"]/);
+assert.match(proxy, /!isApiSessionBypassPath\(pathname\)/);
 
 process.env.NEXT_PHASE = 'phase-production-build';
 process.env.KIS_APP_KEY = 'test-app-key';

@@ -1,6 +1,6 @@
 import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
-import { supabaseAnon } from '@/lib/supabase/server';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +10,10 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const days = Math.min(90, Math.max(7, Number(searchParams.get('days') || 30)));
 
-  const { data, error } = await supabaseAnon
+  // MTN uses its own signed application session, not a Supabase Auth JWT.
+  // After the request-level session gate succeeds, the server-only client is
+  // required because direct anon/authenticated table access is intentionally denied.
+  const { data, error } = await getSupabaseAdmin()
     .from('macro_snapshot')
     .select('calc_date, macro_score, regime')
     .order('calc_date', { ascending: false })

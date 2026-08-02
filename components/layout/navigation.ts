@@ -23,6 +23,13 @@ export interface FlowStep {
   tabs: FlowStepTab[];
 }
 
+export interface StrategyLink {
+  href: string;
+  label: string;
+  sub: string;
+  matchers: string[];
+}
+
 export const FLOW_STEPS: FlowStep[] = [
   {
     key: 'home',
@@ -39,10 +46,12 @@ export const FLOW_STEPS: FlowStep[] = [
     label: '시장 분석',
     sub: '진입 조건 확인',
     href: '/master-filter',
-    matchers: ['/master-filter', '/macro'],
+    matchers: ['/master-filter', '/macro', '/market-barometer', '/intelligence'],
     tabs: [
       { href: '/master-filter', label: '오늘의 결론' },
       { href: '/macro', label: '시장 밖 위험 점검' },
+      { href: '/market-barometer', label: '과열 바로미터' },
+      { href: '/intelligence', label: '실시간 인텔리전스' },
     ],
   },
   {
@@ -114,6 +123,21 @@ export const FLOW_STEPS: FlowStep[] = [
   },
 ];
 
+export const STRATEGY_LINKS: StrategyLink[] = [
+  {
+    href: '/gold',
+    label: '금 투자',
+    sub: '코어·전술 전략',
+    matchers: ['/gold'],
+  },
+  {
+    href: '/nasdaq',
+    label: '나스닥100',
+    sub: 'QQQ·QLD·TQQQ',
+    matchers: ['/nasdaq', '/qqq'],
+  },
+];
+
 export const UTILITY_LINKS = [
   { href: '/guide', label: '사용 가이드' },
   { href: '/links', label: '링크 허브' },
@@ -126,8 +150,16 @@ function matchesPath(pathname: string, matcher: string) {
   return pathname === matcher || pathname.startsWith(`${matcher}/`);
 }
 
+export function findActiveFlowStep(pathname: string) {
+  return FLOW_STEPS.find((step) => step.matchers.some((matcher) => matchesPath(pathname, matcher)));
+}
+
 export function getActiveFlowStep(pathname: string) {
-  return FLOW_STEPS.find((step) => step.matchers.some((matcher) => matchesPath(pathname, matcher))) ?? FLOW_STEPS[0];
+  return findActiveFlowStep(pathname) ?? FLOW_STEPS[0];
+}
+
+export function findActiveStrategyLink(pathname: string) {
+  return STRATEGY_LINKS.find((item) => item.matchers.some((matcher) => matchesPath(pathname, matcher)));
 }
 
 export function isActiveTab(pathname: string, href: string, search = '') {

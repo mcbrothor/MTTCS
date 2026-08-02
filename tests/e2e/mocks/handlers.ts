@@ -22,6 +22,7 @@ export async function setupAllMocks(page: Page): Promise<void> {
   await setupAuthMock(page);
   await setupMacroMocks(page);
   await setupMasterFilterMock(page);
+  await setupRiskBarometerMocks(page);
   await setupTradesMock(page);
   await setupPortfolioMock(page);
   await setupScannerMock(page);
@@ -29,6 +30,88 @@ export async function setupAllMocks(page: Page): Promise<void> {
   await setupWatchlistMock(page);
   await setupMarketDataMock(page);
   await setupRecommendationsMock(page);
+}
+
+const riskIndicatorLabels = [
+  'S&P 500 집중도',
+  '가계 주식 노출',
+  '마진 부채',
+  '시장 참여도',
+  '밸류에이션 주도 수익',
+  '하이퍼스케일러 FCF',
+  '하이퍼스케일러 레버리지',
+  '기업간 주식보유',
+  '자본시장 과열',
+  '주식 위험 프리미엄',
+] as const;
+
+export async function setupRiskBarometerMocks(page: Page): Promise<void> {
+  await page.route(/\/api\/risk-barometer(?:\/history)?(?:\?|$)/, async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/history')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            days: 30,
+            items: [
+              { date: '2026-07-24', score: 3, rawScore: 3, quality: 'VALID', coverage: 10 },
+              { date: '2026-07-25', score: 4, rawScore: 4, quality: 'VALID', coverage: 10 },
+              { date: '2026-07-28', score: 4, rawScore: 4, quality: 'VALID', coverage: 10 },
+            ],
+          },
+          meta: { source: 'e2e', provider: 'fixture', delay: 'EOD' },
+        }),
+      });
+      return;
+    }
+    const indicators = riskIndicatorLabels.map((label, index) => ({
+      key: [
+        'sp500_concentration',
+        'household_equity_exposure',
+        'margin_debt',
+        'market_participation',
+        'valuation_driven_returns',
+        'hyperscaler_fcf',
+        'hyperscaler_leverage',
+        'corporate_cross_holdings',
+        'capital_market_frenzy',
+        'equity_risk_premium',
+      ][index],
+      label,
+      value: index + 1,
+      displayValue: index === 0 ? '38.0%' : `${index + 1}.0`,
+      unit: '%',
+      threshold: `${label} v1 위험 기준`,
+      status: index < 4 ? 'TRIGGERED' : 'SAFE',
+      contribution: index < 4 ? 1 : 0,
+      method: index === 2 || index === 8 || index === 9 ? 'MANUAL' : index === 1 || index === 7 ? 'DIRECT' : 'PROXY',
+      provider: 'E2E official source',
+      sourceUrl: 'https://example.com/official',
+      observedAt: '2026-07-28T20:00:00.000Z',
+      freshness: { limitHours: 36, ageHours: 4, stale: false },
+      detail: `${label} 근거 설명`,
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          score: 4,
+          rawScore: 4,
+          band: 'CAUTION',
+          quality: 'VALID',
+          coverage: { valid: 10, total: 10 },
+          asOf: '2026-07-28T23:59:59.000Z',
+          modelVersion: 'ai-fomo-us-2026.07-v1',
+          modelStatus: 'RESEARCH_ONLY',
+          indicators,
+        },
+        meta: { source: 'e2e', provider: 'fixture', delay: 'EOD' },
+      }),
+    });
+  });
 }
 
 export async function setupRecommendationsMock(page: Page): Promise<void> {
@@ -289,6 +372,20 @@ export async function setupScannerMock(page: Page): Promise<void> {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;
+
+    if (pathname === '/api/scanner/metrics/history' && request.method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: [
+            { calc_date: '2026-06-18', rs_rating: 88 },
+            { calc_date: '2026-06-19', rs_rating: 91 },
+          ],
+        }),
+      });
+      return;
+    }
 
     if (pathname === '/api/scanner/snapshots' && request.method() === 'GET') {
       const universe = url.searchParams.get('universe') || 'NASDAQ100';

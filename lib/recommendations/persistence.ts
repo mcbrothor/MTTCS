@@ -9,6 +9,7 @@ import type { RecommendationCategory } from './types';
 import type { DailyCategoryTop10Result, DailyScreenerCandidate } from '@/lib/daily-screeners';
 import {
   assessRecommendationPublicationGate,
+  isActionableRecommendationGate,
   type RecommendationChartGate,
   type RecommendationPublicationGate,
 } from './chart-gate';
@@ -78,6 +79,46 @@ function chartGateFromSnapshot(snapshot?: Record<string, unknown>) {
   return gate && typeof gate === 'object' ? gate as RecommendationChartGate : undefined;
 }
 
+export type RecommendationActionState = 'ACTIVE' | 'WATCHLIST';
+
+function allocationActionFromSnapshot(snapshot?: Record<string, unknown>) {
+  const action = snapshot?.allocation_action;
+  return action === 'ACTIVE' || action === 'WATCHLIST' ? action : null;
+}
+
+export function resolveRecommendationActionState(
+  candidateSnapshot: Record<string, unknown>,
+  decidedAt: string,
+) {
+  const chartGate = chartGateFromSnapshot(candidateSnapshot);
+  const allocationAction = allocationActionFromSnapshot(candidateSnapshot);
+  const chartActionable = isActionableRecommendationGate(chartGate);
+  const actionState: RecommendationActionState = allocationAction === 'ACTIVE' && chartActionable
+    ? 'ACTIVE'
+    : 'WATCHLIST';
+  const decisionSource = allocationAction
+    ? 'ALLOCATION_AND_CHART_GATE'
+    : 'ALLOCATION_REQUIRED';
+
+  return {
+    action_state: actionState,
+    activated_at: actionState === 'ACTIVE' ? decidedAt : null,
+    activation_source: actionState === 'ACTIVE' ? decisionSource : null,
+    activation_metadata: {
+      initial_action_state: actionState,
+      decided_at: decidedAt,
+      decision_source: decisionSource,
+      allocation_action: allocationAction,
+      chart_gate_actionable: chartActionable,
+      chart_gate_disposition: chartGate?.disposition || 'MISSING',
+      chart_gate_verdict: chartGate?.verdict || 'MISSING',
+      chart_gate_setup_grade: chartGate?.setupGrade || null,
+      chart_gate_readiness: chartGate?.readiness || null,
+      chart_gate_fundamental_verification: chartGate?.fundamentalVerification || 'MISSING',
+    },
+  };
+}
+
 export function buildRecommendationPublicationGate(
   result: DailyCategoryTop10Result,
   category: RecommendationCategory,
@@ -107,9 +148,14 @@ export function resolveRecommendationPublicationDecision(
 
 function validateCategoryRows(result: DailyCategoryTop10Result, category: RecommendationCategory) {
   const rows = result.categories[category];
-  if (!Array.isArray(rows) || rows.length !== 10) throw new Error(`${category} recommendation publication requires exactly 10 picks.`);
-  if (new Set(rows.map((row) => row.ticker)).size !== 10) throw new Error(`${category} recommendation publication contains duplicate tickers.`);
-  if (new Set(rows.map((row) => row.rank)).size !== 10) throw new Error(`${category} recommendation publication contains duplicate ranks.`);
+  if (!Array.isArray(rows) || rows.length < 1 || rows.length > 10) {
+    throw new Error(`${category} recommendation publication requires between 1 and 10 picks.`);
+  }
+  if (new Set(rows.map((row) => row.ticker)).size !== rows.length) throw new Error(`${category} recommendation publication contains duplicate tickers.`);
+  if (new Set(rows.map((row) => row.rank)).size !== rows.length) throw new Error(`${category} recommendation publication contains duplicate ranks.`);
+  if (rows.some((row) => !Number.isInteger(row.rank) || row.rank < 1 || row.rank > 10)) {
+    throw new Error(`${category} recommendation publication contains an invalid rank.`);
+  }
   return rows;
 }
 
@@ -326,6 +372,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
         benchmark_symbol: BENCHMARK_BY_UNIVERSE[pick.universe],
         signal_price: candidate.preferred.price,
         signal_price_as_of: candidate.preferred.priceAsOf,
+        ...resolveRecommendationActionState(candidate.snapshot, input.generatedAt),
         candidate_snapshot: candidate.snapshot,
       };
     });

@@ -40,6 +40,7 @@ import { buildWorkerConfig } from '../scripts/lib/local-analysis-worker-utils.mj
 
 {
   const defaults = buildWorkerConfig({});
+  assert.equal(defaults.workerId, 'mtn-local-primary');
   assert.equal(defaults.pollMs, 30_000);
   assert.equal(defaults.maxPollMs, 300_000);
 
@@ -54,11 +55,23 @@ import { buildWorkerConfig } from '../scripts/lib/local-analysis-worker-utils.mj
 {
   const workerSource = readFileSync(new URL('../scripts/local-llm-worker.mjs', import.meta.url), 'utf8');
   assert.match(workerSource, /DAILY_SCREENER_STALE_CHECK_INTERVAL_MS/);
+  assert.match(workerSource, /LOCAL_LLM_REQUEST_TIMEOUT_MS/);
+  assert.match(workerSource, /operations_component_heartbeats/);
+  assert.match(workerSource, /setInterval\([^]*recordCodexWorkerHeartbeat/);
+  assert.match(workerSource, /timeout:\s*LOCAL_LLM_REQUEST_TIMEOUT_MS/);
+  assert.doesNotMatch(workerSource, /timeout:\s*0\b/);
   assert.match(workerSource, /\.from\('recommendation_picks'\)/);
   assert.doesNotMatch(
     workerSource.match(/async function processPendingRecommendationTelegramQueue\(\)[\s\S]*?async function processDailyScreenerQueue/)?.[0] || '',
     /recommendation_picks\(/,
   );
+}
+
+{
+  const proxyRunner = readFileSync(new URL('../scripts/run-toss-proxy-server.sh', import.meta.url), 'utf8');
+  assert.match(proxyRunner, /\.next\/BUILD_ID/);
+  assert.match(proxyRunner, /npm run start/);
+  assert.doesNotMatch(proxyRunner, /npm run dev/);
 }
 
 {

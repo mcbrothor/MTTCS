@@ -25,11 +25,13 @@ export function evaluateFreshness(observedAt: string | null | undefined, expecte
 
 export function buildFreshnessMeta(input: Partial<DataSourceMeta> & Pick<DataSourceMeta, 'source' | 'provider' | 'delay'>): DataSourceMeta {
   const calculatedAt = input.calculatedAt || new Date().toISOString();
-  const observedAt = input.observedAt || input.asOf || calculatedAt;
+  const observedAt = input.observedAt || input.asOf || undefined;
   const expectedDelaySeconds = input.expectedDelaySeconds ?? DATA_SLA_SECONDS[input.delay];
   const freshness = evaluateFreshness(observedAt, expectedDelaySeconds, new Date(calculatedAt));
   return {
-    asOf: observedAt,
+    // `asOf` remains populated for backwards-compatible response rendering, but it
+    // is never promoted to an observed source timestamp when the source omitted one.
+    asOf: observedAt || calculatedAt,
     source: input.source,
     provider: input.provider,
     delay: input.delay,
@@ -39,8 +41,8 @@ export function buildFreshnessMeta(input: Partial<DataSourceMeta> & Pick<DataSou
     fetchedAt: input.fetchedAt || calculatedAt,
     calculatedAt,
     expectedDelaySeconds,
-    isStale: input.isStale ?? freshness.isStale,
-    staleReason: input.staleReason ?? freshness.staleReason,
+    isStale: freshness.isStale || Boolean(input.isStale),
+    staleReason: freshness.staleReason ?? input.staleReason ?? null,
     fallbackReason: input.fallbackReason ?? null,
     modelVersion: input.modelVersion,
   };

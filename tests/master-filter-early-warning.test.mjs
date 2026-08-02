@@ -211,4 +211,13 @@ const volatilityMetric = {
 assert.equal(friendlyMetricValue(volatilityMetric), '18.58포인트');
 assert.equal(friendlyMetricThreshold(volatilityMetric), '20 이하이면 안정');
 
+const trendMetric = {
+  label: 'Trend Alignment',
+  value: '745.07 / 698.54',
+  threshold: '',
+  status: 'WARNING',
+  description: '',
+};
+assert.equal(friendlyMetricValue(trendMetric), '50일선 745.1 · 200일선 698.5');
+
 console.log('master filter early-warning tests passed');

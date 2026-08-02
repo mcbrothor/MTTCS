@@ -93,6 +93,8 @@ function emptyMetric(item: ScannerConstituent, market: MarketCode, calcDate: str
     ticker: item.ticker,
     market,
     calc_date: calcDate,
+    close_price: null,
+    above_200d: null,
     ibd_proxy_score: null,
     rs_rating: null,
     rs_rank: null,
@@ -123,17 +125,25 @@ function applyNewHighBonus(momentumScore: number | null, data: OHLCData[]): numb
 
 export async function computeStockMetric(item: ScannerConstituent, market: MarketCode, calcDate = todayIso(), benchmarkCache = new Map<string, OHLCData[]>()) {
   try {
-    const { data, source } = await fetchDailyBars(item.ticker, item.exchange);
-    const benchmark = await fetchBenchmarkBars(item.exchange, benchmarkCache);
+    const { data: fetchedData, source } = await fetchDailyBars(item.ticker, item.exchange);
+    const fetchedBenchmark = await fetchBenchmarkBars(item.exchange, benchmarkCache);
+    const data = fetchedData.filter((row) => row.date <= calcDate);
+    const benchmark = fetchedBenchmark.filter((row) => row.date <= calcDate);
     const momentum = calculateWeightedMomentum(data);
     const mansfield = calculateMansfieldFromData(data, benchmark);
     const mdd52wPct = computeMdd52w(data.map((d) => d.close));
     const dataQuality = (momentum.rsDataQuality || 'NA') as DataQuality;
     const adjustedMomentum = applyNewHighBonus(momentum.ibdProxyScore, data);
+    const latestClose = data.at(-1)?.close ?? null;
+    const ma200 = data.length >= 200
+      ? data.slice(-200).reduce((sum, row) => sum + row.close, 0) / 200
+      : null;
     return {
       ticker: item.ticker,
       market,
       calc_date: calcDate,
+      close_price: latestClose,
+      above_200d: latestClose !== null && ma200 !== null ? latestClose > ma200 : null,
       ibd_proxy_score: adjustedMomentum,
       rs_rating: null,
       rs_rank: null,
@@ -329,6 +339,8 @@ export async function finalizeRsMetrics(market: MarketCode, calcDate = todayIso(
     ticker: row.ticker,
     market: row.market,
     calc_date: row.calc_date,
+    close_price: row.close_price ?? null,
+    above_200d: row.above_200d ?? null,
     ibd_proxy_score: row.ibd_proxy_score,
     rs_rating: row.rs_rating,
     rs_rank: row.rs_rank,

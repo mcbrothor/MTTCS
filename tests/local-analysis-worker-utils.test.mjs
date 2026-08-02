@@ -8,6 +8,8 @@ import {
   buildWorkerConfig,
   hashPayload,
   stableStringify,
+  updateOperationsHeartbeat,
+  withJobDeadline,
 } from '../scripts/lib/local-analysis-worker-utils.mjs';
 
 {
@@ -27,8 +29,40 @@ import {
   assert.equal(config.pollMs, 2000);
   assert.equal(config.maxPollMs, 300000);
   assert.equal(config.staleAfterSeconds, 45);
+  assert.equal(config.heartbeatMs, 60_000);
+  assert.equal(config.jobTimeoutMs, 15 * 60_000);
   assert.deepEqual(config.jobTypes, ['FINANCIAL_AUDIT', 'NEWS_PULSE']);
   assert.equal(config.once, true);
+}
+
+{
+  let captured = null;
+  const fakeSupabase = {
+    from(table) {
+      assert.equal(table, 'operations_component_heartbeats');
+      return {
+        async upsert(row, options) {
+          captured = { row, options };
+          return { error: null };
+        },
+      };
+    },
+  };
+  await updateOperationsHeartbeat(fakeSupabase, {
+    workerId: 'mtn-local-primary',
+  }, 'local-analysis', 'RUNNING', { jobType: 'NEWS_PULSE' }, '00000000-0000-0000-0000-000000000001');
+  assert.equal(captured.options.onConflict, 'component');
+  assert.equal(captured.row.component, 'local-analysis');
+  assert.equal(captured.row.status, 'RUNNING');
+  assert.equal(captured.row.current_job_id, '00000000-0000-0000-0000-000000000001');
+}
+
+{
+  assert.equal(await withJobDeadline(async () => 'done', 100), 'done');
+  await assert.rejects(
+    withJobDeadline(() => new Promise(() => {}), 5),
+    (error) => error?.code === 'WORKER_JOB_TIMEOUT',
+  );
 }
 
 {

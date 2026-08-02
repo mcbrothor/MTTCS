@@ -1,5 +1,18 @@
 import { KR_RISK_ENGINE_VERSION, KR_RISK_FLOW_ENGINE_VERSION, RECOMMENDATION_ENGINE_VERSION } from './config';
 
+export const DEFAULT_POLICY_PROMOTION_MIN_COHORTS = 20;
+export const LONG_TERM_POLICY_PROMOTION_HORIZONS = ['D20', 'D60'] as const;
+export const LONG_TERM_POLICY_PROMOTION_CATEGORIES = ['KOSPI200', 'KOSDAQ150'] as const;
+
+const POLICY_PROMOTION_RANK = new Map([
+  [RECOMMENDATION_ENGINE_VERSION, 0],
+  [KR_RISK_ENGINE_VERSION, 1],
+  [KR_RISK_FLOW_ENGINE_VERSION, 2],
+]);
+
+export type LongTermPolicyPromotionHorizon = (typeof LONG_TERM_POLICY_PROMOTION_HORIZONS)[number];
+export type LongTermPolicyPromotionCategory = (typeof LONG_TERM_POLICY_PROMOTION_CATEGORIES)[number];
+
 export interface PolicyCohortMetric {
   runDate: string;
   engineVersion: string;
@@ -59,7 +72,11 @@ function pairedRows(baseline: PolicyCohortMetric[], challenger: PolicyCohortMetr
   }));
 }
 
-export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
+export function evaluateKrPolicyPromotion(
+  rows: PolicyCohortMetric[],
+  options: { minCohorts?: number } = {},
+) {
+  const minCohorts = Math.max(1, Math.floor(options.minCohorts ?? DEFAULT_POLICY_PROMOTION_MIN_COHORTS));
   const byPolicy = (engineVersion: string) => rows.filter((row) => row.engineVersion === engineVersion);
   const official = byPolicy(RECOMMENDATION_ENGINE_VERSION);
   const risk = byPolicy(KR_RISK_ENGINE_VERSION);
@@ -78,7 +95,7 @@ export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
     >= mean(flowPairs.map((pair) => pair.baseline.averageMaePct));
   const tailNotWorse = flowPairs.length > 0 && mean(flowPairs.map((pair) => pair.challenger.lowerDecileReturnPct))
     >= mean(flowPairs.map((pair) => pair.baseline.lowerDecileReturnPct));
-  const enough = cohortCount >= 20;
+  const enough = cohortCount >= minCohorts;
   const riskPassed = enough && (riskComparison.meanDelta || 0) >= 0.5 && (riskComparison.low90 || 0) > 0;
   const flowPassed = riskPassed
     && (flowComparison.low90 || 0) > 0
@@ -87,7 +104,7 @@ export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
     && coverage >= 90;
   return {
     cohortCount,
-    decision: flowPassed ? 'PROMOTE_FLOW' : riskPassed ? 'PROMOTE_RISK' : cohortCount < 40 ? 'CONTINUE' : 'KEEP_OFFICIAL',
+    decision: flowPassed ? 'PROMOTE_FLOW' : riskPassed ? 'PROMOTE_RISK' : cohortCount < minCohorts * 2 ? 'CONTINUE' : 'KEEP_OFFICIAL',
     riskPassed,
     flowPassed,
     coveragePct: coverage,
@@ -95,6 +112,63 @@ export function evaluateKrPolicyPromotion(rows: PolicyCohortMetric[]) {
     tailNotWorse,
     riskComparison,
     flowComparison,
+  } as const;
+}
+
+export function evaluateKrLongTermPolicyPromotion(input: {
+  activeEngineVersion: string;
+  categories: Array<{
+    category: LongTermPolicyPromotionCategory;
+    cohorts: Record<LongTermPolicyPromotionHorizon, PolicyCohortMetric[]>;
+  }>;
+  minCohorts?: number;
+}) {
+  const minCohorts = Math.max(1, Math.floor(input.minCohorts ?? DEFAULT_POLICY_PROMOTION_MIN_COHORTS));
+  const categoryMap = new Map(input.categories.map((row) => [row.category, row]));
+  const evaluations = LONG_TERM_POLICY_PROMOTION_CATEGORIES.flatMap((category) => {
+    const cohorts = categoryMap.get(category)?.cohorts;
+    return LONG_TERM_POLICY_PROMOTION_HORIZONS.map((horizon) => ({
+      category,
+      horizon,
+      result: evaluateKrPolicyPromotion(cohorts?.[horizon] || [], { minCohorts }),
+    }));
+  });
+  const allMature = evaluations.every((row) => row.result.cohortCount >= minCohorts);
+  const riskReady = allMature && evaluations.every((row) => row.result.riskPassed);
+  const flowReady = riskReady && evaluations.every((row) => row.result.flowPassed);
+  const recommendedEngineVersion = flowReady
+    ? KR_RISK_FLOW_ENGINE_VERSION
+    : riskReady
+      ? KR_RISK_ENGINE_VERSION
+      : null;
+  const activeRank = POLICY_PROMOTION_RANK.get(input.activeEngineVersion);
+  const recommendedRank = recommendedEngineVersion
+    ? POLICY_PROMOTION_RANK.get(recommendedEngineVersion)
+    : undefined;
+  const ready = activeRank !== undefined
+    && recommendedRank !== undefined
+    && recommendedRank > activeRank;
+
+  return {
+    ready,
+    allMature,
+    riskReady,
+    flowReady,
+    minCohorts,
+    activeEngineVersion: input.activeEngineVersion,
+    recommendedEngineVersion,
+    reason: !recommendedEngineVersion
+      ? allMature ? 'LONG_TERM_CRITERIA_NOT_MET' : 'INSUFFICIENT_LONG_TERM_COHORTS'
+      : activeRank === undefined
+        ? 'UNKNOWN_ACTIVE_POLICY'
+      : recommendedEngineVersion === input.activeEngineVersion
+        ? 'ALREADY_ACTIVE'
+        : recommendedRank !== undefined && activeRank !== undefined && recommendedRank < activeRank
+          ? 'NO_FORWARD_PROMOTION'
+        : recommendedEngineVersion === KR_RISK_FLOW_ENGINE_VERSION
+          ? 'PROMOTE_FLOW'
+          : 'PROMOTE_RISK',
+    evaluations,
   } as const;
 }
 

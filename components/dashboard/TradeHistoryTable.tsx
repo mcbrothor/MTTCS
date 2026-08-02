@@ -21,6 +21,24 @@ interface TradeHistoryTableProps {
   title?: string;
 }
 
+function editDraftFromTrade(trade: Trade): EditDraft {
+  return {
+    ticker: trade.ticker,
+    status: trade.status,
+    total_equity: toInput(trade.total_equity),
+    planned_risk: toInput(trade.planned_risk),
+    risk_percent: (getRiskPercent(trade) * 100).toFixed(1).replace('.0', ''),
+    entry_price: toInput(trade.entry_price),
+    stoploss_price: toInput(trade.stoploss_price),
+    total_shares: toInput(trade.total_shares ?? trade.position_size),
+    result_amount: toInput(trade.result_amount),
+    final_discipline: toInput(trade.final_discipline),
+    emotion_note: trade.emotion_note ?? '',
+    plan_note: trade.plan_note ?? '',
+    invalidation_note: trade.invalidation_note ?? '',
+  };
+}
+
 export default function TradeHistoryTable({ trades, limit, title = '매매 히스토리' }: TradeHistoryTableProps) {
   const [rows, setRows] = useState<Trade[]>(trades);
   const [securityNames, setSecurityNames] = useState<SecurityNameMap>({});
@@ -89,21 +107,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     setTab(trade.id, 'plan');
     setEditingId(trade.id);
     setError(null);
-    setDraft({
-      ticker: trade.ticker,
-      status: trade.status,
-      total_equity: toInput(trade.total_equity),
-      planned_risk: toInput(trade.planned_risk),
-      risk_percent: (getRiskPercent(trade) * 100).toFixed(1).replace('.0', ''),
-      entry_price: toInput(trade.entry_price),
-      stoploss_price: toInput(trade.stoploss_price),
-      total_shares: toInput(trade.total_shares ?? trade.position_size),
-      result_amount: toInput(trade.result_amount),
-      final_discipline: toInput(trade.final_discipline),
-      emotion_note: trade.emotion_note ?? '',
-      plan_note: trade.plan_note ?? '',
-      invalidation_note: trade.invalidation_note ?? '',
-    });
+    setDraft(editDraftFromTrade(trade));
   };
 
   const updateDraft = (field: keyof EditDraft, value: string) => {
@@ -116,25 +120,29 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
     setBusyId(trade.id);
     setError(null);
     try {
+      const initialDraft = editDraftFromTrade(trade);
+      const payload: Record<string, unknown> = {
+        id: trade.id,
+        expected_version: trade.version ?? 0,
+      };
+      if (draft.ticker !== initialDraft.ticker) payload.ticker = draft.ticker;
+      if (draft.status !== initialDraft.status) payload.status = draft.status;
+      if (draft.total_equity !== initialDraft.total_equity) payload.total_equity = toNumberOrNull(draft.total_equity);
+      if (draft.planned_risk !== initialDraft.planned_risk) payload.planned_risk = toNumberOrNull(draft.planned_risk);
+      if (draft.risk_percent !== initialDraft.risk_percent) payload.risk_percent = Number(draft.risk_percent) / 100;
+      if (draft.entry_price !== initialDraft.entry_price) payload.entry_price = toNumberOrNull(draft.entry_price);
+      if (draft.stoploss_price !== initialDraft.stoploss_price) payload.stoploss_price = toNumberOrNull(draft.stoploss_price);
+      if (draft.total_shares !== initialDraft.total_shares) payload.total_shares = toNumberOrNull(draft.total_shares);
+      if (draft.result_amount !== initialDraft.result_amount) payload.result_amount = toNumberOrNull(draft.result_amount);
+      if (draft.final_discipline !== initialDraft.final_discipline) payload.final_discipline = toNumberOrNull(draft.final_discipline);
+      if (draft.emotion_note !== initialDraft.emotion_note) payload.emotion_note = draft.emotion_note.trim() || null;
+      if (draft.plan_note !== initialDraft.plan_note) payload.plan_note = draft.plan_note.trim() || null;
+      if (draft.invalidation_note !== initialDraft.invalidation_note) payload.invalidation_note = draft.invalidation_note.trim() || null;
+
       const response = await fetch('/api/trades', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          id: trade.id,
-          ticker: draft.ticker,
-          status: draft.status,
-          total_equity: toNumberOrNull(draft.total_equity),
-          planned_risk: toNumberOrNull(draft.planned_risk),
-          risk_percent: Number(draft.risk_percent) / 100,
-          entry_price: toNumberOrNull(draft.entry_price),
-          stoploss_price: toNumberOrNull(draft.stoploss_price),
-          total_shares: toNumberOrNull(draft.total_shares),
-          result_amount: toNumberOrNull(draft.result_amount),
-          final_discipline: toNumberOrNull(draft.final_discipline),
-          emotion_note: draft.emotion_note.trim() || null,
-          plan_note: draft.plan_note.trim() || null,
-          invalidation_note: draft.invalidation_note.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -213,6 +221,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           id: trade.id,
+          expected_version: trade.version ?? 0,
           final_discipline: toNumberOrNull(reviewDraft.final_discipline),
           setup_tags: reviewDraft.setup_tags,
           mistake_tags: reviewDraft.mistake_tags,
@@ -382,8 +391,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                       )}
                       {activeTab === 'review' && (
                         <div className="space-y-4">
-                          <ExitReasonDropdown tradeId={trade.id} currentReason={trade.exit_reason}
-                            onUpdated={(reason) => replaceRow({ ...trade, exit_reason: reason })} />
+                          <ExitReasonDropdown trade={trade} onUpdated={replaceRow} />
                           <ReviewPanel trade={trade} busy={busyId === trade.id} onSave={(rd) => saveReview(trade, rd)} />
                         </div>
                       )}
@@ -544,11 +552,7 @@ export default function TradeHistoryTable({ trades, limit, title = '매매 히�
                           {activeTab === 'review' && (
                             <div className="space-y-4">
                               {/* 청산 사유 드롭다운 — 복기 탭에 통합 */}
-                              <ExitReasonDropdown
-                                tradeId={trade.id}
-                                currentReason={trade.exit_reason}
-                                onUpdated={(reason) => replaceRow({ ...trade, exit_reason: reason })}
-                              />
+                              <ExitReasonDropdown trade={trade} onUpdated={replaceRow} />
                               <ReviewPanel
                                 trade={trade}
                                 busy={busyId === trade.id}
@@ -636,13 +640,11 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
 const EXIT_REASONS: ExitReason[] = ['손절', '목표가도달', '시장RED전환', '기술적이탈', '조기청산', '기타'];
 
 function ExitReasonDropdown({
-  tradeId,
-  currentReason,
+  trade,
   onUpdated,
 }: {
-  tradeId: string;
-  currentReason: ExitReason | null;
-  onUpdated: (reason: ExitReason | null) => void;
+  trade: Trade;
+  onUpdated: (trade: Trade) => void;
 }) {
   const [saving, setSaving] = useState(false);
 
@@ -650,8 +652,12 @@ function ExitReasonDropdown({
     const reason = value === '' ? null : (value as ExitReason);
     setSaving(true);
     try {
-      await axios.patch('/api/trades', { id: tradeId, exit_reason: reason });
-      onUpdated(reason);
+      const response = await axios.patch('/api/trades', {
+        id: trade.id,
+        expected_version: trade.version ?? 0,
+        exit_reason: reason,
+      });
+      onUpdated(response.data.data);
     } catch {
       // 저장 실패 시 조용히 처리 (다음 저장 시 재시도 가능)
     } finally {
@@ -663,7 +669,7 @@ function ExitReasonDropdown({
     <div className="flex items-center gap-3 rounded-md border border-slate-700 bg-slate-900 px-3 py-2">
       <span className="text-xs font-semibold text-slate-400 whitespace-nowrap">청산 사유</span>
       <select
-        value={currentReason ?? ''}
+        value={trade.exit_reason ?? ''}
         onChange={(e) => handleChange(e.target.value)}
         disabled={saving}
         className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none disabled:opacity-50"

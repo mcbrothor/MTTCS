@@ -119,6 +119,22 @@ export function isOfficiallyEligibleRecommendationGate(gate: RecommendationChart
   );
 }
 
+/**
+ * Candidate publication and position activation are deliberately separate.
+ * WATCHLIST candidates may be shown for observation, but only a fully confirmed
+ * ACTIONABLE/BUY setup is allowed to become an evaluated position.
+ */
+export function isActionableRecommendationGate(gate: RecommendationChartGate | null | undefined) {
+  return Boolean(
+    gate?.eligible === true
+    && gate.disposition === 'ACTIONABLE'
+    && gate.verdict === 'BUY'
+    && gate.setupGrade === 'A'
+    && gate.readiness === 'ACTIONABLE'
+    && (gate.fundamentalVerification === 'VERIFIED' || gate.fundamentalVerification === 'PARTIAL'),
+  );
+}
+
 export function assessRecommendationPublicationGate<
   T extends Pick<DailyCategoryTop10Pick, 'ticker'> & { chartGate?: RecommendationChartGate },
 >(picks: T[], requiredCount = 10): RecommendationPublicationGate {

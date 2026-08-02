@@ -1,10 +1,10 @@
 # MTN Operator Checklist
 
-Last verified: 2026-07-25
+Last verified: 2026-07-26
 
 ## 1. Production URLs
 
-- App: `https://mtn-trading.vercel.app`
+- App: `https://mttcs.vercel.app`
 - Expected unauthenticated `/`: `307` redirect to `/login`
 - Expected `/api/auth/session`: `200`
 
@@ -23,6 +23,7 @@ Confirm these exist in Vercel Production:
 - `KIS_APP_KEY`
 - `KIS_APP_SECRET`
 - `KIS_BASE_URL`
+- `FRED_API_KEY` (optional; without it MTN uses the official FRED CSV endpoint)
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
 - `TELEGRAM_WEBHOOK_SECRET`
@@ -30,12 +31,18 @@ Confirm these exist in Vercel Production:
 - `DAILY_TELEGRAM_CHARTS_PER_CATEGORY` (default: `3`, maximum: `10`)
 - `DAILY_TELEGRAM_CHART_RANGE` (default: `1Y`; `ALL` uses the full returned history)
 - `DAILY_TELEGRAM_CHART_AI_TIMEOUT_MS` (default: `60000`; first local 14B inference includes model-load time)
-- `DAILY_RECOMMENDATION_CHART_GATE_ENABLED` (default: `true`; excludes invalid, extended, or fundamentally unverified picks from Telegram chart delivery)
+- `DAILY_RECOMMENDATION_CHART_GATE_ENABLED` (default: `true`; `false` stops chart/fundamental collection but remains fail-closed: every pick is `UNVERIFIED`, publications stay `SHADOW`, and official Telegram delivery is blocked)
 - `DAILY_RECOMMENDATION_CHART_GATE_CONCURRENCY` (default: `3`, maximum: `5`)
 - `MTN_BASE_URL` (default: `https://mttcs.vercel.app`; used by the local worker for protected chart analysis)
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `CEREBRAS_API_KEY`
+- `CEREBRAS_MODEL=gpt-oss-120b`
+- `CENTAUR_GEMINI_TIMEOUT_MS=7000`
+- `CENTAUR_FAST_MODEL_TIMEOUT_MS=5000`
+- `CENTAUR_LOCAL_MODEL_TIMEOUT_MS=8000`
+- `MARKET_INSIGHT_TIMEOUT_MS=12000`
+- `MARKET_INSIGHT_FAILURE_CACHE_TTL_MS=60000`
 
 Optional market data fallback variables:
 
@@ -73,6 +80,7 @@ Required migrations confirmed:
 - `20260711015944_add_trade_market_and_versions`
 - `20260711020223_trade_integrity_v2`
 - `20260711000000_harden_privileged_functions`
+- `20260726090000_gold_strategy_v1`
 
 Before production rollout, run migration validation in a staging database, then verify:
 
@@ -100,6 +108,27 @@ Required indexes:
 - `trades_contest_snapshot_gin`
 - `trades_llm_verdict_gin`
 
+### Retention maintenance safety gate
+
+The `MTN DB Maintenance` GitHub Actions workflow uses the PostgreSQL 17 client
+and `SUPABASE_DATABASE_URL`. Its weekly schedule is observation-only: it calls
+`mtn_internal.apply_retention_policies(true, null)` and reports candidate and
+capacity counts without deleting rows. The legacy
+`maintain_stock_metrics_retention_v2(false)` automatic deletion path is not
+used.
+
+Before a manual deletion:
+
+1. Run `workflow_dispatch` with `mode=dry-run` and review every returned policy,
+   cutoff, candidate count, and current capacity level.
+2. Confirm the affected tables are reproducible/noncritical and that a verified
+   encrypted backup and restore drill are recent.
+3. Dispatch again with `mode=apply` and the exact, case-sensitive confirmation
+   `APPLY_RETENTION`. Any missing or different confirmation fails closed after
+   the dry-run report; a scheduled event cannot enter the apply step.
+4. Re-run `mode=dry-run` and the database-capacity snapshot after completion,
+   then retain the workflow run as the audit record.
+
 ## 4. Live Data Smoke Tests
 
 Run after deployment with an authenticated session:
@@ -113,6 +142,96 @@ Run after deployment with an authenticated session:
 - `GET /api/portfolio/risk?market=KR&source=toss`
   - Expected provider: `Toss Securities`, with active positions matching the Toss account holdings
 
+### Supabase-owned scheduler and market intelligence
+
+All production schedules are owned by Supabase Cron. Vercel hosts only the
+authenticated HTTP handlers, and `vercel.json` must not contain a `crons` key.
+This removes the Vercel Hobby frequency and timing limits and prevents two
+independent schedulers from invoking the same endpoint.
+
+- Supabase Cron owns 24 HTTP schedules, including all daily/weekly jobs.
+- Official market feeds run every 30 minutes; their alert threshold is 45 minutes.
+- BLS retries run at `35,45,55 12,13 * * *`; their alert threshold is 26 hours.
+- A one-minute response collector copies transient `pg_net` responses into the
+  durable `cron_http_runs` ledger.
+- Each call claims a job/time-slot unique key before sending HTTP, so a duplicate
+  delivery in the same slot is ignored.
+- No paid Vercel Cron interval, queue, Redis, or always-on worker is required.
+
+Before enabling the Supabase schedules:
+
+- Review the pending migration set and apply `20260731123727_market_intelligence_v1.sql` in staging first.
+- Apply `20260801123027_repair_market_intelligence_remote_drift.sql` when an older v1 shape lacks `is_revision` or `market_intelligence_source_health`.
+- Confirm the baseline `20260801085212_free_infrastructure_scheduler.sql` is in
+  migration history, then apply
+  `20260801133000_supabase_scheduler_control_plane.sql`. Confirm `pg_cron`,
+  `pg_net`, and Vault are enabled. Apply through migration history rather than
+  running untracked DDL.
+- Apply `20260801135500_remove_legacy_cron_invoker.sql` and confirm only the
+  three-argument, execution-slot-aware `mtn_internal.invoke_cron` remains.
+- Set `CRON_SECRET` and a real organization/contact value for `SEC_USER_AGENT`; `BLS_API_KEY` remains optional.
+- Add the production origin and the same cron secret to Supabase Vault without committing either value:
+
+```sql
+select vault.create_secret(
+  'https://<production-host>',
+  'mtn_app_base_url',
+  'MTN production HTTPS origin'
+);
+select vault.create_secret(
+  '<same-value-as-vercel-CRON_SECRET>',
+  'mtn_cron_secret',
+  'MTN protected cron bearer token'
+);
+```
+
+- Confirm the 24 HTTP jobs and two internal maintenance jobs are the only MTN jobs:
+
+```sql
+select jobname, schedule, active, command
+from cron.job
+where jobname like 'mtn-%'
+order by jobname;
+```
+
+- Confirm secrets exist without selecting their decrypted values:
+
+```sql
+select name, created_at, updated_at
+from vault.secrets
+where name in ('mtn_app_base_url', 'mtn_cron_secret')
+order by name;
+```
+
+- Inspect durable transport health and actionable failures:
+
+```sql
+select * from public.cron_scheduler_health order by job_name;
+select * from public.cron_scheduler_alerts order by job_name;
+select job_name, status, http_status, requested_at, completed_at, error_message
+from public.cron_http_runs
+order by requested_at desc
+limit 100;
+```
+
+- Call `GET /api/cron/market-intelligence?mode=all&dryRun=true` with `Authorization: Bearer $CRON_SECRET`.
+- Confirm `FED_MONETARY`, `BOK_MONETARY`, `SEC_TRADING_SUSPENSIONS`, and `BLS` are all `SUCCESS`; BLS must return four events.
+- Run the non-dry feed and indicator jobs once, then open `/intelligence`; the authenticated `공식 원천 갱신` action must respect its 30-minute cooldown.
+- Invoke `mtn_internal.invoke_cron` twice with the same test job name and slot in
+  staging; the first call must return a request ID and the second must return
+  `NULL`. Never use a production job name for this check.
+- Confirm `mtn-market-intelligence-feeds` runs every 30 minutes,
+  `mtn-market-intelligence-indicators` uses the two BLS UTC windows,
+  `mtn-cron-response-monitor` runs every minute, and
+  `mtn-cron-history-prune` keeps 30 days of pg_cron logs and 90 days of HTTP runs.
+- A `FAILED` or `STALE` row in `cron_scheduler_alerts` is an operational incident.
+  Resolve the HTTP/auth/provider cause and verify a later `SUCCESS`; do not clear
+  the ledger manually.
+- Force one source failure in staging and confirm decision readiness becomes `BLOCKED`; do not accept a recent success from another source as a substitute.
+- Verify unauthenticated `GET /api/market-intelligence` and an unauthenticated cron call both return `401`.
+- Keep `market-intelligence-rules-2026.07-v1` at `RESEARCH_ONLY`; the displayed multiplier is advisory only.
+- Monitor Supabase database usage below the Free Plan's 500 MB limit and Vercel Function usage monthly. Never enable metered add-ons for this deployment.
+
 ### Weekly recommendation performance report
 
 Before enabling or manually retrying Telegram delivery:
@@ -122,6 +241,21 @@ Before enabling or manually retrying Telegram delivery:
 - Read the returned `preview` and verify the reporting window, executive summary, market scorecards, risks, and actions.
 - Treat a live response with skipped Telegram delivery as a failure; do not retry until the bot token and allowed chat IDs are confirmed.
 - Keep `RECOMMENDATION_WEEKLY_DRY_RUN=false` in production after validation. Setting it to `true` forces all weekly report calls into preview mode.
+- Keep `RECOMMENDATION_PROMOTION_MIN_COHORTS=20` unless the promotion protocol is formally revised. The weekly job sends a separate, recipient-deduplicated Telegram alert only after both Korean categories pass the D20 and D60 paired-cohort criteria. It does not change `KR_RECOMMENDATION_POLICY` automatically.
+
+### Gold strategy v1
+
+Before enabling the scheduled snapshot:
+
+- Apply `20260726090000_gold_strategy_v1.sql` in staging and run `supabase db lint --level warning`.
+- Confirm `gold_strategy_settings`, `gold_macro_observations`, and `gold_strategy_snapshots` have RLS enabled.
+- Confirm `anon` and `authenticated` have no direct table privileges and `service_role` has the explicit policy/grants.
+- In `/admin`, enter only the approved WGC monthly aggregates, reference month, short excerpt, and official `https://*.gold.org` source URL. Do not store or redistribute the source table or raw report.
+- Run `npm run smoke:gold-providers`; Yahoo, KIS, DFII10, and DTWEXBGS must each report `ok: true`.
+- Run `npm run backtest:gold`; deploy the published historical table only when `publishable: true`.
+- Call `GET /api/cron/gold-strategy?dryRun=true` with `Authorization: Bearer $CRON_SECRET`; confirm `persisted=false`, a 64-character `inputHash`, and no order/execution side effect.
+- After deployment, confirm the `23:30 UTC` cron creates one idempotent snapshot for the same date and input.
+- Keep model status `gold-core-tactical-2026.07-v1 / RESEARCH_ONLY`; do not add order buttons or broker execution.
 
 ## 5. Free Toss Holdings Production Workaround
 
@@ -152,6 +286,13 @@ For production Local LLM calls, keep the Mac mini Next server exposed through th
 - Vercel `LOCAL_LLM_MODEL=qwen2.5:7b` for lightweight non-chart jobs
 - Local worker `TECHNICAL_CHART_LOCAL_MODEL=qwen3:14b`, with `qwen3:8b,qwen2.5:7b` as installed-model fallbacks
 - The local proxy authenticates with `LOCAL_LLM_PROXY_SECRET` or `TOSS_PROXY_SECRET`.
+
+After changing a provider model or proxy URL:
+
+- Confirm Cerebras `GET /v1/models` includes `gpt-oss-120b`.
+- Confirm the protected local proxy `/models` and `/chat/completions` return JSON, never an ngrok or tunnel HTML page.
+- Call authenticated `GET /api/master-filter?market=US` and `?market=KR` three times each.
+- Require at least one AI `success`, no persistent `MODEL_NOT_FOUND` or `PROXY_ERROR`, and a working rule-based fallback when all AI providers are unavailable.
 
 Start on the Mac mini when IB validation queue processing is needed:
 
@@ -323,6 +464,6 @@ npx vercel --prod --yes
 Confirm production:
 
 ```bash
-curl -I -s https://mtn-trading.vercel.app | head
-curl -s -o /dev/null -w "%{http_code}\n" https://mtn-trading.vercel.app/api/auth/session
+curl -I -s https://mttcs.vercel.app | head
+curl -s -o /dev/null -w "%{http_code}\n" https://mttcs.vercel.app/api/auth/session
 ```

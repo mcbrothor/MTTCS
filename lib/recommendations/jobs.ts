@@ -1,7 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { calculateRecommendationPerformance, buildDiagnosticFindings } from './core';
+import { buildDiagnosticFindings } from './core';
 import { RECOMMENDATION_ANALYZER_VERSION } from './config';
+import {
+  buildRecommendationEvidenceManifest,
+  buildRecommendationPriceEvidence,
+  calculateNetRecommendationPerformance,
+} from './evidence-performance';
+import {
+  extractRecommendationMarketRegime,
+  refreshRecommendationEvidenceEvaluations,
+  registerRecommendationEvidenceManifest,
+} from './evidence-repository';
+import {
+  RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS,
+  claimRecommendationPerformanceShard,
+  completeRecommendationPerformanceShard,
+  finalizeRecommendationPerformanceBatchIfReady,
+  recommendationPerformanceUtcBatchDate,
+} from './performance-barrier';
 import { fetchRecommendationBenchmarkBars, fetchRecommendationSecurityBars, recommendationPriceRows } from './prices';
 import type { DiagnosticInput, RecommendationCategory, RecommendationHorizon, RecommendationMarket } from './types';
 
@@ -16,11 +33,16 @@ interface PickRow {
   confidence: number;
   benchmark_symbol: string;
   signal_price: number | null;
+  action_state: 'ACTIVE';
   recommendation_publications: {
     run_date: string;
     market: RecommendationMarket;
     category: RecommendationCategory | null;
     generated_at: string;
+    engine_version: string;
+    prompt_version: string | null;
+    market_context: Record<string, unknown>;
+    is_official: boolean;
   };
 }
 
@@ -30,13 +52,14 @@ function hash(value: string) {
   return Math.abs(result);
 }
 
-async function loadActivePicks(client: SupabaseClient, market: RecommendationMarket) {
+export async function loadActivePicks(client: SupabaseClient, market: RecommendationMarket) {
   const cutoff = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const rows: PickRow[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await client
       .from('recommendation_picks')
-      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, recommendation_publications!inner(run_date, market, category, generated_at, status)')
+      .select('id, publication_id, ticker, exchange, source, sector, rank, confidence, benchmark_symbol, signal_price, action_state, recommendation_publications!inner(run_date, market, category, generated_at, engine_version, prompt_version, market_context, is_official, status)')
+      .eq('action_state', 'ACTIVE')
       .eq('recommendation_publications.market', market)
       .in('recommendation_publications.status', ['PUBLISHED', 'SHADOW'])
       .gte('recommendation_publications.run_date', cutoff)
@@ -63,9 +86,56 @@ export async function runRecommendationPerformanceBatch(input: {
   market: RecommendationMarket;
   shard?: number;
   shards?: number;
+  batchDate?: string;
 }) {
-  const shards = Math.max(1, Math.min(16, input.shards || 1));
-  const shard = Math.max(0, Math.min(shards - 1, input.shard || 0));
+  const shards = input.shards ?? RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS;
+  const shard = input.shard ?? 0;
+  const batchDate = input.batchDate || recommendationPerformanceUtcBatchDate();
+  if (shards !== RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS) {
+    throw new Error(`Recommendation performance requires exactly ${RECOMMENDATION_PERFORMANCE_REQUIRED_SHARDS} shards.`);
+  }
+  if (!Number.isInteger(shard) || shard < 0 || shard >= shards) {
+    throw new Error(`Recommendation performance shard must be between 0 and ${shards - 1}.`);
+  }
+
+  const shardClaim = await claimRecommendationPerformanceShard({
+    client: input.client,
+    batchDate,
+    market: input.market,
+    shard,
+  });
+  if (!shardClaim.claimed) {
+    const finalization = await finalizeRecommendationPerformanceBatchIfReady({
+      client: input.client,
+      batchDate,
+      market: input.market,
+      refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market),
+      refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market),
+    });
+    return {
+      market: input.market,
+      batchDate,
+      shard,
+      shards,
+      skipped: true,
+      skipReason: shardClaim.claimStatus,
+      barrier: finalization,
+      picks: 0,
+      securities: 0,
+      updated: 0,
+      evidenceRows: 0,
+      evidence: finalization.evidence,
+      findings: finalization.findings,
+      errors: [],
+    };
+  }
+  if (!shardClaim.claimToken) throw new Error('Recommendation performance shard claim did not return a token.');
+
+  let shardCompletionRecorded = false;
+  let recordedShardStatus: 'SUCCESS' | 'DEGRADED' | 'FAILED' | null = null;
+  let pipelineRunRecorded = false;
+  let barrierStatus = shardClaim.barrierStatus;
+  try {
   const allPicks = await loadActivePicks(input.client, input.market);
   const picks = allPicks.filter((pick) => hash(`${pick.exchange}:${pick.ticker}`) % shards === shard);
   const bySecurity = new Map<string, PickRow[]>();
@@ -74,7 +144,9 @@ export async function runRecommendationPerformanceBatch(input: {
     bySecurity.set(key, [...(bySecurity.get(key) || []), pick]);
   }
   const benchmarkCache = new Map<string, Awaited<ReturnType<typeof fetchRecommendationBenchmarkBars>>>();
+  const evidenceManifestCache = new Map<string, string>();
   let updated = 0;
+  let evidenceRows = 0;
   const errors: { ticker: string; message: string }[] = [];
 
   for (const securityPicks of bySecurity.values()) {
@@ -89,14 +161,39 @@ export async function runRecommendationPerformanceBatch(input: {
           benchmarkCache.set(pick.benchmark_symbol, benchmark);
           await upsertPriceSeries(input.client, recommendationPriceRows(input.market, benchmark, 'BENCHMARK'));
         }
+        const marketRegime = extractRecommendationMarketRegime(pick.recommendation_publications.market_context);
         for (const horizon of ['LIVE', 'D5', 'D20', 'D60'] as RecommendationHorizon[]) {
-          const result = calculateRecommendationPerformance({
+          const calculation = buildRecommendationPriceEvidence({
+            pickId: pick.id,
             generatedAt: pick.recommendation_publications.generated_at,
             market: input.market,
             horizon,
-            bars: security.bars,
-            benchmarkBars: benchmark.bars,
+            security,
+            benchmark,
           });
+          const { result, dataManifest } = calculation;
+          const evidenceManifest = buildRecommendationEvidenceManifest({
+            pickId: pick.id,
+            engineId: pick.recommendation_publications.engine_version,
+            promptId: pick.recommendation_publications.prompt_version,
+            calculation,
+            marketRegime,
+          });
+          let evidenceManifestId = evidenceManifestCache.get(evidenceManifest.manifestHash);
+          if (!evidenceManifestId) {
+            evidenceManifestId = await registerRecommendationEvidenceManifest(input.client, evidenceManifest);
+            evidenceManifestCache.set(evidenceManifest.manifestHash, evidenceManifestId);
+          }
+          const net = calculateNetRecommendationPerformance({
+            market: input.market,
+            grossReturnPct: result.returnPct,
+            benchmarkReturnPct: result.benchmarkReturnPct,
+          });
+          const evidenceStatus = result.status === 'MATURED'
+            && evidenceManifest.evidenceStatus === 'READY'
+            && net.costEvidenceStatus !== 'MISSING'
+            ? 'READY'
+            : 'INCOMPLETE';
           const { error } = await input.client.from('recommendation_performance').upsert({
             pick_id: pick.id,
             horizon,
@@ -111,6 +208,20 @@ export async function runRecommendationPerformanceBatch(input: {
             return_pct: result.returnPct,
             benchmark_return_pct: result.benchmarkReturnPct,
             excess_return_pct: result.excessReturnPct,
+            net_return_pct: net.netReturnPct,
+            net_excess_return_pct: net.netExcessReturnPct,
+            total_cost_pct: net.totalCostPct,
+            commission_cost_pct: net.commissionCostPct,
+            tax_cost_pct: net.taxCostPct,
+            slippage_cost_pct: net.slippageCostPct,
+            fx_cost_pct: net.fxCostPct,
+            cost_model_version: net.costModelVersion,
+            cost_evidence_status: net.costEvidenceStatus,
+            account_evidence_status: net.accountEvidenceStatus,
+            data_evidence_tier: dataManifest.evidenceTier,
+            evidence_status: evidenceStatus,
+            evidence_manifest_id: evidenceManifestId,
+            market_regime: marketRegime,
             mfe_pct: result.mfePct,
             mae_pct: result.maePct,
             quality_status: result.qualityStatus,
@@ -126,6 +237,7 @@ export async function runRecommendationPerformanceBatch(input: {
             }).eq('id', pick.publication_id);
           }
           updated += 1;
+          if (evidenceStatus === 'READY') evidenceRows += 1;
         }
       }
     } catch (error) {
@@ -133,23 +245,145 @@ export async function runRecommendationPerformanceBatch(input: {
     }
   }
 
-  const findingCount = shard === shards - 1
-    ? await refreshRecommendationDiagnostics(input.client, input.market)
-    : 0;
+  const shardStatus = errors.length ? 'DEGRADED' as const : 'SUCCESS' as const;
+  const shardMetadata = {
+    batch_date: batchDate,
+    market: input.market,
+    shard,
+    shards,
+    picks: picks.length,
+    securities: bySecurity.size,
+    performance_rows: updated,
+    evidence_rows: evidenceRows,
+    errors,
+  };
+  const shardCompletion = await completeRecommendationPerformanceShard({
+    client: input.client,
+    batchDate,
+    market: input.market,
+    shard,
+    claimToken: shardClaim.claimToken,
+    status: shardStatus,
+    metadata: shardMetadata,
+    errorMessage: errors.length ? `${errors.length} securities failed` : null,
+  });
+  shardCompletionRecorded = true;
+  recordedShardStatus = shardStatus;
+  barrierStatus = String(shardCompletion.barrier_status || barrierStatus);
 
-  await input.client.from('data_pipeline_runs').insert({
+  const finalization = await finalizeRecommendationPerformanceBatchIfReady({
+    client: input.client,
+    batchDate,
+    market: input.market,
+    refreshDiagnostics: () => refreshRecommendationDiagnostics(input.client, input.market),
+    refreshEvidence: () => refreshRecommendationEvidenceEvaluations(input.client, input.market),
+  });
+  barrierStatus = finalization.barrierStatus;
+  const findingCount = finalization.findings;
+  const evidence = finalization.evidence
+    || { evaluated: 0, groups: 0, promotionPasses: 0, accountEvidenceStatus: 'NOT_AVAILABLE' as const };
+
+  const { error: pipelineRunError } = await input.client.from('data_pipeline_runs').insert({
     pipeline: 'recommendation-performance',
     provider: 'KIS/Yahoo',
     market: input.market,
-    status: errors.length ? 'DEGRADED' : 'SUCCESS',
+    status: shardStatus,
     observed_at: new Date().toISOString(),
     completed_at: new Date().toISOString(),
     fallback_used: errors.length > 0,
     fallback_reason: errors.length ? `${errors.length} securities failed` : null,
-    metadata: { shard, shards, picks: picks.length, securities: bySecurity.size, performance_rows: updated, findings: findingCount, errors },
+    metadata: {
+      batch_date: batchDate,
+      batch_key: `${batchDate}:${input.market}`,
+      shard,
+      shards,
+      shard_status: shardStatus,
+      shard_attempt: shardClaim.attemptCount,
+      barrier_status: barrierStatus,
+      barrier_claim_status: finalization.claimStatus,
+      barrier_successful_shards: finalization.successfulShards,
+      barrier_required_shards: finalization.requiredShards,
+      barrier_degraded_shards: finalization.degradedShards,
+      barrier_missing_shards: finalization.missingShards,
+      finalization_status: finalization.finalized ? 'SUCCESS' : 'PENDING',
+      finalization_claimed: finalization.claimed,
+      picks: picks.length,
+      securities: bySecurity.size,
+      performance_rows: updated,
+      evidence_rows: evidenceRows,
+      evidence_evaluations: evidence.evaluated,
+      findings: findingCount,
+      account_evidence_status: evidence.accountEvidenceStatus,
+      errors,
+    },
   });
+  if (pipelineRunError) throw pipelineRunError;
+  pipelineRunRecorded = true;
 
-  return { market: input.market, shard, shards, picks: picks.length, securities: bySecurity.size, updated, findings: findingCount, errors };
+  return {
+    market: input.market,
+    batchDate,
+    shard,
+    shards,
+    skipped: false,
+    barrier: finalization,
+    picks: picks.length,
+    securities: bySecurity.size,
+    updated,
+    evidenceRows,
+    evidence,
+    findings: findingCount,
+    errors,
+  };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown recommendation performance failure';
+    if (!shardCompletionRecorded) {
+      try {
+        const failedCompletion = await completeRecommendationPerformanceShard({
+          client: input.client,
+          batchDate,
+          market: input.market,
+          shard,
+          claimToken: shardClaim.claimToken,
+          status: 'FAILED',
+          metadata: { batch_date: batchDate, market: input.market, shard, shards },
+          errorMessage: message,
+        });
+        shardCompletionRecorded = true;
+        recordedShardStatus = 'FAILED';
+        barrierStatus = String(failedCompletion.barrier_status || barrierStatus);
+      } catch (completionError) {
+        const completionMessage = completionError instanceof Error ? completionError.message : String(completionError);
+        throw new Error(`${message}; shard failure ledger update also failed: ${completionMessage}`, { cause: error });
+      }
+    }
+    if (!pipelineRunRecorded) {
+      const { error: pipelineRunError } = await input.client.from('data_pipeline_runs').insert({
+        pipeline: 'recommendation-performance',
+        provider: 'KIS/Yahoo',
+        market: input.market,
+        status: 'FAILED',
+        observed_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        fallback_used: false,
+        fallback_reason: null,
+        error_message: message,
+        metadata: {
+          batch_date: batchDate,
+          batch_key: `${batchDate}:${input.market}`,
+          shard,
+          shards,
+          shard_status: recordedShardStatus || 'FAILED',
+          barrier_status: barrierStatus,
+          finalization_status: recordedShardStatus === 'SUCCESS' ? 'FAILED' : 'BLOCKED',
+        },
+      });
+      if (pipelineRunError) {
+        throw new Error(`${message}; pipeline failure ledger update also failed: ${pipelineRunError.message}`, { cause: error });
+      }
+    }
+    throw error;
+  }
 }
 
 export async function refreshRecommendationDiagnostics(client: SupabaseClient, market: RecommendationMarket) {

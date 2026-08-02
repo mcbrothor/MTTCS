@@ -73,6 +73,11 @@ export function friendlyMetricStatus(status: MasterFilterMetricDetail['status'])
   return '위험';
 }
 
+export function formatMovingAverageValue(value: number | string) {
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toFixed(1) : String(value);
+}
+
 export function friendlyMetricValue(detail: MasterFilterMetricDetail) {
   const label = friendlyMetricLabel(detail.label);
   const value = detail.value;
@@ -81,7 +86,7 @@ export function friendlyMetricValue(detail: MasterFilterMetricDetail) {
 
   if (label === '지수 평균선 위치' && raw.includes('/')) {
     const [ma50, ma200] = raw.split('/').map((item) => item.trim());
-    return `50일선 ${ma50} · 200일선 ${ma200}`;
+    return `50일선 ${formatMovingAverageValue(ma50)} · 200일선 ${formatMovingAverageValue(ma200)}`;
   }
   if (label === '강한 반등 확인 여부') {
     if (lower.includes('unconfirmed')) return '아직 확인되지 않음';

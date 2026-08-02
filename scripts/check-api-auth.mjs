@@ -8,6 +8,7 @@ const publicPrefixes = [
   path.join(root, 'local-llm-proxy') + path.sep,
   path.join(root, 'toss-proxy') + path.sep,
   path.join(root, 'telegram-webhook') + path.sep,
+  path.join(root, 'release') + path.sep,
 ];
 
 function files(directory) {
@@ -23,7 +24,7 @@ for (const file of files(root)) {
   const source = fs.readFileSync(file, 'utf8');
   const methods = [...source.matchAll(/export async function (GET|POST|PATCH|PUT|DELETE)/g)].map((match) => match[1]);
   if (methods.length === 0) continue;
-  const guards = (source.match(/(?:rejectUnauthenticatedRequest|getRequestSession|requireContext|validateCronRequest|validateKisCoordinatorRequest)\(/g) || []).length;
+  const guards = (source.match(/(?:rejectUnauthenticatedRequest|getRequestSession|requireContext|validateCronRequest|validateKisCoordinatorRequest|validateOperationsMonitorRequest)\(/g) || []).length;
   if (guards < methods.length) failures.push(`${path.relative(process.cwd(), file)} (${guards}/${methods.length})`);
 }
 
