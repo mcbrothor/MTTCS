@@ -136,6 +136,7 @@ assert.doesNotMatch(backupScript, /echo[^\n]*DATABASE_URL/);
 
 assert.match(compatibilitySql, /create schema if not exists extensions/i);
 assert.match(compatibilitySql, /create extension if not exists "uuid-ossp"/i);
+assert.match(compatibilitySql, /create extension if not exists pgcrypto with schema extensions/i);
 assert.match(compatibilitySql, /create table if not exists auth\.users/i);
 assert.match(compatibilitySql, /create role authenticated/i);
 assert.match(compatibilitySql, /create role service_role/i);
