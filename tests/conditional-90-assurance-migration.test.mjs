@@ -87,5 +87,9 @@ assert.ok(
   manifest.requiredMigrations.includes('supabase/migrations/20260803120000_assurance_least_privilege.sql'),
   'least-privilege correction must be release-gated',
 );
+assert.ok(
+  manifest.requiredMigrations.includes('supabase/migrations/20260803121000_assurance_service_hash_execution.sql'),
+  'service hash execution correction must be release-gated',
+);
 
 console.log('conditional 90 assurance migration contract tests passed');
