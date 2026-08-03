@@ -77,7 +77,7 @@ jobs:
       shell: bash
       run: |
         set -uo pipefail
-        report_dir="test-results/assurance"
+        report_dir="assurance-results"
         report_path="$report_dir/a11y-playwright.json"
         summary_path="$report_dir/a11y-summary.json"
         mkdir -p "$report_dir"
@@ -239,7 +239,7 @@ jobs:
           process.exit(1);
         });
         NODE
-        schema_summary="test-results/assurance/schema-drift.json"
+        schema_summary="assurance-results/schema-drift.json"
         mkdir -p "$(dirname "$schema_summary")"
         node scripts/verify-assurance-schema-drift.mjs > "$schema_summary"
         test "$(jq -r '.schema_drift_verified' "$schema_summary")" = "true"
@@ -260,10 +260,10 @@ jobs:
         observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
         valid_until="$(date -u -d '+30 days' +'%Y-%m-%dT%H:%M:%SZ')"
         source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
-        a11y_summary="test-results/assurance/a11y-summary.json"
+        a11y_summary="assurance-results/a11y-summary.json"
         test -s "$a11y_summary"
         test "$(jq -r '.result' "$a11y_summary")" = "PASS"
-        schema_summary="test-results/assurance/schema-drift.json"
+        schema_summary="assurance-results/schema-drift.json"
         test -s "$schema_summary"
         test "$(jq -r '.schema_drift_verified' "$schema_summary")" = "true"
         migration_sha256="$(jq -r '.migration_sha256' "$schema_summary")"
@@ -364,7 +364,7 @@ jobs:
           --arg run_id "$GITHUB_RUN_ID" \
           --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
           '{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,result:"FAIL"}')"
-        a11y_summary="test-results/assurance/a11y-summary.json"
+        a11y_summary="assurance-results/a11y-summary.json"
         if [[ -s "$a11y_summary" ]]; then
           a11y_status="$(jq -r 'if .result == "PASS" then "PASS" else "FAIL" end' "$a11y_summary")"
           a11y_payload="$(jq -cS \
@@ -448,5 +448,5 @@ jobs:
         name: playwright-report
         path: |
           playwright-report/
-          test-results/assurance/
+          assurance-results/
         retention-days: 14
