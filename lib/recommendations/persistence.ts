@@ -3,8 +3,15 @@ import {
   BENCHMARK_BY_UNIVERSE,
   RECOMMENDATION_CATEGORIES,
   RECOMMENDATION_CATEGORY_MARKET,
+  RECOMMENDATION_ASSURANCE_CONTRACT_SCHEMA_VERSION,
   RECOMMENDATION_ENGINE_VERSION,
+  RECOMMENDATION_PROMPT_VERSION,
 } from './config';
+import {
+  RECOMMENDATION_EVIDENCE_STRATEGY_VERSION,
+  RECOMMENDATION_PRICE_EVIDENCE_PAYLOAD_VERSION,
+  stableEvidenceHash,
+} from './evidence-performance';
 import type { RecommendationCategory } from './types';
 import type { DailyCategoryTop10Result, DailyScreenerCandidate } from '@/lib/daily-screeners';
 import {
@@ -29,6 +36,29 @@ interface PersistRecommendationInput {
   marketContextByCategory?: Partial<Record<RecommendationCategory, Record<string, unknown>>>;
   categories?: RecommendationCategory[];
   candidateSnapshotByTicker?: Record<string, Record<string, unknown>>;
+}
+
+export function buildRecommendationAssuranceContract(input: {
+  engineVersion: string;
+  llmProvider: string;
+  llmModel: string;
+}) {
+  const contract = {
+    schemaVersion: RECOMMENDATION_ASSURANCE_CONTRACT_SCHEMA_VERSION,
+    engineVersion: input.engineVersion,
+    promptVersion: RECOMMENDATION_PROMPT_VERSION,
+    llmProvider: input.llmProvider,
+    llmModel: input.llmModel,
+    strategyContractVersion: RECOMMENDATION_EVIDENCE_STRATEGY_VERSION,
+    dataContractVersion: RECOMMENDATION_PRICE_EVIDENCE_PAYLOAD_VERSION,
+  };
+  if ([contract.engineVersion, contract.llmProvider, contract.llmModel].some((value) => !value.trim())) {
+    throw new Error('Recommendation assurance contract identifiers must be non-empty.');
+  }
+  return {
+    contract,
+    contractHash: stableEvidenceHash(contract),
+  };
 }
 
 export function initialTelegramDelivery(sentAt?: string | null) {
@@ -217,9 +247,14 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     || input.marketContext
     || {};
   const marketContext = { ...sourceMarketContext, publication_gate: publicationDecision };
+  const assuranceContract = buildRecommendationAssuranceContract({
+    engineVersion: input.engineVersion,
+    llmProvider: input.provider,
+    llmModel: input.model,
+  });
   const { data: existing, error: existingError } = await input.client
     .from('recommendation_publications')
-    .select('id, version, is_official, status, telegram_status, telegram_sent_at')
+    .select('id, version, is_official, status, telegram_status, telegram_sent_at, assurance_contract_hash, assurance_contract')
     .eq('run_date', input.runDate)
     .eq('category', category)
     .eq('engine_version', input.engineVersion)
@@ -228,6 +263,12 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
 
   let publication;
   if (existing) {
+    if (existing.assurance_contract_hash
+      && existing.assurance_contract_hash !== assuranceContract.contractHash) {
+      throw new Error(
+        `Publication ${existing.id} is already bound to a different immutable assurance contract.`,
+      );
+    }
     if (existing.is_official && existing.status === 'PUBLISHED') {
       const { data: preserved, error: preservedError } = await input.client
         .from('recommendation_publications')
@@ -292,9 +333,15 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       is_official: isOfficial,
       status: 'DRAFT',
       generated_at: input.generatedAt,
-      prompt_version: 'daily-category-top10-2026.07-v1',
+      prompt_version: RECOMMENDATION_PROMPT_VERSION,
       llm_provider: input.provider,
       llm_model: input.model,
+      ...(existing.assurance_contract_hash
+        ? {
+            assurance_contract_hash: assuranceContract.contractHash,
+            assurance_contract: assuranceContract.contract,
+          }
+        : {}),
       ...(isOfficial
         ? input.telegramSentAt
           ? initialTelegramDelivery(input.telegramSentAt)
@@ -327,9 +374,11 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       status: 'DRAFT',
       generated_at: input.generatedAt,
       engine_version: input.engineVersion,
-      prompt_version: 'daily-category-top10-2026.07-v1',
+      prompt_version: RECOMMENDATION_PROMPT_VERSION,
       llm_provider: input.provider,
       llm_model: input.model,
+      assurance_contract_hash: assuranceContract.contractHash,
+      assurance_contract: assuranceContract.contract,
       ...(isOfficial
         ? initialTelegramDelivery(input.telegramSentAt)
         : { telegram_status: 'SKIPPED' as const, telegram_sent_at: null }),

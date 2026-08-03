@@ -5,6 +5,7 @@ permissions:
 
 on:
   schedule:
+    - cron: '30 4 * * *'
     - cron: '30 16 * * *'
   workflow_dispatch:
 
@@ -45,6 +46,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
       - name: Create encrypted backup and perform restore drill
+        id: backup_restore
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           MTN_BACKUP_AGE_RECIPIENT: ${{ secrets.MTN_BACKUP_AGE_RECIPIENT }}
@@ -53,12 +55,33 @@ jobs:
           RESTORE_DRILL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/mtn_restore_drill
           MTN_RESTORE_DRILL_CONFIRM: EMPTY_TARGET_ONLY
         run: |
+          set -euo pipefail
           test -n "$DATABASE_URL"
           test -n "$MTN_BACKUP_AGE_RECIPIENT"
+          restore_started_at="$(date +%s)"
           bash scripts/backup-supabase-encrypted.sh
           test "$(find backup-output -type f -name '*.dump.age' | wc -l)" -eq 1
           test "$(find backup-output -type f ! -name '*.dump.age' ! -name '*.sha256' | wc -l)" -eq 0
+          critical_table_count="$(/usr/lib/postgresql/17/bin/psql "$RESTORE_DRILL_DATABASE_URL" --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 --command \
+            "select count(*) from pg_catalog.pg_tables where schemaname = 'public' and tablename in ('recommendation_publications','recommendation_picks','trades');")"
+          test "$critical_table_count" -eq 3
+          publication_query_count="$(/usr/lib/postgresql/17/bin/psql "$RESTORE_DRILL_DATABASE_URL" --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 --command \
+            "select count(*) from public.recommendation_publications where generated_at <= now() + interval '5 minutes';")"
+          lineage_query_count="$(/usr/lib/postgresql/17/bin/psql "$RESTORE_DRILL_DATABASE_URL" --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 --command \
+            "select count(*) from public.recommendation_picks as pick join public.recommendation_publications as publication on publication.id = pick.publication_id;")"
+          trade_query_count="$(/usr/lib/postgresql/17/bin/psql "$RESTORE_DRILL_DATABASE_URL" --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 --command \
+            "select count(*) from public.trades where id is not null;")"
+          [[ "$publication_query_count" =~ ^[0-9]+$ ]]
+          [[ "$lineage_query_count" =~ ^[0-9]+$ ]]
+          [[ "$trade_query_count" =~ ^[0-9]+$ ]]
+          restore_rto_seconds="$(( $(date +%s) - restore_started_at ))"
+          test "$restore_rto_seconds" -le 3600
+          echo "rto_seconds=$restore_rto_seconds" >> "$GITHUB_OUTPUT"
+          echo "critical_query_smoke=true" >> "$GITHUB_OUTPUT"
+          echo "critical_query_count=3" >> "$GITHUB_OUTPUT"
+          echo "row_count_reconciliation=true" >> "$GITHUB_OUTPUT"
       - name: Upload ciphertext only
+        id: github_artifact_upload
         uses: actions/upload-artifact@v4
         with:
           name: mtn-db-backup-${{ github.run_id }}
@@ -142,7 +165,9 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg run_id "$GITHUB_RUN_ID" \
             --argjson bytes "$R2_OBJECT_BYTES" \
-            '[{storage_provider:"R2",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,restore_drill:true,row_count_reconciliation:true,retention:{daily:7,weekly:8,monthly:12},hard_cap_bytes:8000000000}}]')"
+            --arg release_sha "$GITHUB_SHA" \
+            --argjson rto_seconds "${{ steps.backup_restore.outputs.rto_seconds }}" \
+            '[{storage_provider:"R2",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,release_sha:$release_sha,restore_drill:true,row_count_reconciliation:true,critical_query_smoke:true,critical_query_count:3,rto_seconds:$rto_seconds,rpo_target_seconds:86400,offsite_verified:true,retention:{daily:7,weekly:8,monthly:12},hard_cap_bytes:8000000000}}]')"
           curl --fail-with-body --silent --show-error \
             --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
             --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
@@ -154,9 +179,13 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GITHUB_ARTIFACT_ID: ${{ steps.github_artifact_upload.outputs.artifact-id }}
+          GITHUB_ARTIFACT_DIGEST: ${{ steps.github_artifact_upload.outputs.artifact-digest }}
         run: |
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$GITHUB_ARTIFACT_ID"
+          test -n "$GITHUB_ARTIFACT_DIGEST"
           encrypted_path="$(find backup-output -type f -name '*.dump.age' -print -quit)"
           test -n "$encrypted_path"
           encrypted_name="$(basename "$encrypted_path")"
@@ -168,7 +197,11 @@ jobs:
             --arg repository "$GITHUB_REPOSITORY" \
             --arg run_id "$GITHUB_RUN_ID" \
             --argjson bytes "$encrypted_bytes" \
-            '[{storage_provider:"GITHUB_ARTIFACT",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,restore_drill:true,row_count_reconciliation:true,retention_days:7}}]')"
+            --arg release_sha "$GITHUB_SHA" \
+            --argjson rto_seconds "${{ steps.backup_restore.outputs.rto_seconds }}" \
+            --arg artifact_id "$GITHUB_ARTIFACT_ID" \
+            --arg artifact_digest "$GITHUB_ARTIFACT_DIGEST" \
+            '[{storage_provider:"GITHUB_ARTIFACT",object_key:$object_key,status:"SUCCESS",encrypted:true,bytes:$bytes,checksum_sha256:$checksum,metadata:{repository:$repository,run_id:$run_id,release_sha:$release_sha,restore_drill:true,row_count_reconciliation:true,critical_query_smoke:true,critical_query_count:3,rto_seconds:$rto_seconds,rpo_target_seconds:86400,offsite_verified:true,artifact_id:$artifact_id,artifact_digest:$artifact_digest,retention_days:7}}]')"
           curl --fail-with-body --silent --show-error \
             --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
             --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
@@ -176,13 +209,146 @@ jobs:
             --header "Content-Type: application/json" \
             --header "Prefer: return=minimal" \
             --data "$payload"
+      - name: Record immutable backup and recovery assurance evidence
+        id: assurance_evidence
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESTORE_RTO_SECONDS: ${{ steps.backup_restore.outputs.rto_seconds }}
+          CRITICAL_QUERY_SMOKE: ${{ steps.backup_restore.outputs.critical_query_smoke }}
+          CRITICAL_QUERY_COUNT: ${{ steps.backup_restore.outputs.critical_query_count }}
+          ROW_COUNT_RECONCILIATION: ${{ steps.backup_restore.outputs.row_count_reconciliation }}
+          GITHUB_ARTIFACT_ID: ${{ steps.github_artifact_upload.outputs.artifact-id }}
+          GITHUB_ARTIFACT_DIGEST: ${{ steps.github_artifact_upload.outputs.artifact-digest }}
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          test -n "$RESTORE_RTO_SECONDS"
+          [[ "$RESTORE_RTO_SECONDS" =~ ^[0-9]+$ ]]
+          test "$CRITICAL_QUERY_SMOKE" = "true"
+          test "$CRITICAL_QUERY_COUNT" -eq 3
+          test "$ROW_COUNT_RECONCILIATION" = "true"
+          test -n "$GITHUB_ARTIFACT_ID"
+          [[ "$GITHUB_ARTIFACT_DIGEST" =~ ^(sha256:)?[a-f0-9]{64}$ ]]
+          observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          backup_valid_until="$(date -u -d '+48 hours' +'%Y-%m-%dT%H:%M:%SZ')"
+          drill_valid_until="$(date -u -d '+30 days' +'%Y-%m-%dT%H:%M:%SZ')"
+          source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+          encrypted_path="$(find backup-output -type f -name '*.dump.age' -print -quit)"
+          checksum="$(sha256sum "$encrypted_path" | awk '{print $1}')"
+          recent_backups="$(curl --fail-with-body --silent --show-error \
+            --get "$SUPABASE_URL/rest/v1/operations_backup_runs" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --data-urlencode "select=completed_at,metadata" \
+            --data-urlencode "status=eq.SUCCESS" \
+            --data-urlencode "order=completed_at.desc" \
+            --data-urlencode "limit=20")"
+          previous_completed_at="$(jq -r --arg run_id "$GITHUB_RUN_ID" '[.[] | select((.metadata.run_id // "") != $run_id)][0].completed_at // empty' <<<"$recent_backups")"
+          if [[ -n "$previous_completed_at" ]]; then
+            previous_epoch="$(date -u -d "$previous_completed_at" +%s)"
+            current_epoch="$(date -u +%s)"
+            if [[ "$previous_epoch" -le "$current_epoch" ]]; then
+              rpo_seconds="$(( current_epoch - previous_epoch ))"
+              rpo_measured=true
+            else
+              rpo_seconds=2147483647
+              rpo_measured=false
+            fi
+          else
+            rpo_seconds=2147483647
+            rpo_measured=false
+          fi
+          recovery_status="PASS"
+          recovery_reason="ALL_RECOVERY_OBJECTIVES_VERIFIED"
+          if [[ "$rpo_measured" != "true" ]]; then
+            recovery_status="INCONCLUSIVE"
+            recovery_reason="RPO_BASELINE_NOT_YET_MEASURED"
+          elif [[ "$rpo_seconds" -gt 86400 ]]; then
+            recovery_status="FAIL"
+            recovery_reason="RPO_TARGET_BREACHED"
+          elif [[ "$RESTORE_RTO_SECONDS" -gt 3600 ]]; then
+            recovery_status="FAIL"
+            recovery_reason="RTO_TARGET_BREACHED"
+          elif [[ "$CRITICAL_QUERY_SMOKE" != "true" || "$CRITICAL_QUERY_COUNT" -ne 3 || "$ROW_COUNT_RECONCILIATION" != "true" ]]; then
+            recovery_status="FAIL"
+            recovery_reason="RESTORE_INTEGRITY_GATE_FAILED"
+          elif [[ -z "$GITHUB_ARTIFACT_ID" || ! "$GITHUB_ARTIFACT_DIGEST" =~ ^(sha256:)?[a-f0-9]{64}$ ]]; then
+            recovery_status="FAIL"
+            recovery_reason="OFFSITE_ARTIFACT_NOT_VERIFIED"
+          fi
+          if [[ "$recovery_status" == "PASS" ]]; then
+            recovery_gate_passed=true
+            recovery_valid_until="$drill_valid_until"
+          else
+            recovery_gate_passed=false
+            recovery_valid_until="$(date -u -d '+1 day' +'%Y-%m-%dT%H:%M:%SZ')"
+          fi
+          base_payload="$(jq -cS -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg checksum "$checksum" \
+            --arg artifact_id "$GITHUB_ARTIFACT_ID" \
+            --arg artifact_digest "$GITHUB_ARTIFACT_DIGEST" \
+            --argjson rto_seconds "$RESTORE_RTO_SECONDS" \
+            --argjson rpo_seconds "$rpo_seconds" \
+            --argjson rpo_measured "$rpo_measured" \
+            '{repository:$repository,run_id:$run_id,checksum_sha256:$checksum,encrypted:true,restore_drill:true,row_count_reconciliation:true,critical_query_smoke:true,critical_query_count:3,rto_seconds:$rto_seconds,rto_target_seconds:3600,rpo_seconds:$rpo_seconds,rpo_measured:$rpo_measured,rpo_target_seconds:86400,offsite:true,offsite_provider:"GITHUB_ARTIFACT",artifact_id:$artifact_id,artifact_digest:$artifact_digest}')"
+          backup_payload="$(jq -cS '. + {backup_gate_passed:true,result:"PASS"}' <<<"$base_payload")"
+          recovery_payload="$(jq -cS \
+            --arg recovery_status "$recovery_status" \
+            --arg recovery_reason "$recovery_reason" \
+            --argjson recovery_gate_passed "$recovery_gate_passed" \
+            '. + {recovery_gate_passed:$recovery_gate_passed,result:$recovery_status,recovery_reason:$recovery_reason}' \
+            <<<"$base_payload")"
+          backup_payload_hash="$(printf '%s' "$backup_payload" | sha256sum | awk '{print $1}')"
+          recovery_payload_hash="$(printf '%s' "$recovery_payload" | sha256sum | awk '{print $1}')"
+          backup_hash="$(printf '%s' "BACKUP_RESTORE:${GITHUB_SHA}:${source_record_id}:PASS" | sha256sum | awk '{print $1}')"
+          recovery_hash="$(printf '%s' "RECOVERY_DRILL:${GITHUB_SHA}:${source_record_id}:${recovery_status}" | sha256sum | awk '{print $1}')"
+          body="$(jq -n \
+            --arg backup_hash "$backup_hash" \
+            --arg recovery_hash "$recovery_hash" \
+            --arg source_record_id "$source_record_id" \
+            --arg release_sha "$GITHUB_SHA" \
+            --arg observed_at "$observed_at" \
+            --arg backup_valid_until "$backup_valid_until" \
+            --arg recovery_valid_until "$recovery_valid_until" \
+            --arg recovery_status "$recovery_status" \
+            --arg backup_payload_hash "$backup_payload_hash" \
+            --arg recovery_payload_hash "$recovery_payload_hash" \
+            --argjson backup_payload "$backup_payload" \
+            --argjson recovery_payload "$recovery_payload" \
+            '[
+              {evidence_hash:$backup_hash,control_key:"BACKUP_RESTORE",environment:"PRODUCTION",status:"PASS",source_kind:"BACKUP_LEDGER",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$backup_valid_until,payload:$backup_payload,payload_hash:$backup_payload_hash},
+              {evidence_hash:$recovery_hash,control_key:"RECOVERY_DRILL",environment:"PRODUCTION",status:$recovery_status,source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$recovery_valid_until,payload:$recovery_payload,payload_hash:$recovery_payload_hash}
+            ]')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "$SUPABASE_URL/rest/v1/assurance_control_evidence" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: resolution=ignore-duplicates,return=minimal" \
+            --data "$body"
+          echo "recorded=true" >> "$GITHUB_OUTPUT"
+          echo "recovery_status=$recovery_status" >> "$GITHUB_OUTPUT"
+          if [[ "$recovery_status" == "FAIL" ]]; then
+            echo "Recovery assurance failed: $recovery_reason" >&2
+            exit 1
+          fi
       - name: Record failed backup or restore drill
         if: failure()
         continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ASSURANCE_EVIDENCE_RECORDED: ${{ steps.assurance_evidence.outputs.recorded }}
         run: |
+          if [[ "$ASSURANCE_EVIDENCE_RECORDED" == "true" ]]; then
+            echo "Detailed backup and recovery evidence was already recorded; skipping generic failure evidence."
+            exit 0
+          fi
           if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
             echo "Backup failure could not be recorded because the operations ledger is not configured." >&2
             exit 0
@@ -200,3 +366,30 @@ jobs:
             --header "Content-Type: application/json" \
             --header "Prefer: return=minimal" \
             --data "$payload"
+          observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          valid_until="$(date -u -d '+1 day' +'%Y-%m-%dT%H:%M:%SZ')"
+          source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+          control_payload="$(jq -cS -n --arg repository "$GITHUB_REPOSITORY" --arg run_id "$GITHUB_RUN_ID" --arg run_attempt "$GITHUB_RUN_ATTEMPT" '{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,result:"FAIL"}')"
+          control_payload_hash="$(printf '%s' "$control_payload" | sha256sum | awk '{print $1}')"
+          backup_hash="$(printf '%s' "BACKUP_RESTORE:${GITHUB_SHA}:${source_record_id}:FAIL" | sha256sum | awk '{print $1}')"
+          recovery_hash="$(printf '%s' "RECOVERY_DRILL:${GITHUB_SHA}:${source_record_id}:FAIL" | sha256sum | awk '{print $1}')"
+          control_body="$(jq -n \
+            --arg backup_hash "$backup_hash" \
+            --arg recovery_hash "$recovery_hash" \
+            --arg source_record_id "$source_record_id" \
+            --arg release_sha "$GITHUB_SHA" \
+            --arg observed_at "$observed_at" \
+            --arg valid_until "$valid_until" \
+            --arg payload_hash "$control_payload_hash" \
+            --argjson payload "$control_payload" \
+            '[
+              {evidence_hash:$backup_hash,control_key:"BACKUP_RESTORE",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$payload,payload_hash:$payload_hash},
+              {evidence_hash:$recovery_hash,control_key:"RECOVERY_DRILL",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$payload,payload_hash:$payload_hash}
+            ]')"
+          curl --fail-with-body --silent --show-error \
+            --request POST "$SUPABASE_URL/rest/v1/assurance_control_evidence" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: resolution=ignore-duplicates,return=minimal" \
+            --data "$control_body"

@@ -3,6 +3,7 @@ import { validateOperationsMonitorRequest } from '@/lib/auth/operations-monitor'
 import { evaluateOperationsHealth } from '@/lib/operations/health';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import schedulerManifest from '@/infra/release/production-scheduler-manifest.json';
+import { buildAssuranceControlEvidenceRow } from '@/lib/assurance/control-evidence';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,6 +72,38 @@ export async function GET(request: Request) {
     backupRows: backups.error ? [] : backups.data || [],
     capacity,
   });
-  const body = { ...health, dependencyErrors };
-  return response(body, health.status === 'FAILED' ? 503 : 200);
+  const assuranceRow = buildAssuranceControlEvidenceRow({
+    controlKey: 'EXTERNAL_HEALTH',
+    status: health.status === 'HEALTHY' ? 'PASS' : 'FAIL',
+    sourceKind: 'OPERATIONS_MONITOR',
+    sourceRecordId: health.fingerprint,
+    observedAt: health.checkedAt,
+    validForSeconds: 4 * 60 * 60,
+    releaseSha: process.env.MTN_RELEASE_SHA || process.env.VERCEL_GIT_COMMIT_SHA || null,
+    payload: {
+      healthStatus: health.status,
+      fingerprint: health.fingerprint,
+      schedulerStatus: health.checks.scheduler.status,
+      workerStatus: health.checks.workers.status,
+      backupStatus: health.checks.backup.status,
+      capacityStatus: health.checks.capacity.status,
+    },
+  });
+  const { error: assuranceError } = await db
+    .from('assurance_control_evidence')
+    .upsert(assuranceRow, { onConflict: 'evidence_hash', ignoreDuplicates: true });
+  const allDependencyErrors = assuranceError
+    ? [...dependencyErrors, {
+        dependency: 'assurance-control-evidence',
+        error: assuranceError instanceof Error
+          ? assuranceError.message
+          : String((assuranceError as { message?: string })?.message || assuranceError),
+      }]
+    : dependencyErrors;
+  const body = {
+    ...health,
+    status: assuranceError ? 'FAILED' : health.status,
+    dependencyErrors: allDependencyErrors,
+  };
+  return response(body, health.status === 'FAILED' || assuranceError ? 503 : 200);
 }

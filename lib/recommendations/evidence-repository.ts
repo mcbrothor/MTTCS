@@ -19,6 +19,10 @@ import type {
   RecommendationMarket,
   RecommendationPerformanceResult,
 } from './types';
+import {
+  buildLongitudinalEvidenceEvaluationRows,
+  type LongitudinalPerformanceRow,
+} from '@/lib/assurance/longitudinal-evidence';
 
 export const RECOMMENDATION_PROMOTION_POLICY_VERSION = 'mtn-evidence-promotion-v1';
 
@@ -77,7 +81,9 @@ export function recommendationEvidenceManifestInsertRow(evidence: Recommendation
   };
 }
 
-interface PerformanceEvidenceRow {
+interface PerformanceEvidenceRow extends LongitudinalPerformanceRow {
+  status: string | null;
+  cost_model_version: string | null;
   horizon: string;
   net_return_pct: number | string | null;
   net_excess_return_pct: number | string | null;
@@ -87,12 +93,15 @@ interface PerformanceEvidenceRow {
   evidence_manifest_id: string | null;
   market_regime: string | null;
   recommendation_picks: {
+    id: string;
     recommendation_publications: {
       run_date: string;
       market: RecommendationMarket;
       category: RecommendationCategory | null;
       engine_version: string;
+      assurance_contract_hash: string | null;
       is_official: boolean;
+      status: string;
     };
   };
 }
@@ -300,11 +309,12 @@ export async function refreshRecommendationEvidenceEvaluations(
   for (let from = 0; ; from += pageSize) {
     const request = client
       .from('recommendation_performance')
-      .select('horizon, net_return_pct, net_excess_return_pct, mae_pct, data_evidence_tier, evidence_status, evidence_manifest_id, market_regime, recommendation_picks!inner(recommendation_publications!inner(run_date, market, category, engine_version, is_official))')
+      .select('status, cost_model_version, horizon, net_return_pct, net_excess_return_pct, mae_pct, data_evidence_tier, evidence_status, evidence_manifest_id, market_regime, recommendation_picks!inner(id, recommendation_publications!inner(run_date, market, category, engine_version, assurance_contract_hash, is_official, status))')
       .eq('status', 'MATURED')
       .eq('cost_model_version', RECOMMENDATION_COST_MODEL_VERSION)
       .eq('recommendation_picks.recommendation_publications.market', market)
       .eq('recommendation_picks.recommendation_publications.is_official', true)
+      .eq('recommendation_picks.recommendation_publications.status', 'PUBLISHED')
       .in('horizon', ['D5', 'D20', 'D60'])
       .order('evaluation_date', { ascending: true })
       .range(from, from + pageSize - 1);
@@ -314,7 +324,26 @@ export async function refreshRecommendationEvidenceEvaluations(
     rows.push(...page);
     if (page.length < pageSize) break;
   }
+  const longitudinalRows: PerformanceEvidenceRow[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const request = client
+      .from('recommendation_performance')
+      .select('status, cost_model_version, horizon, net_return_pct, net_excess_return_pct, mae_pct, data_evidence_tier, evidence_status, evidence_manifest_id, market_regime, recommendation_picks!inner(id, recommendation_publications!inner(run_date, market, category, engine_version, assurance_contract_hash, is_official, status))')
+      .eq('recommendation_picks.recommendation_publications.market', market)
+      .eq('recommendation_picks.recommendation_publications.is_official', true)
+      .eq('recommendation_picks.recommendation_publications.status', 'PUBLISHED')
+      .not('recommendation_picks.recommendation_publications.assurance_contract_hash', 'is', null)
+      .in('horizon', ['D5', 'D20', 'D60'])
+      .order('evaluation_date', { ascending: true })
+      .range(from, from + pageSize - 1);
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
+    if (error) throw error;
+    const page = (data || []) as unknown as PerformanceEvidenceRow[];
+    longitudinalRows.push(...page);
+    if (page.length < pageSize) break;
+  }
   const evaluations = buildRecommendationEvidenceEvaluationRows(rows, market);
+  const longitudinalEvaluations = buildLongitudinalEvidenceEvaluationRows(longitudinalRows, market);
   if (signal?.aborted) throw signal.reason || new DOMException('Recommendation evidence refresh cancelled.', 'AbortError');
   if (evaluations.length > 0) {
     const request = client
@@ -323,8 +352,16 @@ export async function refreshRecommendationEvidenceEvaluations(
     const { error } = await (signal ? request.abortSignal(signal) : request);
     if (error) throw error;
   }
+  if (longitudinalEvaluations.length > 0) {
+    const request = client
+      .from('recommendation_longitudinal_evaluations')
+      .upsert(longitudinalEvaluations, { onConflict: 'evaluation_hash', ignoreDuplicates: true });
+    const { error } = await (signal ? request.abortSignal(signal) : request);
+    if (error) throw error;
+  }
   return {
     evaluated: evaluations.length,
+    longitudinalEvaluated: longitudinalEvaluations.length,
     groups: [...new Set(evaluations.map((evaluation) => `${evaluation.category}:${evaluation.engine_version}`))].length,
     promotionPasses: evaluations.filter((evaluation) => (
       (evaluation.promotion_gate as { status?: string }).status === 'PASS'

@@ -69,6 +69,82 @@ function validateExitShares(trade: Trade, executions: TradeExecution[]) {
   }
 }
 
+interface PilotRiskAuthorization {
+  authorized_risk_r: number | string;
+  linked_at: string;
+}
+
+/**
+ * A recommendation pilot is deliberately smaller than an ordinary trade.  The
+ * link authorizes at most 0.5R where 1R is one percent of the account.  Check
+ * the *executed* entries as well as the plan so that a larger fill cannot turn
+ * a compliant plan into an over-sized pilot.  A database trigger repeats this
+ * check; this application check only gives the operator an actionable error.
+ */
+async function validatePilotExecutionRisk(trade: Trade, executions: TradeExecution[]) {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from('recommendation_pilot_links')
+    .select('authorized_risk_r, linked_at')
+    .eq('trade_id', trade.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return;
+
+  const authorization = data as PilotRiskAuthorization;
+  const entries = executions.filter((execution) => execution.side === 'ENTRY');
+  if (entries.length === 0) return;
+
+  const linkedAt = Date.parse(authorization.linked_at);
+  if (!Number.isFinite(linkedAt)
+    || entries.some((execution) => {
+      const executedAt = Date.parse(execution.executed_at);
+      return !Number.isFinite(executedAt) || executedAt < linkedAt;
+    })) {
+    throw new InputError(
+      '파일럿 체결은 사전 승인 링크 이후에만 기록할 수 있습니다.',
+      'PILOT_ENTRY_PREDATES_LINK',
+    );
+  }
+
+  const plannedShares = Number(trade.total_shares ?? trade.position_size);
+  const entryShares = entries.reduce((sum, execution) => sum + Number(execution.shares), 0);
+  if (!Number.isFinite(plannedShares) || plannedShares <= 0 || entryShares > plannedShares + 0.000001) {
+    throw new InputError(
+      '파일럿 누적 진입 수량이 승인된 계획 수량을 초과했습니다.',
+      'PILOT_PLAN_SHARES_EXCEEDED',
+    );
+  }
+
+  const totalEquity = Number(trade.total_equity);
+  const stopPrice = Number(trade.stoploss_price);
+  const authorizedR = Number(authorization.authorized_risk_r);
+  const weightedEntry = entries.reduce(
+    (sum, execution) => sum + Number(execution.price) * Number(execution.shares),
+    0,
+  ) / entryShares;
+  const perShareRisk = trade.direction === 'LONG'
+    ? weightedEntry - stopPrice
+    : stopPrice - weightedEntry;
+  if (!Number.isFinite(totalEquity) || totalEquity <= 0
+    || !Number.isFinite(stopPrice) || stopPrice <= 0
+    || !Number.isFinite(authorizedR) || authorizedR <= 0
+    || !Number.isFinite(perShareRisk) || perShareRisk <= 0) {
+    throw new InputError(
+      '파일럿 실제 위험을 계산할 수 있는 계좌·진입·손절 정보가 필요합니다.',
+      'PILOT_EXECUTION_RISK_INCOMPLETE',
+    );
+  }
+  const executedRisk = perShareRisk * entryShares;
+  const authorizedRisk = totalEquity * (authorizedR / 100);
+  if (executedRisk > authorizedRisk + 0.000001) {
+    throw new InputError(
+      '파일럿 실제 체결 위험이 승인된 0.5R 한도를 초과했습니다.',
+      'PILOT_EXECUTION_RISK_EXCEEDED',
+    );
+  }
+}
+
 function requestHash(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
@@ -78,6 +154,18 @@ function mutationError(error: unknown) {
   if (message.includes('VERSION_CONFLICT')) return apiError('다른 요청이 먼저 반영되었습니다. 새로고침 후 다시 시도하세요.', 'VERSION_CONFLICT', 409);
   if (message.includes('IDEMPOTENCY_CONFLICT')) return apiError('같은 멱등 키가 다른 요청에 사용되었습니다.', 'IDEMPOTENCY_CONFLICT', 409);
   if (message.includes('NOT_FOUND')) return apiError('거래 또는 체결을 찾을 수 없습니다.', 'NOT_FOUND', 404);
+  if (message.includes('MTN_VERIFIED_PILOT_SOURCE_IMMUTABLE')) {
+    return apiError(
+      '독립 검증된 파일럿 결과의 원천 체결은 변경할 수 없습니다.',
+      'VERIFIED_PILOT_SOURCE_IMMUTABLE',
+      409,
+    );
+  }
+  if (message.includes('MTN_PILOT_EXECUTION_RISK_EXCEEDED')
+    || message.includes('MTN_PILOT_PLAN_SHARES_EXCEEDED')
+    || message.includes('MTN_PILOT_ENTRY_PREDATES_LINK')) {
+    return apiError('파일럿 체결이 사전 승인된 수량·위험·시간 경계를 벗어났습니다.', 'PILOT_EXECUTION_RISK_EXCEEDED', 409);
+  }
   console.error('Trade execution mutation failed:', error);
   return apiError('체결 변경을 저장하지 못했습니다.', 'TRADE_EXECUTION_FAILED', 500);
 }
@@ -155,6 +243,7 @@ export async function POST(request: Request) {
       fees: nonNegativeNumber(body.fees), note: textOrNull(body.note) };
     const next = [...(trade.executions || []), { ...execution, id: '', trade_id: trade.id, created_at: '', updated_at: '' } as TradeExecution];
     validateExitShares(trade, next);
+    await validatePilotExecutionRisk(trade, next);
     return NextResponse.json({ data: await commitMutation({ operation: 'CREATE', trade, ownerId: session.systemId,
       nextExecutions: next, execution, idempotencyKey: key, hash: requestHash(execution), expectedVersion: body.expected_version }) });
   } catch (error) {
@@ -185,6 +274,7 @@ export async function PATCH(request: Request) {
     const replacement = { ...current, ...execution } as TradeExecution;
     const next = (trade.executions || []).map((item) => item.id === id ? replacement : item);
     validateExitShares(trade, next);
+    await validatePilotExecutionRisk(trade, next);
     return NextResponse.json({ data: await commitMutation({ operation: 'UPDATE', trade, ownerId: session.systemId,
       nextExecutions: next, execution, executionId: id, idempotencyKey: key, hash: requestHash(execution), expectedVersion: body.expected_version }) });
   } catch (error) {
@@ -205,6 +295,7 @@ export async function DELETE(request: Request) {
     const trade = await getTradeWithExecutions(current.trade_id, session.systemId);
     const next = (trade.executions || []).filter((item) => item.id !== id);
     validateExitShares(trade, next);
+    await validatePilotExecutionRisk(trade, next);
     return NextResponse.json({ data: await commitMutation({ operation: 'DELETE', trade, ownerId: session.systemId,
       nextExecutions: next, executionId: id, idempotencyKey: key, hash: requestHash({ id }),
       expectedVersion: Number(searchParams.get('expected_version')) || undefined }) });

@@ -7,6 +7,7 @@ const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': p
 const {
   canPromoteShadowPublication,
   canReplaceIncompleteOfficial,
+  buildRecommendationAssuranceContract,
   buildRecommendationPublicationGate,
   initialTelegramDelivery,
   persistRecommendationPolicy,
@@ -19,6 +20,23 @@ const {
 } = jiti('../lib/recommendations/persistence.ts');
 
 const sentAt = '2026-06-19T12:15:49.495Z';
+
+const assuranceContract = buildRecommendationAssuranceContract({
+  engineVersion: 'test-v1',
+  llmProvider: 'test',
+  llmModel: 'test',
+});
+assert.equal(assuranceContract.contractHash.length, 64);
+assert.equal(assuranceContract.contract.engineVersion, 'test-v1');
+assert.equal(assuranceContract.contract.llmProvider, 'test');
+assert.notEqual(
+  buildRecommendationAssuranceContract({
+    engineVersion: 'test-v1',
+    llmProvider: 'test',
+    llmModel: 'test-v2',
+  }).contractHash,
+  assuranceContract.contractHash,
+);
 
 assert.deepEqual(initialTelegramDelivery(sentAt), {
   telegram_status: 'SENT',
@@ -288,8 +306,12 @@ const persisted = await persistRecommendationPolicy({
   candidateSnapshotByTicker: snapshots,
 });
 assert.equal(persisted.is_official, false);
+const publicationInsert = client.writes.find((write) => (
+  write.table === 'recommendation_publications' && write.operation === 'insert'
+));
+assert.equal(publicationInsert.payload.assurance_contract_hash, assuranceContract.contractHash);
+assert.deepEqual(publicationInsert.payload.assurance_contract, assuranceContract.contract);
 assert.equal(persisted.status, 'SHADOW');
-const publicationInsert = client.writes.find((write) => write.table === 'recommendation_publications' && write.operation === 'insert');
 assert.equal(publicationInsert.payload.is_official, false);
 assert.equal(publicationInsert.payload.telegram_status, 'SKIPPED');
 assert.equal(publicationInsert.payload.market_context.publication_gate.eligibleCount, 9);
@@ -408,6 +430,11 @@ const promotionDraft = promotionClient.writes.find((write) => (
   && write.payload.status === 'DRAFT'
 ));
 assert.equal(promotionDraft.payload.is_official, true);
+assert.equal(
+  Object.hasOwn(promotionDraft.payload, 'assurance_contract_hash'),
+  false,
+  'legacy rows must not be retroactively admitted by backfilling a contract hash',
+);
 const promotedPicks = promotionClient.writes.find((write) => write.table === 'recommendation_picks' && write.operation === 'insert');
 assert.equal(promotedPicks.payload.length, 10);
 assert.equal(promotedPicks.payload.every((pick) => pick.candidate_snapshot.publication_gate.canPublish), true);
@@ -474,6 +501,34 @@ assert.equal(failedShadowClient.writes.some((write) => (
   && write.payload.is_official === true
   && write.payload.status === 'DRAFT'
 )), true);
+
+const contractBoundClient = createPersistenceClient({
+  existingPublication: {
+    id: 'contract-bound-shadow',
+    version: 1,
+    is_official: false,
+    status: 'SHADOW',
+    telegram_status: 'SKIPPED',
+    telegram_sent_at: null,
+    assurance_contract_hash: assuranceContract.contractHash,
+    assurance_contract: assuranceContract.contract,
+  },
+});
+await assert.rejects(() => persistRecommendationPolicy({
+  client: contractBoundClient,
+  runId: 'run-1',
+  runDate: '2026-06-22',
+  generatedAt: '2026-06-22T16:00:00.000Z',
+  provider: 'test',
+  model: 'changed-model',
+  result,
+  candidates,
+  category: 'NASDAQ100',
+  engineVersion: 'test-v1',
+  isOfficial: true,
+  candidateSnapshotByTicker: safeSnapshots,
+}), /different immutable assurance contract/);
+assert.equal(contractBoundClient.writes.length, 0);
 
 const actionStateMigration = await readFile(
   new URL('../supabase/migrations/20260802090000_recommendation_action_state.sql', import.meta.url),

@@ -8,6 +8,8 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '17 2 * * 0'
   workflow_dispatch:
 
 jobs:
@@ -45,8 +47,12 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Audit API route authentication
-      run: npm run check:api-auth
+    - name: Verify API authentication, server-only service role, and RLS denial
+      id: least_privilege
+      run: |
+        npm run check:api-auth
+        node_modules/.bin/jiti tests/security-hardening.test.mjs
+        node_modules/.bin/jiti tests/conditional-90-workflows.test.mjs
 
     - name: Verify clean release preflight
       run: node scripts/release/verify-release.mjs --verify-clean-clone --expected-sha="$GITHUB_SHA"
@@ -65,14 +71,382 @@ jobs:
       
     - name: Build Next.js
       run: npm run build
-      
+
+    - name: Measure core accessibility matrix
+      id: core_a11y
+      shell: bash
+      run: |
+        set -uo pipefail
+        report_dir="test-results/assurance"
+        report_path="$report_dir/a11y-playwright.json"
+        summary_path="$report_dir/a11y-summary.json"
+        mkdir -p "$report_dir"
+        set +e
+        PLAYWRIGHT_JSON_OUTPUT_NAME="$report_path" \
+          npx playwright test tests/e2e/a11y.spec.ts --reporter=json
+        test_exit=$?
+        set -e
+        REPORT_PATH="$report_path" SUMMARY_PATH="$summary_path" TEST_EXIT="$test_exit" node <<'NODE'
+        const fs = require('node:fs');
+
+        const expectedRoutes = ['recommendations', 'portfolio', 'scanner', 'dashboard'];
+        const expectedChecks = ['axe', 'keyboard', 'zoom-200', 'mobile-360'];
+        const reportPath = process.env.REPORT_PATH;
+        const summaryPath = process.env.SUMMARY_PATH;
+        const testExit = Number(process.env.TEST_EXIT || 1);
+        const specs = [];
+
+        function visit(value) {
+          if (!value || typeof value !== 'object') return;
+          if (typeof value.title === 'string' && value.title.startsWith('A11Y-CORE::') && Array.isArray(value.tests)) {
+            specs.push(value);
+          }
+          for (const child of Object.values(value)) {
+            if (Array.isArray(child)) child.forEach(visit);
+            else if (child && typeof child === 'object') visit(child);
+          }
+        }
+
+        let reportError = null;
+        try {
+          visit(JSON.parse(fs.readFileSync(reportPath, 'utf8')));
+        } catch (error) {
+          reportError = error instanceof Error ? error.message : String(error);
+        }
+
+        const outcomes = new Map();
+        for (const spec of specs) {
+          const [, route, check] = spec.title.split('::');
+          const results = spec.tests.flatMap((entry) => Array.isArray(entry.results) ? entry.results : []);
+          const executed = results.some((result) => result.status !== 'skipped');
+          const passed = spec.ok === true
+            && results.length > 0
+            && results.every((result) => result.status === 'passed');
+          const key = `${route}::${check}`;
+          const duplicate = outcomes.has(key);
+          outcomes.set(key, { route, check, executed, passed: passed && !duplicate });
+        }
+
+        const routeRows = expectedRoutes.map((route) => {
+          const checks = expectedChecks.map((check) => outcomes.get(`${route}::${check}`));
+          return {
+            route,
+            covered: checks.every((entry) => entry?.executed === true),
+            passed: checks.every((entry) => entry?.passed === true),
+          };
+        });
+        const checkRows = [...outcomes.values()].filter((entry) => (
+          expectedRoutes.includes(entry.route) && expectedChecks.includes(entry.check)
+        ));
+        const failuresFor = (check) => expectedRoutes.filter((route) => (
+          outcomes.get(`${route}::${check}`)?.passed !== true
+        ));
+        const coveredRouteCount = routeRows.filter((entry) => entry.covered).length;
+        const passedRouteCount = routeRows.filter((entry) => entry.passed).length;
+        const checksPassed = checkRows.filter((entry) => entry.passed).length;
+        const matrixComplete = checkRows.length === expectedRoutes.length * expectedChecks.length
+          && coveredRouteCount === expectedRoutes.length;
+        const result = testExit === 0
+          && reportError === null
+          && matrixComplete
+          && passedRouteCount === expectedRoutes.length
+          ? 'PASS'
+          : 'FAIL';
+        const summary = {
+          schema_version: 'mtn-a11y-core-matrix-v2',
+          keyboard_audit_mode: 'FULL_VISIBLE_MAIN_TAB_SEQUENCE_WITH_RENDERED_INDICATOR',
+          zoom_audit_mode: 'BROWSER_ZOOM_EQUIVALENT_REFLOW_AND_FIXED_PX_SCOPE',
+          mobile_audit_mode: 'DOCUMENT_AND_DESCENDANT_CLIPPING',
+          fixed_pixel_text_scopes_enforced: true,
+          result,
+          test_exit_code: testExit,
+          expected_route_count: expectedRoutes.length,
+          covered_route_count: coveredRouteCount,
+          passed_route_count: passedRouteCount,
+          core_route_coverage_pct: Math.floor((coveredRouteCount * 100) / expectedRoutes.length),
+          covered_routes: routeRows.filter((entry) => entry.covered).map((entry) => entry.route),
+          passed_routes: routeRows.filter((entry) => entry.passed).map((entry) => entry.route),
+          checks_expected: expectedRoutes.length * expectedChecks.length,
+          checks_executed: checkRows.filter((entry) => entry.executed).length,
+          checks_passed: checksPassed,
+          axe_checks_total: expectedRoutes.length,
+          axe_checks_passed: expectedRoutes.length - failuresFor('axe').length,
+          axe_failed_routes: failuresFor('axe'),
+          keyboard_failures: failuresFor('keyboard').length,
+          keyboard_failed_routes: failuresFor('keyboard'),
+          zoom_200_failures: failuresFor('zoom-200').length,
+          zoom_200_failed_routes: failuresFor('zoom-200'),
+          mobile_360_overflow_failures: failuresFor('mobile-360').length,
+          mobile_360_failed_routes: failuresFor('mobile-360'),
+          report_error: reportError,
+        };
+        fs.writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`);
+        NODE
+        cat "$summary_path"
+        echo "result=$(jq -r '.result' "$summary_path")" >> "$GITHUB_OUTPUT"
+        echo "summary_path=$summary_path" >> "$GITHUB_OUTPUT"
+
+    - name: Enforce core accessibility gate
+      run: test "${{ steps.core_a11y.outputs.result }}" = "PASS"
+
     - name: Run Playwright tests
-      run: npx playwright test
+      run: npx playwright test --grep-invert='A11Y-(CORE|SUPPORT)::'
+
+    - name: Verify deployed assurance RLS, privilege boundary, and schema fingerprint
+      id: assurance_schema
+      if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      env:
+        SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+      run: |
+        set -euo pipefail
+        set +x
+        test -n "$SUPABASE_DATABASE_URL"
+        node <<'NODE'
+        const { Client } = require('pg');
+
+        async function main() {
+          const client = new Client({
+            connectionString: process.env.SUPABASE_DATABASE_URL,
+            ssl: { rejectUnauthorized: false },
+          });
+          await client.connect();
+          try {
+            const result = await client.query(`
+              select
+                relation.relrowsecurity as rls_enabled,
+                has_table_privilege('anon', 'public.assurance_control_evidence', 'INSERT') as anon_insert,
+                has_table_privilege('authenticated', 'public.assurance_control_evidence', 'INSERT') as authenticated_insert,
+                has_table_privilege('service_role', 'public.assurance_control_evidence', 'INSERT') as service_role_insert
+              from pg_catalog.pg_class as relation
+              join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+              where namespace.nspname = 'public' and relation.relname = 'assurance_control_evidence'
+            `);
+            const row = result.rows[0];
+            if (!row
+              || row.rls_enabled !== true
+              || row.anon_insert !== false
+              || row.authenticated_insert !== false
+              || row.service_role_insert !== true) {
+              throw new Error('Deployed assurance privilege boundary is not fail-closed.');
+            }
+          } finally {
+            await client.end();
+          }
+        }
+
+        main().catch((error) => {
+          console.error(error instanceof Error ? error.message : String(error));
+          process.exit(1);
+        });
+        NODE
+        schema_summary="test-results/assurance/schema-drift.json"
+        mkdir -p "$(dirname "$schema_summary")"
+        node scripts/verify-assurance-schema-drift.mjs > "$schema_summary"
+        test "$(jq -r '.schema_drift_verified' "$schema_summary")" = "true"
+        echo "migration_sha256=$(jq -r '.migration_sha256' "$schema_summary")" >> "$GITHUB_OUTPUT"
+        echo "migration_sha256s=$(jq -cS '.migration_sha256s' "$schema_summary")" >> "$GITHUB_OUTPUT"
+        echo "deployed_definition_fingerprint=$(jq -r '.deployed_definition_fingerprint' "$schema_summary")" >> "$GITHUB_OUTPUT"
+
+    - name: Record successful release CI and automated accessibility evidence
+      if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        set -euo pipefail
+        set +x
+        test -n "$SUPABASE_URL"
+        test -n "$SUPABASE_SERVICE_ROLE_KEY"
+        observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        valid_until="$(date -u -d '+30 days' +'%Y-%m-%dT%H:%M:%SZ')"
+        source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+        a11y_summary="test-results/assurance/a11y-summary.json"
+        test -s "$a11y_summary"
+        test "$(jq -r '.result' "$a11y_summary")" = "PASS"
+        schema_summary="test-results/assurance/schema-drift.json"
+        test -s "$schema_summary"
+        test "$(jq -r '.schema_drift_verified' "$schema_summary")" = "true"
+        migration_sha256="$(jq -r '.migration_sha256' "$schema_summary")"
+        migration_sha256s="$(jq -cS '.migration_sha256s' "$schema_summary")"
+        deployed_definition_fingerprint="$(jq -r '.deployed_definition_fingerprint' "$schema_summary")"
+        schema_contract_version="$(jq -r '.schema_version' "$schema_summary")"
+        ci_payload="$(jq -cS -n \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg run_id "$GITHUB_RUN_ID" \
+          --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          '{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,checks:["api-auth","least-privilege-security","rls-denial","assurance-schema-drift","release-preflight","lint","typecheck","unit","build","playwright"],result:"PASS"}')"
+        a11y_payload="$(jq -cS \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg run_id "$GITHUB_RUN_ID" \
+          --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          '. + {repository:$repository,run_id:$run_id,run_attempt:$run_attempt}' \
+          "$a11y_summary")"
+        least_privilege_payload="$(jq -cS -n \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg run_id "$GITHUB_RUN_ID" \
+          --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          --arg migration_sha256 "$migration_sha256" \
+          --argjson migration_sha256s "$migration_sha256s" \
+          --arg deployed_definition_fingerprint "$deployed_definition_fingerprint" \
+          --arg schema_contract_version "$schema_contract_version" \
+          '{
+            repository:$repository,
+            run_id:$run_id,
+            run_attempt:$run_attempt,
+            control_scope_version:"mtn-api-auth-rls-schema-integrity-v1",
+            claim_scope:"API_AUTH_SERVICE_ROLE_SERVER_ONLY_DEPLOYED_RLS_SCHEMA_INTEGRITY",
+            measured_controls:["api-auth-audit","service-role-server-only-static-test","deployed-rls-privilege-boundary","assurance-schema-drift"],
+            separately_required_control:"BRANCH_PROTECTION",
+            explicitly_not_measured:["secret-rotation","environment-secret-separation"],
+            api_auth_audit_passed:true,
+            service_role_server_only_tested:true,
+            rls_anon_write_denied_tested:true,
+            deployed_rls_verified:true,
+            schema_drift_verified:true,
+            migration_sha256:$migration_sha256,
+            migration_sha256s:$migration_sha256s,
+            deployed_definition_fingerprint:$deployed_definition_fingerprint,
+            schema_contract_version:$schema_contract_version,
+            result:"PASS"
+          }')"
+        ci_payload_hash="$(printf '%s' "$ci_payload" | sha256sum | awk '{print $1}')"
+        a11y_payload_hash="$(printf '%s' "$a11y_payload" | sha256sum | awk '{print $1}')"
+        least_privilege_payload_hash="$(printf '%s' "$least_privilege_payload" | sha256sum | awk '{print $1}')"
+        ci_evidence_hash="$(printf '%s' "RELEASE_CI:${GITHUB_SHA}:${source_record_id}:PASS" | sha256sum | awk '{print $1}')"
+        a11y_evidence_hash="$(printf '%s' "ACCESSIBILITY_AUTOMATED:${GITHUB_SHA}:${source_record_id}:PASS" | sha256sum | awk '{print $1}')"
+        least_privilege_evidence_hash="$(printf '%s' "SECRETS_LEAST_PRIVILEGE:${GITHUB_SHA}:${source_record_id}:PASS" | sha256sum | awk '{print $1}')"
+        body="$(jq -n \
+          --arg ci_hash "$ci_evidence_hash" \
+          --arg a11y_hash "$a11y_evidence_hash" \
+          --arg least_privilege_hash "$least_privilege_evidence_hash" \
+          --arg observed_at "$observed_at" \
+          --arg valid_until "$valid_until" \
+          --arg source_record_id "$source_record_id" \
+          --arg release_sha "$GITHUB_SHA" \
+          --arg ci_payload_hash "$ci_payload_hash" \
+          --arg a11y_payload_hash "$a11y_payload_hash" \
+          --arg least_privilege_payload_hash "$least_privilege_payload_hash" \
+          --argjson ci_payload "$ci_payload" \
+          --argjson a11y_payload "$a11y_payload" \
+          --argjson least_privilege_payload "$least_privilege_payload" \
+          '[
+            {evidence_hash:$ci_hash,control_key:"RELEASE_CI",environment:"PRODUCTION",status:"PASS",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$ci_payload,payload_hash:$ci_payload_hash},
+            {evidence_hash:$a11y_hash,control_key:"ACCESSIBILITY_AUTOMATED",environment:"PRODUCTION",status:"PASS",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$a11y_payload,payload_hash:$a11y_payload_hash},
+            {evidence_hash:$least_privilege_hash,control_key:"SECRETS_LEAST_PRIVILEGE",environment:"PRODUCTION",status:"PASS",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$least_privilege_payload,payload_hash:$least_privilege_payload_hash}
+          ]')"
+        curl --fail-with-body --silent --show-error \
+          --request POST "$SUPABASE_URL/rest/v1/assurance_control_evidence" \
+          --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+          --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+          --header "Content-Type: application/json" \
+          --header "Prefer: resolution=ignore-duplicates,return=minimal" \
+          --data "$body"
+
+    - name: Record failed or inconclusive assurance evidence
+      if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+      continue-on-error: true
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: |
+        set -euo pipefail
+        set +x
+        if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_SERVICE_ROLE_KEY" ]]; then
+          echo "Assurance failure could not be recorded because the ledger is not configured." >&2
+          exit 0
+        fi
+        observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        failure_valid_until="$(date -u -d '+1 day' +'%Y-%m-%dT%H:%M:%SZ')"
+        passing_valid_until="$(date -u -d '+30 days' +'%Y-%m-%dT%H:%M:%SZ')"
+        source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
+        ci_payload="$(jq -cS -n \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg run_id "$GITHUB_RUN_ID" \
+          --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          '{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,result:"FAIL"}')"
+        a11y_summary="test-results/assurance/a11y-summary.json"
+        if [[ -s "$a11y_summary" ]]; then
+          a11y_status="$(jq -r 'if .result == "PASS" then "PASS" else "FAIL" end' "$a11y_summary")"
+          a11y_payload="$(jq -cS \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            '. + {repository:$repository,run_id:$run_id,run_attempt:$run_attempt}' \
+            "$a11y_summary")"
+        else
+          a11y_status="INCONCLUSIVE"
+          a11y_payload="$(jq -cS -n \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            '{schema_version:"mtn-a11y-core-matrix-v1",repository:$repository,run_id:$run_id,run_attempt:$run_attempt,expected_route_count:4,covered_route_count:0,passed_route_count:0,checks_executed:0,result:"INCONCLUSIVE",reason:"ACCESSIBILITY_MATRIX_NOT_EXECUTED"}')"
+        fi
+        if [[ "$a11y_status" == "PASS" ]]; then
+          a11y_valid_until="$passing_valid_until"
+        else
+          a11y_valid_until="$failure_valid_until"
+        fi
+        least_privilege_payload="$(jq -cS -n \
+          --arg repository "$GITHUB_REPOSITORY" \
+          --arg run_id "$GITHUB_RUN_ID" \
+          --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+          '{
+            repository:$repository,
+            run_id:$run_id,
+            run_attempt:$run_attempt,
+            control_scope_version:"mtn-api-auth-rls-schema-integrity-v1",
+            claim_scope:"API_AUTH_SERVICE_ROLE_SERVER_ONLY_DEPLOYED_RLS_SCHEMA_INTEGRITY",
+            measured_controls:["api-auth-audit","service-role-server-only-static-test","deployed-rls-privilege-boundary","assurance-schema-drift"],
+            separately_required_control:"BRANCH_PROTECTION",
+            explicitly_not_measured:["secret-rotation","environment-secret-separation"],
+            api_auth_audit_passed:false,
+            service_role_server_only_tested:false,
+            rls_anon_write_denied_tested:false,
+            deployed_rls_verified:false,
+            schema_drift_verified:false,
+            result:"FAIL"
+          }')"
+        ci_payload_hash="$(printf '%s' "$ci_payload" | sha256sum | awk '{print $1}')"
+        a11y_payload_hash="$(printf '%s' "$a11y_payload" | sha256sum | awk '{print $1}')"
+        least_privilege_payload_hash="$(printf '%s' "$least_privilege_payload" | sha256sum | awk '{print $1}')"
+        ci_evidence_hash="$(printf '%s' "RELEASE_CI:${GITHUB_SHA}:${source_record_id}:FAIL" | sha256sum | awk '{print $1}')"
+        a11y_evidence_hash="$(printf '%s' "ACCESSIBILITY_AUTOMATED:${GITHUB_SHA}:${source_record_id}:${a11y_status}" | sha256sum | awk '{print $1}')"
+        least_privilege_evidence_hash="$(printf '%s' "SECRETS_LEAST_PRIVILEGE:${GITHUB_SHA}:${source_record_id}:FAIL" | sha256sum | awk '{print $1}')"
+        body="$(jq -n \
+          --arg ci_hash "$ci_evidence_hash" \
+          --arg a11y_hash "$a11y_evidence_hash" \
+          --arg least_privilege_hash "$least_privilege_evidence_hash" \
+          --arg observed_at "$observed_at" \
+          --arg failure_valid_until "$failure_valid_until" \
+          --arg a11y_valid_until "$a11y_valid_until" \
+          --arg source_record_id "$source_record_id" \
+          --arg release_sha "$GITHUB_SHA" \
+          --arg a11y_status "$a11y_status" \
+          --arg ci_payload_hash "$ci_payload_hash" \
+          --arg a11y_payload_hash "$a11y_payload_hash" \
+          --arg least_privilege_payload_hash "$least_privilege_payload_hash" \
+          --argjson ci_payload "$ci_payload" \
+          --argjson a11y_payload "$a11y_payload" \
+          --argjson least_privilege_payload "$least_privilege_payload" \
+          '[
+            {evidence_hash:$ci_hash,control_key:"RELEASE_CI",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$failure_valid_until,payload:$ci_payload,payload_hash:$ci_payload_hash},
+            {evidence_hash:$a11y_hash,control_key:"ACCESSIBILITY_AUTOMATED",environment:"PRODUCTION",status:$a11y_status,source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$a11y_valid_until,payload:$a11y_payload,payload_hash:$a11y_payload_hash},
+            {evidence_hash:$least_privilege_hash,control_key:"SECRETS_LEAST_PRIVILEGE",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$failure_valid_until,payload:$least_privilege_payload,payload_hash:$least_privilege_payload_hash}
+          ]')"
+        curl --fail-with-body --silent --show-error \
+          --request POST "$SUPABASE_URL/rest/v1/assurance_control_evidence" \
+          --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+          --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+          --header "Content-Type: application/json" \
+          --header "Prefer: resolution=ignore-duplicates,return=minimal" \
+          --data "$body"
       
     - name: Upload Test Results
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: playwright-report
-        path: playwright-report/
+        path: |
+          playwright-report/
+          test-results/assurance/
         retention-days: 14

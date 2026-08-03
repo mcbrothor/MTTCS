@@ -311,6 +311,7 @@ try {
     'supabase/migrations/20260802093000_recommendation_category_market_state.sql',
     'supabase/migrations/20260802140000_operations_health_control_plane.sql',
     'supabase/migrations/20260802153000_recommendation_evidence_backend.sql',
+    'supabase/migrations/20260803100000_conditional_90_assurance.sql',
   ]) {
     assert.ok(
       repositoryStructure.migrations.requiredMigrations.includes(requiredMigration),

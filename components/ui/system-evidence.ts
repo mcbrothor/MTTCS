@@ -9,7 +9,7 @@ export interface DisplayFailure {
   lastSuccessfulAt?: string | null;
 }
 
-const INTERNAL_ERROR_PATTERN = /(?:\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|PGRST\d*|SQLSTATE)\b|TypeError:\s*fetch failed|\bat\s+(?:async\s+)?[\w.[\]<>]+\s*\(|(?:route|page|server|client)\.(?:ts|tsx|js|mjs):\d+|127\.0\.0\.1(?::\d+)?|localhost(?::\d+)?|postgres(?:ql)?:\/\/|supabase\.co|node_modules)/i;
+const INTERNAL_ERROR_PATTERN = /(?:\b(?:ECONNREFUSED|ECONNRESET|ENOTFOUND|ETIMEDOUT|PGRST\d*|PostgREST|SQLSTATE)\b|TypeError:\s*fetch failed|\bat\s+(?:async\s+)?[\w.[\]<>]+\s*\(|(?:route|page|server|client)\.(?:ts|tsx|js|mjs):\d+|127\.0\.0\.1(?::\d+)?|localhost(?::\d+)?|postgres(?:ql)?:\/\/|supabase\.co|node_modules)/i;
 
 export function safeDisplayError(
   value: unknown,
@@ -23,7 +23,7 @@ export function safeDisplayError(
 export function toDisplayFailure(value: unknown, fallback: string): DisplayFailure {
   const body = value && typeof value === 'object' ? value as Partial<ApiFailure> : {};
   return {
-    rawMessage: typeof body.message === 'string' ? body.message : fallback,
+    rawMessage: safeDisplayError(body.message, fallback),
     code: typeof body.code === 'string' ? body.code : null,
     recoverable: typeof body.recoverable === 'boolean' ? body.recoverable : null,
     lastSuccessfulAt: typeof body.lastSuccessfulAt === 'string' ? body.lastSuccessfulAt : null,

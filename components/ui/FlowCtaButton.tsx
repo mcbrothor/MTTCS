@@ -57,7 +57,7 @@ export default function FlowCtaButton({
       `}
     >
       <div className="text-left">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
+        <p className="text-[10px] font-black uppercase tracking-widest text-white">
           {subLabel || 'Next Step'}
         </p>
         <p className="text-lg font-black tracking-tight">
@@ -73,8 +73,8 @@ export default function FlowCtaButton({
   return (
     <div className={wrapperClass}>
       <MotionDiv
-        initial={{ opacity: 0, y: 20, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
+        initial={{ y: 20, scale: 0.9 }}
+        animate={{ y: 0, scale: 1 }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >

@@ -44,12 +44,12 @@ export default function MarketBanner({ compact = false }: { compact?: boolean })
   if (compact) {
     return (
       <div className={`rounded-xl border px-3 py-1.5 shadow-sm transition-all hover:bg-white/5 ${style.shell}`}>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black ${style.badge}`}>
               {style.icon}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-tighter ${style.badge}`}>
                 {data.state}
               </span>
@@ -60,12 +60,12 @@ export default function MarketBanner({ compact = false }: { compact?: boolean })
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex w-full min-w-0 items-center justify-between gap-2 pl-9 sm:w-auto sm:justify-start sm:gap-3 sm:pl-0">
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-black uppercase tracking-tighter text-[var(--text-tertiary)]">Score</span>
               <span className="font-mono text-[11px] font-black text-[var(--text-primary)]">{data.metrics.score}/100</span>
             </div>
-            <div className="h-3 w-px bg-white/10" />
+            <div className="hidden h-3 w-px bg-white/10 sm:block" />
             <div className="flex items-center gap-1.5">
               <span className="text-[9px] font-black uppercase tracking-tighter text-[var(--text-tertiary)]">Updated</span>
               <span className="font-mono text-[10px] text-[var(--text-secondary)]">
