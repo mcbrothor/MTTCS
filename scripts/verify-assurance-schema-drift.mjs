@@ -12,6 +12,7 @@ export const MIGRATION_PATHS = Object.freeze([
   MIGRATION_PATH,
   'supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql',
   'supabase/migrations/20260803110000_pilot_source_integrity.sql',
+  'supabase/migrations/20260803120000_assurance_least_privilege.sql',
 ]);
 export const MANIFEST_PATH = 'infra/release/conditional-90-schema-fingerprint.json';
 
@@ -23,6 +24,7 @@ export const CORE_FUNCTION_NAMES = Object.freeze([
   'guard_pilot_trade_source_fields',
   'guard_verified_pilot_model_performance',
   'guard_verified_pilot_performance',
+  'prevent_recommendation_evidence_mutation',
   'validate_assurance_control_evidence_append',
   'validate_assurance_score_snapshot_append',
   'validate_pilot_execution_authorization',

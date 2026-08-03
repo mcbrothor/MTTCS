@@ -11,6 +11,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 migration="$repo_root/supabase/migrations/20260803100000_conditional_90_assurance.sql"
 manual_accessibility_migration="$repo_root/supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql"
 pilot_source_integrity_migration="$repo_root/supabase/migrations/20260803110000_pilot_source_integrity.sql"
+least_privilege_migration="$repo_root/supabase/migrations/20260803120000_assurance_least_privilege.sql"
 test_root="$(mktemp -d "/tmp/mtn-assurance-pg17.XXXXXX")"
 data_dir="$test_root/data"
 socket_dir="$test_root/socket"
@@ -124,6 +125,7 @@ SQL
 "${psql_cmd[@]}" -f "$migration" >/dev/null
 "${psql_cmd[@]}" -f "$manual_accessibility_migration" >/dev/null
 "${psql_cmd[@]}" -f "$pilot_source_integrity_migration" >/dev/null
+"${psql_cmd[@]}" -f "$least_privilege_migration" >/dev/null
 
 "${psql_cmd[@]}" >/dev/null <<'SQL'
 do $$
