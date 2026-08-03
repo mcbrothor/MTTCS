@@ -13,6 +13,7 @@ export const MIGRATION_PATHS = Object.freeze([
   'supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql',
   'supabase/migrations/20260803110000_pilot_source_integrity.sql',
   'supabase/migrations/20260803120000_assurance_least_privilege.sql',
+  'supabase/migrations/20260803121000_assurance_service_hash_execution.sql',
 ]);
 export const MANIFEST_PATH = 'infra/release/conditional-90-schema-fingerprint.json';
 
@@ -35,6 +36,12 @@ export const CORE_FUNCTION_NAMES = Object.freeze([
   'validate_recommendation_pilot_link',
   'validate_recommendation_pilot_outcome',
   'validate_recommendation_publication_assurance_contract',
+]);
+
+export const SERVICE_ROLE_EXECUTE_FUNCTION_NAMES = Object.freeze([
+  'assurance_canonical_jsonb',
+  'assurance_jsonb_object_key_count',
+  'assurance_stable_jsonb_hash',
 ]);
 
 export const CORE_TABLE_NAMES = Object.freeze([
@@ -141,10 +148,14 @@ export function assertFunctionPrivilegeBoundary(functions) {
   ));
   const violations = [];
   for (const row of functions) {
-    for (const role of ['anon', 'authenticated', 'service_role']) {
+    for (const role of ['anon', 'authenticated']) {
       if (row[`${role}_execute`] !== false) {
         violations.push(`${row.object_name}(${row.identity_arguments}):${role}_execute`);
       }
+    }
+    const expectedServiceRoleExecute = SERVICE_ROLE_EXECUTE_FUNCTION_NAMES.includes(row.object_name);
+    if (row.service_role_execute !== expectedServiceRoleExecute) {
+      violations.push(`${row.object_name}(${row.identity_arguments}):service_role_execute`);
     }
   }
   if (missing.length > 0 || violations.length > 0) {

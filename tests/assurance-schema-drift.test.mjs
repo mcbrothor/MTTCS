@@ -10,6 +10,7 @@ import {
   fileSha256,
   MIGRATION_PATHS,
   SCHEMA_CONTRACT_VERSION,
+  SERVICE_ROLE_EXECUTE_FUNCTION_NAMES,
 } from '../scripts/verify-assurance-schema-drift.mjs';
 
 const migrationSha256s = Object.fromEntries(MIGRATION_PATHS.map((path, index) => [
@@ -93,12 +94,24 @@ const passingFunctionPrivileges = CORE_FUNCTION_NAMES.map((objectName) => ({
     identity_arguments: '',
     anon_execute: false,
     authenticated_execute: false,
-    service_role_execute: false,
+    service_role_execute: SERVICE_ROLE_EXECUTE_FUNCTION_NAMES.includes(objectName),
   }));
 assert.equal(assertFunctionPrivilegeBoundary(passingFunctionPrivileges), true);
-for (const role of ['anon', 'authenticated', 'service_role']) {
+for (const role of ['anon', 'authenticated']) {
   const changed = structuredClone(passingFunctionPrivileges);
   changed[0][`${role}_execute`] = true;
+  assert.throws(() => assertFunctionPrivilegeBoundary(changed), /not fail-closed/);
+}
+{
+  const changed = structuredClone(passingFunctionPrivileges);
+  const helperIndex = changed.findIndex((row) => SERVICE_ROLE_EXECUTE_FUNCTION_NAMES.includes(row.object_name));
+  changed[helperIndex].service_role_execute = false;
+  assert.throws(() => assertFunctionPrivilegeBoundary(changed), /not fail-closed/);
+}
+{
+  const changed = structuredClone(passingFunctionPrivileges);
+  const validatorIndex = changed.findIndex((row) => !SERVICE_ROLE_EXECUTE_FUNCTION_NAMES.includes(row.object_name));
+  changed[validatorIndex].service_role_execute = true;
   assert.throws(() => assertFunctionPrivilegeBoundary(changed), /not fail-closed/);
 }
 assert.throws(

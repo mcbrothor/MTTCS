@@ -4,25 +4,27 @@
     "supabase/migrations/20260803100000_conditional_90_assurance.sql",
     "supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql",
     "supabase/migrations/20260803110000_pilot_source_integrity.sql",
-    "supabase/migrations/20260803120000_assurance_least_privilege.sql"
+    "supabase/migrations/20260803120000_assurance_least_privilege.sql",
+    "supabase/migrations/20260803121000_assurance_service_hash_execution.sql"
   ],
-  "migration_sha256": "ea39d484813d340de815cf384932c3dacbc18bd3913c2f5aed9d6a5abd8cf23e",
+  "migration_sha256": "cc28340d405c82ad846055b8596e036341425e6dfcee2a5be87ea48a4aa06eab",
   "migration_sha256s": {
     "supabase/migrations/20260803100000_conditional_90_assurance.sql": "4c260545ef6c96a007d9686a1948d35b16e1632364554f49597af59262ea570c",
     "supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql": "9a811deb5a98a89e3d95013b03eb8977f9e3ce198bb53871f88be4050313b7f1",
     "supabase/migrations/20260803110000_pilot_source_integrity.sql": "fbcaadd7215b1850643d81dabc43b73d73d986c386ac5dc612dbe333672a7d7c",
-    "supabase/migrations/20260803120000_assurance_least_privilege.sql": "e2c4d57d2176cd40ecaf43a6dde43ca5bea29082de32d5ae8f68fc749b5d6c82"
+    "supabase/migrations/20260803120000_assurance_least_privilege.sql": "e2c4d57d2176cd40ecaf43a6dde43ca5bea29082de32d5ae8f68fc749b5d6c82",
+    "supabase/migrations/20260803121000_assurance_service_hash_execution.sql": "4b43e179905038fea4f88c06cd0d2c3271a12aae560f12ead1de50346e9dc0ec"
   },
-  "deployed_definition_fingerprint": "f5483cd1666a9d6f98c067f638ee757bc78dbffba2d5eef52e131a3978cd9aea",
+  "deployed_definition_fingerprint": "07e1863a7eb653b7d25f6c97430af8e006c16d6c27e05563096bea530c0e77d2",
   "definition_fingerprints": {
-    "functions": "8a252a21f7faed22036ab736a6598c69e8eb58836c38ddfd1a3a830baa100968",
+    "functions": "717c69b8cb5fad66724e94f49a63403a493d1a087f190cb4e933ee88902788f5",
     "triggers": "3e6e33aea4747c2de29c86f2a2dc5cc5302f4eaf13dda0ba177b7e65d41a8673",
     "constraints": "3cc02a1b6cc57b1e78e3d5c31797e02d66a8a9750184c8a395d011bc2193575b",
     "tables": "0ca1a5488e62fc7de5ced9bc89fd89ac65703afac8bf735b8565a35e5cc20344",
     "columns": "f40d3bbbc1f81dbb8fd341cadb18b2e75ff6e4e8da4f0496b081b4dfa6cad22b",
     "policies": "2f75dfda35a989af84966b9385324347b3d25342a0e20dffb2f8d302074fe343",
     "privileges": "7fc186cc1083878e8b3b705cae87ee08c99196e73986a17c51cb0d3738ee55e9",
-    "combined": "f5483cd1666a9d6f98c067f638ee757bc78dbffba2d5eef52e131a3978cd9aea"
+    "combined": "07e1863a7eb653b7d25f6c97430af8e006c16d6c27e05563096bea530c0e77d2"
   },
   "object_counts": {
     "functions": 18,
