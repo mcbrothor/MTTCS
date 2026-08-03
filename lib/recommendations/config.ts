@@ -2,6 +2,8 @@ import type { RecommendationCategory, RecommendationMarket } from './types';
 
 export const RECOMMENDATION_ANALYZER_VERSION = 'recommendation-diagnostics-2026.06-v1';
 export const RECOMMENDATION_ENGINE_VERSION = 'daily-top10-active-allocation-v2';
+export const RECOMMENDATION_PROMPT_VERSION = 'daily-category-top10-2026.07-v1';
+export const RECOMMENDATION_ASSURANCE_CONTRACT_SCHEMA_VERSION = 'mtn-recommendation-assurance-contract-v1';
 export const KR_RISK_ENGINE_VERSION = 'kr-risk-ranked-v3';
 export const KR_RISK_FLOW_ENGINE_VERSION = 'kr-risk-flow-v3';
 export const KR_RECOMMENDATION_POLICY = process.env.KR_RECOMMENDATION_POLICY || RECOMMENDATION_ENGINE_VERSION;

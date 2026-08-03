@@ -124,7 +124,7 @@ export default function SystemEvidencePanel({
             <div key={`${item.label}-${index}`} className="min-w-0 rounded-lg border border-slate-800 bg-slate-900/45 p-3">
               <dt className="text-[11px] font-semibold text-slate-500">{item.label}</dt>
               <dd className="mt-1 break-words text-sm font-bold text-slate-100">{item.value}</dd>
-              {item.detail && <p className="mt-1 break-words text-[11px] leading-5 text-slate-500">{item.detail}</p>}
+              {item.detail && <dd className="mt-1 break-words text-[11px] leading-5 text-slate-500">{item.detail}</dd>}
             </div>
           ))}
         </dl>

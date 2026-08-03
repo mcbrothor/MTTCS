@@ -3,6 +3,7 @@ import marketData from '../fixtures/market-data.json';
 import seedTrades from '../fixtures/seed-trades.json';
 import scannerResults from '../fixtures/scanner-results.json';
 import contestResponse from '../fixtures/contest-response.json';
+import type { Conditional90Scorecard } from '../../../lib/assurance/conditional-90';
 
 /**
  * MTN E2E API Route Interceptor
@@ -30,6 +31,7 @@ export async function setupAllMocks(page: Page): Promise<void> {
   await setupWatchlistMock(page);
   await setupMarketDataMock(page);
   await setupRecommendationsMock(page);
+  await setupConditional90AssuranceMock(page);
 }
 
 const riskIndicatorLabels = [
@@ -170,6 +172,156 @@ export async function setupRecommendationsMock(page: Page): Promise<void> {
       }], nextCursor: null };
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data }) });
+  });
+}
+
+export function buildConditional90ScorecardMock(): Conditional90Scorecard {
+  const requirement = {
+    code: 'E2E_EVIDENCE_DURATION',
+    label: '장기 성과 근거기간',
+    status: 'WAITING' as const,
+    measured: '30',
+    target: '365',
+    unit: '일',
+    nextAction: '공식 추천 성과를 계속 축적하세요.',
+    evidenceAsOf: '2026-08-03T00:00:00.000Z',
+  };
+  return {
+    schemaVersion: 'mtn-conditional-90-scorecard-v1',
+    policyVersion: 'mtn-conditional-90-policy-2026.08-v1',
+    evaluatedAt: '2026-08-03T00:00:00.000Z',
+    score: { verifiedScore: 73, scaleMax: 100, conditionalMaximum: 90, nextMilestone: 85 },
+    disposition: 'RESEARCH_ONLY',
+    capitalApproval: 'NOT_GRANTED',
+    policy: {
+      implementationBaseline: {
+        score: 72,
+        kind: 'IMPLEMENTATION_VERIFICATION_BASELINE',
+        fixedAsOf: '2026-08-03T00:00:00.000Z',
+        scope: '무료 인프라의 코드·테스트·위험통제·System UI 구현 기준선',
+        evidenceBoundary: '실계좌 성과·장기 운영·현재 배포의 외부 증거는 포함하지 않으며 각 상위 게이트에서 별도로 검증합니다.',
+      },
+      mfa: {
+        required: false,
+        status: 'OWNER_WAIVED',
+        rationale: 'MFA는 소유자 결정에 따라 비필수이며 보상통제를 유지합니다.',
+      },
+      compensatingControls: ['GitHub API로 검증된 보호 main·필수 CI', 'API 인증·서비스 역할 서버 전용·배포 RLS 권한분리'],
+      assessmentOnly: true,
+    },
+    milestones: [
+      {
+        score: 73, status: 'PASS', label: '기술 기준선', passedRequirements: 1,
+        totalRequirements: 1, evidenceAsOf: '2026-08-03T00:00:00.000Z',
+        requirements: [{ ...requirement, code: 'E2E_BASELINE', label: '기술 기준선', status: 'PASS', measured: '73', target: '73', unit: '점' }],
+      },
+      {
+        score: 85, status: 'WAITING', label: '장기 성과 검증', passedRequirements: 0,
+        totalRequirements: 1, evidenceAsOf: '2026-08-03T00:00:00.000Z', requirements: [requirement],
+      },
+      {
+        score: 90, status: 'BLOCKED', label: '조건부 이론상 최대', passedRequirements: 0,
+        totalRequirements: 1, evidenceAsOf: null,
+        requirements: [{ ...requirement, code: 'E2E_PILOT', label: '검증된 소액 파일럿', status: 'BLOCKED', measured: '0', target: '20', unit: '건' }],
+      },
+    ],
+    domains: [
+      { code: 'investment', label: '투자효용·성과증거', verified: 6, max: 17, status: 'WAITING' },
+      { code: 'data', label: '데이터 품질·계보', verified: 12, max: 13, status: 'WAITING' },
+      { code: 'strategy', label: '전략·검증방법', verified: 10, max: 13, status: 'WAITING' },
+      { code: 'risk', label: '위험통제', verified: 14, max: 14, status: 'PASS' },
+      { code: 'software', label: '소프트웨어 품질', verified: 10, max: 10, status: 'PASS' },
+      { code: 'operations', label: '운영·복구', verified: 7, max: 8, status: 'WAITING' },
+      { code: 'security', label: '보안·비밀관리', verified: 5, max: 5, status: 'PASS' },
+      { code: 'system_ui', label: 'System UI', verified: 9, max: 10, status: 'WAITING' },
+    ],
+    blockers: [{
+      code: 'E2E_DURATION_BLOCKER', scope: '85', severity: 'TIME_BOUND', label: '관측기간 부족',
+      detail: '장기 성과 근거기간이 아직 부족합니다.', current: '30', target: '365', unit: '일',
+      nextAction: '동일 계약으로 공식 추천 성과를 축적하세요.', evidenceAsOf: '2026-08-03T00:00:00.000Z',
+    }],
+    priorityActions: [{
+      code: 'E2E_ACCUMULATE', label: '장기 성과 축적', expectedPointGain: 12,
+      effort: 'TIME_BOUND', minimumElapsedDays: 335, costTier: 'FREE',
+      nextAction: '무료 자동화로 근거를 계속 누적하세요.',
+    }],
+    evidence: {
+      oldestRequiredEvidenceAt: '2026-07-04T00:00:00.000Z',
+      currentReleaseSha: 'e'.repeat(40),
+      publicationSpanDays: 30,
+    },
+  } satisfies Conditional90Scorecard;
+}
+
+export async function setupConditional90AssuranceMock(page: Page): Promise<void> {
+  const scorecard = buildConditional90ScorecardMock();
+
+  await page.route(/\/api\/assurance\/conditional-90(?:\?|$)/, async (route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      const body = route.request().postDataJSON() as Record<string, unknown> | null;
+      if (body?.action !== 'RECORD_DECISION') {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            code: 'INVALID_ACTION',
+            message: 'Unsupported assurance action in E2E mock.',
+            recoverable: true,
+          }),
+        });
+        return;
+      }
+      const decidedAt = '2026-08-03T00:00:00.000Z';
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            action: 'RECORD_DECISION',
+            result: {
+              id: '90000000-0000-4000-8000-000000000001',
+              decision_hash: 'f'.repeat(64),
+              pick_id: String(body.pickId || ''),
+              decision_code: String(body.decisionCode || ''),
+              decided_at: decidedAt,
+            },
+          },
+          meta: {
+            asOf: decidedAt,
+            source: 'MTN assurance decision ledger',
+            provider: 'Supabase',
+            delay: 'REALTIME',
+            fallbackUsed: false,
+            warnings: [],
+          },
+        }),
+      });
+      return;
+    }
+    if (method !== 'GET') {
+      await route.fulfill({
+        status: 405,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed.', recoverable: true }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: scorecard,
+        meta: {
+          asOf: scorecard.evaluatedAt,
+          source: 'MTN immutable assurance ledgers',
+          provider: 'Supabase/GitHub Actions/MTN',
+          delay: 'EOD',
+          fallbackUsed: false,
+          warnings: [],
+        },
+      }),
+    });
   });
 }
 

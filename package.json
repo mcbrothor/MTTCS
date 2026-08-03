@@ -15,6 +15,7 @@
     "test:e2e": "playwright test --config=playwright.config.ts",
     "typecheck": "tsc --noEmit --incremental false",
     "check:api-auth": "node scripts/check-api-auth.mjs",
+    "assurance:branch": "node --env-file=.env.local scripts/record-branch-protection-assurance.mjs",
     "quality": "npm run lint && npm run typecheck && npm run test:unit && npm run check:api-auth",
     "codex:worker": "node --env-file=.env.local scripts/local-llm-worker.mjs",
     "daily:screener:enqueue": "node --env-file=.env.local scripts/enqueue-daily-screener.mjs",
@@ -58,6 +59,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/adm-zip": "^0.5.8",

@@ -12,13 +12,28 @@ const {
   describeFreshness,
   describePromotion,
   safeDisplayError,
+  toDisplayFailure,
 } = jiti('../components/ui/system-evidence.ts');
 
 test('raw infrastructure errors are replaced with an actionable safe message', () => {
   const raw = 'TypeError: fetch failed\n  at async GET (route.ts:42)\n  cause: connect ECONNREFUSED 127.0.0.1:5432';
 
   assert.equal(safeDisplayError(raw), '내부 오류 상세는 운영 로그에서 확인하세요.');
+  assert.equal(
+    safeDisplayError('PostgREST internal connection details should not be exposed'),
+    '내부 오류 상세는 운영 로그에서 확인하세요.',
+  );
   assert.equal(safeDisplayError('인증이 만료되었습니다. 다시 로그인해 주세요.'), '인증이 만료되었습니다. 다시 로그인해 주세요.');
+});
+
+test('API failure conversion retains the caller-specific fallback when internals are redacted', () => {
+  assert.equal(
+    toDisplayFailure(
+      { message: 'PostgREST internal connection details should not be exposed' },
+      '조건부 90점 검증 근거를 불러오지 못했습니다.',
+    ).rawMessage,
+    '조건부 90점 검증 근거를 불러오지 못했습니다.',
+  );
 });
 
 test('freshness is not inferred when the API did not measure it', () => {

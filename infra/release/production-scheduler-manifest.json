@@ -214,6 +214,9 @@
     "supabase/migrations/20260802140000_operations_health_control_plane.sql",
     "supabase/migrations/20260802153000_recommendation_evidence_backend.sql",
     "supabase/migrations/20260802160000_recommendation_performance_scheduler_barrier.sql",
-    "supabase/migrations/20260802170000_recommendation_performance_retry_budget.sql"
+    "supabase/migrations/20260802170000_recommendation_performance_retry_budget.sql",
+    "supabase/migrations/20260803100000_conditional_90_assurance.sql",
+    "supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql",
+    "supabase/migrations/20260803110000_pilot_source_integrity.sql"
   ]
 }

@@ -58,6 +58,8 @@ function priceSeries(instrument) {
 function row({ engineVersion, horizon, day, dataTier = 'OFFICIAL', excess = 2 }) {
   const runDate = `2026-07-${String(day).padStart(2, '0')}`;
   return {
+    status: 'MATURED',
+    cost_model_version: 'mtn-standardized-round-trip-v1',
     horizon,
     net_return_pct: excess + 2,
     net_excess_return_pct: excess,
@@ -67,12 +69,15 @@ function row({ engineVersion, horizon, day, dataTier = 'OFFICIAL', excess = 2 })
     evidence_manifest_id: `${engineVersion}-${horizon}-${runDate}-${dataTier}`,
     market_regime: day % 2 === 0 ? 'RED' : 'GREEN',
     recommendation_picks: {
+      id: `${engineVersion}-${runDate}-${day % 2}`,
       recommendation_publications: {
         run_date: runDate,
         market: 'US',
         category: 'NASDAQ100',
         engine_version: engineVersion,
+        assurance_contract_hash: engineVersion === 'engine-a' ? 'a'.repeat(64) : 'b'.repeat(64),
         is_official: true,
+        status: 'PUBLISHED',
       },
     },
   };

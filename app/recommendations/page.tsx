@@ -6,6 +6,8 @@ import * as Tooltip from '@radix-ui/react-tooltip';
 import { BarChart3, CalendarDays, Database, Info, Search } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import SystemEvidencePanel, { SystemFailurePanel } from '@/components/ui/SystemEvidencePanel';
+import Conditional90Scorecard from '@/components/recommendations/Conditional90Scorecard';
+import RecommendationDecisionRecorder from '@/components/recommendations/RecommendationDecisionRecorder';
 import {
   toDisplayFailure,
   type DisplayFailure,
@@ -525,7 +527,7 @@ function HistoryView({ publications }: { publications: Publication[] }) {
   if (!publications.length) return <EmptyState icon={CalendarDays} title="저장된 공식 추천이 없습니다" message="다음 Daily Top10 발행 또는 백필 이후 이력과 성과가 표시됩니다." />;
   return (
     <div className="space-y-5">
-      {publications.map((publication) => (
+      {publications.map((publication, publicationIndex) => (
         <section key={publication.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
             <div>
@@ -538,7 +540,7 @@ function HistoryView({ publications }: { publications: Publication[] }) {
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1280px] text-left text-xs">
-              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>진입 시가</th><th>현재가</th><th>현재 수익</th><th>D5</th><th>D20</th><th>D60</th><th><MetricHeaderTooltip label="초과수익" ariaLabel="초과수익 계산 기준"><p className="font-semibold text-emerald-300">종목 수익률 - 동일 기간 벤치마크 수익률</p><p className="mt-1">종목과 지수 모두 첫 거래 가능일 시가부터 같은 평가일 종가까지 계산합니다.</p><p className="mt-1 text-slate-400">NASDAQ100: ^NDX · S&amp;P500: ^GSPC<br />KOSPI200: ^KS200 · KOSDAQ150: ^KQ150</p></MetricHeaderTooltip></th><th><MetricHeaderTooltip label="MFE / MAE" ariaLabel="MFE / MAE 계산 기준"><p className="font-semibold text-emerald-300">MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.</p><p className="mt-1">MFE = (평가구간 최고가 ÷ 진입가 - 1) × 100</p><p>MAE = (평가구간 최저가 ÷ 진입가 - 1) × 100</p><p className="mt-1 text-slate-400">현재 표시된 최신 성숙 평가기간과 같은 구간을 사용합니다.</p></MetricHeaderTooltip></th></tr></thead>
+              <thead className="bg-slate-900/70 text-slate-500"><tr><th className="px-4 py-3">순위·종목</th><th>근거</th><th>진입 시가</th><th>현재가</th><th>현재 수익</th><th>D5</th><th>D20</th><th>D60</th><th><MetricHeaderTooltip label="초과수익" ariaLabel="초과수익 계산 기준"><p className="font-semibold text-emerald-300">종목 수익률 - 동일 기간 벤치마크 수익률</p><p className="mt-1">종목과 지수 모두 첫 거래 가능일 시가부터 같은 평가일 종가까지 계산합니다.</p><p className="mt-1 text-slate-400">NASDAQ100: ^NDX · S&amp;P500: ^GSPC<br />KOSPI200: ^KS200 · KOSDAQ150: ^KQ150</p></MetricHeaderTooltip></th><th><MetricHeaderTooltip label="MFE / MAE" ariaLabel="MFE / MAE 계산 기준"><p className="font-semibold text-emerald-300">MFE는 진입 후 가장 높았던 수익률, MAE는 가장 낮았던 수익률입니다.</p><p className="mt-1">MFE = (평가구간 최고가 ÷ 진입가 - 1) × 100</p><p>MAE = (평가구간 최저가 ÷ 진입가 - 1) × 100</p><p className="mt-1 text-slate-400">현재 표시된 최신 성숙 평가기간과 같은 구간을 사용합니다.</p></MetricHeaderTooltip></th><th>당시 결정</th></tr></thead>
               <tbody className="divide-y divide-slate-800/70">
                 {publication.recommendation_picks.map((pick) => {
                   const d5 = performance(pick, 'D5');
@@ -575,6 +577,11 @@ function HistoryView({ publications }: { publications: Publication[] }) {
                       <td className={`py-3 pr-4 font-mono font-semibold ${tone(d60?.return_pct)}`}>{horizonValue(d60, 'D60')}</td>
                       <td className={`py-3 pr-4 font-mono ${tone(latest?.excess_return_pct)}`}>{pct(latest?.excess_return_pct)}</td>
                       <td className="py-3 pr-4 font-mono text-slate-400">{pct(latest?.mfe_pct)} / {pct(latest?.mae_pct)}</td>
+                      <td className="py-3 pr-4">
+                        {publicationIndex === 0
+                          ? <RecommendationDecisionRecorder pickId={pick.id} />
+                          : <span className="text-[10px] text-slate-600">최신 발행분에서 기록</span>}
+                      </td>
                     </tr>
                   );
                 })}
@@ -611,6 +618,7 @@ function MetricsView({ data }: { data: MetricsData | null }) {
       : 'waiting';
   return (
     <div className="space-y-6">
+      <Conditional90Scorecard />
       <SystemEvidencePanel
         ariaLabel="추천 성과 검증 상태"
         title="추천 성과 검증 상태"
@@ -761,17 +769,17 @@ function AuthoritativeRecommendationEvidence({ data }: { data: MetricsData | nul
         <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
           <dt className="text-[11px] font-semibold text-slate-500">권위 승격 게이트</dt>
           <dd className="mt-1 text-sm font-bold text-white">{statusLabel}</dd>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">legacy 정책 비교보다 우선하며 D5·D20·D60 모두 통과해야 합니다.</p>
+          <dd className="mt-1 text-[11px] leading-5 text-slate-500">legacy 정책 비교보다 우선하며 D5·D20·D60 모두 통과해야 합니다.</dd>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
           <dt className="text-[11px] font-semibold text-slate-500">검증 엔진</dt>
           <dd className="mt-1 break-words text-sm font-bold text-white">{promotion?.engineVersion || '미측정'}</dd>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">엔진·전략·프롬프트·가격 매니페스트 기준</p>
+          <dd className="mt-1 text-[11px] leading-5 text-slate-500">엔진·전략·프롬프트·가격 매니페스트 기준</dd>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
           <dt className="text-[11px] font-semibold text-slate-500">계정 실제 성과</dt>
           <dd className="mt-1 break-words text-sm font-bold text-white">{accountLabel}</dd>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">모형 검증 결과를 실제 체결계좌 수익으로 오인하지 마세요.</p>
+          <dd className="mt-1 text-[11px] leading-5 text-slate-500">모형 검증 결과를 실제 체결계좌 수익으로 오인하지 마세요.</dd>
         </div>
         <div className="rounded-lg border border-slate-800 bg-slate-900/45 p-3">
           <dt className="text-[11px] font-semibold text-slate-500">데이터·비용 범위</dt>
@@ -780,11 +788,11 @@ function AuthoritativeRecommendationEvidence({ data }: { data: MetricsData | nul
               ? '공식 데이터와 대체 데이터 분리'
               : '분리 여부 미측정'}
           </dd>
-          <p className="mt-1 text-[11px] leading-5 text-slate-500">
+          <dd className="mt-1 text-[11px] leading-5 text-slate-500">
             {evidence?.methodology?.costs === 'STANDARDIZED_MODEL_NOT_ACCOUNT_ACTUAL'
               ? '표준 비용 모형 · 계정 실제 비용 아님'
               : '비용 모형 미측정'}
-          </p>
+          </dd>
         </div>
       </dl>
 

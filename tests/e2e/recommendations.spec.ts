@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { login } from './helpers/auth';
-import { setupAllMocks } from './mocks/handlers';
+import { buildConditional90ScorecardMock, setupAllMocks } from './mocks/handlers';
 
 test.describe('TC-REC: 추천 성과·원인 분석', () => {
   test.beforeEach(async ({ page }) => {
@@ -101,6 +101,217 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     await expect(page.getByRole('heading', { name: 'D5' })).toBeVisible();
     await expect(page.getByText('n=40')).toBeVisible();
     await expect(page.getByText('신호 소스별 성과')).toBeVisible();
+  });
+
+  test('REC-14: 조건부 73·85·90 점수판은 MFA를 차단하지 않고 자동승인을 금지', async ({ page }) => {
+    await page.goto('/recommendations?view=metrics');
+
+    const scorecard = page.getByRole('region', { name: '조건부 90점 검증 점수판' });
+    await expect(scorecard).toBeVisible();
+    await expect(scorecard.getByRole('progressbar', { name: '조건부 최대 점수 진행도' }))
+      .toHaveAttribute('aria-valuenow', '73');
+    await expect(scorecard.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuetext',
+      '구현 검증 기준선 포함 현재 점수 73점, 무료 인프라 조건부 이론상 최대 90점',
+    );
+    await expect(scorecard).toContainText('MFA 비필수 · 보상통제 적용');
+    await expect(scorecard).toContainText('점수 차단 아님');
+    await expect(scorecard).toContainText('자동 실매매 승인 아님');
+    await expect(scorecard).toContainText('점수효과+12점');
+    await expect(scorecard.getByText('85점', { exact: true })).toBeVisible();
+    await expect(scorecard.getByText('90점', { exact: true })).toBeVisible();
+  });
+
+  test('REC-15: 최신 추천의 당시 결정을 사후결과와 분리해 기록', async ({ page }) => {
+    await page.goto('/recommendations');
+    const row = page.getByRole('row').filter({ hasText: '1. NVDA' });
+    const requestPromise = page.waitForRequest((request) => (
+      new URL(request.url()).pathname === '/api/assurance/conditional-90'
+      && request.method() === 'POST'
+    ));
+
+    await row.getByText('결정 원장 기록').click();
+    await row.getByLabel('결정').selectOption('WATCH');
+    await row.getByLabel('주된 사유').selectOption('NEEDS_REVIEW');
+    await row.getByLabel('당시 판단 근거').fill('실적 발표 전이라 추가 확인이 필요합니다.');
+    await row.getByRole('button', { name: '불변 원장에 기록' }).click();
+
+    const request = await requestPromise;
+    expect(await request.postDataJSON()).toMatchObject({
+      action: 'RECORD_DECISION',
+      decisionCode: 'WATCH',
+      reasonCodes: ['NEEDS_REVIEW'],
+    });
+    await expect(row.getByRole('status')).toContainText('거래나 자본 승인이 생성되지는 않습니다');
+  });
+
+  test('REC-15A: HTTP 200이라도 결정 기록 응답 계약이 틀리면 성공으로 표시하지 않음', async ({ page }) => {
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: buildConditional90ScorecardMock() }),
+      });
+    });
+    await page.goto('/recommendations');
+    const row = page.getByRole('row').filter({ hasText: '1. NVDA' });
+
+    await row.getByText('결정 원장 기록').click();
+    await row.getByLabel('당시 판단 근거').fill('실적 발표 전이라 추가 확인이 필요합니다.');
+    await row.getByRole('button', { name: '불변 원장에 기록' }).click();
+
+    await expect(row.getByRole('alert')).toContainText('엄격한 기록 계약과 일치하지 않습니다');
+    await expect(row.getByRole('status')).toHaveCount(0);
+    await expect(row.getByLabel('당시 판단 근거')).toHaveValue('실적 발표 전이라 추가 확인이 필요합니다.');
+  });
+
+  test('REC-15B: 서버가 다른 유효 decision code를 반환해도 제출 성공으로 오인하지 않음', async ({ page }) => {
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            action: 'RECORD_DECISION',
+            result: {
+              id: '90000000-0000-4000-8000-000000000004',
+              decision_hash: 'f'.repeat(64),
+              pick_id: 'pick-1',
+              decision_code: 'ACCEPT',
+              decided_at: '2026-08-03T00:00:00.000Z',
+            },
+          },
+          meta: {
+            asOf: '2026-08-03T00:00:00.000Z',
+            source: 'MTN assurance decision ledger',
+            provider: 'Supabase',
+            delay: 'REALTIME',
+            fallbackUsed: false,
+            warnings: [],
+          },
+        }),
+      });
+    });
+    await page.goto('/recommendations');
+    const row = page.getByRole('row').filter({ hasText: '1. NVDA' });
+
+    await row.getByText('결정 원장 기록').click();
+    await row.getByLabel('결정').selectOption('WATCH');
+    await row.getByLabel('당시 판단 근거').fill('실적 발표 전이라 추가 확인이 필요합니다.');
+    await row.getByRole('button', { name: '불변 원장에 기록' }).click();
+
+    await expect(row.getByRole('alert')).toContainText('엄격한 기록 계약과 일치하지 않습니다');
+    await expect(row.getByRole('status')).toHaveCount(0);
+  });
+
+  test('REC-16: 점수판 API 장애는 기존 추천 성과 화면과 격리', async ({ page }) => {
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'ASSURANCE_EVALUATION_FAILED',
+          message: 'PostgREST internal connection details should not be exposed',
+          recoverable: false,
+        }),
+      });
+    });
+    await page.goto('/recommendations?view=metrics');
+
+    await expect(page.getByRole('heading', { name: 'D5' })).toBeVisible();
+    const failure = page.getByRole('alert', { name: '조건부 90점 검증 점수판 장애' });
+    await expect(failure).toContainText('조건부 90점 검증 근거를 불러오지 못했습니다');
+    await expect(failure).toContainText('기존 추천 성과 화면은 계속 사용할 수 있습니다');
+    await expect(failure).not.toContainText('PostgREST');
+  });
+
+  test('REC-17: 위조되거나 불완전한 점수판 응답은 fail-closed', async ({ page }) => {
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            schemaVersion: 'mtn-conditional-90-scorecard-v1',
+            policyVersion: 'mtn-conditional-90-policy-2026.08-v1',
+            evaluatedAt: '2026-08-03T00:00:00.000Z',
+            score: { verifiedScore: 90, scaleMax: 100, conditionalMaximum: 90, nextMilestone: null },
+            disposition: 'ELIGIBLE_FOR_HUMAN_REVIEW',
+            capitalApproval: 'NOT_GRANTED',
+            milestones: [],
+            domains: [],
+          },
+        }),
+      });
+    });
+    await page.goto('/recommendations?view=metrics');
+
+    await expect(page.getByRole('heading', { name: 'D5' })).toBeVisible();
+    const failure = page.getByRole('alert', { name: '조건부 90점 검증 점수판 장애' });
+    await expect(failure).toContainText('점수판 응답 형식이 v1 계약과 일치하지 않습니다');
+    await expect(failure).toContainText('기존 추천 성과 화면은 계속 사용할 수 있습니다');
+  });
+
+  test('REC-17A: 유효한 3개 뒤에 위조 milestone을 덧붙인 응답도 fail-closed', async ({ page }) => {
+    const scorecard = buildConditional90ScorecardMock();
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            ...scorecard,
+            milestones: [
+              { score: 73, status: 'PASS', requirements: null },
+              ...scorecard.milestones,
+            ],
+          },
+        }),
+      });
+    });
+    await page.goto('/recommendations?view=metrics');
+
+    const failure = page.getByRole('alert', { name: '조건부 90점 검증 점수판 장애' });
+    await expect(failure).toContainText('점수판 응답 형식이 v1 계약과 일치하지 않습니다');
+    await expect(page.getByRole('region', { name: '조건부 90점 검증 점수판' })).toHaveCount(0);
+  });
+
+  test('REC-17B: malformed blocker와 음수 개선효과 action은 렌더 전에 거부', async ({ page }) => {
+    const scorecard = buildConditional90ScorecardMock();
+    await page.route('**/api/assurance/conditional-90', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            ...scorecard,
+            blockers: [{ ...scorecard.blockers[0], evidenceAsOf: 'not-a-date', unexpected: 'forged' }],
+            priorityActions: [{ ...scorecard.priorityActions[0], expectedPointGain: -999 }],
+          },
+        }),
+      });
+    });
+    await page.goto('/recommendations?view=metrics');
+
+    const failure = page.getByRole('alert', { name: '조건부 90점 검증 점수판 장애' });
+    await expect(failure).toContainText('점수판 응답 형식이 v1 계약과 일치하지 않습니다');
+    await expect(page.getByText('-999점')).toHaveCount(0);
   });
 
   test('REC-10: 데이터 근거와 성과 검증 한계를 정직하게 표시', async ({ page }) => {
