@@ -6,6 +6,7 @@
 -- copying auth credentials into a backup artifact.
 create schema if not exists extensions;
 create extension if not exists "uuid-ossp" with schema extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 create schema if not exists auth;
 
