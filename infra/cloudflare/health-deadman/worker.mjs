@@ -14,6 +14,13 @@ function compactFailure(health) {
   const unexpectedJobs = health?.checks?.scheduler?.unexpectedJobs || [];
   const missingWorkers = health?.checks?.workers?.missingComponents || [];
   const staleWorkers = health?.checks?.workers?.staleComponents || [];
+  const capacity = health?.checks?.capacity;
+  const capacityUsedMiB = Number.isFinite(capacity?.usedBytes)
+    ? (capacity.usedBytes / 1024 / 1024).toFixed(1)
+    : null;
+  const capacityBlockMiB = Number.isFinite(capacity?.blockBytes)
+    ? (capacity.blockBytes / 1024 / 1024).toFixed(0)
+    : null;
   return [
     `MTN infrastructure ${health?.status || 'FAILED'}`,
     scheduler.length ? `scheduler=${scheduler.join(',')}` : null,
@@ -24,8 +31,9 @@ function compactFailure(health) {
     staleWorkers.length ? `stale_worker=${staleWorkers.join(',')}` : null,
     health?.checks?.backup?.status && health.checks.backup.status !== 'HEALTHY'
       ? `backup=${health.checks.backup.status}` : null,
-    health?.checks?.capacity?.status && health.checks.capacity.status !== 'HEALTHY'
-      ? `capacity=${health.checks.capacity.status}` : null,
+    capacity?.status && capacity.status !== 'HEALTHY'
+      ? `capacity=${capacity.status}${capacityUsedMiB ? ` used_mib=${capacityUsedMiB}` : ''}${capacityBlockMiB ? ` block_mib=${capacityBlockMiB}` : ''}${capacity.capturedAt ? ` captured_at=${capacity.capturedAt}` : ''}`
+      : null,
     `checked_at=${health?.checkedAt || new Date().toISOString()}`,
   ].filter(Boolean).join('\n').slice(0, 3500);
 }
@@ -60,6 +68,7 @@ export async function runHealthCheck(env, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const cache = options.cache || globalThis.caches?.default;
   const timeoutMs = Number(env.MTN_HEALTH_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
+  const dedupeSeconds = Math.max(300, Number(env.MTN_ALERT_DEDUPE_SECONDS || DEFAULT_DEDUPE_SECONDS));
   const signal = typeof AbortSignal?.timeout === 'function'
     ? AbortSignal.timeout(Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS)
     : undefined;
@@ -84,13 +93,29 @@ export async function runHealthCheck(env, options = {}) {
   const alertFingerprint = encodeURIComponent(String(health.fingerprint || 'unknown'));
   const cacheKey = new Request(`https://mtn-health-deadman.invalid/incidents/${alertFingerprint}`);
   if (cache && await cache.match(cacheKey)) return { ...health, notified: false };
+  const now = options.now ? options.now() : new Date();
+  const notifiedAt = now instanceof Date ? now : new Date(now);
+  if (options.alertState) {
+    const previous = await options.alertState.read().catch(() => null);
+    const previousAt = Date.parse(String(previous?.notifiedAt || ''));
+    if (previous?.fingerprint === String(health.fingerprint || 'unknown')
+      && Number.isFinite(previousAt)
+      && notifiedAt.getTime() - previousAt < dedupeSeconds * 1000) {
+      return { ...health, notified: false };
+    }
+  }
 
   await sendTelegram(env, fetchImpl, health);
   if (cache) {
-    const dedupeSeconds = Math.max(300, Number(env.MTN_ALERT_DEDUPE_SECONDS || DEFAULT_DEDUPE_SECONDS));
     await cache.put(cacheKey, new Response('sent', {
       headers: { 'cache-control': `public, max-age=${dedupeSeconds}` },
     }));
+  }
+  if (options.alertState) {
+    await options.alertState.write({
+      fingerprint: String(health.fingerprint || 'unknown'),
+      notifiedAt: notifiedAt.toISOString(),
+    });
   }
   return { ...health, notified: true };
 }

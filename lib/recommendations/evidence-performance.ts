@@ -277,6 +277,12 @@ export function buildRecommendationEvidenceManifest(input: {
   };
 }
 
+export function shouldPersistRecommendationEvidenceManifest(
+  evidence: ReturnType<typeof buildRecommendationEvidenceManifest>,
+) {
+  return evidence.evidenceStatus === 'READY';
+}
+
 interface CostComponentBps {
   entry: number;
   exit: number;

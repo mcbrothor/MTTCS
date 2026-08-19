@@ -18,6 +18,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Restore alert dedupe state
+        uses: actions/cache/restore@v4
+        with:
+          path: .mtn-health-cache
+          key: mtn-health-dedupe-${{ github.run_id }}
+          restore-keys: |
+            mtn-health-dedupe-
       - name: Check aggregate operations health
         env:
           MTN_HEALTH_URL: ${{ secrets.MTN_HEALTH_URL }}
@@ -25,4 +32,11 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           MTN_ALERT_DEDUPE_SECONDS: '1800'
+          MTN_ALERT_STATE_PATH: .mtn-health-cache/state.json
         run: node scripts/check-operations-health.mjs
+      - name: Save alert dedupe state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .mtn-health-cache
+          key: mtn-health-dedupe-${{ github.run_id }}

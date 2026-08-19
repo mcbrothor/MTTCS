@@ -219,6 +219,7 @@
     "supabase/migrations/20260803103000_harden_manual_accessibility_assurance.sql",
     "supabase/migrations/20260803110000_pilot_source_integrity.sql",
     "supabase/migrations/20260803120000_assurance_least_privilege.sql",
-    "supabase/migrations/20260803121000_assurance_service_hash_execution.sql"
+    "supabase/migrations/20260803121000_assurance_service_hash_execution.sql",
+    "supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql"
   ]
 }

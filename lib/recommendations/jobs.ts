@@ -6,6 +6,7 @@ import {
   buildRecommendationEvidenceManifest,
   buildRecommendationPriceEvidence,
   calculateNetRecommendationPerformance,
+  shouldPersistRecommendationEvidenceManifest,
 } from './evidence-performance';
 import {
   extractRecommendationMarketRegime,
@@ -228,7 +229,7 @@ export async function runRecommendationPerformanceBatch(input: {
         runtime.signal,
       );
       const performanceRows: {
-        manifestHash: string;
+        manifestHash: string | null;
         evidenceReady: boolean;
         row: Record<string, unknown>;
       }[] = [];
@@ -274,7 +275,10 @@ export async function runRecommendationPerformanceBatch(input: {
             calculation,
             marketRegime,
           });
-          evidenceManifests.set(evidenceManifest.manifestHash, evidenceManifest);
+          const persistEvidenceManifest = shouldPersistRecommendationEvidenceManifest(evidenceManifest);
+          if (persistEvidenceManifest) {
+            evidenceManifests.set(evidenceManifest.manifestHash, evidenceManifest);
+          }
           const net = calculateNetRecommendationPerformance({
             market: input.market,
             grossReturnPct: result.returnPct,
@@ -286,7 +290,7 @@ export async function runRecommendationPerformanceBatch(input: {
             ? 'READY'
             : 'INCOMPLETE';
           performanceRows.push({
-            manifestHash: evidenceManifest.manifestHash,
+            manifestHash: persistEvidenceManifest ? evidenceManifest.manifestHash : null,
             evidenceReady: evidenceStatus === 'READY',
             row: {
               pick_id: pick.id,
@@ -345,6 +349,9 @@ export async function runRecommendationPerformanceBatch(input: {
       }
 
       const persistedPerformanceRows = performanceRows.map((pending) => {
+        if (!pending.manifestHash) {
+          return { ...pending.row, evidence_manifest_id: null };
+        }
         const evidenceManifestId = evidenceManifestCache.get(pending.manifestHash);
         if (!evidenceManifestId) {
           throw new Error(`Evidence manifest ${pending.manifestHash} was not registered.`);

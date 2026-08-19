@@ -21,6 +21,19 @@ assert.match(
   maintenanceWorkflow,
   /mtn_internal\.apply_retention_policies\(false,\s*'APPLY_RETENTION'\)/i,
 );
+assert.match(maintenanceWorkflow, /apply_recommendation_evidence_retention\(true,\s*null\)/i);
+assert.match(
+  maintenanceWorkflow,
+  /apply_recommendation_evidence_retention\(false,\s*'APPLY_RETENTION'\)/i,
+);
+for (const table of [
+  'daily_screener_candidates',
+  'recommendation_market_prices',
+  'recommendation_evidence_manifests',
+]) {
+  assert.match(maintenanceWorkflow, new RegExp(`vacuumdb[^\\n]+${table}`, 'i'));
+}
+assert.match(maintenanceWorkflow, /capture_database_capacity\(\)/i);
 assert.doesNotMatch(maintenanceWorkflow, /maintain_stock_metrics_retention_v2/i);
 assert.doesNotMatch(maintenanceWorkflow, /p_dry_run[^\n]*false/i);
 

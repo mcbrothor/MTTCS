@@ -101,6 +101,7 @@ function longSeries({ instrument = 'TEST', qualityStatus = 'FULL', source = 'off
     pickId: '00000000-0000-4000-8000-000000000001',
   });
   assert.equal(first.evidenceStatus, 'READY');
+  assert.equal(evidence.shouldPersistRecommendationEvidenceManifest(first), true);
   assert.equal(first.manifestHash, same.manifestHash);
   assert.notEqual(
     first.manifestHash,
@@ -118,6 +119,7 @@ function longSeries({ instrument = 'TEST', qualityStatus = 'FULL', source = 'off
     marketRegime: null,
   });
   assert.equal(incomplete.evidenceStatus, 'INCOMPLETE');
+  assert.equal(evidence.shouldPersistRecommendationEvidenceManifest(incomplete), false);
   assert.deepEqual(incomplete.missingFields.sort(), ['marketRegime', 'promptId']);
 }
 
@@ -171,6 +173,7 @@ function longSeries({ instrument = 'TEST', qualityStatus = 'FULL', source = 'off
     marketRegime: 'GREEN',
   });
   assert.equal(liveManifest.evidenceStatus, 'INCOMPLETE');
+  assert.equal(evidence.shouldPersistRecommendationEvidenceManifest(liveManifest), false);
   assert.ok(liveManifest.missingFields.includes('maturedHorizon'));
 
   const sourceBars = longSeries();
