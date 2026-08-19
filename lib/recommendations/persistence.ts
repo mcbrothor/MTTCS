@@ -176,6 +176,12 @@ export function resolveRecommendationPublicationDecision(
   };
 }
 
+export function shouldQueueObservationTelegram(
+  publicationDecision: RecommendationPublicationDecision,
+) {
+  return publicationDecision.requestedOfficial && !publicationDecision.isOfficial;
+}
+
 function validateCategoryRows(result: DailyCategoryTop10Result, category: RecommendationCategory) {
   const rows = result.categories[category];
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > 10) {
@@ -242,6 +248,8 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     buildRecommendationPublicationGate(input.result, category, input.candidateSnapshotByTicker),
   );
   const isOfficial = publicationDecision.isOfficial;
+  const observationOnly = shouldQueueObservationTelegram(publicationDecision);
+  const shouldQueueTelegram = isOfficial || observationOnly;
   const sourceMarketContext = input.marketContextByCategory?.[category]
     || input.marketContextByMarket?.[market]
     || input.marketContext
@@ -342,7 +350,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
             assurance_contract: assuranceContract.contract,
           }
         : {}),
-      ...(isOfficial
+      ...(shouldQueueTelegram
         ? input.telegramSentAt
           ? initialTelegramDelivery(input.telegramSentAt)
           : promotingShadow
@@ -379,7 +387,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
       llm_model: input.model,
       assurance_contract_hash: assuranceContract.contractHash,
       assurance_contract: assuranceContract.contract,
-      ...(isOfficial
+      ...(shouldQueueTelegram
         ? initialTelegramDelivery(input.telegramSentAt)
         : { telegram_status: 'SKIPPED' as const, telegram_sent_at: null }),
       market_context: marketContext,
@@ -404,6 +412,27 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
           .map((item) => item.ticker.toUpperCase() === pick.ticker.toUpperCase() ? cleanSecurityName(item.name, pick.ticker) : null)
           .find((item): item is string => Boolean(item))
         ?? pick.ticker;
+      const candidateSnapshot = observationOnly
+        ? {
+          ...candidate.snapshot,
+          allocation_action: 'WATCHLIST',
+          allocation: {
+            ...((candidate.snapshot as Record<string, unknown>).allocation
+              && typeof (candidate.snapshot as Record<string, unknown>).allocation === 'object'
+              ? (candidate.snapshot as Record<string, unknown>).allocation as Record<string, unknown>
+              : {}),
+            action_reason: 'PUBLICATION_GATE_INSUFFICIENT',
+            target_weight: 0,
+            cash_weight: 1,
+          },
+          observation: {
+            delivery_mode: 'OBSERVATION_ONLY',
+            reason: publicationDecision.reason,
+            eligible_count: publicationDecision.eligibleCount,
+            required_count: publicationDecision.requiredCount,
+          },
+        }
+        : candidate.snapshot;
       return {
         publication_id: publication.id,
         rank: pick.rank,
@@ -421,8 +450,8 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
         benchmark_symbol: BENCHMARK_BY_UNIVERSE[pick.universe],
         signal_price: candidate.preferred.price,
         signal_price_as_of: candidate.preferred.priceAsOf,
-        ...resolveRecommendationActionState(candidate.snapshot, input.generatedAt),
-        candidate_snapshot: candidate.snapshot,
+        ...resolveRecommendationActionState(candidateSnapshot, input.generatedAt),
+        candidate_snapshot: candidateSnapshot,
       };
     });
     const { error: picksError } = await input.client.from('recommendation_picks').insert(rows);
@@ -430,7 +459,7 @@ export async function persistRecommendationPolicy(input: PersistRecommendationIn
     const status = publicationDecision.status;
     const { error: statusError } = await input.client
       .from('recommendation_publications')
-      .update({ status, telegram_status: isOfficial ? publication.telegram_status : 'SKIPPED', updated_at: new Date().toISOString() })
+      .update({ status, telegram_status: shouldQueueTelegram ? publication.telegram_status : 'SKIPPED', updated_at: new Date().toISOString() })
       .eq('id', publication.id);
     if (statusError) throw statusError;
     return { ...publication, is_official: isOfficial, status, picks: rows };

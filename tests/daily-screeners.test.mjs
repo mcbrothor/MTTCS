@@ -329,6 +329,30 @@ function candidate(overrides) {
 }
 
 {
+  const observationMessage = daily.formatDailyCategoryTop10TelegramMessage({
+    runDate: '2026-08-03',
+    category: 'NASDAQ100',
+    top10: [{
+      rank: 1, category: 'NASDAQ100', market: 'US', ticker: 'OBS', name: 'Observation', universe: 'NASDAQ100',
+      score: 90, grade: 'A', source: 'leader', reason: 'reference only', confidence: 0.9, actionState: 'WATCHLIST',
+      actionReason: 'PUBLICATION_GATE_INSUFFICIENT', cashWeight: 1,
+    }],
+    provider: 'policy-v2',
+    observation: {
+      eligibleCount: 6,
+      requiredCount: 10,
+      reason: '차트 검증 기준을 충족한 종목이 6/10개입니다.',
+    },
+  });
+  assert.match(observationMessage, /나스닥 관찰 후보 Top10/);
+  assert.match(observationMessage, /공식 매수 추천이 아닙니다/);
+  assert.match(observationMessage, /차트 검증: \*6\/10\*/);
+  assert.match(observationMessage, /사용자가 직접 결정하세요/);
+  assert.match(observationMessage, /성과 집계와 자동 실행 대상에서는 제외됩니다/);
+  assert.match(observationMessage, /대기 사유: 공식 발행 검증 수 부족/);
+}
+
+{
   const prompt = daily.buildDailyCategoryTop10Prompt({
     runDate: '2026-06-12',
     candidates: [

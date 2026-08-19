@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, CheckCircle2, Clipboard, ShieldAlert, ShieldCheck } from 'lucide-react';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import AllocationGuidance from '@/components/portfolio/AllocationGuidance';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import SystemEvidencePanel, { SystemFailurePanel } from '@/components/ui/SystemEvidencePanel';
 import { toDisplayFailure, type DisplayFailure, type EvidenceState } from '@/components/ui/system-evidence';
@@ -221,6 +222,8 @@ export default function PortfolioPage() {
           <PortfolioRiskEvidence summary={summary} />
 
           <PortfolioCommandCenter summary={summary} market={market} />
+
+          <AllocationGuidance />
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Metric label="총 자산" value={money(summary.totalEquity, market)} helper="계좌 평가 기준" emphasis />

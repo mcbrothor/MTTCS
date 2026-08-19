@@ -14,6 +14,7 @@ const {
   preservedTelegramDelivery,
   resolveRecommendationPublicationDecision,
   resolveRecommendationActionState,
+  shouldQueueObservationTelegram,
   shouldPreservePublishedPublication,
   shouldPreserveSentPublication,
   pickCandidateSnapshot,
@@ -199,6 +200,8 @@ assert.deepEqual(resolveRecommendationPublicationDecision(true, publicationGate)
   isOfficial: false,
   status: 'SHADOW',
 });
+assert.equal(shouldQueueObservationTelegram(resolveRecommendationPublicationDecision(true, publicationGate)), true);
+assert.equal(shouldQueueObservationTelegram(resolveRecommendationPublicationDecision(false, publicationGate)), false);
 
 function createPersistenceClient({ existingPublication = null, categoryOfficial = null } = {}) {
   const writes = [];
@@ -313,15 +316,17 @@ assert.equal(publicationInsert.payload.assurance_contract_hash, assuranceContrac
 assert.deepEqual(publicationInsert.payload.assurance_contract, assuranceContract.contract);
 assert.equal(persisted.status, 'SHADOW');
 assert.equal(publicationInsert.payload.is_official, false);
-assert.equal(publicationInsert.payload.telegram_status, 'SKIPPED');
+assert.equal(publicationInsert.payload.telegram_status, 'PENDING');
 assert.equal(publicationInsert.payload.market_context.publication_gate.eligibleCount, 9);
 const picksInsert = client.writes.find((write) => write.table === 'recommendation_picks' && write.operation === 'insert');
 assert.equal(picksInsert.payload[0].candidate_snapshot.publication_gate.canPublish, false);
 assert.equal(picksInsert.payload.length, 10, 'candidate Top10 is preserved regardless of action state');
-assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'ACTIVE').length, 9);
-assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'WATCHLIST').length, 1);
-assert.equal(picksInsert.payload[0].activated_at, '2026-06-22T12:00:00.000Z');
-assert.equal(picksInsert.payload[0].activation_source, 'ALLOCATION_AND_CHART_GATE');
+assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'ACTIVE').length, 0);
+assert.equal(picksInsert.payload.filter((pick) => pick.action_state === 'WATCHLIST').length, 10);
+assert.equal(picksInsert.payload[0].activated_at, null);
+assert.equal(picksInsert.payload[0].candidate_snapshot.allocation_action, 'WATCHLIST');
+assert.equal(picksInsert.payload[0].candidate_snapshot.allocation.action_reason, 'PUBLICATION_GATE_INSUFFICIENT');
+assert.equal(picksInsert.payload[0].candidate_snapshot.observation.delivery_mode, 'OBSERVATION_ONLY');
 assert.equal(picksInsert.payload[9].activated_at, null);
 assert.equal(picksInsert.payload[9].activation_metadata.chart_gate_disposition, 'UNVERIFIED');
 

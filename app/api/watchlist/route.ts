@@ -2,7 +2,27 @@ import { rejectUnauthenticatedRequest } from '@/lib/auth/api';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { getServerSession } from '@/lib/auth/session';
-import type { WatchlistPriority } from '@/types';
+import type { InvestmentIdeaStatus, WatchlistPriority } from '@/types';
+
+const IDEA_STATUSES = new Set<InvestmentIdeaStatus>(['DRAFT', 'WATCHING', 'READY', 'INVALIDATED', 'ARCHIVED']);
+
+function ideaStatus(value: unknown): InvestmentIdeaStatus {
+  const normalized = String(value || '').toUpperCase() as InvestmentIdeaStatus;
+  return IDEA_STATUSES.has(normalized) ? normalized : 'DRAFT';
+}
+
+function sourceRefs(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === 'string' && /^https?:\/\//i.test(item)) return [{ url: item.slice(0, 2000) }];
+    if (!item || typeof item !== 'object') return [];
+    const row = item as { url?: unknown; label?: unknown };
+    const url = String(row.url || '').trim();
+    if (!/^https?:\/\//i.test(url)) return [];
+    const label = String(row.label || '').trim();
+    return [{ url: url.slice(0, 2000), ...(label ? { label: label.slice(0, 120) } : {}) }];
+  }).slice(0, 20);
+}
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
@@ -36,7 +56,10 @@ export async function GET(request: Request) {
 
     if (error?.message?.includes('group_name')) {
       const legacy = await db.from('watchlist').select('id,user_id,ticker,exchange,memo,tags,priority,created_at,updated_at').eq('user_id', session.systemId).order('priority', { ascending: false }).order('created_at', { ascending: false });
-      data = legacy.data?.map((item) => ({ ...item, group_name: '기본', sort_order: 0 })) || null;
+      data = legacy.data?.map((item) => ({
+        ...item, group_name: '기본', sort_order: 0, thesis: null, catalysts: [], invalidation: null,
+        review_at: null, idea_status: 'DRAFT', source_refs: [],
+      })) || null;
       error = legacy.error;
     }
 
@@ -76,7 +99,22 @@ export async function POST(request: Request) {
 
     const now = new Date().toISOString();
     const group_name = String(body.group_name || '기본').trim().slice(0, 40) || '기본';
-    const payload = { ticker, exchange, memo, tags, priority, group_name, user_id: systemId, updated_at: now };
+    const payload = {
+      ticker,
+      exchange,
+      memo,
+      tags,
+      priority,
+      group_name,
+      thesis: body.thesis ? String(body.thesis).slice(0, 5000) : null,
+      catalysts: Array.isArray(body.catalysts) ? body.catalysts.filter((value: unknown) => typeof value === 'string').map((value: string) => value.slice(0, 500)).slice(0, 20) : [],
+      invalidation: body.invalidation ? String(body.invalidation).slice(0, 3000) : null,
+      review_at: body.review_at ? String(body.review_at) : null,
+      idea_status: ideaStatus(body.idea_status),
+      source_refs: sourceRefs(body.source_refs),
+      user_id: systemId,
+      updated_at: now,
+    };
 
     const db = getSupabaseAdmin();
     const { data: existingRows, error: lookupError } = await db
@@ -136,6 +174,12 @@ export async function PATCH(request: Request) {
     }
     if (body.group_name !== undefined) update.group_name = String(body.group_name || '기본').trim().slice(0, 40) || '기본';
     if (body.sort_order !== undefined && Number.isInteger(Number(body.sort_order))) update.sort_order = Number(body.sort_order);
+    if (body.thesis !== undefined) update.thesis = body.thesis === null ? null : String(body.thesis).slice(0, 5000);
+    if (body.catalysts !== undefined && Array.isArray(body.catalysts)) update.catalysts = body.catalysts.filter((value: unknown) => typeof value === 'string').map((value: string) => value.slice(0, 500)).slice(0, 20);
+    if (body.invalidation !== undefined) update.invalidation = body.invalidation === null ? null : String(body.invalidation).slice(0, 3000);
+    if (body.review_at !== undefined) update.review_at = body.review_at ? String(body.review_at) : null;
+    if (body.idea_status !== undefined) update.idea_status = ideaStatus(body.idea_status);
+    if (body.source_refs !== undefined) update.source_refs = sourceRefs(body.source_refs);
 
     const { data, error } = await getSupabaseAdmin()
       .from('watchlist')

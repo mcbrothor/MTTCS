@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { analyzeSurge } from '@/lib/finance/engines/surge-score';
+import { calculateTurnoverIntensity } from '@/lib/finance/engines/turnover-intensity';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { OHLCData } from '@/types';
 import axios from 'axios';
 
@@ -101,15 +103,15 @@ async function fetchDailyBars(ticker: string, exchange: string): Promise<OHLCDat
 
     try {
       const data = provider === 'KIS'
-        ? await getMarketDailyPrice(ticker, exchange, 30)
-        : await getTossDailyPrice(ticker, 60);
+        ? await getMarketDailyPrice(ticker, exchange, 90)
+        : await getTossDailyPrice(ticker, 90);
       if (data.length > 0) return data;
     } catch {
       // 다음 provider로 fallback
     }
   }
 
-  return fetchYahooShortRange(yahooTicker(ticker, exchange), 60);
+  return fetchYahooShortRange(yahooTicker(ticker, exchange), 90);
 }
 
 async function parallelWithLimit<T, R>(
@@ -179,12 +181,18 @@ export async function POST(request: Request) {
 
           const lastBar = data.at(-1);
           const currentPrice = lastBar?.close ?? null;
+          const turnoverIntensity = calculateTurnoverIntensity({
+            ticker: item.ticker,
+            bars: data,
+            provider: isKr ? 'KIS/Toss/Yahoo' : 'Toss/KIS/Yahoo',
+          });
 
           return {
             ticker: item.ticker,
             success: true,
             data: {
               ...analysis,
+              turnoverIntensity,
               currentPrice,
             },
           };
@@ -198,6 +206,22 @@ export async function POST(request: Request) {
       },
       CONCURRENCY_LIMIT,
     );
+
+    const turnoverSnapshots = rawResults.flatMap((result) => {
+      if (!result.success || !result.data?.turnoverIntensity) return [];
+      const signal = result.data.turnoverIntensity;
+      const exchange = items.find((item) => item.ticker === result.ticker)?.exchange || 'US';
+      return [{
+        ticker: result.ticker, exchange, as_of: signal.asOf.slice(0, 10), model_version: signal.modelVersion,
+        provider: signal.provider, quality: signal.quality, snapshot: signal, updated_at: new Date().toISOString(),
+      }];
+    });
+    if (turnoverSnapshots.length > 0) {
+      const { error: snapshotError } = await getSupabaseAdmin().from('turnover_intensity_snapshots').upsert(turnoverSnapshots, {
+        onConflict: 'ticker,exchange,as_of,model_version',
+      });
+      if (snapshotError) console.warn('[Momentum Batch] turnover snapshot persistence failed:', snapshotError.message);
+    }
 
     return NextResponse.json({ results: rawResults });
   } catch (error: unknown) {

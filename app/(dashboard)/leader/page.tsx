@@ -31,6 +31,7 @@ import type {
   LeaderScannerResult,
   ScannerUniverse,
   ScannerUniverseResponse,
+  TurnoverIntensitySignal,
 } from '@/types';
 
 // ── 상수 ──────────────────────────────────────────────────────────────────
@@ -386,6 +387,7 @@ export default function LeaderScannerPage() {
                 trendIntensityIndex: (d.trendIntensityIndex as number) ?? null,
                 weightedMomentumScore: (d.weightedMomentumScore as number) ?? null,
                 benchmarkRelativeScore: (d.benchmarkRelativeScore as number) ?? null,
+                turnoverIntensity: (d.turnoverIntensity as TurnoverIntensitySignal) ?? null,
                 // 구형 호환
                 rsRating: (d.rsRating as number) ?? null,
                 mansfieldRsScore: (d.mansfieldRsScore as number) ?? null,
@@ -746,6 +748,7 @@ export default function LeaderScannerPage() {
                 <th className="px-3 py-4 text-right">12-M-1</th>
                 <th className="px-3 py-4 text-center">거래대금 (점유율)</th>
                 <th className="px-3 py-4 text-center">TII</th>
+                <th className="px-3 py-4 text-center">거래강도</th>
                 <th className="px-3 py-4 text-left">Grade</th>
                 <th className="px-3 py-4 className=text-center">선정</th>
               </tr>
@@ -934,6 +937,13 @@ export default function LeaderScannerPage() {
                         {r.trendIntensityIndex}
                       </span>
                     ) : '-'}
+                  </td>
+                  <td className="px-3 py-4 text-center">
+                    {r.turnoverIntensity?.raw !== null && r.turnoverIntensity?.raw !== undefined ? (
+                      <span className={r.turnoverIntensity.timing === 'ACCELERATING' ? 'text-emerald-300' : r.turnoverIntensity.timing === 'COOLING' ? 'text-rose-300' : 'text-slate-300'}>
+                        {r.turnoverIntensity.raw.toFixed(0)} · {r.turnoverIntensity.timing === 'ACCELERATING' ? '가속' : r.turnoverIntensity.timing === 'COOLING' ? '둔화' : '중립'}
+                      </span>
+                    ) : <span className="text-slate-600">—</span>}
                   </td>
                   <td className="px-3 py-4 font-sans">
                     {r.status === 'done' && (

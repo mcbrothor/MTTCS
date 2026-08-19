@@ -4,9 +4,10 @@
   "provenanceEndpoint": "/api/release",
   "scheduleMigrations": [
     "supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql",
-    "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql"
+    "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql",
+    "supabase/migrations/20260820123000_investor_flow_scheduler.sql"
   ],
-  "expectedJobCount": 25,
+  "expectedJobCount": 34,
   "jobs": [
     {
       "name": "mtn-snapshot-macro",
@@ -135,6 +136,69 @@
       "expectedDelaySeconds": 352800
     },
     {
+      "name": "mtn-investor-flow-kr-0",
+      "path": "/api/cron/investor-flow?cursor=0&size=40",
+      "schedule": "20 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-1",
+      "path": "/api/cron/investor-flow?cursor=40&size=40",
+      "schedule": "22 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-2",
+      "path": "/api/cron/investor-flow?cursor=80&size=40",
+      "schedule": "24 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-3",
+      "path": "/api/cron/investor-flow?cursor=120&size=40",
+      "schedule": "26 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-4",
+      "path": "/api/cron/investor-flow?cursor=160&size=40",
+      "schedule": "28 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-5",
+      "path": "/api/cron/investor-flow?cursor=200&size=40",
+      "schedule": "30 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-6",
+      "path": "/api/cron/investor-flow?cursor=240&size=40",
+      "schedule": "32 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-7",
+      "path": "/api/cron/investor-flow?cursor=280&size=40",
+      "schedule": "34 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-investor-flow-kr-8",
+      "path": "/api/cron/investor-flow?cursor=320&size=40",
+      "schedule": "36 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
       "name": "mtn-edgar-backfill-a",
       "path": "/api/cron/edgar-backfill?wave=A&size=80",
       "schedule": "30 02 * * *",
@@ -220,6 +284,8 @@
     "supabase/migrations/20260803110000_pilot_source_integrity.sql",
     "supabase/migrations/20260803120000_assurance_least_privilege.sql",
     "supabase/migrations/20260803121000_assurance_service_hash_execution.sql",
-    "supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql"
+    "supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql",
+    "supabase/migrations/20260820120000_investment_management_integration.sql",
+    "supabase/migrations/20260820123000_investor_flow_scheduler.sql"
   ]
 }
