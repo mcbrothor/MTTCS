@@ -29,7 +29,7 @@ concurrency:
 jobs:
   maintenance:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Install PostgreSQL 17 client
         run: |
@@ -52,7 +52,7 @@ jobs:
           set +x
           test -n "$DATABASE_URL"
           /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
-            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(true, null); commit;"
+            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(true, null); select * from mtn_internal.apply_recommendation_evidence_retention(true, null); commit;"
 
       - name: Reject an unconfirmed apply request
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation != 'APPLY_RETENTION' }}
@@ -76,4 +76,26 @@ jobs:
             exit 1
           fi
           /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
-            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(false, 'APPLY_RETENTION'); commit;"
+            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(false, 'APPLY_RETENTION'); select * from mtn_internal.apply_recommendation_evidence_retention(false, 'APPLY_RETENTION'); commit;"
+
+      - name: Reclaim physical database space
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION' }}
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          PGOPTIONS: -c lock_timeout=30000 -c statement_timeout=600000
+        run: |
+          set -euo pipefail
+          set +x
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --full --analyze --table=public.daily_screener_candidates
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --full --analyze --table=public.recommendation_market_prices
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --full --analyze --table=public.recommendation_evidence_manifests
+
+      - name: Refresh capacity evidence
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION' }}
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          set +x
+          /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
+            "select mtn_internal.capture_database_capacity();"

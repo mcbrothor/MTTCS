@@ -65,6 +65,20 @@ function fingerprint(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 24);
 }
 
+function capacityIncidentReason(input: {
+  capacity: CapacityStatus | null;
+  ageSeconds: number | null;
+  staleAfterSeconds: number;
+}) {
+  if (!input.capacity) return 'MISSING';
+  if (!Number.isFinite(input.capacity.used_bytes)) return 'INVALID_USAGE';
+  if (input.ageSeconds === null) return 'INVALID_CAPTURE';
+  if (input.ageSeconds > input.staleAfterSeconds) return 'STALE';
+  if (input.capacity.used_bytes >= input.capacity.block_bytes) return 'BLOCKED';
+  if (input.capacity.used_bytes >= input.capacity.warning_bytes) return 'WARNING';
+  return input.capacity.used_bytes >= (input.capacity.info_bytes ?? 250_000_000) ? 'WATCH' : 'NORMAL';
+}
+
 export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
   const now = input.now || new Date();
   const requiredWorkerComponents = input.requiredWorkerComponents || ['local-analysis', 'codex-llm'];
@@ -202,11 +216,49 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     backupStatus,
     capacityStatus,
   ]);
+  const incidentIdentity = {
+    status,
+    scheduler: {
+      status: schedulerStatus,
+      failedJobs,
+      missingJobs,
+      unexpectedJobs,
+      duplicateJobs,
+      invalidJobs,
+    },
+    workers: {
+      status: workerStatus,
+      missingComponents,
+      staleComponents,
+      failedComponents,
+      startingComponents,
+    },
+    backup: {
+      status: backupStatus,
+      reason: !latestBackup
+        ? 'MISSING'
+        : String(latestBackup.status).toUpperCase() !== 'SUCCESS'
+          ? 'FAILED_RUN'
+          : backupAgeSeconds === null
+            ? 'INVALID_COMPLETION'
+            : backupAgeSeconds > backupStaleAfterSeconds
+              ? 'STALE'
+              : backupAgeSeconds > 24 * 60 * 60 ? 'AGING' : 'NORMAL',
+    },
+    capacity: {
+      status: capacityStatus,
+      reason: capacityIncidentReason({
+        capacity,
+        ageSeconds: capacityAgeSeconds,
+        staleAfterSeconds: capacityStaleAfterSeconds,
+      }),
+    },
+  };
 
   return {
     status,
     checkedAt: now.toISOString(),
     checks,
-    fingerprint: fingerprint({ status, checks }),
+    fingerprint: fingerprint(incidentIdentity),
   };
 }

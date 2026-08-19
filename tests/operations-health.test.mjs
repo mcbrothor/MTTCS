@@ -80,6 +80,29 @@ const now = new Date('2026-08-02T03:00:00.000Z');
   assert.equal(result.checks.backup.status, 'FAILED');
   assert.equal(result.checks.capacity.status, 'FAILED');
   assert.ok(result.fingerprint.length >= 16);
+
+  const later = evaluateOperationsHealth({
+    now: new Date('2026-08-02T03:05:00.000Z'),
+    schedulerRows: [
+      { job_name: 'daily', health_status: 'FAILED', last_success_at: '2026-08-01T02:00:00.000Z', error_message: 'HTTP 500' },
+    ],
+    expectedSchedulerJobs: ['daily'],
+    workerRows: [
+      { component: 'local-analysis', status: 'RUNNING', observed_at: '2026-08-02T02:30:00.000Z' },
+    ],
+    backupRows: [],
+    capacity: {
+      used_bytes: 405_000_000,
+      captured_at: '2026-08-02T02:50:00.000Z',
+      warning_bytes: 350_000_000,
+      block_bytes: 400_000_000,
+    },
+  });
+  assert.equal(
+    later.fingerprint,
+    result.fingerprint,
+    'incident identity must not change only because age counters advanced',
+  );
 }
 
 {

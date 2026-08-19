@@ -4,10 +4,17 @@ import fs from 'node:fs';
 const job = fs.readFileSync('lib/recommendations/jobs.ts', 'utf8');
 const metricsApi = fs.readFileSync('app/api/recommendations/metrics/route.ts', 'utf8');
 const migration = fs.readFileSync('supabase/migrations/20260802153000_recommendation_evidence_backend.sql', 'utf8');
+const capacityMigration = fs.readFileSync(
+  'supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql',
+  'utf8',
+);
 
 assert.match(job, /engine_version, prompt_version, market_context, is_official/);
 assert.match(job, /buildRecommendationEvidenceManifest/);
 assert.match(job, /buildRecommendationPriceEvidence/);
+assert.match(job, /shouldPersistRecommendationEvidenceManifest/);
+assert.match(job, /manifestHash:\s*persistEvidenceManifest\s*\?\s*evidenceManifest\.manifestHash\s*:\s*null/);
+assert.match(job, /if \(!pending\.manifestHash\)[\s\S]*evidence_manifest_id:\s*null/);
 assert.doesNotMatch(job, /buildPriceDataManifest/, 'jobs must not register a shared full-series manifest');
 assert.match(job, /for \(const horizon[\s\S]*buildRecommendationPriceEvidence\(\{[\s\S]*horizon,/);
 assert.match(job, /calculateNetRecommendationPerformance/);
@@ -49,5 +56,13 @@ assert.match(migration, /prevent_recommendation_evidence_mutation/i);
 assert.match(migration, /before update or delete/i);
 assert.match(migration, /enable row level security/i);
 assert.doesNotMatch(migration, /drop\s+(table|column)/i);
+
+assert.match(capacityMigration, /recommendation_evidence_manifests_ready_only/i);
+assert.match(capacityMigration, /check \(evidence_status = 'READY'\) not valid/i);
+assert.match(capacityMigration, /apply_recommendation_evidence_retention/i);
+assert.match(capacityMigration, /evidence_status = 'INCOMPLETE'/i);
+assert.match(capacityMigration, /not exists[\s\S]*recommendation_performance/i);
+assert.match(capacityMigration, /p_confirmation is distinct from 'APPLY_RETENTION'/i);
+assert.doesNotMatch(capacityMigration, /delete from public\.recommendation_evidence_manifests\s*;/i);
 
 console.log('recommendation evidence backend contract tests passed');

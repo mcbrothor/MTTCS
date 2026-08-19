@@ -75,4 +75,35 @@ function response(body, status = 200) {
   assert.equal(duplicate.notified, false);
 }
 
+{
+  let state = null;
+  let telegramCalls = 0;
+  const env = {
+    MTN_HEALTH_URL: 'https://example.test/api/internal/health',
+    MTN_HEALTH_TOKEN: 'monitor-token',
+    TELEGRAM_BOT_TOKEN: 'telegram-token',
+    TELEGRAM_CHAT_ID: '123',
+    MTN_ALERT_DEDUPE_SECONDS: '1800',
+  };
+  const options = {
+    fetchImpl: async (url) => {
+      if (String(url).includes('api.telegram.org')) {
+        telegramCalls += 1;
+        return response({ ok: true });
+      }
+      return response({ status: 'FAILED', fingerprint: 'stable-incident' }, 503);
+    },
+    now: () => new Date('2026-08-02T03:00:00.000Z'),
+    alertState: {
+      async read() { return state; },
+      async write(next) { state = next; },
+    },
+  };
+  const first = await runHealthCheck(env, options);
+  const duplicate = await runHealthCheck(env, options);
+  assert.equal(first.notified, true);
+  assert.equal(duplicate.notified, false, 'persistent runner state must dedupe the same incident');
+  assert.equal(telegramCalls, 1);
+}
+
 console.log('cloudflare health deadman tests passed');
