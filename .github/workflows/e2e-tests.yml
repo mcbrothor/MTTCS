@@ -14,7 +14,7 @@ on:
 
 jobs:
   test:
-    timeout-minutes: 20
+    timeout-minutes: 35
     runs-on: ubuntu-latest
     env:
       # Dummy values satisfy build-time guards and E2E auth in CI.
@@ -67,7 +67,9 @@ jobs:
       run: npm test
       
     - name: Install Playwright Browsers
-      run: npx playwright install --with-deps chromium
+      # ubuntu-latest already carries Chromium's system libraries. Avoid a
+      # redundant apt update whose Azure mirror can stall the entire CI job.
+      run: npx playwright install chromium
       
     - name: Build Next.js
       run: npm run build

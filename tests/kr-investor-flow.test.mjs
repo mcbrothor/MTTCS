@@ -18,7 +18,7 @@ const parsed = flow.parseKisInvestorFlowRows({
 });
 
 assert.equal(parsed[0].foreignNetBuyQty, -1000);
-assert.deepEqual(Object.keys(parsed[0].rawJson).sort(), ['acml_tr_pbmn', 'frgn_ntby_qty', 'frgn_ntby_tr_pbmn', 'frgn_shnu_tr_pbmn', 'orgn_ntby_qty', 'orgn_ntby_tr_pbmn', 'orgn_shnu_tr_pbmn', 'prsn_shnu_tr_pbmn', 'stck_bsop_date'].sort());
+assert.deepEqual(Object.keys(parsed[0].rawJson).sort(), ['acml_tr_pbmn', 'frgn_ntby_qty', 'frgn_ntby_tr_pbmn', 'frgn_shnu_tr_pbmn', 'orgn_ntby_qty', 'orgn_ntby_tr_pbmn', 'orgn_shnu_tr_pbmn', 'prsn_shnu_tr_pbmn', 'stck_bsop_date', 'stck_clpr'].sort());
 
 const derivedTurnover = flow.parseKisInvestorFlowRows({
   ticker: '005930',

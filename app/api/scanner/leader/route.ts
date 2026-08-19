@@ -4,6 +4,8 @@ import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
 import { getTossDailyPrice, isTossInvestConfigured } from '@/lib/finance/providers/toss-api';
 import { analyzeLeaderScore, applyLeaderUniverseMetrics } from '@/lib/finance/engines/leader-score';
+import { calculateTurnoverIntensity } from '@/lib/finance/engines/turnover-intensity';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { OHLCData } from '@/types';
 import type { LeaderAnalysisResult } from '@/lib/finance/engines/leader-score';
 
@@ -139,6 +141,11 @@ export async function POST(request: Request) {
             market: item.exchange === 'KOSPI' || item.exchange === 'KOSDAQ' ? 'KR' : 'US',
             exchange: item.exchange,
           });
+          const turnoverIntensity = calculateTurnoverIntensity({
+            ticker: item.ticker,
+            bars: data,
+            provider: isKoreanExchange(item.exchange) ? 'KIS/Toss/Yahoo' : 'Toss/KIS/Yahoo',
+          });
 
           // 현재가 및 등락률 추출
           const lastBar = data.at(-1);
@@ -154,6 +161,7 @@ export async function POST(request: Request) {
             success: true,
             data: {
               ...analysis,
+              turnoverIntensity,
               currentPrice,
               changePercent,
             },
@@ -218,6 +226,22 @@ export async function POST(request: Request) {
       }
       return r;
     });
+
+    const turnoverSnapshots = finalResults.flatMap((result) => {
+      if (!result.success || !result.data?.turnoverIntensity) return [];
+      const signal = result.data.turnoverIntensity;
+      const exchange = items.find((item) => item.ticker === result.ticker)?.exchange || 'US';
+      return [{
+        ticker: result.ticker, exchange, as_of: signal.asOf.slice(0, 10), model_version: signal.modelVersion,
+        provider: signal.provider, quality: signal.quality, snapshot: signal, updated_at: new Date().toISOString(),
+      }];
+    });
+    if (turnoverSnapshots.length > 0) {
+      const { error: snapshotError } = await getSupabaseAdmin().from('turnover_intensity_snapshots').upsert(turnoverSnapshots, {
+        onConflict: 'ticker,exchange,as_of,model_version',
+      });
+      if (snapshotError) console.warn('[Leader Batch] turnover snapshot persistence failed:', snapshotError.message);
+    }
 
     return NextResponse.json({ results: finalResults });
   } catch (error: unknown) {

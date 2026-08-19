@@ -861,6 +861,7 @@ export interface ScannerResult extends ScannerConstituent {
   rsDataQuality?: DataQuality | null;
   macroActionLevel?: MacroActionLevel | null;
   benchmarkRelativeScore?: number | null;
+  turnoverIntensity?: TurnoverIntensitySignal | null;
   rsLineNewHigh?: boolean | null;
   rsLineNearHigh?: boolean | null;
   tennisBallCount?: number | null;
@@ -883,6 +884,7 @@ export interface ScannerResult extends ScannerConstituent {
 }
 
 export type WatchlistPriority = 0 | 1 | 2;
+export type InvestmentIdeaStatus = 'DRAFT' | 'WATCHING' | 'READY' | 'INVALIDATED' | 'ARCHIVED';
 
 export interface WatchlistItem {
   id: string;
@@ -895,6 +897,126 @@ export interface WatchlistItem {
   priority: WatchlistPriority;
   group_name: string;
   sort_order: number;
+  thesis: string | null;
+  catalysts: string[];
+  invalidation: string | null;
+  review_at: string | null;
+  idea_status: InvestmentIdeaStatus;
+  source_refs: { label?: string; url: string }[];
+}
+
+export type InvestmentSignalQuality = 'FULL' | 'DEGRADED' | 'STALE' | 'BLOCKED';
+
+export interface InvestmentSignalMeta {
+  asOf: string;
+  provider: string;
+  quality: InvestmentSignalQuality;
+  modelVersion: string;
+  warnings: string[];
+}
+
+export type LeadershipBreadthState =
+  | 'STRONG'
+  | 'HIGH_ALERT'
+  | 'NORMAL'
+  | 'CAUTION'
+  | 'RISK'
+  | 'SELLOFF'
+  | 'NEUTRAL'
+  | 'WEAK_REBOUND'
+  | 'POST_SELLOFF_REBOUND';
+
+export interface LeadershipBreadthSnapshot extends InvestmentSignalMeta {
+  market: 'US' | 'KR';
+  universe: string;
+  score: number | null;
+  state: LeadershipBreadthState | 'BLOCKED';
+  peakout: 'NONE' | 'WARNING' | 'STRONG_WARNING';
+  components: {
+    aboveMa20Pct: number | null;
+    aboveMa60Pct: number | null;
+    aboveMa200Pct: number | null;
+    positiveReturn60Pct: number | null;
+  };
+  breadthMa5: number | null;
+  slope5: number | null;
+  slope10: number | null;
+  fallingDays10: number;
+  indexNearHigh20: boolean | null;
+  drawdownFromBreadthHigh20: number | null;
+  coveredConstituents: number;
+  totalConstituents: number;
+}
+
+export interface InvestorFlowOscillatorSector {
+  sector: string;
+  score: number;
+  state: 'INFLOW' | 'SLOWING' | 'OUTFLOW' | 'NEUTRAL';
+  combinedNetBuyRatio5d: number | null;
+  consecutiveNetBuyDays: number;
+  acceleration: number | null;
+  priceFlowDivergence: 'BULLISH' | 'BEARISH' | 'NONE' | 'UNKNOWN';
+  coveredStocks: number;
+}
+
+export interface InvestorFlowOscillatorSnapshot extends InvestmentSignalMeta {
+  market: 'KR';
+  universe: 'KOSPI200_KOSDAQ150' | 'CUSTOM';
+  state: 'INFLOW' | 'SLOWING' | 'OUTFLOW' | 'NEUTRAL' | 'BLOCKED';
+  score: number | null;
+  sectors: InvestorFlowOscillatorSector[];
+  coveredStocks: number;
+  requestedStocks: number;
+}
+
+export interface TurnoverIntensitySignal extends InvestmentSignalMeta {
+  ticker: string;
+  raw: number | null;
+  sma3: number | null;
+  ema5: number | null;
+  ema7: number | null;
+  components: {
+    volumeSpike: number | null;
+    turnoverZScore: number | null;
+    gapTrend: number | null;
+  };
+  timing: 'ACCELERATING' | 'COOLING' | 'NEUTRAL' | 'BLOCKED';
+}
+
+export interface AllocationTarget {
+  ticker: string;
+  sleeve: 'OFFENSIVE' | 'DEFENSIVE' | 'CASH';
+  momentum: number | null;
+  targetWeightPct: number;
+  currentWeightPct: number | null;
+  targetAmount: number | null;
+  changeAmount: number | null;
+}
+
+export interface AllocationRecommendation extends InvestmentSignalMeta {
+  strategy: 'HAA';
+  regime: 'RISK_ON' | 'RISK_OFF' | 'BLOCKED';
+  canaryTicker: 'TIP';
+  canaryMomentum: number | null;
+  accountValue: number | null;
+  targets: AllocationTarget[];
+  nextReviewAt: string | null;
+  autoOrder: false;
+}
+
+export interface MarketSentimentSnapshot extends InvestmentSignalMeta {
+  market: 'KR';
+  score: number | null;
+  label: 'EXTREME_FEAR' | 'FEAR' | 'NEUTRAL' | 'GREED' | 'EXTREME_GREED' | 'BLOCKED';
+  components: {
+    indexMomentum: number | null;
+    putCall: number | null;
+    vkospi: number | null;
+    bondSpread: number | null;
+    rsi10: number | null;
+  };
+  macd: { value: number | null; signal: number | null; histogram: number | null; direction: 'UP' | 'DOWN' | 'FLAT' | 'UNKNOWN' };
+  missingInputs: string[];
 }
 
 export interface SavedScreen {
@@ -1376,6 +1498,7 @@ export interface LeaderScannerResult {
   trendIntensityIndex?: number | null; // 이평선 추세 강도 지수 (TII)
   weightedMomentumScore?: number | null;
   benchmarkRelativeScore?: number | null;
+  turnoverIntensity?: TurnoverIntensitySignal | null;
 
 
   // RS 지표

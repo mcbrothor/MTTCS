@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { getKisToken } from '@/lib/finance/providers/kis-auth';
+import { selectInvestorFlowBatch } from '@/lib/recommendations/investor-flow-batch';
 
 export type KrInvestorFlowQuality = 'FULL' | 'STALE' | 'MISSING';
 
@@ -80,6 +81,7 @@ export function parseKisInvestorFlowRows(input: {
     if (!tradeDate) continue;
     const rawJson = {
       stck_bsop_date: String(row.stck_bsop_date ?? ''),
+      stck_clpr: String(row.stck_clpr ?? ''),
       frgn_ntby_qty: String(row.frgn_ntby_qty ?? '0'),
       orgn_ntby_qty: String(row.orgn_ntby_qty ?? '0'),
       frgn_ntby_tr_pbmn: String(row.frgn_ntby_tr_pbmn ?? '0'),
@@ -247,9 +249,11 @@ export async function collectKrInvestorFlows(input: {
   provider?: KrInvestorFlowProvider;
   concurrency?: number;
   intervalMs?: number;
+  batchSize?: number;
+  cursor?: number;
 }) {
   const provider = input.provider || createKisKrInvestorFlowProvider();
-  const tickers = [...new Set(input.tickers.filter((ticker) => /^\d{6}$/.test(ticker)))].slice(0, 40);
+  const { allTickers, cursor, tickers, nextCursor } = selectInvestorFlowBatch(input);
   const results = new Map<string, KrInvestorFlowDaily[]>();
   const errors = new Map<string, string>();
   let index = 0;
@@ -271,7 +275,15 @@ export async function collectKrInvestorFlows(input: {
     }
   };
   await Promise.all(Array.from({ length: Math.min(input.concurrency ?? 2, tickers.length) }, worker));
-  return { provider: provider.name, tickers, results, errors };
+  return {
+    provider: provider.name,
+    tickers,
+    results,
+    errors,
+    cursor,
+    nextCursor,
+    totalTickers: allTickers.length,
+  };
 }
 
 export async function upsertKrInvestorFlowDaily(client: SupabaseClient, rows: KrInvestorFlowDaily[]) {

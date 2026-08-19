@@ -1347,6 +1347,7 @@ function recommendationActionReasonLabel(reason?: string | null) {
     RECENT_ACTIVE_REPEAT: '최근 ACTIVE 추천 쿨다운',
     POLICY_WATCHLIST_BACKFILL: '안전필터 보충 후보',
     REQUESTED_POLICY_UNAVAILABLE: '요청 정책 산출 실패',
+    PUBLICATION_GATE_INSUFFICIENT: '공식 발행 검증 수 부족',
   } as Record<string, string>)[reason] || reason;
 }
 
@@ -1355,6 +1356,11 @@ export function formatDailyCategoryTop10TelegramMessage(input: {
   category: DailyScreenerCategory;
   top10: DailyCategoryTop10Pick[];
   provider: string;
+  observation?: {
+    eligibleCount: number;
+    requiredCount: number;
+    reason?: string | null;
+  };
 }) {
   const rows = input.top10.slice(0, 10);
   const actionAware = rows.some((pick) => pick.actionState === 'ACTIVE' || pick.actionState === 'WATCHLIST');
@@ -1375,11 +1381,22 @@ export function formatDailyCategoryTop10TelegramMessage(input: {
     pick.risk ? `   리스크: ${md(compactSentence(pick.risk, 360))}` : null,
   ].filter(Boolean).join('\n')).join('\n\n');
 
+  const observationNotice = input.observation
+    ? [
+      '⚠️ *검증 부족 안내 — 공식 매수 추천이 아닙니다.*',
+      `차트 검증: *${input.observation.eligibleCount}/${input.observation.requiredCount}* (공식 발행 기준 미달)`,
+      input.observation.reason ? `사유: ${md(input.observation.reason)}` : null,
+      '이 목록은 참고용 관찰 후보입니다. 매수·매도 판단은 추가 확인 후 사용자가 직접 결정하세요.',
+      '성과 집계와 자동 실행 대상에서는 제외됩니다.',
+    ]
+    : [];
+
   return [
-    `*MTN Daily ${md(categoryLabel(input.category))} 추천 Top10*`,
+    `*MTN Daily ${md(categoryLabel(input.category))} ${input.observation ? '관찰 후보' : '추천'} Top10*`,
     `기준일: *${md(input.runDate)}* | 엔진: \`${md(input.provider)}\``,
     `후보: 스크리너별 카테고리 Top10 통합 → LLM 최종 ${rows.length}개`,
     allocationSummary,
+    ...observationNotice,
     '',
     rows.length ? body : '전송할 후보가 없습니다.',
   ].filter((line) => line !== null).join('\n');

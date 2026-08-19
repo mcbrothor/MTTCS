@@ -1439,6 +1439,10 @@ async function processDailyScreenerRun(run) {
     const officialResultByCategory = Object.fromEntries(recommendationPublications
       .filter((publication) => publication.is_official)
       .map((publication) => [publication.category, storedRecommendationPicks(publication)]));
+    const observationResultByCategory = Object.fromEntries(recommendationPublications
+      .filter((publication) => !publication.is_official && publication.status === 'SHADOW'
+        && publication.market_context?.publication_gate?.requestedOfficial)
+      .map((publication) => [publication.category, storedRecommendationPicks(publication)]));
     const { data: existingKrPublications, error: existingKrPublicationsError } = await supabase
       .from('recommendation_publications')
       .select('*, recommendation_picks(ticker, exchange, name, rank, universe, source, score, grade, confidence, reason, risk, action_state, candidate_snapshot)')
@@ -1654,6 +1658,9 @@ async function processDailyScreenerRun(run) {
               ),
             });
             recommendationPublications.push(publication);
+            if (!publication.is_official && publication.status === 'SHADOW') {
+              observationResultByCategory[category] = storedRecommendationPicks(publication);
+            }
           } catch (error) {
             if (policy.isOfficial) throw error;
             const message = compactError(error);
@@ -1665,18 +1672,30 @@ async function processDailyScreenerRun(run) {
       }
     }
     const publicationByCategory = new Map(recommendationPublications
-      .filter((publication) => publication.is_official)
+      .filter((publication) => publication.is_official || (
+        publication.status === 'SHADOW'
+        && publication.market_context?.publication_gate?.requestedOfficial
+      ))
       .map((publication) => [publication.category, publication]));
+    const deliveryPicksByCategory = {
+      ...observationResultByCategory,
+      ...officialResultByCategory,
+    };
     const deliveryCategories = krSessionOpen ? recommendationConfig.RECOMMENDATION_CATEGORIES : usCategories;
     const deliveryResult = await deliverCategoriesIndependently({
       categories: deliveryCategories,
       publicationByCategory,
-      picksByCategory: officialResultByCategory,
-      formatMessage: ({ category, picks }) => dailyScreeners.formatDailyCategoryTop10TelegramMessage({
+      picksByCategory: deliveryPicksByCategory,
+      formatMessage: ({ category, picks, publication }) => dailyScreeners.formatDailyCategoryTop10TelegramMessage({
         runDate: run.run_date,
         category,
         top10: picks,
         provider: `${top5Attempt.provider} (${top5Attempt.model})`,
+        observation: publication.is_official ? undefined : {
+          eligibleCount: Number(publication.market_context?.publication_gate?.eligibleCount || 0),
+          requiredCount: Number(publication.market_context?.publication_gate?.requiredCount || 10),
+          reason: publication.market_context?.publication_gate?.reason || null,
+        },
       }),
       sendMessage: sendTelegramMessage,
       markStatus: markRecommendationTelegramStatusWithRetry,

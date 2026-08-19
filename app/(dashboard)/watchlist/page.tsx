@@ -9,7 +9,7 @@ import Card from '@/components/ui/Card';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import { getVolumeSignalTier } from '@/lib/scanner-recommendation';
-import type { MarketAnalysisResponse, WatchlistItem, WatchlistPriority } from '@/types';
+import type { InvestmentIdeaStatus, MarketAnalysisResponse, WatchlistItem, WatchlistPriority } from '@/types';
 
 const PRIORITY_LABELS: Record<WatchlistPriority, { label: string; color: string; bg: string }> = {
   2: { label: '긴급', color: 'text-red-300', bg: 'bg-red-500/20 border-red-500/40' },
@@ -126,7 +126,7 @@ export default function WatchlistPage() {
     }
   };
 
-  const handleUpdateItem = async (id: string, patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name' | 'sort_order'>>) => {
+  const handleUpdateItem = async (id: string, patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name' | 'sort_order' | 'thesis' | 'catalysts' | 'invalidation' | 'review_at' | 'idea_status' | 'source_refs'>>) => {
     try {
       const { data } = await axios.patch('/api/watchlist', { id, ...patch });
       const updated = data.data as WatchlistItem;
@@ -135,6 +135,19 @@ export default function WatchlistPage() {
       setError(null);
     } catch (err) {
       setError(apiMessage(err, '수정에 실패했습니다.'));
+    }
+  };
+
+  const handleImport = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      await axios.post('/api/watchlist/import', form);
+      await fetchItems();
+      setError(null);
+    } catch (err) {
+      setError(apiMessage(err, '투자 아이디어 가져오기에 실패했습니다.'));
     }
   };
 
@@ -150,10 +163,17 @@ export default function WatchlistPage() {
             추적할 종목을 저장하고, 행을 눌러 최근 가격과 SEPA/VCP 요약을 빠르게 확인합니다.
           </p>
         </div>
-        <Button className="mt-2 flex items-center gap-2 px-4 py-2" onClick={() => setShowAddForm((value) => !value)}>
-          {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-          <span className="hidden sm:inline">{showAddForm ? '닫기' : '종목 추가'}</span>
-        </Button>
+        <div className="mt-2 flex items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
+            <Save className="h-4 w-4" />
+            <span className="hidden sm:inline">CSV/XLSX 가져오기</span>
+            <input type="file" accept=".csv,.xlsx" className="sr-only" onChange={(event) => { void handleImport(event.target.files?.[0]); event.target.value = ''; }} />
+          </label>
+          <Button className="flex items-center gap-2 px-4 py-2" onClick={() => setShowAddForm((value) => !value)}>
+            {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            <span className="hidden sm:inline">{showAddForm ? '닫기' : '종목 추가'}</span>
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -221,6 +241,7 @@ export default function WatchlistPage() {
                   <th className="py-3 pr-3">우선순위</th>
                   <th className="py-3 pr-3">티커</th>
                   <th className="py-3 pr-3">거래소</th>
+                  <th className="py-3 pr-3">아이디어</th>
                   <th className="py-3 pr-3">메모</th>
                   <th className="py-3 pr-3">태그</th>
                   <th className="py-3 pr-3">등록일</th>
@@ -250,6 +271,10 @@ export default function WatchlistPage() {
                       </td>
                       <td className="py-3 pr-3"><span className="font-mono text-base font-bold text-white">{item.ticker}</span></td>
                       <td className="py-3 pr-3 text-slate-400">{item.exchange}</td>
+                      <td className="py-3 pr-3">
+                        <span className="rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-1 text-[10px] font-bold text-violet-200">{item.idea_status || 'DRAFT'}</span>
+                        {item.review_at && <p className="mt-1 text-[10px] text-slate-500">검토 {new Date(item.review_at).toLocaleDateString('ko-KR')}</p>}
+                      </td>
                       <td className="max-w-[220px] py-3 pr-3"><p className="truncate text-xs text-slate-400">{item.memo || '-'}</p></td>
                       <td className="py-3 pr-3">
                         <div className="flex flex-wrap gap-1">
@@ -462,7 +487,7 @@ function WatchlistDetailModal({
   analysis: MarketAnalysisResponse | null;
   loading: boolean;
   onClose: () => void;
-  onSave: (patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name'>>) => Promise<void>;
+  onSave: (patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name' | 'thesis' | 'catalysts' | 'invalidation' | 'review_at' | 'idea_status' | 'source_refs'>>) => Promise<void>;
   onDelete: () => void;
 }) {
   const [exchange, setExchange] = useState(item.exchange);
@@ -470,6 +495,12 @@ function WatchlistDetailModal({
   const [memo, setMemo] = useState(item.memo || '');
   const [tags, setTags] = useState(item.tags.join(', '));
   const [groupName, setGroupName] = useState(item.group_name || '기본');
+  const [thesis, setThesis] = useState(item.thesis || '');
+  const [catalysts, setCatalysts] = useState((item.catalysts || []).join('\n'));
+  const [invalidation, setInvalidation] = useState(item.invalidation || '');
+  const [reviewAt, setReviewAt] = useState(item.review_at?.slice(0, 10) || '');
+  const [ideaStatus, setIdeaStatus] = useState<InvestmentIdeaStatus>(item.idea_status || 'DRAFT');
+  const [sourceRefs, setSourceRefs] = useState((item.source_refs || []).map((source) => source.url).join('\n'));
   const [saving, setSaving] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
 
@@ -479,6 +510,12 @@ function WatchlistDetailModal({
     setMemo(item.memo || '');
     setTags(item.tags.join(', '));
     setGroupName(item.group_name || '기본');
+    setThesis(item.thesis || '');
+    setCatalysts((item.catalysts || []).join('\n'));
+    setInvalidation(item.invalidation || '');
+    setReviewAt(item.review_at?.slice(0, 10) || '');
+    setIdeaStatus(item.idea_status || 'DRAFT');
+    setSourceRefs((item.source_refs || []).map((source) => source.url).join('\n'));
   }, [item]);
 
   const volumeTier = analysis
@@ -498,6 +535,12 @@ function WatchlistDetailModal({
         memo: memo.trim() || null,
         tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean),
         group_name: groupName,
+        thesis: thesis.trim() || null,
+        catalysts: catalysts.split('\n').map((value) => value.trim()).filter(Boolean),
+        invalidation: invalidation.trim() || null,
+        review_at: reviewAt || null,
+        idea_status: ideaStatus,
+        source_refs: sourceRefs.split('\n').map((url) => url.trim()).filter(Boolean).map((url) => ({ url })),
       });
     } finally {
       setSaving(false);
@@ -546,7 +589,37 @@ function WatchlistDetailModal({
                   {Object.entries(PRIORITY_LABELS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
                 </select>
               </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-400">아이디어 상태</span>
+                <select value={ideaStatus} onChange={(event) => setIdeaStatus(event.target.value as InvestmentIdeaStatus)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+                  {(['DRAFT', 'WATCHING', 'READY', 'INVALIDATED', 'ARCHIVED'] as const).map((status) => <option key={status} value={status}>{status}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-400">다음 검토일</span>
+                <input type="date" value={reviewAt} onChange={(event) => setReviewAt(event.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+              </label>
             </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-400">투자 논지</span>
+              <textarea value={thesis} onChange={(event) => setThesis(event.target.value)} rows={4} placeholder="왜 이 종목을 보유/관찰해야 하는가" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-400">촉매 · 한 줄에 하나</span>
+              <textarea value={catalysts} onChange={(event) => setCatalysts(event.target.value)} rows={3} placeholder={'실적 발표\n신제품 출시'} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-400">무효화 조건</span>
+              <textarea value={invalidation} onChange={(event) => setInvalidation(event.target.value)} rows={3} placeholder="이 논지가 틀렸다고 판단할 조건" className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-slate-400">출처 URL · 한 줄에 하나</span>
+              <textarea value={sourceRefs} onChange={(event) => setSourceRefs(event.target.value)} rows={2} placeholder="https://..." className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white" />
+            </label>
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-medium text-slate-400">메모</span>

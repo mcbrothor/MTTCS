@@ -6,6 +6,7 @@ import DecisionBox from '@/components/master-filter/DecisionBox';
 import EarlyWarningPanel from '@/components/master-filter/EarlyWarningPanel';
 import MacroCompactWidget from '@/components/master-filter/MacroCompactWidget';
 import RiskBarometerCompactWidget from '@/components/master-filter/RiskBarometerCompactWidget';
+import InvestmentManagementSignals from '@/components/master-filter/InvestmentManagementSignals';
 import LLMBriefing from '@/components/ui/LLMBriefing';
 import { useMarket } from '@/contexts/MarketContext';
 
@@ -89,6 +90,7 @@ export default function MasterFilterPage() {
       <div id="early-warning" className="scroll-mt-24">
         <EarlyWarningPanel />
       </div>
+      <InvestmentManagementSignals market={market} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <section id="market-health" className="scroll-mt-24 space-y-3">

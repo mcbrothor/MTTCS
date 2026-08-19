@@ -386,11 +386,11 @@ import {
       KOSPI200: [{ ticker: '005930' }],
       KOSDAQ150: [{ ticker: '196170' }],
     },
-    formatMessage: ({ category }) => category,
+    formatMessage: ({ category, publication }) => `${category}:${publication.id}`,
     sendMessage: async (message, context) => {
       attempted.push(message);
       deliveryContexts.push(context);
-      if (message === 'NASDAQ100') throw new Error('telegram unavailable');
+      if (message === 'NASDAQ100:pub-us-1') throw new Error('telegram unavailable');
       return { skipped: false };
     },
     markStatus: async (publicationId, status) => {
@@ -398,7 +398,7 @@ import {
     },
   });
 
-  assert.deepEqual(attempted, ['NASDAQ100', 'SP500', 'KOSPI200']);
+  assert.deepEqual(attempted, ['NASDAQ100:pub-us-1', 'SP500:pub-us-2', 'KOSPI200:pub-kr-1']);
   assert.deepEqual(deliveryContexts.map((context) => context.publicationId), ['pub-us-1', 'pub-us-2', 'pub-kr-1']);
   assert.deepEqual(statuses, [
     ['pub-us-1', 'FAILED'],

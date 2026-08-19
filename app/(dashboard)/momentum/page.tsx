@@ -15,7 +15,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import TableSkeleton from '@/components/ui/TableSkeleton';
-import type { DataSourceMeta, ScannerUniverse } from '@/types';
+import type { DataSourceMeta, ScannerUniverse, TurnoverIntensitySignal } from '@/types';
 import type { SurgeGrade, SurgeMetrics } from '@/lib/finance/engines/surge-score';
 import type { DailyScannerSnapshot, DailyScannerSnapshotCandidate } from '@/lib/scanner/daily-snapshot';
 import type { MomentumDrilldownResult } from '@/components/scanner/MomentumDrilldownModal';
@@ -31,6 +31,7 @@ interface SurgeResult {
   exchange: string;
   metrics: SurgeMetrics;
   currentPrice: number | null;
+  turnoverIntensity?: TurnoverIntensitySignal | null;
 }
 
 interface UniverseItem {
@@ -41,7 +42,7 @@ interface UniverseItem {
 interface MomentumApiResult {
   ticker: string;
   success: boolean;
-  data?: SurgeMetrics & { currentPrice?: number | null };
+  data?: SurgeMetrics & { currentPrice?: number | null; turnoverIntensity?: TurnoverIntensitySignal | null };
   error?: string;
 }
 
@@ -220,6 +221,7 @@ export default function MomentumScannerPage() {
                        isIntraday: r.data.isIntraday,
                     },
                     currentPrice: r.data.currentPrice ?? null,
+                    turnoverIntensity: r.data.turnoverIntensity ?? null,
                 }));
              allResults = [...allResults, ...successBatch];
 
@@ -285,6 +287,7 @@ export default function MomentumScannerPage() {
         ticker: row.ticker,
         exchange: target.exchange,
         currentPrice: row.data.currentPrice ?? null,
+        turnoverIntensity: row.data.turnoverIntensity ?? null,
         metrics: {
           rvol: row.data.rvol,
           rawRvol: row.data.rawRvol,
@@ -564,6 +567,12 @@ export default function MomentumScannerPage() {
                              <div className="text-xs font-medium text-slate-500 mb-1">{item.metrics.isIntraday ? '추정 거래량' : '오늘 거래량'}</div>
                              <div className="text-lg font-bold text-slate-200">{((item.metrics.isIntraday ? item.metrics.estimatedVolume : item.metrics.currentVolume) / 1000000).toFixed(1)}M</div>
                          </div>
+                         <div className="col-span-2 flex items-center justify-between text-xs">
+                           <span className="text-slate-500">거래대금 강도 · 매수 타이밍</span>
+                           <span className={item.turnoverIntensity?.timing === 'ACCELERATING' ? 'font-bold text-emerald-300' : item.turnoverIntensity?.timing === 'COOLING' ? 'font-bold text-rose-300' : 'text-slate-300'}>
+                             {item.turnoverIntensity?.raw ?? '—'} · {item.turnoverIntensity?.timing === 'ACCELERATING' ? '가속' : item.turnoverIntensity?.timing === 'COOLING' ? '둔화' : '중립'}
+                           </span>
+                         </div>
                          <div className="col-span-2 relative h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
                              <div 
                                className={`absolute top-0 left-0 h-full rounded-full ${gl.styles.fill} transition-all`}
@@ -585,6 +594,7 @@ export default function MomentumScannerPage() {
                       <th className="px-6 py-4 font-semibold text-right">현재가 (Price)</th>
                       <th className="px-6 py-4 font-semibold text-right">등락률 (ROC)</th>
                       <th className="px-6 py-4 font-semibold text-right">RVOL</th>
+                      <th className="px-6 py-4 font-semibold text-right">거래강도</th>
                       <th className="px-6 py-4 font-semibold text-right">당일 거래량 (Vol)</th>
                     </tr>
                   </thead>
@@ -607,6 +617,9 @@ export default function MomentumScannerPage() {
                           </td>
                           <td className="px-6 py-4 text-right font-bold text-slate-100">
                             {item.metrics.isIntraday ? '~' : ''}{item.metrics.rvol.toFixed(2)}x
+                          </td>
+                          <td className="px-6 py-4 text-right text-slate-300">
+                            {item.turnoverIntensity?.raw ?? '—'}
                           </td>
                           <td className="px-6 py-4 text-right text-slate-400">
                             {((item.metrics.isIntraday ? item.metrics.estimatedVolume : item.metrics.currentVolume) / 1000000).toFixed(1)}M

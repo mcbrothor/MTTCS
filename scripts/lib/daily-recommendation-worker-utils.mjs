@@ -367,7 +367,7 @@ export async function deliverCategoriesIndependently({
     }
 
     try {
-      const delivery = await sendMessage(formatMessage({ category, picks }), {
+      const delivery = await sendMessage(formatMessage({ category, picks, publication }), {
         category,
         publication,
         publicationId: publication.id,
