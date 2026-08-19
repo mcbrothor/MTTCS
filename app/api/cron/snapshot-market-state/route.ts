@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { validateCronRequest } from '@/lib/contest-cron';
 import { apiError } from '@/lib/api/response';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
+import {
+  getMasterFilterDailyPrice,
+  selectFreshestSufficientHistory,
+} from '@/lib/master-filter/price-history';
 import { buildSectorRows } from '@/lib/master-filter/sector-rows';
 import { buildMacroSnapshotRow, fetchMacroAssessment } from '@/lib/macro/service';
 import type { OHLCData } from '@/types';
@@ -69,7 +72,7 @@ const CATEGORY_SNAPSHOT_CONFIG: Record<RecommendationStateCategory, CategorySnap
 };
 
 async function safeDaily(symbol: string): Promise<OHLCData[]> {
-  return getYahooDailyPrice(symbol).catch(() => []);
+  return getMasterFilterDailyPrice(symbol);
 }
 
 function percentReturn(data: { close: number }[], lookback: number) {
@@ -111,7 +114,7 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
 
   for (const config of configs) {
     try {
-      const mainSymbol = config.mainSymbols.find((symbol) => (prices.get(symbol)?.length || 0) >= 200);
+      const mainSymbol = selectFreshestSufficientHistory(config.mainSymbols, prices);
       if (!mainSymbol) throw new Error(`${config.benchmarkSymbol} 200일 데이터 부족`);
       const mainData = prices.get(mainSymbol)!;
       const breadthSeries = config.breadthEtfs.map((symbol) => [symbol, prices.get(symbol) || []] as const);
