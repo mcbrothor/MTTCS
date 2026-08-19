@@ -67,7 +67,9 @@ jobs:
       run: npm test
       
     - name: Install Playwright Browsers
-      run: npx playwright install --with-deps chromium
+      # ubuntu-latest already carries Chromium's system libraries. Avoid a
+      # redundant apt update whose Azure mirror can stall the entire CI job.
+      run: npx playwright install chromium
       
     - name: Build Next.js
       run: npm run build
