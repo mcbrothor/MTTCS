@@ -35,7 +35,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install PostgreSQL 17 client and age
         run: |
-          sudo apt-get update
+          sudo sed -i 's#mirror+file:/etc/apt/apt-mirrors.txt#https://archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=20 update
           sudo apt-get install -y age ca-certificates curl gnupg
           sudo install -d /usr/share/postgresql-common/pgdg
           curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc \
@@ -43,7 +44,7 @@ jobs:
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-          sudo apt-get update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=20 update
           sudo apt-get install -y postgresql-client-17
       - name: Create encrypted backup and perform restore drill
         id: backup_restore
