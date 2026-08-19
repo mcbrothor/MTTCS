@@ -8,6 +8,10 @@ const capacityMigration = fs.readFileSync(
   'supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql',
   'utf8',
 );
+const referenceIndexMigration = fs.readFileSync(
+  'supabase/migrations/20260820000500_index_evidence_manifest_references.sql',
+  'utf8',
+);
 
 assert.match(job, /engine_version, prompt_version, market_context, is_official/);
 assert.match(job, /buildRecommendationEvidenceManifest/);
@@ -64,5 +68,7 @@ assert.match(capacityMigration, /evidence_status = 'INCOMPLETE'/i);
 assert.match(capacityMigration, /not exists[\s\S]*recommendation_performance/i);
 assert.match(capacityMigration, /p_confirmation is distinct from 'APPLY_RETENTION'/i);
 assert.doesNotMatch(capacityMigration, /delete from public\.recommendation_evidence_manifests\s*;/i);
+assert.match(referenceIndexMigration, /recommendation_performance\s*\(evidence_manifest_id\)/i);
+assert.match(referenceIndexMigration, /where evidence_manifest_id is not null/i);
 
 console.log('recommendation evidence backend contract tests passed');

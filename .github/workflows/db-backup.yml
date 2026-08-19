@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: mtn-db-backup-writer
+  group: mtn-database-exclusive-io
   cancel-in-progress: false
 
 jobs:

@@ -293,6 +293,8 @@
     "supabase/migrations/20260803120000_assurance_least_privilege.sql",
     "supabase/migrations/20260803121000_assurance_service_hash_execution.sql",
     "supabase/migrations/20260819143000_bound_recommendation_evidence_capacity.sql",
+    "supabase/migrations/20260820000500_index_evidence_manifest_references.sql",
+    "supabase/migrations/20260820001000_automatic_capacity_maintenance.sql",
     "supabase/migrations/20260820120000_investment_management_integration.sql",
     "supabase/migrations/20260820123000_investor_flow_scheduler.sql",
     "supabase/migrations/20260820150000_market_sentiment_scheduler.sql"

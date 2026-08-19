@@ -22,6 +22,8 @@ if [[ -z "${LOCAL_POSTGRES_URL:-}" ]]; then
   exit 1
 fi
 
+umask 077
+
 PG_BIN_DIR="${MTN_POSTGRES_BIN_DIR:-/opt/homebrew/opt/postgresql@16/bin}"
 PG_DUMP_BIN="${PG_BIN_DIR}/pg_dump"
 if [[ ! -x "$PG_DUMP_BIN" ]]; then
@@ -29,6 +31,7 @@ if [[ ! -x "$PG_DUMP_BIN" ]]; then
 fi
 
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 "$PG_DUMP_BIN" "$LOCAL_POSTGRES_URL" --format=custom --file="$OUT"
 gzip -f "$OUT"
