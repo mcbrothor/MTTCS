@@ -1,7 +1,7 @@
 import type { InvestorFlowOscillatorSector, InvestorFlowOscillatorSnapshot } from '@/types';
 import type { KrInvestorFlowDaily } from '@/lib/recommendations/kr-investor-flow';
 
-const MODEL_VERSION = 'kr-investor-flow-oscillator-v1';
+const MODEL_VERSION = 'kr-investor-flow-oscillator-v2';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -45,7 +45,9 @@ export function calculateInvestorFlowOscillator(input: {
     priceReturn: number | null;
   }>>();
   for (const [ticker, unsorted] of grouped) {
-    const rows = [...unsorted].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate)).slice(-10);
+    const byDate = new Map<string, KrInvestorFlowDaily>();
+    for (const row of [...unsorted].sort((a, b) => a.observedAt.localeCompare(b.observedAt))) byDate.set(row.tradeDate, row);
+    const rows = [...byDate.values()].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate)).slice(-10);
     const latest5 = rows.slice(-5);
     if (latest5.length === 0) continue;
     const combined = (row: KrInvestorFlowDaily) => row.foreignNetBuyAmountMkrw + row.institutionNetBuyAmountMkrw;
@@ -63,13 +65,15 @@ export function calculateInvestorFlowOscillator(input: {
     }
     const sector = input.sectors[ticker] || '미분류';
     const list = sectorStocks.get(sector) || [];
+    const prices = rows.map((row) => Number(row.rawJson.stck_clpr)).filter((value) => Number.isFinite(value) && value > 0);
+    const inferredPriceReturn = prices.length >= 6 ? ((prices.at(-1)! / prices.at(-6)!) - 1) * 100 : null;
     list.push({
       ticker,
       amount5,
       turnover5,
       consecutive,
       acceleration: avg(recent3) - avg(prior3),
-      priceReturn: input.priceReturns5d?.[ticker] ?? null,
+      priceReturn: input.priceReturns5d?.[ticker] ?? inferredPriceReturn,
     });
     sectorStocks.set(sector, list);
   }

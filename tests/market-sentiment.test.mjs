@@ -21,13 +21,26 @@ test('sentiment uses complete inputs and produces MACD metadata', () => {
   assert.deepEqual(result.missingInputs, []);
 });
 
-test('sentiment blocks when options or bond inputs are missing', () => {
+test('sentiment excludes missing options and bond inputs without neutral imputation', () => {
   const data = rows();
-  data.at(-1).putCall = null;
-  data.at(-1).bond10 = null;
+  for (const row of data) {
+    row.putCall = null;
+    row.vkospi = null;
+    row.bond10 = null;
+    row.bond5 = null;
+  }
   const result = calculateMarketSentiment({ rows: data, provider: 'PARTIAL' });
+  assert.equal(result.quality, 'DEGRADED');
+  assert.equal(typeof result.score, 'number');
+  assert.ok(result.missingInputs.includes('Put/Call'));
+  assert.ok(result.missingInputs.includes('VKOSPI'));
+  assert.ok(result.missingInputs.includes('10년-5년 국채선물'));
+  assert.equal(result.components.putCall, null);
+  assert.match(result.warnings.join(' '), /중립값으로 대체하지 않고/);
+});
+
+test('sentiment still blocks when index history is insufficient', () => {
+  const result = calculateMarketSentiment({ rows: rows(80), provider: 'SHORT' });
   assert.equal(result.quality, 'BLOCKED');
   assert.equal(result.label, 'BLOCKED');
-  assert.ok(result.missingInputs.includes('Put/Call'));
-  assert.ok(result.missingInputs.includes('10년-5년 국채선물'));
 });

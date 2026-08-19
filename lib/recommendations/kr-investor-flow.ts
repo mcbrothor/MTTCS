@@ -81,6 +81,7 @@ export function parseKisInvestorFlowRows(input: {
     if (!tradeDate) continue;
     const rawJson = {
       stck_bsop_date: String(row.stck_bsop_date ?? ''),
+      stck_clpr: String(row.stck_clpr ?? ''),
       frgn_ntby_qty: String(row.frgn_ntby_qty ?? '0'),
       orgn_ntby_qty: String(row.orgn_ntby_qty ?? '0'),
       frgn_ntby_tr_pbmn: String(row.frgn_ntby_tr_pbmn ?? '0'),

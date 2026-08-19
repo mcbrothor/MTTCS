@@ -51,7 +51,14 @@ export const GET = withAdminSession(async (request: Request) => {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'market,universe,as_of,model_version' });
     if (snapshotError) snapshot.warnings.push(`스냅샷 저장 실패: ${snapshotError.message}`);
-    return apiSuccess(snapshot, { asOf: snapshot.asOf, provider: snapshot.provider, source: 'MTN Breadth Engine' });
+    return apiSuccess(snapshot, {
+      observedAt: snapshot.asOf,
+      provider: snapshot.provider,
+      source: 'MTN Breadth Engine',
+      delay: 'EOD',
+      modelVersion: snapshot.modelVersion,
+      warnings: snapshot.warnings,
+    });
   } catch (error) {
     return apiError(getErrorMessage(error, 'Breadth 계산에 실패했습니다.'), 'MARKET_BREADTH_FAILED', 500);
   }

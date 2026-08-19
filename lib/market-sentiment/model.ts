@@ -1,6 +1,6 @@
 import type { MarketSentimentSnapshot } from '@/types';
 
-const MODEL_VERSION = 'kr-fear-greed-rolling252-v1';
+const MODEL_VERSION = 'kr-fear-greed-rolling252-v2';
 
 export interface MarketSentimentInput {
   date: string;
@@ -93,7 +93,7 @@ export function calculateMarketSentiment(input: {
     macd: { value: null, signal: null, histogram: null, direction: 'UNKNOWN' },
     missingInputs,
   });
-  if (!latest || missingInputs.length > 0) return blocked([`필수 데이터 누락: ${missingInputs.join(', ')}`]);
+  if (!latest) return blocked([`필수 데이터 누락: ${missingInputs.join(', ')}`]);
   if (rows.length < 126) return blocked([`125일선 계산에 126거래일이 필요하지만 ${rows.length}일만 있습니다.`]);
 
   const indexValues = rows.map((row) => row.indexClose);
@@ -113,9 +113,8 @@ export function calculateMarketSentiment(input: {
     bondSpread: rollingNormalize(bondSpreads, index),
     rsi10: rsi(indexValues, index),
   };
-  if (Object.values(components).some((value) => value === null)) {
-    return blocked(['롤링 정규화에 필요한 유효 관측치가 부족합니다.']);
-  }
+  const availableComponents = Object.values(components).filter((value): value is number => value !== null);
+  if (availableComponents.length < 2) return blocked(['실제 관측치로 계산 가능한 심리 지표가 2개 미만입니다.']);
 
   const scoreHistory = rows.map((_, rowIndex) => {
     const values = [
@@ -125,9 +124,10 @@ export function calculateMarketSentiment(input: {
       rollingNormalize(bondSpreads, rowIndex),
       rsi(indexValues, rowIndex),
     ];
-    return values.every((value): value is number => value !== null) ? average(values) : null;
+    const available = values.filter((value): value is number => value !== null);
+    return available.length >= 2 ? average(available) : null;
   }).filter((value): value is number => value !== null);
-  const score = average(Object.values(components) as number[]);
+  const score = average(availableComponents);
   const macdLine = (() => {
     const fast = ema(scoreHistory, 12);
     const slow = ema(scoreHistory, 26);
@@ -143,12 +143,23 @@ export function calculateMarketSentiment(input: {
   const direction = histogram === null || priorHistogram === null
     ? 'UNKNOWN'
     : histogram > priorHistogram ? 'UP' : histogram < priorHistogram ? 'DOWN' : 'FLAT';
-  const warnings = rows.length < 252 ? ['252거래일 미만 구간은 가용 기간 롤링 정규화를 사용했습니다.'] : [];
+  const warnings: string[] = [];
+  if (missingInputs.length > 0) warnings.push(`결측 지표를 중립값으로 대체하지 않고 계산에서 제외했습니다: ${missingInputs.join(', ')}`);
+  const unavailableComponents = [
+    components.indexMomentum === null ? '지수 125일 모멘텀' : null,
+    components.putCall === null ? 'Put/Call 롤링 점수' : null,
+    components.vkospi === null ? 'VKOSPI 롤링 점수' : null,
+    components.bondSpread === null ? '국채선물 스프레드 롤링 점수' : null,
+    components.rsi10 === null ? 'RSI10' : null,
+  ].filter((value): value is string => value !== null);
+  if (unavailableComponents.length > 0) warnings.push(`가용 이력 부족으로 제외된 구성요소: ${unavailableComponents.join(', ')}`);
+  if (rows.length < 252) warnings.push('252거래일 미만 구간은 가용 기간 롤링 정규화를 사용했습니다.');
+  const full = rows.length >= 252 && availableComponents.length === 5;
 
   return {
     asOf,
     provider: input.provider,
-    quality: rows.length >= 252 ? 'FULL' : 'DEGRADED',
+    quality: full ? 'FULL' : 'DEGRADED',
     modelVersion: MODEL_VERSION,
     warnings,
     market: 'KR',
@@ -162,6 +173,6 @@ export function calculateMarketSentiment(input: {
       rsi10: round(components.rsi10),
     },
     macd: { value: round(macd), signal: round(signalValue), histogram: round(histogram), direction },
-    missingInputs: [],
+    missingInputs,
   };
 }

@@ -42,7 +42,14 @@ export const GET = withAdminSession(async (_request: Request, _context, session)
       quality: recommendation.quality, snapshot: recommendation, updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,strategy,as_of,model_version' });
     if (snapshotError) recommendation.warnings.push(`스냅샷 저장 실패: ${snapshotError.message}`);
-    return apiSuccess(recommendation, { asOf: recommendation.asOf, provider: recommendation.provider, source: 'MTN HAA Engine' });
+    return apiSuccess(recommendation, {
+      observedAt: recommendation.asOf,
+      provider: recommendation.provider,
+      source: 'MTN HAA Engine',
+      delay: 'EOD',
+      modelVersion: recommendation.modelVersion,
+      warnings: recommendation.warnings,
+    });
   } catch (error) {
     return apiError(getErrorMessage(error, 'HAA 비중 제안을 만들지 못했습니다.'), 'ALLOCATION_FAILED', 500);
   }

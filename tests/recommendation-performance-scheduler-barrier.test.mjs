@@ -51,9 +51,9 @@ assert.doesNotMatch(
   'the last-arriving shard must not bypass the 4\/4 success barrier',
 );
 
-assert.equal(manifest.expectedJobCount, 34);
-assert.equal(manifest.jobs.length, 34);
-assert.equal(new Set(manifest.jobs.map((job) => job.path)).size, 34);
+assert.equal(manifest.expectedJobCount, 35);
+assert.equal(manifest.jobs.length, 35);
+assert.equal(new Set(manifest.jobs.map((job) => job.path)).size, 35);
 assert.ok(
   manifest.requiredMigrations.includes(
     'supabase/migrations/20260802160000_recommendation_performance_scheduler_barrier.sql',

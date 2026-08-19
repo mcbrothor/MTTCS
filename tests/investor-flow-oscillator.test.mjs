@@ -57,3 +57,20 @@ test('KIS collection exposes a cursor instead of silently dropping stocks after 
   assert.equal(second.nextCursor, null);
   assert.equal(second.allTickers.length, 45);
 });
+
+test('flow oscillator deduplicates provider rows and derives price divergence from KIS closes', () => {
+  const rows = [10, 11, 12, 13, 14, 15].flatMap((day, index) => {
+    const base = { ...row('000001', day, -10), rawJson: { stck_clpr: String(100 + index * 2) } };
+    return [base, { ...base, provider: 'KIS_FALLBACK', observedAt: '2026-08-20T01:00:00Z' }];
+  });
+  const result = calculateInvestorFlowOscillator({
+    rows,
+    sectors: { '000001': '전기·전자' },
+    requestedStocks: 1,
+    asOf: '2026-08-15',
+  });
+  assert.equal(result.quality, 'FULL');
+  assert.equal(result.sectors[0].coveredStocks, 1);
+  assert.equal(result.sectors[0].priceFlowDivergence, 'BEARISH');
+  assert.doesNotMatch(result.warnings.join(' '), /가격 데이터가 없어/);
+});

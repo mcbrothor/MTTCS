@@ -35,9 +35,9 @@ assert.match(migration, /mtn-recommendation-performance-retry-finalize-%s-\[0-9\
 assert.match(migration, /order by run\.requested_at desc, run\.id desc/i);
 assert.match(migration, /when latest\.status in \('FAILED', 'TIMED_OUT'\) then 'FAILED'/i);
 
-assert.equal(manifest.expectedJobCount, 34);
-assert.equal(manifest.jobs.length, 34);
-assert.equal(new Set(manifest.jobs.map((job) => job.path)).size, 34);
+assert.equal(manifest.expectedJobCount, 35);
+assert.equal(manifest.jobs.length, 35);
+assert.equal(new Set(manifest.jobs.map((job) => job.path)).size, 35);
 assert.ok(
   manifest.requiredMigrations.includes(
     'supabase/migrations/20260802170000_recommendation_performance_retry_budget.sql',
