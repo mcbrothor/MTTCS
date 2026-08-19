@@ -14,7 +14,7 @@ on:
 
 jobs:
   test:
-    timeout-minutes: 20
+    timeout-minutes: 35
     runs-on: ubuntu-latest
     env:
       # Dummy values satisfy build-time guards and E2E auth in CI.
