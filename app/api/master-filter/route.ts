@@ -15,6 +15,7 @@ import type { YahooQuote } from '@/lib/finance/providers/yahoo-api';
 import { getKisIndexQuotes, getKisMarketForeignNetBuy } from '@/lib/finance/providers/kis-api';
 import { computeP3 } from '@/lib/master-filter/compute';
 import { buildEarlyWarningMatrix } from '@/lib/master-filter/early-warning';
+import { selectMainSeries } from '@/lib/master-filter/main-series';
 import { buildSectorRows } from '@/lib/master-filter/sector-rows';
 import type { MasterFilterResponse, OHLCData, MasterFilterMetricDetail } from '@/types';
 
@@ -248,12 +249,17 @@ export async function GET(request: Request) {
     const riskOnSectors = isKosdaq ? KOSDAQ_RISK_ON_SECTORS : isKR ? KR_RISK_ON_SECTORS : US_RISK_ON_SECTORS;
     const sectorNames = isKosdaq ? KOSDAQ_SECTOR_NAMES : isKR ? KR_SECTOR_NAMES : US_SECTOR_NAMES;
     const sectorTickerNames = isKR ? KR_SECTOR_TICKER_NAMES : US_SECTOR_TICKER_NAMES;
-    const mainSymbol = isKosdaq ? '^KQ11' : isKR ? '^KS200' : 'SPY';
+    const mainSymbols = isKosdaq
+      ? ['^KQ11', '229200.KS']
+      : isKR
+        ? ['^KS200', '^KS11', '069500.KS']
+        : ['SPY'];
+    const preferredMainSymbol = mainSymbols[0];
     const vixSymbol = '^VIX';
 
     const kisMarket = isKosdaq ? 'KOSDAQ' : 'KOSPI';
     const [mainDataRaw, vixData, vix3mData, macroQuotes, kisIndexQuotes, breadthSeries, sectorSeries, foreignNetBuy] = await Promise.all([
-      safeDaily(mainSymbol),
+      safeDaily(preferredMainSymbol),
       safeDaily(vixSymbol),
       safeDaily('^VIX3M'),
       getYahooQuotes(symbols).catch(() => []),
@@ -263,9 +269,15 @@ export async function GET(request: Request) {
       // KR 시장에서만 외국인 순매수 조회, US는 빈 배열
       isKR ? getKisMarketForeignNetBuy(kisMarket, 20).catch(() => []) : Promise.resolve([]),
     ]);
+    const selectedMain = selectMainSeries(mainSymbols, [
+      [preferredMainSymbol, mainDataRaw],
+      ...breadthSeries,
+    ]);
+    const mainSymbol = selectedMain?.symbol || preferredMainSymbol;
+    const selectedMainData = selectedMain?.data || mainDataRaw;
     const macroMap = quoteMap(macroQuotes, kisIndexQuotes);
     const mainQuote = macroMap[mainSymbol];
-    const patchedMain = patchLatestBarWithQuote(mainDataRaw, mainQuote);
+    const patchedMain = patchLatestBarWithQuote(selectedMainData, mainQuote);
     const mainData = patchedMain.data;
 
     if (mainData.length < 200) {
@@ -317,8 +329,8 @@ export async function GET(request: Request) {
             source: 'Market Analysis Engine',
             provider: 'MTN Aggregator',
             delay: 'EOD',
-            fallbackUsed: false,
-            warnings: ['Insufficient data for 200ma'],
+            fallbackUsed: true,
+            warnings: [`Insufficient data for 200ma: ${mainSymbols.join(', ')}`],
           },
           updatedAt: new Date().toISOString(),
         },
@@ -458,6 +470,9 @@ export async function GET(request: Request) {
           delay: 'EOD',
           fallbackUsed: false,
           warnings: [
+            ...(selectedMain?.fallbackUsed
+              ? [`${preferredMainSymbol} history was insufficient; ${mainSymbol} was used as the representative index.`]
+              : []),
             ...(patchedMain.patched ? [`${mainSymbol} latest daily bar was patched with live quote.`] : []),
             ...res.shockWarnings,
           ],

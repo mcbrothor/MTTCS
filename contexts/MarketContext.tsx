@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { DataSourceMeta, MacroRegime, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 import type { MacroScoreBreakdown } from '@/lib/macro/compute';
+import { isMasterFilterDataStale } from '@/lib/master-filter/data-quality';
 
 export type MarketSelection = 'US' | 'KR';
 
@@ -183,7 +184,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
           setMacroScore(score);
           setMacroBreakdown(breakdown);
           setConflictWarning(regime ? detectConflict(result.state, regime) : null);
-          setIsStale(result.metrics?.meta?.fallbackUsed === true || (result.metrics?.meta?.warnings?.length ?? 0) > 0);
+          setIsStale(isMasterFilterDataStale(result.metrics?.meta));
           setError(null);
         }
       } catch (err) {
