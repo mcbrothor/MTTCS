@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 15 * * 0' # 매주 일요일 한국시간 0시 (UTC 15:00)
+    - cron: '15 17 * * *' # Daily 02:15 KST, after the 16:30 UTC verified backup
   workflow_dispatch:
     inputs:
       mode:
@@ -23,7 +23,7 @@ on:
         type: string
 
 concurrency:
-  group: mtn-db-maintenance
+  group: mtn-database-exclusive-io
   cancel-in-progress: false
 
 jobs:
@@ -31,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install PostgreSQL 17 client
         run: |
           sudo apt-get update
@@ -44,6 +46,75 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
 
+      - name: Inspect live capacity and verified backup
+        id: capacity_state
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$DATABASE_URL"
+          row="$(/usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --tuples-only --no-align --field-separator='|' --set ON_ERROR_STOP=1 --command \
+            "with role_context as (
+               select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true)
+             ), capacity as (
+               select mtn_internal.database_capacity_status() as status
+               from role_context
+             ), latest_backup as (
+               select backup.*
+               from public.operations_backup_runs as backup
+               order by backup.completed_at desc nulls last
+               limit 1
+             )
+             select capacity.status->>'capacity_level',
+                    capacity.status->>'database_mb',
+                    coalesce(backup.status, 'MISSING'),
+                    case when backup.completed_at >= pg_catalog.clock_timestamp() - interval '24 hours' then 'true' else 'false' end,
+                    case when backup.encrypted then 'true' else 'false' end,
+                    case when coalesce(backup.checksum_sha256, '') <> '' then 'true' else 'false' end,
+                    case when coalesce((backup.metadata->>'restore_drill')::boolean, false) then 'true' else 'false' end,
+                    case when coalesce((backup.metadata->>'row_count_reconciliation')::boolean, false) then 'true' else 'false' end,
+                    case when coalesce((backup.metadata->>'critical_query_smoke')::boolean, false) then 'true' else 'false' end,
+                    case when coalesce((backup.metadata->>'offsite_verified')::boolean, false) then 'true' else 'false' end
+             from capacity
+             left join latest_backup as backup on true;")"
+          IFS='|' read -r capacity_level database_mb backup_status backup_fresh backup_encrypted backup_checksum_present backup_restore_drill backup_row_reconciliation backup_critical_query_smoke backup_offsite_verified <<< "$row"
+          case "$capacity_level" in
+            NORMAL|WATCH_250|WARNING_350|BLOCK_NONCRITICAL) ;;
+            *) echo "Unknown capacity level: $capacity_level" >&2; exit 1 ;;
+          esac
+          [[ "$database_mb" =~ ^[0-9]+([.][0-9]+)?$ ]]
+          for value in "$backup_fresh" "$backup_encrypted" "$backup_checksum_present" "$backup_restore_drill" "$backup_row_reconciliation" "$backup_critical_query_smoke" "$backup_offsite_verified"; do
+            [[ "$value" == "true" || "$value" == "false" ]]
+          done
+          {
+            echo "capacity_level=$capacity_level"
+            echo "database_mb=$database_mb"
+            echo "backup_status=$backup_status"
+            echo "backup_fresh=$backup_fresh"
+            echo "backup_encrypted=$backup_encrypted"
+            echo "backup_checksum_present=$backup_checksum_present"
+            echo "backup_restore_drill=$backup_restore_drill"
+            echo "backup_row_reconciliation=$backup_row_reconciliation"
+            echo "backup_critical_query_smoke=$backup_critical_query_smoke"
+            echo "backup_offsite_verified=$backup_offsite_verified"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate automatic capacity gate
+        id: capacity_gate
+        env:
+          MTN_MAINTENANCE_EVENT: ${{ github.event_name }}
+          MTN_CAPACITY_LEVEL: ${{ steps.capacity_state.outputs.capacity_level }}
+          MTN_BACKUP_STATUS: ${{ steps.capacity_state.outputs.backup_status }}
+          MTN_BACKUP_FRESH: ${{ steps.capacity_state.outputs.backup_fresh }}
+          MTN_BACKUP_ENCRYPTED: ${{ steps.capacity_state.outputs.backup_encrypted }}
+          MTN_BACKUP_CHECKSUM_PRESENT: ${{ steps.capacity_state.outputs.backup_checksum_present }}
+          MTN_BACKUP_RESTORE_DRILL: ${{ steps.capacity_state.outputs.backup_restore_drill }}
+          MTN_BACKUP_ROW_RECONCILIATION: ${{ steps.capacity_state.outputs.backup_row_reconciliation }}
+          MTN_BACKUP_CRITICAL_QUERY_SMOKE: ${{ steps.capacity_state.outputs.backup_critical_query_smoke }}
+          MTN_BACKUP_OFFSITE_VERIFIED: ${{ steps.capacity_state.outputs.backup_offsite_verified }}
+        run: node scripts/capacity-maintenance-gate.mjs >> "$GITHUB_OUTPUT"
+
       - name: Report retention candidates (never deletes)
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
@@ -52,7 +123,7 @@ jobs:
           set +x
           test -n "$DATABASE_URL"
           /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
-            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(true, null); select * from mtn_internal.apply_recommendation_evidence_retention(true, null); commit;"
+            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(true, null); select * from mtn_internal.apply_recommendation_evidence_retention(true, null); select * from mtn_internal.apply_automatic_capacity_retention(true, null); commit;"
 
       - name: Reject an unconfirmed apply request
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation != 'APPLY_RETENTION' }}
@@ -60,7 +131,7 @@ jobs:
           echo "Apply mode requires the exact confirmation phrase APPLY_RETENTION." >&2
           exit 1
 
-      - name: Apply reviewed retention policies
+      - name: Apply manually reviewed retention policies
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION' }}
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
@@ -78,6 +149,18 @@ jobs:
           /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
             "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_retention_policies(false, 'APPLY_RETENTION'); select * from mtn_internal.apply_recommendation_evidence_retention(false, 'APPLY_RETENTION'); commit;"
 
+      - name: Apply bounded automatic capacity retention
+        if: ${{ github.event_name == 'schedule' && steps.capacity_gate.outputs.auto_apply == 'true' }}
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=60000
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "$DATABASE_URL"
+          /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
+            "begin; select pg_catalog.set_config('request.jwt.claim.role', 'service_role', true); select * from mtn_internal.apply_automatic_capacity_retention(false, 'AUTO_CAPACITY_RETENTION'); commit;"
+
       - name: Reclaim physical database space
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION' }}
         env:
@@ -90,8 +173,21 @@ jobs:
           /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --full --analyze --table=public.recommendation_market_prices
           /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --full --analyze --table=public.recommendation_evidence_manifests
 
+      - name: Reclaim reusable space after automatic retention
+        if: ${{ github.event_name == 'schedule' && steps.capacity_gate.outputs.auto_apply == 'true' }}
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          PGOPTIONS: -c lock_timeout=5000 -c statement_timeout=300000
+        run: |
+          set -euo pipefail
+          set +x
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --analyze --table=public.cron_http_runs
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --analyze --table=public.daily_screener_candidates
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --analyze --table=public.recommendation_market_prices
+          /usr/lib/postgresql/17/bin/vacuumdb --dbname="$DATABASE_URL" --analyze --table=public.recommendation_evidence_manifests
+
       - name: Refresh capacity evidence
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION' }}
+        if: ${{ always() }}
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
         run: |
@@ -99,3 +195,17 @@ jobs:
           set +x
           /usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --command \
             "select mtn_internal.capture_database_capacity();"
+
+      - name: Verify capacity is not blocked after retention
+        if: ${{ always() && ((github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && inputs.confirmation == 'APPLY_RETENTION') || (github.event_name == 'schedule' && steps.capacity_gate.outputs.auto_apply == 'true')) }}
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          set +x
+          capacity_level="$(/usr/lib/postgresql/17/bin/psql "$DATABASE_URL" --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 --command \
+            "select case when pg_database_size(current_database()) >= 400 * 1024 * 1024 then 'BLOCK_NONCRITICAL' when pg_database_size(current_database()) >= 350 * 1024 * 1024 then 'WARNING_350' when pg_database_size(current_database()) >= 250 * 1024 * 1024 then 'WATCH_250' else 'NORMAL' end;")"
+          if [[ "$capacity_level" == "BLOCK_NONCRITICAL" ]]; then
+            echo "Capacity remains blocked after retention." >&2
+            exit 1
+          fi
