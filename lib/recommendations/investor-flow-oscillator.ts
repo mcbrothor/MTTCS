@@ -125,6 +125,8 @@ export function calculateInvestorFlowOscillator(input: {
   const warnings: string[] = [];
   if (coverage < 0.8) warnings.push(`수급 데이터 커버리지가 ${Math.round(coverage * 100)}%입니다.`);
   if (stale && latestTradeDate) warnings.push(`최근 수급 데이터가 ${latestTradeDate}로 오래되었습니다.`);
+  const unclassifiedStocks = sectors.find((item) => item.sector === '미분류')?.coveredStocks || 0;
+  if (unclassifiedStocks > 0) warnings.push(`KIS 업종 정보가 없는 ${unclassifiedStocks}종목은 미분류로 집계했습니다.`);
   if (sectors.some((item) => item.priceFlowDivergence === 'UNKNOWN')) warnings.push('일부 종목의 가격 데이터가 없어 다이버전스를 생략했습니다.');
 
   return {

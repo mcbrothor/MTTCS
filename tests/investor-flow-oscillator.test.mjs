@@ -40,6 +40,16 @@ test('flow oscillator blocks instead of emitting a false normal signal without d
   assert.equal(result.state, 'BLOCKED');
 });
 
+test('flow oscillator discloses unclassified KIS sector metadata', () => {
+  const result = calculateInvestorFlowOscillator({
+    rows: [row('950160', 19, 10)],
+    sectors: { '950160': null },
+    requestedStocks: 1,
+    asOf: '2026-08-20',
+  });
+  assert.match(result.warnings.join(' '), /1종목은 미분류/);
+});
+
 test('stale flow never emits a normal state', () => {
   const staleRows = [1, 2, 3, 4, 5].map((day) => ({ ...row('000001', day, 20), quality: 'STALE' }));
   const result = calculateInvestorFlowOscillator({ rows: staleRows, sectors: { '000001': '반도체' }, requestedStocks: 1, asOf: '2026-08-20' });
