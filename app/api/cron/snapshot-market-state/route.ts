@@ -132,7 +132,7 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
           above200: lastBar.close > (movingAverage(data, 200) ?? Infinity),
           return20: percentReturn(data, 20) ?? 0,
           };
-        }));
+        });
       const sectorRows = buildSectorRows(sectorSeries, config.sectorNames, config.riskOnSectors);
       const foreignNetBuy = foreignByCategory.get(config.category) || [];
       const foreignNetBuy5d = foreignNetBuy.length
