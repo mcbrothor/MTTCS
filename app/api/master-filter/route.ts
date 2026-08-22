@@ -210,7 +210,8 @@ function patchLatestBarWithQuote(data: OHLCData[], quote?: YahooQuote | null) {
   if (!quote || !Number.isFinite(quote.regularMarketPrice) || quote.regularMarketPrice <= 0 || data.length === 0) {
     return { data, patched: false, staleDailyData: false };
   }
-  const last = data.at(-1)!;
+  const last = data.at(-1);
+  if (!last) return { data, patched: false, staleDailyData: false };
   const quotePrice = quote.regularMarketPrice;
   const changeFromDailyPct = last.close > 0 ? Math.abs((quotePrice - last.close) / last.close) * 100 : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -352,7 +353,9 @@ export async function GET(request: Request) {
     const breadthRows = breadthSeries
       .filter(([, data]) => data.length >= 200)
       .map(([sym, data]) => {
-        const last = data.at(-1)!.close;
+        const lastBar = data.at(-1);
+        if (!lastBar) throw new Error(`breadth data empty for ${sym}`);
+        const last = lastBar.close;
         const ma200 = data.slice(-200).reduce((s, d) => s + d.close, 0) / 200;
         // 52주 고가/저가 (실제 데이터 사용)
         const year = data.slice(-252);

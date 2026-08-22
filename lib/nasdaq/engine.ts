@@ -126,7 +126,17 @@ export function calculateTenMonthTrend(
       average10MonthClose: null,
     };
   }
-  const latest = samples.at(-1)!;
+  const latest = samples.at(-1);
+  if (!latest) {
+    return {
+      signal: 'UNAVAILABLE',
+      signalDate: null,
+      effectiveFrom: null,
+      isEffective: false,
+      latestClose: null,
+      average10MonthClose: null,
+    };
+  }
   const average10MonthClose = average(samples.map((point) => point.close));
   const effectiveFrom = ordered.find((bar) => bar.date > latest.date)?.date ?? null;
   return {
@@ -147,7 +157,9 @@ export function calculateNasdaqRegime(
     bars.length < NASDAQ_POLICY.minimumPriceBars
     || bars.some((bar) => !isValidBar(bar) || bar.product !== 'QQQ' || bar.series !== 'ADJUSTED')
   ) return null;
-  const close = bars.at(-1)!.close;
+  const lastBar = bars.at(-1);
+  if (!lastBar) return null;
+  const close = lastBar.close;
   const ma50 = movingAverage(bars, 50);
   const ma200 = movingAverage(bars, 200);
   const priorDayMa200 = movingAverage(bars.slice(0, -1), 200);
@@ -163,7 +175,7 @@ export function calculateNasdaqRegime(
     || (close < ma200 && volatility >= NASDAQ_POLICY.deRiskVolatilityPct)
   );
   return {
-    asOf: bars.at(-1)!.date,
+    asOf: lastBar.date,
     close: round(close),
     ma50: round(ma50),
     ma200: round(ma200),
@@ -192,7 +204,8 @@ export function calculateExecutionTechnical(
   const ma50 = movingAverage(bars, 50);
   const ma200 = movingAverage(bars, 200);
   if (atr14 === null || ma20 === null || ma50 === null || ma200 === null) return null;
-  const latest = bars.at(-1)!;
+  const latest = bars.at(-1);
+  if (!latest) return null;
   const prior20DayHigh = Math.max(...bars.slice(-21, -1).map((bar) => bar.high));
   return {
     product: latest.product,

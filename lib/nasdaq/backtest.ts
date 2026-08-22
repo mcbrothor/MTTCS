@@ -16,7 +16,10 @@ function round(value: number, digits = 6) {
 function annualizedMetrics(curve: readonly NasdaqBacktestPoint[], turnoverPct: number) {
   const returns = curve.slice(1).map((point, index) => (point.equity / curve[index].equity) - 1);
   const years = Math.max((curve.length - 1) / 252, 1 / 252);
-  const cagr = (curve.at(-1)!.equity / curve[0].equity) ** (1 / years) - 1;
+  const last = curve.at(-1);
+  const first = curve[0];
+  if (!last || !first) throw new Error('curve empty');
+  const cagr = (last.equity / first.equity) ** (1 / years) - 1;
   const mean = returns.reduce((sum, value) => sum + value, 0) / Math.max(returns.length, 1);
   const variance = returns.reduce((sum, value) => sum + ((value - mean) ** 2), 0)
     / Math.max(returns.length - 1, 1);
@@ -149,10 +152,12 @@ export function runNasdaqBacktest(input: {
   }
 
   const metrics = annualizedMetrics(curve, turnover);
+  const lastPoint = curve.at(-1);
+  if (!lastPoint) throw new Error('curve empty');
   return {
     mode: input.mode,
     startDate: curve[0].date,
-    endDate: curve.at(-1)!.date,
+    endDate: lastPoint.date,
     observations: curve.length,
     ...metrics,
     averageEffectiveExposurePct: round(

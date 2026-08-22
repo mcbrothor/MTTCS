@@ -133,19 +133,21 @@ export function computeMacroScore(
 
   // FRED HY OAS 사용 (가장 정확한 크레딧 신호)
   if (fredData?.hyOas && fredData.hyOas.length > 0) {
-    const latest = fredData.hyOas.at(-1)!;
-    fredHyOasValue = latest.value;
-    fredHyOasTrendVal = hyOasTrend(fredData.hyOas);
-    // OAS 레벨로 기본 점수 (낮을수록 Risk-On)
-    const levelScore = hyOasToScore(fredHyOasValue, W_CREDIT);
-    // 20일 추세 보정: 스프레드 축소(음수) = Risk-On 호재
-    let trendBonus = 0;
-    if (fredHyOasTrendVal !== null) {
-      if (fredHyOasTrendVal < -30) trendBonus = Math.round(W_CREDIT * 0.15);   // 축소 강함
-      else if (fredHyOasTrendVal < 0) trendBonus = Math.round(W_CREDIT * 0.05); // 소폭 축소
-      else if (fredHyOasTrendVal > 30) trendBonus = -Math.round(W_CREDIT * 0.15); // 확대 강함
+    const latestObs = fredData.hyOas.at(-1);
+    if (latestObs) {
+      fredHyOasValue = latestObs.value;
+      fredHyOasTrendVal = hyOasTrend(fredData.hyOas);
+      // OAS 레벨로 기본 점수 (낮을수록 Risk-On)
+      const levelScore = hyOasToScore(fredHyOasValue, W_CREDIT);
+      // 20일 추세 보정: 스프레드 축소(음수) = Risk-On 호재
+      let trendBonus = 0;
+      if (fredHyOasTrendVal !== null) {
+        if (fredHyOasTrendVal < -30) trendBonus = Math.round(W_CREDIT * 0.15);   // 축소 강함
+        else if (fredHyOasTrendVal < 0) trendBonus = Math.round(W_CREDIT * 0.05); // 소폭 축소
+        else if (fredHyOasTrendVal > 30) trendBonus = -Math.round(W_CREDIT * 0.15); // 확대 강함
+      }
+      creditScore = Math.min(W_CREDIT, Math.max(0, levelScore + trendBonus));
     }
-    creditScore = Math.min(W_CREDIT, Math.max(0, levelScore + trendBonus));
   } else if (histories?.HYG && histories?.IEF) {
     const slope = rollingRatioSlope(histories.HYG, histories.IEF, 20);
     if (slope !== null) {

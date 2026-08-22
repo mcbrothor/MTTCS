@@ -14,7 +14,9 @@ export interface MonthlyPrice {
 export function calculateHaaMomentum(prices: MonthlyPrice[]) {
   const sorted = [...prices].filter((row) => row.close > 0).sort((a, b) => a.date.localeCompare(b.date));
   if (sorted.length < 13) return null;
-  const latest = sorted.at(-1)!.close;
+  const latestBar = sorted.at(-1);
+  if (!latestBar) return null;
+  const latest = latestBar.close;
   const returns = [1, 3, 6, 12].map((months) => (latest / sorted[sorted.length - 1 - months].close) - 1);
   return returns.reduce((sum, value) => sum + value, 0) / returns.length;
 }

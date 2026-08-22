@@ -104,7 +104,10 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
     safeDaily('^VIX3M'),
     Promise.all(configs.map(async (config) => [
       config.category,
-      config.kisMarket ? await getKisMarketForeignNetBuy(config.kisMarket, 20).catch(() => []) : [],
+      config.kisMarket ? await getKisMarketForeignNetBuy(config.kisMarket, 20).catch((err: unknown) => {
+        console.warn(`[snapshot-market-state] KIS foreignNetBuy ${config.kisMarket} failed:`, err instanceof Error ? err.message : String(err));
+        return [];
+      }) : [],
     ] as const)),
   ]);
   const prices = new Map(priceEntries);
@@ -121,10 +124,14 @@ async function snapshotMasterFilter(market: 'US' | 'KR', calcDate: string) {
       const sectorSeries = config.sectorEtfs.map((symbol) => [symbol, prices.get(symbol) || []] as const);
       const breadthRows = breadthSeries
         .filter(([, data]) => data.length >= 200)
-        .map(([symbol, data]) => ({
+        .map(([symbol, data]) => {
+          const lastBar = data.at(-1);
+          if (!lastBar) throw new Error(`breadth data empty for ${symbol}`);
+          return {
           symbol,
-          above200: data.at(-1)!.close > (movingAverage(data, 200) ?? Infinity),
+          above200: lastBar.close > (movingAverage(data, 200) ?? Infinity),
           return20: percentReturn(data, 20) ?? 0,
+          };
         }));
       const sectorRows = buildSectorRows(sectorSeries, config.sectorNames, config.riskOnSectors);
       const foreignNetBuy = foreignByCategory.get(config.category) || [];

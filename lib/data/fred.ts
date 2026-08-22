@@ -158,7 +158,8 @@ export function hyOasToScore(oasBps: number, maxScore: number): number {
  */
 export function hyOasTrend(observations: FredObservation[]): number | null {
   if (observations.length < 20) return null;
-  const latest = observations.at(-1)!.value;
-  const prev20 = observations[observations.length - 20].value;
-  return latest - prev20; // 음수 = 축소 = 좋은 신호
+  const latestObs = observations.at(-1);
+  const prev20Obs = observations[observations.length - 20];
+  if (!latestObs || !prev20Obs) return null;
+  return latestObs.value - prev20Obs.value; // 음수 = 축소 = 좋은 신호
 }

@@ -19,7 +19,11 @@ function ema(values: number[], period: number) {
   if (values.length === 0) return [];
   const alpha = 2 / (period + 1);
   const result = [values[0]];
-  for (const value of values.slice(1)) result.push(value * alpha + result.at(-1)! * (1 - alpha));
+  for (const value of values.slice(1)) {
+    const prev = result.at(-1);
+    if (prev === undefined) break;
+    result.push(value * alpha + prev * (1 - alpha));
+  }
   return result;
 }
 

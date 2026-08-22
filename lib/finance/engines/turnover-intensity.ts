@@ -67,7 +67,8 @@ export function calculateTurnoverIntensity(input: {
       : bars.slice(index - 59, index + 1).map((row) => row.close * row.volume);
     const priorTurnover = turnoverSeries.slice(0, -1);
     const sd = standardDeviation(priorTurnover);
-    const zScore = sd > 0 ? (turnoverSeries.at(-1)! - average(priorTurnover)) / sd : 0;
+    const lastTurnover = turnoverSeries.at(-1);
+    const zScore = sd > 0 && lastTurnover !== undefined ? (lastTurnover - average(priorTurnover)) / sd : 0;
     const turnoverZScore = clamp(50 + zScore * 15);
     const gaps: number[] = [];
     for (let offset = Math.max(1, index - 6); offset <= index; offset += 1) {
@@ -79,10 +80,44 @@ export function calculateTurnoverIntensity(input: {
     rawSeries.push(volumeSpike * 0.5 + turnoverZScore * 0.3 + gapTrend * 0.2);
   }
 
-  const raw = rawSeries.at(-1)!;
+  const raw = rawSeries.at(-1);
+  if (raw === undefined) {
+    return {
+      ticker: input.ticker,
+      asOf: input.asOf || bars.at(-1)?.date || new Date().toISOString(),
+      provider: input.provider,
+      quality: 'BLOCKED',
+      modelVersion: MODEL_VERSION,
+      warnings: [...warnings, '회전율 시그널 계산 실패: rawSeries empty'],
+      raw: null,
+      sma3: null,
+      ema5: null,
+      ema7: null,
+      components: { volumeSpike: null, turnoverZScore: null, gapTrend: null },
+      timing: 'BLOCKED',
+    };
+  }
   const sma3 = average(rawSeries.slice(-3));
-  const ema5 = ema(rawSeries, 5)!;
-  const ema7 = ema(rawSeries, 7)!;
+  const ema5Val = ema(rawSeries, 5);
+  const ema7Val = ema(rawSeries, 7);
+  if (ema5Val === null || ema7Val === null) {
+    return {
+      ticker: input.ticker,
+      asOf: input.asOf || bars.at(-1)?.date || new Date().toISOString(),
+      provider: input.provider,
+      quality: 'BLOCKED',
+      modelVersion: MODEL_VERSION,
+      warnings: [...warnings, '회전율 EMA 계산 실패'],
+      raw: round(raw),
+      sma3: round(sma3),
+      ema5: null,
+      ema7: null,
+      components: { volumeSpike: round(latestComponents.volumeSpike), turnoverZScore: round(latestComponents.turnoverZScore), gapTrend: round(latestComponents.gapTrend) },
+      timing: 'BLOCKED',
+    };
+  }
+  const ema5 = ema5Val;
+  const ema7 = ema7Val;
   const timing = raw >= ema5 && ema5 >= ema7 && raw >= 60
     ? 'ACCELERATING'
     : raw < ema5 && ema5 < ema7
@@ -90,7 +125,7 @@ export function calculateTurnoverIntensity(input: {
       : 'NEUTRAL';
   return {
     ticker: input.ticker,
-    asOf: input.asOf || bars.at(-1)!.date,
+    asOf: input.asOf || bars.at(-1)?.date || new Date().toISOString(),
     provider: input.provider,
     quality: input.turnoverRates ? 'FULL' : 'DEGRADED',
     modelVersion: MODEL_VERSION,

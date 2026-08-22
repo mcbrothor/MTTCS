@@ -16,8 +16,11 @@ interface HistoryPoint {
 function ScoreSparkline({ history, currentScore }: { history: HistoryPoint[]; currentScore: number }) {
   if (history.length < 2) return null;
 
-  const first = history[0].p3Score;
-  const last = history.at(-1)!.p3Score;
+  const firstEntry = history[0];
+  const lastEntry = history.at(-1);
+  if (!firstEntry || !lastEntry) return null;
+  const first = firstEntry.p3Score;
+  const last = lastEntry.p3Score;
   const delta = last - first;
   const isImproving = delta > 0;
 

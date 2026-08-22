@@ -45,7 +45,9 @@ export function buildSectorRows(
       && data.slice(-21).every((row) => Number.isFinite(row.close) && row.close > 0)
     ))
     .map(([symbol, data]) => {
-      const price = data.at(-1)!.close;
+      const lastBar = data.at(-1);
+      if (!lastBar) throw new Error(`sector data empty for ${symbol}`);
+      const price = lastBar.close;
       const ma5 = movingAverage(data, 5);
       const ma20 = movingAverage(data, 20);
       return {

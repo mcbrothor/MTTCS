@@ -43,12 +43,18 @@ function Stock360Content({ ticker, exchange }: { ticker: string; exchange: strin
         setMeta(payload.meta || null);
         setError('');
       })
-      .catch((requestError) => setError(requestError instanceof Error ? requestError.message : String(requestError)));
+      .catch((requestError) => {
+        console.warn('[Stock360] market-data fetch failed:', requestError instanceof Error ? requestError.message : String(requestError));
+        setError(requestError instanceof Error ? requestError.message : String(requestError));
+      });
 
     fetch(`/api/security-events?ticker=${encodeURIComponent(ticker)}&exchange=${exchange}`)
       .then((response) => response.json())
       .then((payload) => setEvents(payload.data || []))
-      .catch(() => setEvents([]));
+      .catch((err: unknown) => {
+        console.warn('[Stock360] security-events fetch failed:', err instanceof Error ? err.message : String(err));
+        setEvents([]);
+      });
   }, [ticker, exchange]);
 
   const latest = analysis?.priceData?.at(-1);

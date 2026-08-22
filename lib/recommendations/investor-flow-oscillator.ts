@@ -66,7 +66,9 @@ export function calculateInvestorFlowOscillator(input: {
     const sector = input.sectors[ticker] || '미분류';
     const list = sectorStocks.get(sector) || [];
     const prices = rows.map((row) => Number(row.rawJson.stck_clpr)).filter((value) => Number.isFinite(value) && value > 0);
-    const inferredPriceReturn = prices.length >= 6 ? ((prices.at(-1)! / prices.at(-6)!) - 1) * 100 : null;
+    const lastPrice = prices.at(-1);
+    const price6Ago = prices.at(-6);
+    const inferredPriceReturn = prices.length >= 6 && lastPrice !== undefined && price6Ago !== undefined && price6Ago !== 0 ? ((lastPrice / price6Ago) - 1) * 100 : null;
     list.push({
       ticker,
       amount5,

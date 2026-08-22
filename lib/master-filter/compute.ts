@@ -213,7 +213,9 @@ export function computeP3(
   foreignNetBuy5d?: number,
   intradayShock: IntradayShockInput = {}
 ): P3ComputeResult {
-  const lastClose = mainData.at(-1)!.close;
+  const lastBar = mainData.at(-1);
+  if (!lastBar) throw new Error('computeP3: mainData is empty');
+  const lastClose = lastBar.close;
   const ma50 = movingAverage(mainData, 50) ?? 0;
   const ma150 = movingAverage(mainData, 150) ?? 0;
   const ma200 = movingAverage(mainData, 200) ?? 0;
