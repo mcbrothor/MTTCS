@@ -253,10 +253,10 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
                   <span className="font-mono text-[10px] text-slate-500">#{row.rank}</span>
                   <p className="text-xs font-bold text-white">{friendlySectorLabel(row.name)}</p>
                 </div>
-                <p className="mt-1 truncate text-[11px] text-slate-300" title={row.tickerName}>
+                <p className="mt-1 font-mono text-[11px] font-semibold text-slate-400">{row.symbol}</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-300" title={row.tickerName}>
                   {friendlyFundName(row.symbol, row.tickerName || row.name)}
                 </p>
-                <p className="font-mono text-[10px] text-slate-500">{row.symbol}</p>
               </div>
               <span className={`shrink-0 text-[10px] ${row.riskOn ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {row.riskOn ? '공격 업종' : '방어/중립'}
@@ -290,8 +290,8 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
             <tr>
               <th className="py-2 pr-3">당일 순위</th>
               <th className="py-2 pr-3">섹터</th>
-              <th className="py-2 pr-3">실제 종목명</th>
               <th className="py-2 pr-3">티커</th>
+              <th className="py-2 pr-3">실제 종목명</th>
               <th className="py-2 pr-3 text-right">당일 수익률</th>
               <th className="py-2 pr-3 text-right">주간 수익률</th>
               <th className="py-2 pr-3 text-right">20일 수익률</th>
@@ -304,10 +304,10 @@ function SectorTable({ rows }: { rows: NonNullable<MasterFilterMetrics['sectorRo
               <tr key={row.symbol} className="border-b border-slate-900">
                 <td className="py-2 pr-3 font-mono text-slate-400">{row.rank}</td>
                 <td className="py-2 pr-3 font-semibold text-white">{friendlySectorLabel(row.name)}</td>
+                <td className="py-2 pr-3 font-mono text-slate-200">{row.symbol}</td>
                 <td className="max-w-[260px] py-2 pr-3 text-xs text-slate-300" title={row.tickerName}>
                   {friendlyFundName(row.symbol, row.tickerName || row.name)}
                 </td>
-                <td className="py-2 pr-3 font-mono">{row.symbol}</td>
                 <td className={`py-2 pr-3 text-right font-mono ${sectorReturnTone(row.return1)}`}>
                   {sectorReturnText(row.return1)}
                 </td>
