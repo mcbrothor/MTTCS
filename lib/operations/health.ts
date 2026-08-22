@@ -82,7 +82,10 @@ function capacityIncidentReason(input: {
 export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
   const now = input.now || new Date();
   const requiredWorkerComponents = input.requiredWorkerComponents || ['local-analysis', 'codex-llm'];
-  const workerStaleAfterSeconds = input.workerStaleAfterSeconds ?? 15 * 60;
+  // Free-tier Mac mini sleeps overnight; 15m was too strict and caused continuous FAILED.
+  // Allow 2h grace, and treat stale as DEGRADED (alert still fires) instead of immediate FAILED.
+  const workerStaleAfterSeconds = input.workerStaleAfterSeconds ?? 2 * 60 * 60;
+  const workerHardStaleAfterSeconds = input.workerStaleAfterSeconds ?? 24 * 60 * 60;
   const backupStaleAfterSeconds = input.backupStaleAfterSeconds ?? 30 * 60 * 60;
   const capacityStaleAfterSeconds = input.capacityStaleAfterSeconds ?? 26 * 60 * 60;
 
@@ -131,6 +134,10 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     const age = secondsSince(latestWorkerByComponent.get(component)?.observed_at, now);
     return age !== null && age > workerStaleAfterSeconds;
   });
+  const hardStaleComponents = requiredWorkerComponents.filter((component) => {
+    const age = secondsSince(latestWorkerByComponent.get(component)?.observed_at, now);
+    return age !== null && age > workerHardStaleAfterSeconds;
+  });
   const failedComponents = requiredWorkerComponents.filter((component) => {
     const status = String(latestWorkerByComponent.get(component)?.status || '').toUpperCase();
     return ['ERROR', 'FAILED', 'STOPPING'].includes(status);
@@ -138,9 +145,9 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
   const startingComponents = requiredWorkerComponents.filter((component) => (
     String(latestWorkerByComponent.get(component)?.status || '').toUpperCase() === 'STARTING'
   ));
-  const workerStatus: OperationsStatus = missingComponents.length || staleComponents.length || failedComponents.length
+  const workerStatus: OperationsStatus = missingComponents.length || hardStaleComponents.length || failedComponents.length
     ? 'FAILED'
-    : startingComponents.length ? 'DEGRADED' : 'HEALTHY';
+    : staleComponents.length || startingComponents.length ? 'DEGRADED' : 'HEALTHY';
 
   const latestBackup = [...input.backupRows]
     .sort((left, right) => Date.parse(right.completed_at) - Date.parse(left.completed_at))[0] || null;
@@ -185,6 +192,7 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
       requiredComponents: requiredWorkerComponents,
       missingComponents,
       staleComponents,
+      hardStaleComponents,
       failedComponents,
       latest: Object.fromEntries(requiredWorkerComponents.map((component) => {
         const row = latestWorkerByComponent.get(component);
@@ -230,6 +238,7 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
       status: workerStatus,
       missingComponents,
       staleComponents,
+      hardStaleComponents,
       failedComponents,
       startingComponents,
     },
