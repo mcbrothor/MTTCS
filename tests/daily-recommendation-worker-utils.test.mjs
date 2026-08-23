@@ -178,8 +178,8 @@ import {
     marketState: 'YELLOW',
     marketStateQuality: 'FULL',
   });
-  assert.equal(yellowUs.activeCount, 3);
-  assert.equal(yellowUs.cashWeight, 0.7);
+  assert.equal(yellowUs.activeCount, 2);
+  assert.equal(yellowUs.cashWeight, 0.8);
 
   const yellowKr = resolveActiveRecommendationDecision({
     picks: fivePicks,
@@ -187,7 +187,7 @@ import {
     marketState: 'YELLOW',
     marketStateQuality: 'FULL',
   });
-  assert.equal(yellowKr.activeCount, 2);
+  assert.equal(yellowKr.activeCount, 1);
 
   const greenNasdaq = resolveActiveRecommendationDecision({
     picks: fivePicks,

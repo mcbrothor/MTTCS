@@ -274,12 +274,18 @@ export default function MacroPage() {
 
           {/* Right Content */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
-            <div className="grid gap-3 md:grid-cols-4">
+            {/* 이미지 가이드: 매주 확인 순서 1순위 Net Liquidity */}
+            <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/10 px-4 py-3">
+              <p className="text-[11px] font-bold text-emerald-300">매주 확인 순서 (이미지 가이드)</p>
+              <p className="mt-1 text-[11px] leading-5 text-emerald-100/80">1순위 <b>Net Liquidity (WALCL-TGA-RRP) 절대 4주+8주</b> → 2순위 10Y 실질금리(DFII10) → 3순위 2Y (DGS2) → 4순위 10Y (DGS10) → 5순위 10Y-2Y 스프레드 · DXY 4주 추세 보조</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-5">
               {[
-                ['신용 시장', 'HY OAS · HYG/IEF', '돈이 위험자산을 편하게 보는지'],
-                ['금리/달러 부담', 'UUP · TLT · Curve', '달러와 금리가 시장에 주는 압박'],
-                ['시장 불안도', 'VIX', '불안 심리와 급등 위험'],
-                ['시장 참여 폭', 'QQQ/SPY · IWM/SPY', '성장주·소형주가 함께 움직이는지'],
+                ['Net Liquidity', 'WALCL-TGA-RRP', '1순위 · 절대 4주+8주 변화가 핵심'],
+                ['실질금리', 'DFII10', '10Y 실질금리 하락=금·성장주 우호'],
+                ['단기금리', 'DGS2', '2Y 하락=완화 기대'],
+                ['장기금리', 'DGS10', '10Y 하락=할인율 완화'],
+                ['커브·달러', 'DGS10-DGS2 · DXY', '2Y↓ 스티프닝=완화 / 10Y↑ 스티프닝=성장 기대'],
               ].map(([title, metric, desc]) => (
                 <div key={title} className="rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] p-4">
                   <p className="text-[10px] font-bold uppercase text-slate-500">{title}</p>

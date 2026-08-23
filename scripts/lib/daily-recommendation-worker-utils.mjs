@@ -5,11 +5,12 @@ function compactError(error) {
 const ACTIVE_RECOMMENDATION_CAPACITY = 10;
 const FAIL_CLOSED_MARKET_STATES = new Set(['RED', 'GRAY', 'MISSING']);
 const UNUSABLE_MARKET_STATE_QUALITIES = new Set(['MISSING', 'STALE', 'BLOCKED', 'UNVERIFIED']);
-// Weekly replay showed US alpha concentrated in ranks 1-3 and a severe KOSDAQ tail;
-// KOSPI keeps broader GREEN capacity while YELLOW reduces Korean exposure to two slots.
+// Wave3: RED/YELLOW에서 현금 비중 확대 — KOSDAQ 꼬리 리스크(-14.57%p) 대응
+// Weekly replay: US alpha rank 1-3 집중, KOSDAQ 꼬리 심각 → GREEN도 KOSDAQ 3 유지하되 YELLOW/RED는 축소
 const ACTIVE_CAP_BY_STATE_CATEGORY = Object.freeze({
   GREEN: Object.freeze({ NASDAQ100: 3, SP500: 3, KOSPI200: 10, KOSDAQ150: 3, US: 3, KR: 3 }),
-  YELLOW: Object.freeze({ NASDAQ100: 3, SP500: 3, KOSPI200: 2, KOSDAQ150: 2, US: 3, KR: 2 }),
+  YELLOW: Object.freeze({ NASDAQ100: 2, SP500: 2, KOSPI200: 1, KOSDAQ150: 1, US: 2, KR: 1 }),
+  RED: Object.freeze({ NASDAQ100: 0, SP500: 0, KOSPI200: 0, KOSDAQ150: 0, US: 0, KR: 0 }),
 });
 
 function normalizedMarketStateValue(value) {

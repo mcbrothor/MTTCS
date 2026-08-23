@@ -1,6 +1,6 @@
 import type { OHLCData } from '../../types/index.ts';
 import type { FredObservation } from '../data/fred.ts';
-import { get5yBreakeven, getDgs10, getDgs2, getHyOas } from '../data/fred.ts';
+import { get5yBreakeven, getDfii10, getDgs10, getDgs2, getHyOas, getRrpontsyd, getWalcl, getWtreGen } from '../data/fred.ts';
 import { evaluateFreshness } from '../data/freshness.ts';
 import {
   getYahooDailyPrice,
@@ -14,13 +14,14 @@ import {
   type MacroScoreBreakdown,
 } from './compute.ts';
 
-export const MACRO_MODEL_VERSION = 'macro-2026.07-v3';
+export const MACRO_MODEL_VERSION = 'macro-2026.08-netliquidity-v1';
 
 export type MacroMarket = 'US' | 'KR';
 export type MacroQualityStatus = 'VALID' | 'DEGRADED' | 'BLOCKED';
 export type MacroComponentState = 'AVAILABLE' | 'FALLBACK' | 'STALE' | 'MISSING';
 
 type MacroComponentKey =
+  | 'liquidity'
   | 'credit'
   | 'volatility'
   | 'dollarRate'
@@ -77,6 +78,10 @@ export interface MacroDataDependencies {
   get5yBreakeven(): Promise<FredObservation[]>;
   getDgs10(): Promise<FredObservation[]>;
   getDgs2(): Promise<FredObservation[]>;
+  getDfii10(): Promise<FredObservation[]>;
+  getWalcl(): Promise<FredObservation[]>;
+  getWtreGen(): Promise<FredObservation[]>;
+  getRrpontsyd(): Promise<FredObservation[]>;
   getKisIndexQuotes(): Promise<Record<string, KisIndexQuoteLike>>;
 }
 
@@ -134,10 +139,10 @@ const MACRO_SYMBOLS = [
   'QQQ', 'SPY', '^KS200', 'DIA', 'IWM', 'RSP',
   'GLD', 'CPER', 'USO', 'UNG', 'BTC-USD',
   '^GSPC', '^IXIC', '^KS11', '^KQ11', 'KRW=X',
-  '^TNX', '^IRX', 'IEI',
+  '^TNX', '^IRX', 'IEI', 'DX-Y.NYB',
 ] as const;
 
-const HISTORY_SYMBOLS = ['HYG', 'IEF', 'CPER', 'GLD', 'IWM', 'RSP', 'SPY'] as const;
+const HISTORY_SYMBOLS = ['HYG', 'IEF', 'CPER', 'GLD', 'IWM', 'RSP', 'SPY', 'DX-Y.NYB'] as const;
 const EOD_FRESHNESS_SECONDS = 96 * 60 * 60;
 const MIN_USABLE_WEIGHT = 70;
 
@@ -148,6 +153,10 @@ const DEFAULT_DEPENDENCIES: MacroDataDependencies = {
   get5yBreakeven,
   getDgs10,
   getDgs2,
+  getDfii10,
+  getWalcl,
+  getWtreGen,
+  getRrpontsyd,
   getKisIndexQuotes: async () => {
     const kisApi = await import('../finance/providers/kis-api.ts');
     return kisApi.getKisIndexQuotes();
@@ -282,6 +291,10 @@ function assessUs(
     breakeven5y: FredObservation[];
     dgs10: FredObservation[];
     dgs2: FredObservation[];
+    dfii10: FredObservation[];
+    walcl: FredObservation[];
+    wtreGen: FredObservation[];
+    rrpontsyd: FredObservation[];
   },
   fetchedAt: string,
   staleSeries: Set<string>,
@@ -303,10 +316,18 @@ function assessUs(
   const dollarDirect = hasQuote(quote('UUP')) && hasQuote(quote('TLT'));
   const dollarFallback = !dollarDirect && hasQuote(quote('UUP'));
   const curveDirect = fredData.dgs10.length > 0 && fredData.dgs2.length > 0;
+  const liquidityDirect = fredData.walcl.length > 0 && fredData.wtreGen.length > 0 && fredData.rrpontsyd.length > 0;
 
   const components = [
     component({
-      key: 'credit', label: '크레딧 스프레드', weight: 25,
+      key: 'liquidity', label: 'Net Liquidity', weight: 20,
+      available: liquidityDirect,
+      stale: (staleSeries.has('walcl') || staleSeries.has('wtreGen') || staleSeries.has('rrpontsyd')) && !liquidityDirect,
+      observedAt: liquidityDirect ? latestObservation(fredData.walcl) : null,
+      source: liquidityDirect ? 'FRED WALCL/TGA/RRP' : null,
+    }),
+    component({
+      key: 'credit', label: '크레딧 스프레드', weight: 20,
       available: creditDirect,
       fallback: !creditDirect && (creditHistory || creditQuote),
       stale: staleSeries.has('hyOas') && !creditHistory && !creditQuote,
@@ -316,20 +337,20 @@ function assessUs(
       source: creditDirect ? 'FRED' : creditHistory ? 'Yahoo history' : creditQuote ? 'Yahoo quote' : null,
     }),
     component({
-      key: 'volatility', label: '변동성', weight: 20,
+      key: 'volatility', label: '변동성', weight: 15,
       available: hasQuote(quote('^VIX')) || hasQuote(quote('UVXY')),
       observedAt: hasQuote(quote('^VIX')) || hasQuote(quote('UVXY')) ? fetchedAt : null,
       source: hasQuote(quote('^VIX')) ? 'Yahoo VIX' : hasQuote(quote('UVXY')) ? 'Yahoo UVXY' : null,
     }),
     component({
-      key: 'dollarRate', label: '달러/금리', weight: 20,
+      key: 'dollarRate', label: '달러/금리', weight: 15,
       available: dollarDirect,
       fallback: dollarFallback,
       observedAt: dollarDirect || dollarFallback ? fetchedAt : null,
       source: dollarDirect ? 'Yahoo UUP+TLT' : dollarFallback ? 'Yahoo UUP' : null,
     }),
     component({
-      key: 'yieldCurve', label: '수익률 곡선', weight: 15,
+      key: 'yieldCurve', label: '수익률 곡선', weight: 10,
       available: curveDirect,
       stale: (staleSeries.has('dgs10') || staleSeries.has('dgs2')) && !curveDirect,
       observedAt: curveDirect
@@ -356,6 +377,7 @@ function assessUs(
   ];
   const quality = buildQuality(components);
   const scoreByComponent: Record<MacroComponentKey, number> = {
+    liquidity: (rawResult.componentScores as Record<string, number>).liquidityScore ?? 0,
     credit: rawResult.componentScores.creditScore,
     volatility: rawResult.componentScores.volatilityScore,
     dollarRate: rawResult.componentScores.dollarRateScore,
@@ -468,12 +490,16 @@ export async function fetchMacroAssessment(
   const dependencies = { ...DEFAULT_DEPENDENCIES, ...options.dependencies };
   const now = options.now ?? new Date();
   const fetchedAt = now.toISOString();
-  const [quotes, hyOasRaw, breakeven5yRaw, dgs10Raw, dgs2Raw, historyEntries, kisIndexQuotes] = await Promise.all([
+  const [quotes, hyOasRaw, breakeven5yRaw, dgs10Raw, dgs2Raw, dfii10Raw, walclRaw, wtreGenRaw, rrpontsydRaw, historyEntries, kisIndexQuotes] = await Promise.all([
     dependencies.getYahooQuotes([...MACRO_SYMBOLS]).catch(() => []),
     dependencies.getHyOas().catch(() => []),
     dependencies.get5yBreakeven().catch(() => []),
     dependencies.getDgs10().catch(() => []),
     dependencies.getDgs2().catch(() => []),
+    dependencies.getDfii10().catch(() => []),
+    dependencies.getWalcl().catch(() => []),
+    dependencies.getWtreGen().catch(() => []),
+    dependencies.getRrpontsyd().catch(() => []),
     Promise.all(HISTORY_SYMBOLS.map(async (symbol) => [
       symbol,
       await dependencies.getYahooDailyPrice(symbol).catch(() => []),
@@ -522,6 +548,10 @@ export async function fetchMacroAssessment(
     breakeven5y: retainFreshFred('breakeven5y', breakeven5yRaw),
     dgs10: retainFreshFred('dgs10', dgs10Raw),
     dgs2: retainFreshFred('dgs2', dgs2Raw),
+    dfii10: retainFreshFred('dfii10', dfii10Raw),
+    walcl: retainFreshFred('walcl', walclRaw),
+    wtreGen: retainFreshFred('wtreGen', wtreGenRaw),
+    rrpontsyd: retainFreshFred('rrpontsyd', rrpontsydRaw),
   };
 
   const usAssessment = assessUs(data, histories, fredData, fetchedAt, staleSeries);

@@ -32,6 +32,7 @@ export interface RecommendationPublicationGate {
   canPublish: boolean;
   reason: string | null;
   failures: RecommendationPublicationGateFailure[];
+  blockerHistogram: Record<string, number>;
 }
 
 function hasNumber(value: unknown): value is number {
@@ -155,6 +156,16 @@ export function assessRecommendationPublicationGate<
     : picks.length !== requiredCount
       ? `공식 발행에는 ${requiredCount}개 종목이 필요하지만 ${picks.length}개만 확인되었습니다.`
       : `공식 발행 검증 통과 ${eligibleCount}/${requiredCount}: ${failures.map((failure) => failure.ticker).join(', ')}`;
+  // Wave2-B: 차단 사유 분포 계수화 (SEPA/VCP처럼 운영 진단에 활용)
+  const blockerHistogram: Record<string, number> = {};
+  for (const f of failures) {
+    const key = `${f.disposition}:${f.verdict}:${f.fundamentalVerification}`;
+    blockerHistogram[key] = (blockerHistogram[key] || 0) + 1;
+    // 세부 카운트도 별도로
+    blockerHistogram[`disposition:${f.disposition}`] = (blockerHistogram[`disposition:${f.disposition}`] || 0) + 1;
+    blockerHistogram[`verdict:${f.verdict}`] = (blockerHistogram[`verdict:${f.verdict}`] || 0) + 1;
+    blockerHistogram[`fundamental:${f.fundamentalVerification}`] = (blockerHistogram[`fundamental:${f.fundamentalVerification}`] || 0) + 1;
+  }
   return {
     requiredCount,
     totalCount: picks.length,
@@ -163,6 +174,7 @@ export function assessRecommendationPublicationGate<
     canPublish,
     reason,
     failures,
+    blockerHistogram,
   };
 }
 

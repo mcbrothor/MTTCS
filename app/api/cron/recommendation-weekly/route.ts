@@ -48,6 +48,11 @@ function isDryRun(request: Request) {
   return value === 'true' || value === '1' || process.env.RECOMMENDATION_WEEKLY_DRY_RUN === 'true';
 }
 
+function isForceSend(request: Request) {
+  const value = new URL(request.url).searchParams.get('force');
+  return value === 'true' || value === '1';
+}
+
 function toPolicyCohorts(
   engineVersion: string,
   cohorts: Awaited<ReturnType<typeof readRecommendationMetrics>>['cohorts'],
@@ -247,7 +252,9 @@ export async function GET(request: Request) {
     }
     // Free-tier resilience: incomplete weekly data should not fail the Supabase scheduler.
     // Return success with readiness details instead of 500 so cron_scheduler_health stays HEALTHY.
-    if (!readiness.ready) {
+    // ?force=true bypasses this check for manual resend of past week (operator explicitly requested).
+    const forceSend = isForceSend(request);
+    if (!readiness.ready && !forceSend) {
       console.warn(JSON.stringify({
         event: 'recommendation_weekly_report_skipped',
         reason: 'readiness_not_met',
@@ -269,10 +276,19 @@ export async function GET(request: Request) {
         promotionAlertDelivery,
       }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
     }
+    if (!readiness.ready && forceSend) {
+      console.warn(JSON.stringify({
+        event: 'recommendation_weekly_report_force_send',
+        reason: 'readiness_not_met_but_forced',
+        failures: readiness.failures,
+        reportingWindow,
+        dataAsOf,
+      }));
+    }
 
     const delivery = await sendTelegramMessage(message, createWeeklyDeliveryHooks({
       client,
-      reportKey: weeklyReportKey(reportingWindow),
+      reportKey: forceSend ? `${weeklyReportKey(reportingWindow)}:force:${Date.now()}` : weeklyReportKey(reportingWindow),
       messageHash: weeklyReportMessageHash(message),
     }));
     if (delivery.skipped) {
