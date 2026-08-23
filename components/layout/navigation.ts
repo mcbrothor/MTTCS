@@ -23,12 +23,22 @@ export interface FlowStep {
   tabs: FlowStepTab[];
 }
 
+export type StrategyGroup = 'KR' | 'US' | 'SPECIAL';
+
 export interface StrategyLink {
   href: string;
   label: string;
   sub: string;
   matchers: string[];
+  group: StrategyGroup;
+  icon: 'trend' | 'repeat' | 'chart' | 'globe' | 'coins' | 'zap';
 }
+
+export const STRATEGY_GROUP_LABELS: Record<StrategyGroup, string> = {
+  KR: '국내',
+  US: '해외',
+  SPECIAL: '특수 자산',
+};
 
 export const FLOW_STEPS: FlowStep[] = [
   {
@@ -125,42 +135,61 @@ export const FLOW_STEPS: FlowStep[] = [
 
 export const STRATEGY_LINKS: StrategyLink[] = [
   {
+    href: '/strategies/kospi-52w',
+    label: '52주 신고가',
+    sub: 'RS Top12 · MA10 이탈',
+    matchers: ['/strategies/kospi-52w'],
+    group: 'KR',
+    icon: 'trend',
+  },
+  {
+    href: '/strategies/kospi-monthly',
+    label: '월말 리밸런싱',
+    sub: 'Breadth 5단계 · 역추세',
+    matchers: ['/strategies/kospi-monthly'],
+    group: 'KR',
+    icon: 'repeat',
+  },
+  {
+    href: '/strategies/us-52w',
+    label: '52주 신고가',
+    sub: 'ETF Top20 · WATCH',
+    matchers: ['/strategies/us-52w'],
+    group: 'US',
+    icon: 'trend',
+  },
+  {
+    href: '/strategies/us-monthly-v7',
+    label: '월간 V7',
+    sub: 'NASDAQ 독주 · 금속',
+    matchers: ['/strategies/us-monthly-v7'],
+    group: 'US',
+    icon: 'globe',
+  },
+  {
     href: '/gold',
     label: '금 투자',
     sub: '코어·전술 전략',
     matchers: ['/gold'],
+    group: 'SPECIAL',
+    icon: 'coins',
   },
   {
     href: '/nasdaq',
     label: '나스닥100',
     sub: 'QQQ·QLD·TQQQ',
     matchers: ['/nasdaq', '/qqq'],
-  },
-  {
-    href: '/strategies/kospi-52w',
-    label: 'KOSPI 52주',
-    sub: 'RS Top12·MA10',
-    matchers: ['/strategies/kospi-52w'],
-  },
-  {
-    href: '/strategies/us-52w',
-    label: 'US 52주',
-    sub: 'Top20·WATCH',
-    matchers: ['/strategies/us-52w'],
-  },
-  {
-    href: '/strategies/kospi-monthly',
-    label: 'KOSPI 월말',
-    sub: 'V2.3 Breadth',
-    matchers: ['/strategies/kospi-monthly'],
-  },
-  {
-    href: '/strategies/us-monthly-v7',
-    label: 'US 월간 V7',
-    sub: 'Breadth·금속',
-    matchers: ['/strategies/us-monthly-v7'],
+    group: 'SPECIAL',
+    icon: 'zap',
   },
 ];
+
+export function groupStrategyLinks(links: StrategyLink[] = STRATEGY_LINKS) {
+  const order: StrategyGroup[] = ['KR', 'US', 'SPECIAL'];
+  return order
+    .map((group) => ({ group, label: STRATEGY_GROUP_LABELS[group], items: links.filter((item) => item.group === group) }))
+    .filter((entry) => entry.items.length > 0);
+}
 
 export const UTILITY_LINKS = [
   { href: '/guide', label: '사용 가이드' },
