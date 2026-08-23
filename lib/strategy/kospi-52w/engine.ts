@@ -1,5 +1,7 @@
-import { KOSPI52W_POLICY } from './policy';
+import { KOSPI52W_POLICY, KOSPI52W_UNIVERSE } from './policy';
 import type { Kospi52wBar, Kospi52wCandidate, Kospi52wSignal } from './types';
+
+const NAME_MAP = new Map<string, string>(KOSPI52W_UNIVERSE.map(u => [u.ticker, u.name] as [string, string]));
 
 function ma(bars: Kospi52wBar[], period: number): number | null {
   if (bars.length < period) return null;
@@ -46,7 +48,7 @@ export function screenCandidates(
     const close = filtered.at(-1)?.close ?? 0;
     candidates.push({
       ticker,
-      name: ticker,
+      name: NAME_MAP.get(ticker) ?? ticker,
       rs,
       isNewHigh: is52wHigh(filtered, KOSPI52W_POLICY.highLookbackDays),
       high252: high252(filtered),
@@ -79,7 +81,7 @@ export function generateSignal(
   // 재진입: RS Top12+신고가 재충족 시 재매수 (buyPool에 포함되면 자연 재매수)
   const availableSlots = KOSPI52W_POLICY.maxHoldings - holdTickers.length;
   const buyTickers = buyPool.filter(t => !holdTickers.includes(t)).slice(0, Math.max(0, availableSlots));
-  const rsRank = candidates.map((c, i) => ({ ticker: c.ticker, rs: c.rs, rank: i + 1 }));
+  const rsRank = candidates.map((c, i) => ({ ticker: c.ticker, name: c.name, rs: c.rs, rank: i + 1 }));
   const cashSlots = KOSPI52W_POLICY.maxHoldings - holdTickers.length - buyTickers.length;
   return { date: asOf, buyTickers, sellTickers, holdTickers, cashSlots, rsRank };
 }

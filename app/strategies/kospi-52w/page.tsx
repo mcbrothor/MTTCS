@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-interface Signal { date: string; buyTickers: string[]; sellTickers: string[]; holdTickers: string[]; cashSlots: number; rsRank: { ticker: string; rs: number }[] }
+interface RankItem { ticker: string; name: string; rs: number }
+interface Signal { date: string; buyTickers: string[]; sellTickers: string[]; holdTickers: string[]; cashSlots: number; rsRank: RankItem[] }
+function fmt(ticker: string, name?: string) { return name && name !== ticker ? `${name}(${ticker})` : ticker; }
 
 export default function Kospi52wPage() {
-  const [data, setData] = useState<{ signal: Signal; candidates: { ticker: string; rs: number; isNewHigh: boolean }[] } | null>(null);
+  const [data, setData] = useState<{ signal: Signal; candidates: { ticker: string; name: string; rs: number; isNewHigh: boolean }[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
     fetch('/api/strategies/kospi-52w').then(async r => {
@@ -22,9 +24,9 @@ export default function Kospi52wPage() {
         {err && <p className="text-rose-400">{err}</p>}
         {data && (
           <>
-            <p className="mt-2">매수: {data.signal.buyTickers.join(', ') || '없음'} · 매도(MA10): {data.signal.sellTickers.join(', ') || '없음'} · 보유: {data.signal.holdTickers.join(', ') || '없음'} · 현금 슬롯: {data.signal.cashSlots}/4</p>
-            <p className="mt-2 text-xs">RS Top12: {data.signal.rsRank.map(r => `${r.ticker}(${r.rs.toFixed(1)})`).join(' · ')}</p>
-            <p className="mt-2 text-xs">후보 신고가: {data.candidates.filter(c=>c.isNewHigh).map(c=>c.ticker).join(', ') || '없음'}</p>
+            <p className="mt-2">매수: {data.signal.buyTickers.map(t => { const c = data.candidates.find(x=>x.ticker===t) || data.signal.rsRank.find(x=>x.ticker===t); return fmt(t, c?.name); }).join(', ') || '없음'} · 매도(MA10): {data.signal.sellTickers.map(t => { const c = data.candidates.find(x=>x.ticker===t) || data.signal.rsRank.find(x=>x.ticker===t); return fmt(t, c?.name); }).join(', ') || '없음'} · 보유: {data.signal.holdTickers.map(t => { const c = data.candidates.find(x=>x.ticker===t) || data.signal.rsRank.find(x=>x.ticker===t); return fmt(t, c?.name); }).join(', ') || '없음'} · 현금 슬롯: {data.signal.cashSlots}/4</p>
+            <p className="mt-2 text-xs">RS Top12: {data.signal.rsRank.map(r => `${fmt(r.ticker, r.name)}(${r.rs.toFixed(1)})`).join(' · ')}</p>
+            <p className="mt-2 text-xs">후보 신고가: {data.candidates.filter(c=>c.isNewHigh).map(c=>fmt(c.ticker, c.name)).join(', ') || '없음'}</p>
             <p className="mt-2 text-xs text-slate-500">엔진 lib/strategy/kospi-52w/engine.ts · 비용 0.10% · 신호일 종가 진입, 익일 수익반영으로 미래정보 차단</p>
           </>
         )}

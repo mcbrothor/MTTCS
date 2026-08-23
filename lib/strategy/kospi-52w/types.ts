@@ -12,11 +12,11 @@ export interface Kospi52wCandidate {
 
 export interface Kospi52wSignal {
   date: string;
-  buyTickers: string[]; // 신규 매수 (당일 종가 진입, 다음날 수익반영)
-  sellTickers: string[]; // MA10 이탈
+  buyTickers: string[];
+  sellTickers: string[];
   holdTickers: string[];
   cashSlots: number;
-  rsRank: { ticker: string; rs: number; rank: number }[];
+  rsRank: { ticker: string; name: string; rs: number; rank: number }[];
 }
 
 export interface Kospi52wBacktestBar extends Kospi52wBar { ticker: string; }
