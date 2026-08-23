@@ -137,6 +137,70 @@ export async function getBroadDollarIndex(limit = 260): Promise<FredObservation[
   return getFredSeries('DTWEXBGS', Math.max(30, limit));
 }
 
+/** Fed 총자산 WALCL (Millions) — 이미지 핵심 4·8주 절대변화 */
+export async function getWalcl(limit = 60): Promise<FredObservation[]> {
+  return getFredSeries('WALCL', Math.max(30, limit));
+}
+
+/** 재무부 일반계정 TGA WTREGEN (Millions) */
+export async function getWtreGen(limit = 60): Promise<FredObservation[]> {
+  return getFredSeries('WTREGEN', Math.max(30, limit));
+}
+
+/** O/N RRP RRPONTSYD (Billions) — FRED는 10억 단위, WALCL/WTREGEN과 단위 맞춤 필요 */
+export async function getRrpontsyd(limit = 60): Promise<FredObservation[]> {
+  return getFredSeries('RRPONTSYD', Math.max(30, limit));
+}
+
+/**
+ * Net Liquidity = Fed Assets - TGA - RRP
+ * WALCL(백만) - WTREGEN(백만) - RRPONTSYD(십억*1000)
+ * 이미지: 절대값보다 4주+8주 변화 우선
+ */
+export function computeNetLiquidity(
+  walcl: FredObservation[],
+  tga: FredObservation[],
+  rrp: FredObservation[],
+): { observations: FredObservation[]; latest: number | null; change4w: number | null; change8w: number | null } {
+  if (!walcl.length || !tga.length || !rrp.length) return { observations: [], latest: null, change4w: null, change8w: null };
+  // 가장 최근 날짜 기준으로 세 시리즈 교집합 찾기 — 가장 짧은 시리즈 길이에 맞춤
+  const byDate = new Map<string, { walcl?: number; tga?: number; rrp?: number }>();
+  for (const r of walcl) byDate.set(r.date, { ...byDate.get(r.date), walcl: r.value });
+  for (const r of tga) byDate.set(r.date, { ...byDate.get(r.date), tga: r.value });
+  for (const r of rrp) {
+    // RRPONTSYD는 Billions, 나머지는 Millions → *1000 변환
+    byDate.set(r.date, { ...byDate.get(r.date), rrp: r.value * 1000 });
+  }
+  const obs: FredObservation[] = [];
+  for (const [date, v] of [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (v.walcl !== undefined && v.tga !== undefined && v.rrp !== undefined) {
+      obs.push({ date, value: v.walcl - v.tga - v.rrp });
+    }
+  }
+  if (obs.length < 9) return { observations: obs, latest: obs.at(-1)?.value ?? null, change4w: null, change8w: null };
+  const latest = obs.at(-1)!.value;
+  // FRED WALCL은 주간이라 4주=4 obs, 8주=8 obs 근사
+  const obs4wAgo = obs.length >= 5 ? obs[obs.length - 5].value : null;
+  const obs8wAgo = obs.length >= 9 ? obs[obs.length - 9].value : null;
+  return {
+    observations: obs,
+    latest,
+    change4w: obs4wAgo !== null ? latest - obs4wAgo : null,
+    change8w: obs8wAgo !== null ? latest - obs8wAgo : null,
+  };
+}
+
+export function netLiquidityToScore(change4w: number | null, change8w: number | null, maxScore: number): number {
+  if (change4w === null || change8w === null) return Math.round(maxScore * 0.5);
+  const combined = change4w + change8w; // 이미지: 4주+8주 변화 우선
+  // WALCL 단위 Millions → 100B = 100,000 Millions
+  if (combined > 200_000) return maxScore; // +200B 이상 강한 유동성 증가
+  if (combined > 50_000) return Math.round(maxScore * 0.7);
+  if (combined > -50_000) return Math.round(maxScore * 0.4);
+  if (combined > -200_000) return Math.round(maxScore * 0.15);
+  return 0;
+}
+
 /**
  * HY OAS → 크레딧 점수 변환
  * OAS (basis points): 낮을수록 Risk-On
