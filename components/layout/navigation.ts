@@ -136,6 +136,30 @@ export const STRATEGY_LINKS: StrategyLink[] = [
     sub: 'QQQ·QLD·TQQQ',
     matchers: ['/nasdaq', '/qqq'],
   },
+  {
+    href: '/strategies/kospi-52w',
+    label: 'KOSPI 52주',
+    sub: 'RS Top12·MA10',
+    matchers: ['/strategies/kospi-52w'],
+  },
+  {
+    href: '/strategies/us-52w',
+    label: 'US 52주',
+    sub: 'Top20·WATCH',
+    matchers: ['/strategies/us-52w'],
+  },
+  {
+    href: '/strategies/kospi-monthly',
+    label: 'KOSPI 월말',
+    sub: 'V2.3 Breadth',
+    matchers: ['/strategies/kospi-monthly'],
+  },
+  {
+    href: '/strategies/us-monthly-v7',
+    label: 'US 월간 V7',
+    sub: 'Breadth·금속',
+    matchers: ['/strategies/us-monthly-v7'],
+  },
 ];
 
 export const UTILITY_LINKS = [

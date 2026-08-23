@@ -13,9 +13,11 @@ assert.deepEqual(
   ['00', '01', '02', '03', '04', '05', '06', '07'],
 );
 
-assert.equal(STRATEGY_LINKS.length, 2);
+assert.equal(STRATEGY_LINKS.length, 6);
 assert.equal(STRATEGY_LINKS[0].href, '/gold');
 assert.equal(STRATEGY_LINKS[1].href, '/nasdaq');
+assert.equal(STRATEGY_LINKS[2].href, '/strategies/kospi-52w');
+assert.equal(STRATEGY_LINKS[3].href, '/strategies/us-52w');
 
 assert.equal(findActiveFlowStep('/scanner/NVDA')?.key, 'scanner');
 assert.equal(findActiveFlowStep('/market-barometer')?.key, 'market');
