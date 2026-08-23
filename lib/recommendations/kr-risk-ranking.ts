@@ -82,25 +82,34 @@ export function selectKrRiskAdjustedTop10(input: {
     const riskFlags: string[] = momentumOnly ? ['momentum_only'] : [];
 
     const roc = Math.max(...signals.map((signal) => numberOrNull(signal.metrics.roc) ?? Number.NEGATIVE_INFINITY));
-    if (roc >= 15) continue;
-    if (roc >= 8) {
-      aggregateScore -= 15;
+    // Wave2-A: KOSDAQ은 변동성·과열에 취약해 임계치 강화 (SELECTION critical 96 대응)
+    const isKosdaq = preferred.universe === 'KOSDAQ150';
+    const rocHard = isKosdaq ? 10 : 15;
+    const rocSoft = isKosdaq ? 5 : 8;
+    if (roc >= rocHard) continue;
+    if (roc >= rocSoft) {
+      aggregateScore -= isKosdaq ? 20 : 15;
       riskFlags.push('roc_overheated');
     }
 
     const return5d = signals
       .map((signal) => numberOrNull(signal.metrics.return_5d_pct))
       .find((value): value is number => value !== null);
-    if (return5d !== undefined && return5d <= -5) continue;
-    if (return5d !== undefined && return5d <= -2) {
-      aggregateScore -= 10;
+    const returnHard = isKosdaq ? -3 : -5;
+    const returnSoft = isKosdaq ? 0 : -2;
+    if (return5d !== undefined && return5d <= returnHard) continue;
+    if (return5d !== undefined && return5d <= returnSoft) {
+      aggregateScore -= isKosdaq ? 15 : 10;
       riskFlags.push('return_5d_weak');
     }
 
     const dollarVolume20d = Math.max(...signals.map((signal) => numberOrNull(signal.metrics.dollar_volume_20d) ?? 0));
-    const liquidityFloor = preferred.universe === 'KOSDAQ150' ? 2_000_000_000 : 5_000_000_000;
+    // KOSDAQ 유동성 기준 상향 2B→3B (허수성 종목 배제)
+    const liquidityFloor = preferred.universe === 'KOSDAQ150' ? 3_000_000_000 : 5_000_000_000;
     if (dollarVolume20d > 0 && dollarVolume20d < liquidityFloor) continue;
     if (dollarVolume20d === 0) riskFlags.push('liquidity_missing');
+    // KOSDAQ 단독 momentum 신호는 즉시 제외 (mixed 2개 이상 필요)
+    if (isKosdaq && sources.length === 1 && sources[0] === 'momentum') continue;
 
     const tickerRecent = recent.filter((row) => row.ticker === ticker);
     aggregateScore -= tickerRecent.length * 5;
@@ -115,6 +124,11 @@ export function selectKrRiskAdjustedTop10(input: {
     const flowResult = input.useFlow ? flowAdjustment(flow, momentumOnly) : { score: 0, flags: [] as string[] };
     aggregateScore += flowResult.score;
     riskFlags.push(...flowResult.flags);
+    // KOSDAQ 단일 소스 + flow 없음은 추가 감점 (혼합 신호 우대)
+    if (isKosdaq && sources.length < 2 && (!flow || flow.quality === 'MISSING')) {
+      aggregateScore -= 8;
+      riskFlags.push('kosdaq_single_source_weak');
+    }
 
     ranked.push({
       pick: {
