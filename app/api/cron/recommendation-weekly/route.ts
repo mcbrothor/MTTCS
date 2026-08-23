@@ -245,8 +245,29 @@ export async function GET(request: Request) {
     if (message.length >= 3_200 || chunks.length !== 1) {
       throw new Error(`Weekly report exceeds the single-message limit (${message.length} chars, ${chunks.length} chunks).`);
     }
+    // Free-tier resilience: incomplete weekly data should not fail the Supabase scheduler.
+    // Return success with readiness details instead of 500 so cron_scheduler_health stays HEALTHY.
     if (!readiness.ready) {
-      throw new Error(`Weekly report data is incomplete: ${readiness.failures.join('; ')}`);
+      console.warn(JSON.stringify({
+        event: 'recommendation_weekly_report_skipped',
+        reason: 'readiness_not_met',
+        failures: readiness.failures,
+        reportingWindow,
+        dataAsOf,
+      }));
+      return apiSuccess({
+        dryRun: false,
+        skipped: true,
+        reason: 'readiness_not_met',
+        failures: readiness.failures,
+        categories,
+        messageLength: message.length,
+        chunkCount: chunks.length,
+        dataAsOf,
+        readiness,
+        promotionReadiness,
+        promotionAlertDelivery,
+      }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
     }
 
     const delivery = await sendTelegramMessage(message, createWeeklyDeliveryHooks({
@@ -255,7 +276,24 @@ export async function GET(request: Request) {
       messageHash: weeklyReportMessageHash(message),
     }));
     if (delivery.skipped) {
-      throw new Error('Telegram delivery was skipped.');
+      console.warn(JSON.stringify({
+        event: 'recommendation_weekly_report_skipped',
+        reason: 'telegram_skipped',
+        reportingWindow,
+        dataAsOf,
+      }));
+      return apiSuccess({
+        dryRun: false,
+        skipped: true,
+        reason: 'telegram_skipped',
+        categories,
+        messageLength: message.length,
+        chunkCount: chunks.length,
+        dataAsOf,
+        readiness,
+        promotionReadiness,
+        promotionAlertDelivery,
+      }, { source: 'MTN weekly recommendation review', provider: 'Rules/Statistics', delay: 'EOD' });
     }
     console.info(JSON.stringify({
       event: 'recommendation_weekly_report_delivered',
