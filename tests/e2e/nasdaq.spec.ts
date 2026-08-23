@@ -197,7 +197,8 @@ test.describe('TC-NASDAQ: 나스닥100 전략', () => {
 
   test('NASDAQ-03: 독립 메뉴가 활성화되고 오늘 메뉴는 비활성이다', async ({ page }) => {
     await page.goto('/nasdaq');
-    await expect(page.getByRole('link', { name: '나스닥100', exact: true })).toHaveAttribute('aria-current', 'page');
+    await page.getByRole('button', { name: /투자 전략/ }).click();
+    await expect(page.locator('nav a[href="/nasdaq"]')).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('link', { name: '오늘', exact: true })).not.toHaveAttribute('aria-current', 'page');
   });
 

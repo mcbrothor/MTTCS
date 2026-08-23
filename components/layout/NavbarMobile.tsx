@@ -6,12 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Activity, X, TrendingUp, Search, BarChart2, BarChart3, Target, Star, HelpCircle, ArrowUpRight, Database } from 'lucide-react';
 import {
   FLOW_STEPS,
-  STRATEGY_LINKS,
   UTILITY_LINKS,
   findActiveFlowStep,
   findActiveStrategyLink,
+  groupStrategyLinks,
   isActiveTab,
 } from '@/components/layout/navigation';
+import { StrategyIcon } from '@/components/strategy/StrategyShell';
 
 // 하단 탭바 — 핵심 5개 Flow
 const BOTTOM_TABS = [
@@ -242,26 +243,33 @@ export default function NavbarMobile() {
           <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
             투자 전략
           </p>
-          {STRATEGY_LINKS.map((item) => {
-            const isActive = item.href === activeStrategyLink?.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setDrawerOpen(false)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300 ${
-                  isActive
-                    ? 'bg-amber-500/12 text-amber-200'
-                    : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <Star className="h-4 w-4 shrink-0" />
-                <span>{item.label}</span>
-                <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">{item.sub}</span>
-              </Link>
-            );
-          })}
+          {groupStrategyLinks().map((group) => (
+            <div key={group.group} className="mb-1">
+              <p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)]">
+                {group.label}
+              </p>
+              {group.items.map((item) => {
+                const isActive = item.href === activeStrategyLink?.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setDrawerOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                      isActive
+                        ? 'bg-amber-500/12 text-amber-200'
+                        : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    <StrategyIcon iconKey={item.icon} className="h-4 w-4 shrink-0 text-amber-300/80" />
+                    <span>{item.label}</span>
+                    <span className="ml-auto text-[10px] text-[var(--text-tertiary)]">{item.sub}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
 
           <div className="my-3 border-t border-[var(--border)]" />
 

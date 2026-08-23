@@ -531,7 +531,8 @@ test.describe('TC-GOLD: 금 투자 전략', () => {
     await setupGoldMocks(page);
     await page.goto('/gold');
 
-    const goldLink = page.getByRole('link', { name: '금 투자', exact: true });
+    await page.getByRole('button', { name: /투자 전략/ }).click();
+    const goldLink = page.locator('nav a[href="/gold"]');
     await expect(goldLink).toBeVisible();
     await expect(goldLink).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('link', { name: '오늘', exact: true })).not.toHaveAttribute('aria-current', 'page');

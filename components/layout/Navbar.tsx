@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Activity, ChevronDown, Star } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
 import {
   FLOW_STEPS,
@@ -10,13 +11,36 @@ import {
   UTILITY_LINKS,
   findActiveFlowStep,
   findActiveStrategyLink,
+  groupStrategyLinks,
 } from '@/components/layout/navigation';
+import { StrategyIcon } from '@/components/strategy/StrategyShell';
 import GlobalSecuritySearch from '@/components/layout/GlobalSecuritySearch';
 
 export default function Navbar() {
   const pathname = usePathname();
   const activeStep = findActiveFlowStep(pathname);
   const activeStrategyLink = findActiveStrategyLink(pathname);
+  const strategyGroups = groupStrategyLinks();
+  const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
+  const strategyMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!strategyMenuOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (strategyMenuRef.current && !strategyMenuRef.current.contains(event.target as Node)) {
+        setStrategyMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setStrategyMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [strategyMenuOpen]);
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-[var(--border)] bg-[rgba(4,8,16,0.94)] backdrop-blur">
@@ -67,24 +91,60 @@ export default function Navbar() {
               );
             })}
             <span aria-hidden="true" className="my-1 w-px shrink-0 bg-[var(--border)]" />
-            {STRATEGY_LINKS.map((item) => {
-              const isActive = item.href === activeStrategyLink?.href;
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={isActive ? 'page' : undefined}
-                  className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
-                    isActive
-                      ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
-                      : 'border-amber-400/15 bg-amber-500/5 text-amber-200/80 hover:border-amber-400/35 hover:text-amber-100'
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            <div ref={strategyMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setStrategyMenuOpen((open) => !open)}
+                aria-expanded={strategyMenuOpen}
+                aria-haspopup="menu"
+                className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
+                  activeStrategyLink
+                    ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
+                    : 'border-amber-400/15 bg-amber-500/5 text-amber-200/80 hover:border-amber-400/35 hover:text-amber-100'
+                }`}
+              >
+                <Star className="h-3.5 w-3.5" />
+                투자 전략
+                {activeStrategyLink && (
+                  <span className="max-w-[110px] truncate text-amber-300">· {activeStrategyLink.label}</span>
+                )}
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${strategyMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {strategyMenuOpen && (
+                <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-strong)] bg-[rgba(8,14,26,0.98)] p-2 shadow-2xl backdrop-blur">
+                  {strategyGroups.map((group) => (
+                    <div key={group.group} className={group.group !== 'KR' ? 'mt-2 border-t border-[var(--border)] pt-2' : ''}>
+                      <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)]">
+                        {group.label}
+                      </p>
+                      {group.items.map((item) => {
+                        const isActive = item.href === activeStrategyLink?.href;
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            aria-current={isActive ? 'page' : undefined}
+                            onClick={() => setStrategyMenuOpen(false)}
+                            className={`flex items-center gap-2.5 rounded-lg px-2 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300 ${
+                              isActive
+                                ? 'bg-amber-500/12 text-amber-200'
+                                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-soft)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            <StrategyIcon iconKey={item.icon} className="h-4 w-4 shrink-0 text-amber-300/80" />
+                            <span className="min-w-0">
+                              <span className="block text-xs font-semibold">{item.label}</span>
+                              <span className="block truncate text-[10px] text-[var(--text-tertiary)]">{item.sub}</span>
+                            </span>
+                            {isActive && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

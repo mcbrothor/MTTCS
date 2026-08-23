@@ -22,6 +22,7 @@ declare module 'lucide-react' {
   export const Check: LucideIcon;
   export const CheckCircle2: LucideIcon;
   export const Clipboard: LucideIcon;
+  export const Coins: LucideIcon;
   export const Compass: LucideIcon;
   export const Cpu: LucideIcon;
   export const Crosshair: LucideIcon;
@@ -40,6 +41,7 @@ declare module 'lucide-react' {
   export const Plus: LucideIcon;
   export const PlusCircle: LucideIcon;
   export const RefreshCw: LucideIcon;
+  export const Repeat: LucideIcon;
   export const Save: LucideIcon;
   export const ScanSearch: LucideIcon;
   export const Search: LucideIcon;
@@ -60,4 +62,5 @@ declare module 'lucide-react' {
   export const Waves: LucideIcon;
   export const X: LucideIcon;
   export const XCircle: LucideIcon;
+  export const Zap: LucideIcon;
 }
