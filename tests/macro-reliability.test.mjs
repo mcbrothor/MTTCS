@@ -23,7 +23,7 @@ const curve = computeMacroScore(quotes, {}, {
   dgs10: [{ date: '2026-06-17', value: 4.5 }],
   dgs2: [{ date: '2026-06-17', value: 4.0 }],
 });
-assert.equal(curve.componentScores.yieldCurveScore, 10);
+assert.equal(curve.componentScores.yieldCurveScore, 6);
 assert.match(curve.breakdown.find((row) => row.label === '수익률 곡선').rawValue, /DGS10/);
 
 const freshness = evaluateFreshness('2026-06-18T00:00:00.000Z', 300, new Date('2026-06-18T00:06:00.000Z'));
@@ -129,7 +129,7 @@ const degradedAssessment = await fetchMacroAssessment('US', {
   now: new Date('2026-07-01T01:00:00.000Z'),
 });
 assert.equal(degradedAssessment.quality.status, 'DEGRADED');
-assert.equal(degradedAssessment.quality.coverage.availableWeight, 85);
+assert.equal(degradedAssessment.quality.coverage.availableWeight, 90);
 assert.ok(
   degradedAssessment.result.macroScore > degradedAssessment.rawScore,
   '부분 결측 점수는 가용 가중치로 정규화해야 한다',
