@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+function fmt(t:string,n?:string){return n && n!==t?`${n}(${t})`:t;}
 export default function Page(){
   const [s,setS]=useState<Record<string, unknown> | null>(null);
   useEffect(()=>{fetch('/api/strategies/us-monthly-v7').then(r=>r.json()).then(j=>setS(j.data)).catch(()=>{});},[]);
