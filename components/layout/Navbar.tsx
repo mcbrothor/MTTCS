@@ -111,7 +111,7 @@ export default function Navbar() {
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${strategyMenuOpen ? 'rotate-180' : ''}`} />
               </button>
               {strategyMenuOpen && (
-                <div role="menu" className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-strong)] bg-[rgba(8,14,26,0.98)] p-2 shadow-2xl backdrop-blur">
+                <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-strong)] bg-[rgba(8,14,26,0.98)] p-2 shadow-2xl backdrop-blur">
                   {strategyGroups.map((group) => (
                     <div key={group.group} className={group.group !== 'KR' ? 'mt-2 border-t border-[var(--border)] pt-2' : ''}>
                       <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)]">
@@ -123,7 +123,6 @@ export default function Navbar() {
                           <Link
                             key={item.href}
                             href={item.href}
-                            role="menuitem"
                             aria-current={isActive ? 'page' : undefined}
                             onClick={() => setStrategyMenuOpen(false)}
                             className={`flex items-center gap-2.5 rounded-lg px-2 py-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-300 ${
