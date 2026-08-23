@@ -1,6 +1,6 @@
 import { apiError, apiSuccess } from '@/lib/api/response';
 import { getRequestSession } from '@/lib/auth/session';
-import { breadth, decideRegime } from '@/lib/strategy/kospi-monthly/engine';
+import { decideRegime } from '@/lib/strategy/kospi-monthly/engine';
 export const dynamic='force-dynamic';
 export async function GET(req: Request){
   const s=await getRequestSession(req); if(!s) return apiError('Auth required','AUTH_REQUIRED',401);
