@@ -443,8 +443,21 @@ export async function getYahooQuotes(symbols: string[]): Promise<YahooQuote[]> {
       const closes: number[] = result.indicators?.quote?.[0]?.close || [];
       const validCloses = closes.filter((c: unknown): c is number => typeof c === 'number' && c > 0);
 
-      const currentPrice = meta.regularMarketPrice || (validCloses.length > 0 ? validCloses[validCloses.length - 1] : 0);
-      const prevClose = meta.previousClose || (validCloses.length > 1 ? validCloses[validCloses.length - 2] : currentPrice);
+      const currentPrice = Number.isFinite(meta.regularMarketPrice) && meta.regularMarketPrice > 0
+        ? meta.regularMarketPrice
+        : (validCloses.length > 0 ? validCloses[validCloses.length - 1] : 0);
+      let prevClose: number;
+      if (validCloses.length > 1) {
+        const lastValid = validCloses[validCloses.length - 1];
+        const secondLast = validCloses[validCloses.length - 2];
+        // 장중(인트라데이)이면 lastValid가 전일 종가, 장 마감 후이면 currentPrice === lastValid 이므로 전전일 사용
+        const isIntraday = Math.abs(currentPrice - lastValid) > 0.01;
+        prevClose = isIntraday ? lastValid : secondLast;
+      } else if (validCloses.length === 1) {
+        prevClose = validCloses[0];
+      } else {
+        prevClose = currentPrice;
+      }
       const changePct = prevClose && prevClose > 0 ? ((currentPrice - prevClose) / prevClose) * 100 : 0;
 
       const fiftyDayAverage = validCloses.length > 0
