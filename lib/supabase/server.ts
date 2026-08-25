@@ -10,6 +10,13 @@ if (typeof window !== 'undefined') {
   );
 }
 
+// Node.js 환경에서 @supabase/realtime-js가 globalThis.WebSocket 부재로 예외를 던지는 것을 방지
+if (typeof globalThis.WebSocket === 'undefined') {
+  class NoopWebSocket {}
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).WebSocket = NoopWebSocket;
+}
+
 // =============================================
 // Supabase 서버 클라이언트 (API Route 전용)
 // =============================================
