@@ -1,9 +1,13 @@
 import type { Bar } from '@/lib/strategy/us-52w/types';
-import { KOSPI_MV23 } from './policy';
-function ma(bars: Bar[], p: number){ if(bars.length<p) return null; return bars.slice(-p).reduce((s,b)=>s+b.close,0)/p; }
-function rs6m(etf: Bar[], kospi: Bar[]){
-  if(etf.length<126||kospi.length<126) return null;
-  return (etf.at(-1)!.close/etf[etf.length-127].close) - (kospi.at(-1)!.close/kospi[kospi.length-127].close);
+
+function ma(bars: Bar[], p: number) {
+  if (bars.length < p) return null;
+  return bars.slice(-p).reduce((s, b) => s + b.close, 0) / p;
+}
+
+export function rs6m(etf: Bar[], kospi: Bar[]) {
+  if (etf.length < 126 || kospi.length < 126) return null;
+  return (etf.at(-1)!.close / etf[etf.length - 127].close) - (kospi.at(-1)!.close / kospi[kospi.length - 127].close);
 }
 export function breadth(universe: Record<string, Bar[]>): number {
   let above=0, total=0;

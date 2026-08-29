@@ -524,3 +524,187 @@ export function calculateMinerviniRiskPlan(
     pyramidPlan,
   };
 }
+
+export interface ExistingPositionRisk {
+  ticker: string;
+  sector: string;
+  openRiskAmount: number;
+  positionValue: number;
+}
+
+export interface SectorClusterRiskResult {
+  allowed: boolean;
+  currentSectorExposurePct: number; // 총 자산 대비 현재 섹터 평가액 비중
+  currentSectorRiskPct: number; // 총 자산 대비 현재 섹터 오픈 리스크 비중
+  projectedSectorExposurePct: number;
+  maxSectorExposureLimitPct: number;
+  recommendedShares: number;
+  reason?: string;
+}
+
+/**
+ * 포트폴리오 섹터/테마 클러스터 집중도 리스크(Cluster Heat) 평가
+ * 단일 섹터에 과도한 리스크가 쏠리는 것을 방어합니다.
+ */
+export function evaluateSectorClusterRisk(params: {
+  totalEquity: number;
+  targetSector: string;
+  proposedShares: number;
+  entryPrice: number;
+  stopLossPrice: number;
+  existingPositions: ExistingPositionRisk[];
+  maxSectorExposureLimitPct?: number; // 기본 25% (0.25)
+  maxSectorRiskLimitPct?: number; // 기본 3.0% (0.03)
+}): SectorClusterRiskResult {
+  const {
+    totalEquity,
+    targetSector,
+    proposedShares,
+    entryPrice,
+    stopLossPrice,
+    existingPositions,
+    maxSectorExposureLimitPct = 0.25,
+    maxSectorRiskLimitPct = 0.03,
+  } = params;
+
+  if (totalEquity <= 0) {
+    return {
+      allowed: false,
+      currentSectorExposurePct: 0,
+      currentSectorRiskPct: 0,
+      projectedSectorExposurePct: 0,
+      maxSectorExposureLimitPct,
+      recommendedShares: 0,
+      reason: '총 자산(Total Equity)이 유효하지 않습니다.',
+    };
+  }
+
+  // 기존 동일 섹터 포지션 합산
+  const sectorPositions = existingPositions.filter(
+    (pos) => pos.sector.toLowerCase() === targetSector.toLowerCase()
+  );
+  const currentSectorValue = sectorPositions.reduce((acc, pos) => acc + pos.positionValue, 0);
+  const currentSectorRisk = sectorPositions.reduce((acc, pos) => acc + pos.openRiskAmount, 0);
+
+  const currentSectorExposurePct = round(currentSectorValue / totalEquity, 4);
+  const currentSectorRiskPct = round(currentSectorRisk / totalEquity, 4);
+
+  const proposedValue = proposedShares * entryPrice;
+  const proposedRisk = proposedShares * Math.max(0, entryPrice - stopLossPrice);
+
+  const projectedValue = currentSectorValue + proposedValue;
+  const projectedRisk = currentSectorRisk + proposedRisk;
+
+  const projectedSectorExposurePct = round(projectedValue / totalEquity, 4);
+  const projectedSectorRiskPct = round(projectedRisk / totalEquity, 4);
+
+  // 한도 초과 여부 확인
+  const isExposureExceeded = projectedSectorExposurePct > maxSectorExposureLimitPct;
+  const isRiskExceeded = projectedSectorRiskPct > maxSectorRiskLimitPct;
+
+  if (!isExposureExceeded && !isRiskExceeded) {
+    return {
+      allowed: true,
+      currentSectorExposurePct,
+      currentSectorRiskPct,
+      projectedSectorExposurePct,
+      maxSectorExposureLimitPct,
+      recommendedShares: proposedShares,
+    };
+  }
+
+  // 한도에 맞춘 최대 허용 주수 재산출
+  const remainingValueBudget = Math.max(0, totalEquity * maxSectorExposureLimitPct - currentSectorValue);
+  const remainingRiskBudget = Math.max(0, totalEquity * maxSectorRiskLimitPct - currentSectorRisk);
+
+  const maxSharesByValue = entryPrice > 0 ? Math.floor(remainingValueBudget / entryPrice) : 0;
+  const riskPerShare = entryPrice - stopLossPrice;
+  const maxSharesByRisk = riskPerShare > 0 ? Math.floor(remainingRiskBudget / riskPerShare) : 0;
+
+  const recommendedShares = Math.max(0, Math.min(proposedShares, maxSharesByValue, maxSharesByRisk));
+
+  const reasons: string[] = [];
+  if (isExposureExceeded) {
+    reasons.push(
+      `섹터 집중도(${projectedSectorExposurePct * 100}%)가 최대 허용 한도(${maxSectorExposureLimitPct * 100}%)를 초과합니다.`
+    );
+  }
+  if (isRiskExceeded) {
+    reasons.push(
+      `섹터 오픈 리스크(${projectedSectorRiskPct * 100}%)가 허용 한도(${maxSectorRiskLimitPct * 100}%)를 초과합니다.`
+    );
+  }
+
+  return {
+    allowed: recommendedShares > 0,
+    currentSectorExposurePct,
+    currentSectorRiskPct,
+    projectedSectorExposurePct,
+    maxSectorExposureLimitPct,
+    recommendedShares,
+    reason: reasons.join(' '),
+  };
+}
+
+export interface ExitRulesPlan {
+  entryPrice: number;
+  initialStopLoss: number;
+  riskPerShare: number; // 1R
+  target1R: number;
+  target2R: number;
+  target3R: number;
+  target4R: number;
+  milestones: {
+    rMultiple: number;
+    targetPrice: number;
+    actionDescription: string;
+    stopAdjustment: string;
+  }[];
+}
+
+/**
+ * 2R/3R 분할 익절 및 트레일링 스탑 가이드라인 생성기
+ */
+export function generateExitRulesPlan(entryPrice: number, stopLossPrice: number): ExitRulesPlan {
+  const riskPerShare = Math.max(0, entryPrice - stopLossPrice);
+  const r1 = round(entryPrice + riskPerShare);
+  const r2 = round(entryPrice + riskPerShare * 2);
+  const r3 = round(entryPrice + riskPerShare * 3);
+  const r4 = round(entryPrice + riskPerShare * 4);
+
+  return {
+    entryPrice: round(entryPrice),
+    initialStopLoss: round(stopLossPrice),
+    riskPerShare: round(riskPerShare),
+    target1R: r1,
+    target2R: r2,
+    target3R: r3,
+    target4R: r4,
+    milestones: [
+      {
+        rMultiple: 1,
+        targetPrice: r1,
+        actionDescription: '초기 확증 구간: 포지션 유지 (수익 1R 도달)',
+        stopAdjustment: '손절선 본전(Breakeven) 상향 준비',
+      },
+      {
+        rMultiple: 2,
+        targetPrice: r2,
+        actionDescription: '1차 분할 익절 (물량의 30~50% 매도)',
+        stopAdjustment: '손절선을 본전(Entry Price)으로 완전 상향',
+      },
+      {
+        rMultiple: 3,
+        targetPrice: r3,
+        actionDescription: '2차 분할 익절 (잔여 물량의 절반 매도)',
+        stopAdjustment: '10일/20일 지수이동평균(EMA) 트레일링 스탑 전환',
+      },
+      {
+        rMultiple: 4,
+        targetPrice: r4,
+        actionDescription: '추세 추종 런(Run): 주도주 대시세 추적',
+        stopAdjustment: '직전 스윙 로우 또는 20EMA 이탈 시 전량 청산',
+      },
+    ],
+  };
+}

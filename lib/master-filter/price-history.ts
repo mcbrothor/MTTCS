@@ -1,5 +1,5 @@
-import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
-import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
+import { getMarketDailyPrice } from '../finance/providers/kis-api';
+import { getYahooDailyPrice } from '../finance/providers/yahoo-api';
 import type { OHLCData } from '@/types';
 
 const MASTER_FILTER_MINIMUM_BARS = 200;

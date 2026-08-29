@@ -7,7 +7,6 @@ import { Activity, ChevronDown, Star } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
 import {
   FLOW_STEPS,
-  STRATEGY_LINKS,
   UTILITY_LINKS,
   findActiveFlowStep,
   findActiveStrategyLink,
