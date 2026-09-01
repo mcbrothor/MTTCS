@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
 import { execFile } from 'node:child_process';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { getTelegramChatIds } from './lib/codex-cli-worker-utils.mjs';
 import { evaluateDailyDeliveryHealth } from './lib/daily-screener-watchdog-utils.mjs';
+import {
+  createWatchdogAlertReceiptLedger,
+  watchdogAlertReceiptKey,
+} from './lib/watchdog-alert-receipts.mjs';
 import {
   createRetryingSupabaseFetch,
   summarizeSupabaseError,
@@ -16,6 +22,9 @@ const DEFAULT_BASE_URL = 'https://mttcs.vercel.app';
 const ALL_CATEGORIES = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
 const WORKER_LABEL = 'com.mantori.mtn-codex-worker';
 const REQUEST_TIMEOUT_MS = 30_000;
+const ALERT_RECEIPT_PATH = process.env.DAILY_SCREENER_WATCHDOG_ALERT_RECEIPTS
+  || join(homedir(), 'Library', 'Application Support', 'MTN', 'watchdog-alert-receipts.jsonl');
+let alertReceiptLedgerPromise;
 
 function kstDateString(date = new Date()) {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -83,10 +92,9 @@ async function loadState(client, runDate) {
   if (!run) return { run: null, publications: [] };
   const { data: publications, error: publicationsError } = await client
     .from('recommendation_publications')
-    .select('id, category, status, telegram_status, telegram_sent_at, updated_at')
+    .select('id, category, status, is_official, market_context, telegram_status, telegram_sent_at, updated_at')
     .eq('screener_run_id', run.id)
-    .eq('is_official', true)
-    .eq('status', 'PUBLISHED')
+    .in('status', ['PUBLISHED', 'SHADOW'])
     .retry(false);
   if (publicationsError) throw new Error(`publication query failed: ${summarizeSupabaseError(publicationsError)}`);
   return { run, publications: publications || [] };
@@ -164,12 +172,20 @@ async function kickWorker(force = false) {
   return { label: WORKER_LABEL, forced: force };
 }
 
-async function sendAlert(text) {
+async function sendAlert(text, incident = {}) {
   const token = requiredEnv('TELEGRAM_BOT_TOKEN');
   const chatIds = getTelegramChatIds();
   if (chatIds.length === 0) throw new Error('TELEGRAM_ALLOWED_CHAT_IDS or TELEGRAM_CHAT_ID is required for alerts.');
+  alertReceiptLedgerPromise ||= createWatchdogAlertReceiptLedger(ALERT_RECEIPT_PATH);
+  const ledger = await alertReceiptLedgerPromise;
   const failures = [];
+  let skipped = 0;
   for (const chatId of chatIds) {
+    const key = watchdogAlertReceiptKey({ incident, chatId });
+    if (ledger.has(key)) {
+      skipped += 1;
+      continue;
+    }
     try {
       const { stdout } = await execFileAsync('/usr/bin/curl', [
         '-sS', '--connect-timeout', '15', '--max-time', '30',
@@ -179,13 +195,14 @@ async function sendAlert(text) {
       ], { timeout: REQUEST_TIMEOUT_MS + 5_000, maxBuffer: 1_000_000 });
       const body = JSON.parse(stdout || '{}');
       if (!body?.ok) throw new Error(body?.description || 'Telegram returned an invalid response.');
+      await ledger.record({ key, ...incident, chatId: String(chatId) });
     } catch (error) {
       const raw = error instanceof Error ? error.message : String(error);
       failures.push(raw.replaceAll(token, '[redacted]').slice(0, 500));
     }
   }
   if (failures.length > 0) throw new Error(`watchdog Telegram alert failed: ${failures.join('; ')}`);
-  return { recipients: chatIds.length };
+  return { recipients: chatIds.length - skipped, skipped };
 }
 
 async function main() {
@@ -231,6 +248,8 @@ async function main() {
     run_date: args.date,
     status: state.run?.status || null,
     healthy: assessment.healthy,
+    health_state: assessment.state || (assessment.healthy ? 'OFFICIAL_COMPLETE' : 'ATTENTION_REQUIRED'),
+    degraded: assessment.degraded === true,
     reason: assessment.reason,
     actions: assessment.actions,
     dry_run: args.dryRun,
@@ -241,7 +260,11 @@ async function main() {
   const results = [];
   for (const action of assessment.actions) {
     if (action === 'enqueue') results.push({ action, result: await enqueueRun(args) });
-    if (action === 'requeue') results.push({ action, result: await requeueRun(supabase, state.run, assessment.reason) });
+    if (action === 'requeue') {
+      const result = await requeueRun(supabase, state.run, assessment.reason);
+      results.push({ action, result });
+      if (result?.skipped) break;
+    }
     if (action === 'sync_run') results.push({ action, result: await syncRun(supabase, state.run, state.publications) });
     if (action === 'kick_worker') {
       const requeueResult = results.find((item) => item.action === 'requeue')?.result;
@@ -256,7 +279,15 @@ async function main() {
         `원인: ${assessment.reason}`,
         `조치: ${results.map((item) => item.action).join(', ') || 'none'}`,
       ].join('\n');
-      results.push({ action, result: await sendAlert(message) });
+      results.push({
+        action,
+        result: await sendAlert(message, {
+          runDate: args.date,
+          runId: state.run?.id || null,
+          state: summary.health_state,
+          reason: assessment.reason,
+        }),
+      });
     }
   }
   console.log(JSON.stringify({ ...summary, repaired: true, results }));
@@ -268,7 +299,12 @@ main().catch(async (error) => {
   const dryRunRequested = process.argv.includes('--dry-run') || process.env.DRY_RUN?.toLowerCase() === 'true';
   if (!dryRunRequested) {
     try {
-      await sendAlert(`[MTN 감시기 자체 오류]\n${kstDateString()}\n${message.slice(0, 1500)}`);
+      await sendAlert(`[MTN 감시기 자체 오류]\n${kstDateString()}\n${message.slice(0, 1500)}`, {
+        runDate: kstDateString(),
+        runId: null,
+        state: 'WATCHDOG_ERROR',
+        reason: message.slice(0, 1500),
+      });
     } catch (alertError) {
       console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${alertError instanceof Error ? alertError.message : String(alertError)}`);
     }

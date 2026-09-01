@@ -106,6 +106,40 @@ assert.deepEqual(evaluateDailyDeliveryHealth({
   actions: ['requeue', 'kick_worker', 'alert'],
 });
 
+assert.deepEqual(evaluateDailyDeliveryHealth({
+  run: { status: 'completed', updated_at: '2026-07-23T10:00:00.000Z', telegram_sent_at: '2026-07-23T10:05:00.000Z' },
+  publications: [
+    { category: 'NASDAQ100', status: 'SHADOW', is_official: false, telegram_status: 'SENT', market_context: { publication_gate: { requestedOfficial: true } } },
+    { category: 'SP500', status: 'SHADOW', is_official: false, telegram_status: 'SENT', market_context: { publication_gate: { requestedOfficial: true } } },
+    { category: 'KOSPI200', status: 'SHADOW', is_official: false, telegram_status: 'SENT', market_context: { publication_gate: { requestedOfficial: true } } },
+    { category: 'KOSDAQ150', status: 'SHADOW', is_official: false, telegram_status: 'SENT', market_context: { publication_gate: { requestedOfficial: true } } },
+  ],
+  expectedCategories: ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'],
+  now,
+  deliveryOverdue: true,
+}), {
+  healthy: true,
+  degraded: true,
+  state: 'OBSERVATION_COMPLETE',
+  reason: 'observation telegram delivery completed (4/4; official 0/4)',
+  actions: [],
+});
+
+assert.deepEqual(evaluateDailyDeliveryHealth({
+  run: { status: 'completed', updated_at: '2026-07-23T10:00:00.000Z', telegram_sent_at: null },
+  publications: [
+    { category: 'NASDAQ100', status: 'PUBLISHED', is_official: true, telegram_status: 'SENT' },
+    { category: 'SP500', status: 'PUBLISHED', is_official: true, telegram_status: 'SENT' },
+  ],
+  expectedCategories: ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'],
+  now,
+  deliveryOverdue: false,
+}), {
+  healthy: false,
+  reason: 'official publications are incomplete (2/4)',
+  actions: [],
+});
+
 assert.equal(isTradingSession(['2026-07-21', '2026-07-22'], '2026-07-22'), true);
 assert.equal(isTradingSession(['2026-07-21', '2026-07-22'], '2026-07-23'), false);
 

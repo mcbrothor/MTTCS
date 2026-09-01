@@ -76,6 +76,10 @@ const fullHistories = {
 
 function serviceDependencies(overrides = {}) {
   let kisCalls = 0;
+  const weeklyFred = (start) => Array.from({ length: 12 }, (_, index) => ({
+    date: new Date(Date.UTC(2026, 3, 15 + index * 7)).toISOString().slice(0, 10),
+    value: start + index * 10,
+  }));
   const dependencies = {
     getYahooQuotes: async () => fullQuotes,
     getYahooDailyPrice: async (symbol) => fullHistories[symbol] || [],
@@ -83,6 +87,10 @@ function serviceDependencies(overrides = {}) {
     get5yBreakeven: async () => [{ date: '2026-06-30', value: 2.2 }],
     getDgs10: async () => [{ date: '2026-06-30', value: 4.5 }],
     getDgs2: async () => [{ date: '2026-06-30', value: 4.0 }],
+    getDfii10: async () => [{ date: '2026-06-30', value: 2.0 }],
+    getWalcl: async () => weeklyFred(7_000_000),
+    getWtreGen: async () => weeklyFred(700_000),
+    getRrpontsyd: async () => weeklyFred(100_000),
     getKisIndexQuotes: async () => {
       kisCalls += 1;
       return {

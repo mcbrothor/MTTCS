@@ -7,7 +7,6 @@ import { Activity, ChevronDown, Star } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
 import {
   FLOW_STEPS,
-  STRATEGY_LINKS,
   UTILITY_LINKS,
   findActiveFlowStep,
   findActiveStrategyLink,
@@ -23,6 +22,7 @@ export default function Navbar() {
   const strategyGroups = groupStrategyLinks();
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
   const strategyMenuRef = useRef<HTMLDivElement>(null);
+  const strategyMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!strategyMenuOpen) return;
@@ -32,7 +32,10 @@ export default function Navbar() {
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setStrategyMenuOpen(false);
+      if (event.key === 'Escape') {
+        setStrategyMenuOpen(false);
+        strategyMenuButtonRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -71,8 +74,9 @@ export default function Navbar() {
         </div>
 
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="no-scrollbar flex min-w-0 gap-2 overflow-x-auto pb-1">
-            {FLOW_STEPS.map((step) => {
+          <div className="flex min-w-0 flex-1 items-center gap-2 pb-1">
+            <div className="no-scrollbar flex min-w-0 flex-1 gap-2 overflow-x-auto">
+              {FLOW_STEPS.map((step) => {
               const isActive = step.key === activeStep?.key;
 
               return (
@@ -89,14 +93,18 @@ export default function Navbar() {
                   {step.label}
                 </Link>
               );
-            })}
+              })}
+            </div>
             <span aria-hidden="true" className="my-1 w-px shrink-0 bg-[var(--border)]" />
             <div ref={strategyMenuRef} className="relative shrink-0">
               <button
+                ref={strategyMenuButtonRef}
                 type="button"
                 onClick={() => setStrategyMenuOpen((open) => !open)}
+                aria-controls="strategy-navigation-menu"
                 aria-expanded={strategyMenuOpen}
                 aria-haspopup="menu"
+                aria-label={`투자전략 메뉴 ${strategyMenuOpen ? '닫기' : '열기'}`}
                 className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
                   activeStrategyLink
                     ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
@@ -111,7 +119,7 @@ export default function Navbar() {
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${strategyMenuOpen ? 'rotate-180' : ''}`} />
               </button>
               {strategyMenuOpen && (
-                <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-strong)] bg-[rgba(8,14,26,0.98)] p-2 shadow-2xl backdrop-blur">
+                <div id="strategy-navigation-menu" className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-strong)] bg-[rgba(8,14,26,0.98)] p-2 shadow-2xl backdrop-blur">
                   {strategyGroups.map((group) => (
                     <div key={group.group} className={group.group !== 'KR' ? 'mt-2 border-t border-[var(--border)] pt-2' : ''}>
                       <p className="px-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text-tertiary)]">
