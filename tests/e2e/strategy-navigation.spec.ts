@@ -13,7 +13,7 @@ for (const href of strategyRoutes) {
   test(`desktop strategy menu navigates to ${href}`, async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
     await page.goto('/guide');
-    await page.getByRole('button', { name: /투자전략 메뉴/ }).click();
+    await page.getByRole('button', { name: /투자 전략 메뉴/ }).click();
 
     const link = page.locator(`nav a[href="${href}"]`);
     await expect(link).toBeVisible();

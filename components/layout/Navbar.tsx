@@ -104,7 +104,7 @@ export default function Navbar() {
                 aria-controls="strategy-navigation-menu"
                 aria-expanded={strategyMenuOpen}
                 aria-haspopup="menu"
-                aria-label={`투자전략 메뉴 ${strategyMenuOpen ? '닫기' : '열기'}`}
+                aria-label={`투자 전략 메뉴 ${strategyMenuOpen ? '닫기' : '열기'}`}
                 className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
                   activeStrategyLink
                     ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
