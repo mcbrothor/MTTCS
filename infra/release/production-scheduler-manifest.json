@@ -6,9 +6,10 @@
     "supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql",
     "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql",
     "supabase/migrations/20260820123000_investor_flow_scheduler.sql",
-    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql"
+    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql",
+    "supabase/migrations/20260901093000_monthly_strategy_scheduler.sql"
   ],
-  "expectedJobCount": 35,
+  "expectedJobCount": 37,
   "jobs": [
     {
       "name": "mtn-snapshot-macro",
@@ -140,6 +141,20 @@
       "name": "mtn-market-sentiment-kr",
       "path": "/api/cron/market-sentiment",
       "schedule": "12 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-monthly-strategy-kr",
+      "path": "/api/cron/monthly-strategies?market=KR",
+      "schedule": "20 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-monthly-strategy-us",
+      "path": "/api/cron/monthly-strategies?market=US",
+      "schedule": "20 21 * * 1-5",
       "slotMinutes": 1,
       "expectedDelaySeconds": 352800
     },
@@ -297,6 +312,8 @@
     "supabase/migrations/20260820001000_automatic_capacity_maintenance.sql",
     "supabase/migrations/20260820120000_investment_management_integration.sql",
     "supabase/migrations/20260820123000_investor_flow_scheduler.sql",
-    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql"
+    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql",
+    "supabase/migrations/20260901090000_monthly_strategy_snapshots.sql",
+    "supabase/migrations/20260901093000_monthly_strategy_scheduler.sql"
   ]
 }

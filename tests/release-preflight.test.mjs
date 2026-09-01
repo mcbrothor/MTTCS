@@ -302,9 +302,9 @@ try {
   // this block only verifies the real repository's release structure.
   assert.equal(typeof repositoryStructure.releaseEligible, 'boolean');
   assert.equal(repositoryStructure.vercel.cronCount, 0);
-  assert.equal(repositoryStructure.scheduler.jobCount, 35);
-  assert.equal(repositoryStructure.scheduler.scheduleMigrations.length, 4);
-  assert.equal(repositoryStructure.scheduler.discoveredRouteCount, 17);
+  assert.equal(repositoryStructure.scheduler.jobCount, 37);
+  assert.equal(repositoryStructure.scheduler.scheduleMigrations.length, 5);
+  assert.equal(repositoryStructure.scheduler.discoveredRouteCount, 18);
   for (const requiredMigration of [
     'supabase/migrations/20260728090000_manual_strategy_capital.sql',
     'supabase/migrations/20260802090000_recommendation_action_state.sql',
@@ -315,6 +315,8 @@ try {
     'supabase/migrations/20260820120000_investment_management_integration.sql',
     'supabase/migrations/20260820123000_investor_flow_scheduler.sql',
     'supabase/migrations/20260820150000_market_sentiment_scheduler.sql',
+    'supabase/migrations/20260901090000_monthly_strategy_snapshots.sql',
+    'supabase/migrations/20260901093000_monthly_strategy_scheduler.sql',
   ]) {
     assert.ok(
       repositoryStructure.migrations.requiredMigrations.includes(requiredMigration),

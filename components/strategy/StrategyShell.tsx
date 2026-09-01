@@ -36,6 +36,8 @@ export interface StrategyShellProps {
   cashInterpretation?: string;
   ranks?: ShellRankRow[];
   rankHeader?: string;
+  rankMarkerHeader?: string;
+  hideRankMarker?: boolean;
   extraSection?: ReactNode;
   footerNote?: string;
 }
@@ -85,6 +87,8 @@ export default function StrategyShell({
   cashInterpretation,
   ranks = [],
   rankHeader,
+  rankMarkerHeader = '52주 신고가',
+  hideRankMarker = false,
   extraSection,
   footerNote,
 }: StrategyShellProps) {
@@ -183,7 +187,7 @@ export default function StrategyShell({
                       <th className="py-1.5 pr-3 font-semibold">순위</th>
                       <th className="py-1.5 pr-3 font-semibold">종목</th>
                       <th className="py-1.5 pr-3 text-right font-semibold">RS</th>
-                      <th className="py-1.5 pr-3 text-center font-semibold">52주 신고가</th>
+                      {!hideRankMarker && <th className="py-1.5 pr-3 text-center font-semibold">{rankMarkerHeader}</th>}
                       {ranks.some((row) => row.extra) && <th className="py-1.5 text-right font-semibold">비고</th>}
                     </tr>
                   </thead>
@@ -195,15 +199,17 @@ export default function StrategyShell({
                         <td className={`py-2 pr-3 text-right font-mono font-semibold ${(row.rs ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
                           {formatRs(row.rs)}
                         </td>
-                        <td className="py-2 pr-3 text-center">
-                          {row.isNewHigh ? (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                              <span className="h-1 w-1 rounded-full bg-emerald-400" />돌파
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-[var(--text-tertiary)]">—</span>
-                          )}
-                        </td>
+                        {!hideRankMarker && (
+                          <td className="py-2 pr-3 text-center">
+                            {row.isNewHigh ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                                <span className="h-1 w-1 rounded-full bg-emerald-400" />돌파
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-[var(--text-tertiary)]">—</span>
+                            )}
+                          </td>
+                        )}
                         {ranks.some((item) => item.extra) && (
                           <td className="py-2 text-right text-[11px] text-[var(--text-secondary)]">{row.extra || '—'}</td>
                         )}

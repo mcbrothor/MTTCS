@@ -1,33 +1,38 @@
-import { apiError, apiSuccess } from '@/lib/api/response';
+import { apiError, apiSuccess, getErrorMessage } from '@/lib/api/response';
 import { getRequestSession } from '@/lib/auth/session';
-import { breadth, decideRegime } from '@/lib/strategy/kospi-monthly/engine';
-import { calcRs } from '@/lib/strategy/kospi-52w/engine';
-import { loadKospi52wDataset } from '@/lib/strategy/kospi-52w/service';
-import { isStrategyDataUnavailableError, requireStrategyCoverage } from '@/lib/strategy/data-quality';
-export const dynamic='force-dynamic';
-export async function GET(req: Request){
-  const s=await getRequestSession(req); if(!s) return apiError('Auth required','AUTH_REQUIRED',401);
-  try{
-    const { universeBars, kospiBars, quality } = await loadKospi52wDataset(400);
-    requireStrategyCoverage(quality);
-    const breadthValue = breadth(universeBars);
-    const peak = Math.max(...kospiBars.slice(-252).map((bar) => bar.close));
-    const drawdownPct = peak > 0 ? (kospiBars.at(-1)!.close / peak - 1) * 100 : 0;
-    const relativeStrength = Object.values(universeBars)
-      .map((bars) => calcRs(bars, kospiBars))
-      .filter((value): value is number => value !== null);
-    const rsAverage = relativeStrength.length > 0
-      ? relativeStrength.reduce((sum, value) => sum + value, 0) / relativeStrength.length / 100
-      : null;
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { toMonthlyStrategyApi } from '@/lib/strategy/monthly/api-contract';
+import { isStrategyDataUnavailableError, runMonthlyStrategy } from '@/lib/strategy/monthly/run';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+export async function GET(request: Request) {
+  const session = await getRequestSession(request);
+  if (!session) return apiError('Authentication required.', 'AUTH_REQUIRED', 401);
+  try {
+    const { snapshot, holdings, inputHash, provider, source } = await runMonthlyStrategy({
+      client: getSupabaseAdmin(),
+      ownerId: session.systemId,
+      market: 'KR',
+    });
     return apiSuccess(
-      { version:'kospi-monthly-v2.3', asOf: quality.asOf, quality, breadth: breadthValue, drawdownPct, rsAverage, regime: decideRegime(breadthValue, drawdownPct, rsAverage) },
-      { source:'ETF universe Breadth 120MA', provider:'KIS→Yahoo fallback', delay:'EOD', observedAt:quality.asOf, calculatedAt:new Date().toISOString(), modelVersion:'kospi-monthly-v2.3', warnings: quality.warnings.slice(0, 10) },
+      { ...toMonthlyStrategyApi(snapshot), holdings, inputHash },
+      {
+        source,
+        provider,
+        delay: 'EOD',
+        observedAt: snapshot.latestObservationAt ?? undefined,
+        calculatedAt: new Date().toISOString(),
+        modelVersion: snapshot.modelVersion,
+        warnings: snapshot.quality.warnings.slice(0, 20),
+      },
     );
-  }catch(e){
+  } catch (error) {
     return apiError(
-      e instanceof Error ? e.message : 'KOSPI 월간 전략 계산 실패',
-      isStrategyDataUnavailableError(e) ? 'STRATEGY_DATA_UNAVAILABLE' : 'KOSPI_MONTHLY_FAILED',
-      isStrategyDataUnavailableError(e) ? 503 : 500,
+      getErrorMessage(error, 'KOSPI 월간 전략 계산 실패'),
+      isStrategyDataUnavailableError(error) ? 'STRATEGY_DATA_UNAVAILABLE' : 'KOSPI_MONTHLY_FAILED',
+      isStrategyDataUnavailableError(error) ? 503 : 500,
     );
   }
 }

@@ -144,8 +144,8 @@ export const STRATEGY_LINKS: StrategyLink[] = [
   },
   {
     href: '/strategies/kospi-monthly',
-    label: '월말 리밸런싱',
-    sub: 'Breadth 5단계 · 역추세',
+    label: '월간 업종 V3',
+    sub: '8섹터 Breadth · 복합 RS',
     matchers: ['/strategies/kospi-monthly'],
     group: 'KR',
     icon: 'repeat',
@@ -160,8 +160,8 @@ export const STRATEGY_LINKS: StrategyLink[] = [
   },
   {
     href: '/strategies/us-monthly-v7',
-    label: '월간 V7',
-    sub: 'NASDAQ 독주 · 금속',
+    label: '월간 업종 V8',
+    sub: '11섹터 Breadth · 복합 RS',
     matchers: ['/strategies/us-monthly-v7'],
     group: 'US',
     icon: 'globe',
