@@ -1,7 +1,13 @@
-import { getMarketDailyPrice } from '@/lib/finance/providers/kis-api';
-import { getYahooDailyPrice } from '@/lib/finance/providers/yahoo-api';
 import { KOSPI52W_UNIVERSE } from './policy';
 import type { Kospi52wBar } from './types';
+import { StrategyDataUnavailableError, type StrategyDataQuality } from '@/lib/strategy/data-quality';
+
+const MIN_REQUIRED_BARS = 253;
+
+interface Dependencies {
+  getMarketDailyPrice: (ticker: string, exchange: string, bars: number) => Promise<Kospi52wBar[]>;
+  getYahooDailyPrice: (ticker: string) => Promise<Kospi52wBar[]>;
+}
 
 function normalize(rows: { date: string; open: number; high: number; low: number; close: number; volume: number }[]): Kospi52wBar[] {
   return rows
@@ -10,29 +16,56 @@ function normalize(rows: { date: string; open: number; high: number; low: number
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export async function loadKospi52wDataset(targetBars = 400) {
+async function defaultDependencies(): Promise<Dependencies> {
+  const [{ getMarketDailyPrice }, { getYahooDailyPrice }] = await Promise.all([
+    import('@/lib/finance/providers/kis-api'),
+    import('@/lib/finance/providers/yahoo-api'),
+  ]);
+  return { getMarketDailyPrice, getYahooDailyPrice };
+}
+
+export async function loadKospi52wDataset(targetBars = 400, injected?: Dependencies) {
+  const dependencies = injected || await defaultDependencies();
   const universeBars: Record<string, Kospi52wBar[]> = {};
+  const warnings: string[] = [];
   for (const item of KOSPI52W_UNIVERSE) {
     try {
-      const kis = await getMarketDailyPrice(item.ticker, 'KRX', targetBars);
-      if (kis.length >= 260) {
-        universeBars[item.ticker] = normalize(kis as Kospi52wBar[]);
+      const kis = normalize(await dependencies.getMarketDailyPrice(item.ticker, 'KOSPI', targetBars));
+      if (kis.length >= MIN_REQUIRED_BARS) {
+        universeBars[item.ticker] = kis.slice(-targetBars);
         continue;
       }
-    } catch {}
-    // Yahoo fallback: interpret ticker as .KS
+      warnings.push(`${item.ticker}: KIS history is insufficient (${kis.length}/${MIN_REQUIRED_BARS}).`);
+    } catch (error) {
+      warnings.push(`${item.ticker}: KIS failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
     try {
-      const y = await getYahooDailyPrice(`${item.ticker}.KS`);
-      universeBars[item.ticker] = normalize(y as Kospi52wBar[]).slice(-targetBars);
-    } catch {}
+      const yahoo = normalize(await dependencies.getYahooDailyPrice(`${item.ticker}.KS`)).slice(-targetBars);
+      if (yahoo.length >= MIN_REQUIRED_BARS) universeBars[item.ticker] = yahoo;
+      else warnings.push(`${item.ticker}: Yahoo history is insufficient (${yahoo.length}/${MIN_REQUIRED_BARS}).`);
+    } catch (error) {
+      warnings.push(`${item.ticker}: Yahoo failed (${error instanceof Error ? error.message : String(error)}).`);
+    }
   }
-  // KOSPI 지수: ^KS11
   let kospiBars: Kospi52wBar[] = [];
   try {
-    kospiBars = normalize(await getMarketDailyPrice('000020', 'KRX', targetBars) as Kospi52wBar[]);
-  } catch {}
-  if (kospiBars.length < 260) {
-    try { kospiBars = normalize(await getYahooDailyPrice('^KS11') as Kospi52wBar[]).slice(-targetBars); } catch {}
+    kospiBars = normalize(await dependencies.getYahooDailyPrice('^KS11')).slice(-targetBars);
+  } catch (error) {
+    warnings.push(`KOSPI benchmark: Yahoo failed (${error instanceof Error ? error.message : String(error)}).`);
   }
-  return { universeBars, kospiBars };
+  if (kospiBars.length < MIN_REQUIRED_BARS) {
+    throw new StrategyDataUnavailableError(`KOSPI benchmark history is unavailable (${kospiBars.length}/${MIN_REQUIRED_BARS}).`);
+  }
+  const available = Object.keys(universeBars).length;
+  if (available === 0) {
+    throw new StrategyDataUnavailableError('KOSPI strategy universe history is unavailable.');
+  }
+  const quality: StrategyDataQuality = {
+    status: available === KOSPI52W_UNIVERSE.length ? 'VALID' : 'DEGRADED',
+    asOf: kospiBars.at(-1)!.date,
+    requested: KOSPI52W_UNIVERSE.length,
+    available,
+    warnings,
+  };
+  return { universeBars, kospiBars, quality };
 }

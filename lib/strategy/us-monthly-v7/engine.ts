@@ -10,3 +10,14 @@ export function nasdaqDominance(nasdaqBars: Bar[], spBars: Bar[]): boolean {
   const rs = (nasdaqBars.at(-1)!.close/nasdaqBars[nasdaqBars.length-127].close) - (spBars.at(-1)!.close/spBars[spBars.length-127].close);
   return nasdaqAbove && rs>0.05;
 }
+
+export function decideUsRegime(breadthVal: number, drawdownPct: number) {
+  if (breadthVal >= 80) return { regime: 'BROAD_TREND', weight: 100 };
+  if (breadthVal >= 60) return { regime: 'SELECTIVE_TREND', weight: 75 };
+  if (breadthVal >= 40) return { regime: 'NON_TREND', weight: 50 };
+  if (breadthVal >= 30) return { regime: 'RECOVERY', weight: 50 };
+  if (drawdownPct <= -24) return { regime: 'CRASH_100', weight: 100 };
+  if (drawdownPct <= -18) return { regime: 'CRASH_75', weight: 75 };
+  if (drawdownPct <= -12) return { regime: 'CRASH_50', weight: 50 };
+  return { regime: 'CASH', weight: 0 };
+}

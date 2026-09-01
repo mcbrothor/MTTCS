@@ -5,7 +5,7 @@ import StrategyShell, { type ShellRankRow, type ShellSignalCard } from '@/compon
 interface RankItem { ticker: string; name: string; rs: number; rank: number }
 interface Candidate { ticker: string; name: string; rs: number; isNewHigh: boolean; ma10: number | null; close: number }
 interface Signal { date: string; buyTickers: string[]; sellTickers: string[]; holdTickers: string[]; cashSlots: number; rsRank: RankItem[] }
-interface ApiResponse { signal: Signal; candidates: Candidate[] }
+interface ApiResponse { asOf: string; signal: Signal; candidates: Candidate[] }
 
 const MAX_HOLDINGS = 4;
 
@@ -53,7 +53,7 @@ export default function Kospi52wPage() {
       title="KOSPI 52주 신고가 전략"
       source="코스피 52주_신고가_전략_핵심과_깨달음.xlsx"
       modelVersion="kospi-52w-2026.08-v1"
-      asOf={signal?.date ?? null}
+      asOf={data?.asOf ?? signal?.date ?? null}
       description="RS Top12 ∩ 52주 신고가 → 최대 4종목 × 25% → MA10 이탈 매도. 잘 가는 종목의 비중을 억지로 줄이지 않고(drift), 조건이 재충족되면 다시 탑승합니다."
       loading={!data && !err}
       error={err}

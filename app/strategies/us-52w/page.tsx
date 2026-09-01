@@ -5,7 +5,7 @@ import StrategyShell, { type ShellRankRow, type ShellSignalCard } from '@/compon
 interface RankItem { ticker: string; name: string; rs: number }
 interface Candidate { ticker: string; name: string; rs: number; isNewHigh: boolean; distanceToHighPct: number }
 interface Signal { date: string; buyTickers: string[]; sellTickers: string[]; holdTickers: string[]; watchTickers: string[]; cashSlots: number; rsRank: RankItem[] }
-interface ApiResponse { signal: Signal; candidates: Candidate[] }
+interface ApiResponse { asOf: string; signal: Signal; candidates: Candidate[] }
 
 const MAX_HOLDINGS = 4;
 
@@ -49,7 +49,7 @@ export default function Us52wPage() {
       title="US 52주 신고가 전략 (업종·테마 ETF 50)"
       source="미국 52주_신고가_전략_백테스트_깨달음.xlsx"
       modelVersion="us-52w-2026.08-v1"
-      asOf={signal?.date ?? null}
+      asOf={data?.asOf ?? signal?.date ?? null}
       description="6M SPY 대비 RS Top20 ∩ 52주 신고가 돌파 → 최대 4종목 × 25% → MA10 이탈 매도. 하루 지연 진입은 손익비를 악화시키므로 돌파 시점 진입이 원칙입니다."
       loading={!data && !err}
       error={err}

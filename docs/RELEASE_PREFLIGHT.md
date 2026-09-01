@@ -7,7 +7,7 @@ release-critical file, or an unexpected unauthenticated response is found.
 
 ## Source of truth
 
-- `infra/release/production-scheduler-manifest.json` declares all 25 production
+- `infra/release/production-scheduler-manifest.json` declares all 35 production
   jobs, their reviewed schedules, route ownership, explicit route exemptions,
   and scheduler-critical migrations.
 - `supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql`
@@ -31,7 +31,7 @@ dirty tree release eligible.
 node scripts/release/verify-release.mjs --allow-dirty
 ```
 
-Add `--base-url=https://mttcs.vercel.app` to check all 25 production job URLs.
+Add `--base-url=https://mttcs.vercel.app` to check all 35 production job URLs.
 Every request is deliberately unauthenticated and must return HTTP 401 before
 any side effect occurs.
 
@@ -68,9 +68,9 @@ Successful output must contain:
 
 - `releaseEligible: true`
 - `vercel.cronCount: 0`
-- `scheduler.jobCount: 25`
-- `live.checkedJobCount: 25`
-- `live.statusCounts.401: 25`
+- `scheduler.jobCount: 35`
+- `live.checkedJobCount: 35`
+- `live.statusCounts.401: 35`
 - `live.deploymentShaVerified: true`
 
 Do not deploy from `--allow-dirty` output. Do not bypass a manifest mismatch by

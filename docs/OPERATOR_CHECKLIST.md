@@ -149,7 +149,7 @@ authenticated HTTP handlers, and `vercel.json` must not contain a `crons` key.
 This removes the Vercel Hobby frequency and timing limits and prevents two
 independent schedulers from invoking the same endpoint.
 
-- Supabase Cron owns 24 HTTP schedules, including all daily/weekly jobs.
+- Supabase Cron owns 35 HTTP schedules, including all daily/weekly jobs.
 - Official market feeds run every 30 minutes; their alert threshold is 45 minutes.
 - BLS retries run at `35,45,55 12,13 * * *`; their alert threshold is 26 hours.
 - A one-minute response collector copies transient `pg_net` responses into the
@@ -185,7 +185,7 @@ select vault.create_secret(
 );
 ```
 
-- Confirm the 24 HTTP jobs and two internal maintenance jobs are the only MTN jobs:
+- Confirm the 35 HTTP jobs and two internal maintenance jobs are the only MTN jobs:
 
 ```sql
 select jobname, schedule, active, command
