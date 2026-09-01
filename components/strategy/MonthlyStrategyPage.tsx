@@ -98,6 +98,20 @@ export default function MonthlyStrategyPage(props: MonthlyStrategyPageProps) {
         };
       })}
       rankHeader="복합 모멘텀 랭킹"
+      rankRsUnit="%"
+      rankColumnHelp={{
+        rank: {
+          description: '적격 후보를 먼저 배치한 뒤 3개월·6개월 상대모멘텀과 12-1개월 절대모멘텀의 백분위 평균 점수가 높은 순으로 정렬합니다.',
+          formula: '(3M 상대모멘텀 백분위 + 6M 상대모멘텀 백분위 + 12-1M 절대모멘텀 백분위) ÷ 3',
+        },
+        rs: {
+          description: `최근 126거래일의 ${props.marketLabel} 대비 상대가격 비율 변화를 나타냅니다. 0%보다 크면 벤치마크보다 강했다는 뜻입니다.`,
+          formula: '((현재 ETF/벤치마크 상대가격 ÷ 126일 전 ETF/벤치마크 상대가격) − 1) × 100',
+        },
+        extra: {
+          description: '선정 종목은 목표 포트폴리오 비중과 복합점수를, 나머지는 적격 여부와 복합점수를 표시합니다.',
+        },
+      }}
       hideRankMarker
       extraSection={data ? (
         <section className={`rounded-2xl border p-4 ${data.status === 'BLOCKED' ? 'border-rose-400/30 bg-rose-500/8' : 'border-[var(--border)] bg-[var(--surface-strong)]'}`}>
@@ -111,7 +125,7 @@ export default function MonthlyStrategyPage(props: MonthlyStrategyPageProps) {
             <>
               <p className="mt-2 text-sm font-semibold text-amber-300">{REGIME_LABELS[data.regime.regime] || data.regime.regime} · 목표 위험예산 {data.regime.weight.toFixed(0)}%</p>
               <p className="mt-1 text-[11px] leading-5 text-[var(--text-secondary)]">
-                Breadth {data.breadth?.toFixed(1) ?? '—'}% · {props.marketLabel} 고점 대비 {data.drawdownPct?.toFixed(1) ?? '—'}% · Top3 평균 6M RS {data.averageRelativeMomentum?.toFixed(1) ?? '—'}%p
+                Breadth {data.breadth?.toFixed(1) ?? '—'}% · {props.marketLabel} 고점 대비 {data.drawdownPct?.toFixed(1) ?? '—'}% · Top3 평균 6M RS {data.averageRelativeMomentum?.toFixed(1) ?? '—'}%
                 {data.regime.hysteresisApplied ? ' · 이탈 완충 적용' : ''}
               </p>
             </>

@@ -65,6 +65,19 @@ export default function Kospi52wPage() {
         : '신호 수에 따라 현금이 자동으로 늘어나는 구조 — 현금은 투자 실패가 아니라 리스크 조절 포지션입니다.'}
       ranks={ranks}
       rankHeader="RS Top12 랭킹"
+      rankColumnHelp={{
+        rank: {
+          description: '데이터가 유효한 ETF를 6개월 KOSPI 대비 초과수익률이 높은 순으로 정렬하며 상위 12개를 표시합니다.',
+        },
+        rs: {
+          description: '최근 126거래일 동안 KOSPI보다 얼마나 더 오르거나 덜 올랐는지를 퍼센트포인트(%p)로 나타냅니다.',
+          formula: '(ETF 126일 수익률 − KOSPI 126일 수익률) × 100',
+        },
+        marker: {
+          description: '당일 종가가 직전 252거래일의 일중 고가 최고값을 넘어선 종목에 돌파를 표시합니다.',
+          formula: '당일 종가 > max(직전 252거래일 고가)',
+        },
+      }}
       footerNote="엔진 lib/strategy/kospi-52w/engine.ts · 비용 편도 0.10% · 신호일 종가 진입, 익일부터 수익 반영으로 미래정보 차단"
     />
   );
