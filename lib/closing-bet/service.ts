@@ -1,12 +1,12 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { CLOSING_LABELS, CLOSING_MARKETS, CLOSING_POLICY, CLOSING_VERSION } from './config';
-import { collectClosingInputs, closingMinutes, koreanDate, mapClosing, prepareClosingInputs } from './data';
+import { collectClosingInputs, closingMinutes, koreanDate, prepareClosingInputs } from './data';
 import { buildClosingSnapshot } from './engine';
-import { evaluateClosingCandidate } from './evaluation';
+import { collectOpeningEvaluations } from './opening-collection';
 import { getClosingOrderbook, getClosingQuote, getClosingSession } from './kis';
 import { ClosingRepository } from './repository';
 import { deliverClosingText, sendClosingSnapshot } from './telegram';
-import type { ClosingEvaluation, ClosingMarket, ClosingMode, ClosingPhase, ClosingSnapshot } from './types';
+import type { ClosingMarket, ClosingMode, ClosingPhase, ClosingSnapshot } from './types';
 
 export function closingClock(clock: string, deltaMinutes: number) {
   const [h, m, s] = clock.split(':').map(Number);
@@ -107,22 +107,7 @@ async function nextSession(date: string, dryRun: boolean) {
 export async function evaluateClosingBet(snapshot: ClosingSnapshot, dryRun = true) {
   const repo = new ClosingRepository(getSupabaseAdmin());
   const next = await nextSession(snapshot.tradeDate, dryRun);
-  const entrySession = await cachedSession(snapshot.tradeDate, dryRun);
-  const evaluationDue = new Date(`${next.date}T${closingClock(next.open, 32)}+09:00`).getTime() <= Date.now();
-  const candidates = snapshot.mode === 'REPLAY' ? snapshot.reviewCandidates : snapshot.picks;
-  const rows = await mapClosing(candidates, async (candidate): Promise<ClosingEvaluation> => {
-    const entry = await closingMinutes(repo, candidate.ticker, snapshot.tradeDate, closingClock(entrySession.close, 2), true, dryRun);
-    const following = evaluationDue ? await closingMinutes(repo, candidate.ticker, next.date, closingClock(next.open, 32), true, dryRun) : [];
-    const value = evaluateClosingCandidate(snapshot, candidate, entry, following, next.date, CLOSING_POLICY.costBps, next);
-    if (evaluationDue && !following.length) { value.status = 'DATA_MISSING'; value.warnings.push('익일 분봉 수집 실패'); }
-    const withdrawn = await repo.cache<{ observedAt: string }>(`withdrawn:${snapshot.id}:${candidate.ticker}`);
-    if (withdrawn && new Date(withdrawn.payload.observedAt).getTime() < new Date(`${snapshot.tradeDate}T${entrySession.close}+09:00`).getTime()) {
-      value.status = 'NO_ENTRY'; value.entry = null; value.exit = null; value.netReturnPct = null; value.exitReason = 'RECOMMENDATION_WITHDRAWN';
-    }
-    return value;
-  });
-  if (!dryRun) await repo.saveEvaluations(rows);
-  return rows;
+  return collectOpeningEvaluations(snapshot, { repo, next, dryRun });
 }
 
 export async function monitorClosingBet(market: ClosingMarket, dryRun = true) {
@@ -158,8 +143,13 @@ export async function reviewClosingBet(market: ClosingMarket, dryRun = true) {
   if (!snapshot) return { skipped: true, reason: '평가할 실전 추천 없음' };
   const values = await evaluateClosingBet(snapshot, dryRun);
   if (values.some((row) => row.status === 'PENDING')) return { pending: true };
-  const text = `[MTN 종가베팅 익일 복기]\n${snapshot.tradeDate} · ${CLOSING_LABELS[market]}\n실제 체결이 아닌 조건 시뮬레이션 / 비용 ${CLOSING_POLICY.costBps}bp 가정\n`
-    + values.map((row) => `${snapshot.picks.find((pick) => pick.ticker === row.ticker)?.name ?? row.ticker}: ${row.status} · 종가→시가 ${row.benchmarkReturnPct?.toFixed(2) ?? '미확인'}% · 순수익 ${row.netReturnPct?.toFixed(2) ?? '미확인'}%`).join('\n');
+  const text = `[MTN 종가베팅 익일 복기]\n${snapshot.tradeDate} · ${CLOSING_LABELS[market]}\n추천일 KRX 종가 매수 가정 / 익일 NXT 08:05·KRX 09:05 분봉 종가 매도 기준 / 비용 ${CLOSING_POLICY.costBps}bp 가정\n`
+    + values.map((row) => {
+      const name = snapshot.picks.find((pick) => pick.ticker === row.ticker)?.name ?? row.ticker;
+      const opening = row.opening;
+      const format = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)}%` : '미확인';
+      return `${name}: ${row.status} · NXT 08:05 ${format(opening?.nxt.returnPct)} · KRX 09:05 ${format(opening?.krx.returnPct)}`;
+    }).join('\n');
   const delivery = await deliverClosingText(repo, snapshot, text, 'NEXT_DAY_REVIEW', dryRun);
   if (delivery.failed) throw new Error('익일 복기 발송 실패');
   return { evaluated: values.length, delivery };

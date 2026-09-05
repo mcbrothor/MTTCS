@@ -2,11 +2,18 @@ import { createHash } from 'node:crypto';
 import { telegramAllowedChatIds, telegramBotToken } from '@/lib/env';
 import { chunkTelegramMessage } from '@/lib/telegram';
 import { closingExplanation } from '@/components/closing-bet/view-model';
-import { CLOSING_LABELS, CLOSING_POLICY } from './config';
+import { CLOSING_EXIT_RULE, CLOSING_LABELS, CLOSING_POLICY } from './config';
 import { ClosingRepository } from './repository';
 import type { ClosingCandidate, ClosingEvaluation, ClosingSnapshot } from './types';
 
 const price = (value: number | null) => value === null ? '미확인' : `${Math.round(value).toLocaleString('ko-KR')}원`;
+const percent = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(2)}%` : '미확인';
+const openingLine = (evaluation: ClosingEvaluation) => {
+  const opening = evaluation.opening;
+  if (!opening) return `익일 결과: ${evaluation.status}`;
+  if (evaluation.status === 'PENDING') return '익일 결과: 다음 거래일 시초 가격 대기';
+  return `익일 결과: NXT 08:05 ${price(opening.nxt.price)} ${percent(opening.nxt.returnPct)} / KRX 09:05 ${price(opening.krx.price)} ${percent(opening.krx.returnPct)}`;
+};
 const flow = (candidate: ClosingCandidate) => candidate.flow.kind === 'MISSING' ? '장중 수급 미확인'
   : `${candidate.flow.kind === 'ESTIMATE' ? '가집계' : '전일 확정'} ${candidate.flow.asOf ? new Date(candidate.flow.asOf).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : ''} · 외국인 ${candidate.flow.foreignNet?.toLocaleString('ko-KR') ?? '미확인'} / 기관 ${candidate.flow.institutionNet?.toLocaleString('ko-KR') ?? '미확인'} ${candidate.flow.unit === 'SHARES' ? '주' : '원'}`;
 
@@ -26,11 +33,10 @@ export function formatClosingTelegram(snapshot: ClosingSnapshot, evaluations: Cl
       `기준가 ${price(m.price)} · 거래대금 ${m.turnover === null ? '미확인' : `${Math.round(m.turnover / 100_000_000).toLocaleString('ko-KR')}억`}`,
       `가격위치 ${m.rangePosition === null ? '미확인' : `${Math.round(m.rangePosition * 100)}%`} · 후반 ${m.lateReturnPct === null ? '미확인' : `${m.lateReturnPct.toFixed(2)}%`} · 상대거래량 ${m.rvol === null ? '미확인' : `${m.rvol.toFixed(2)}배`}`,
       `진입 ${price(candidate.plan.entryLow)}~${price(candidate.plan.entryMax)} / 무효화 ${price(candidate.plan.invalidation)}`,
-      `목표 ${price(candidate.plan.target)} · 익일 개장 30분 후 시간청산 판단`, flow(candidate));
+      `목표 ${price(candidate.plan.target)} · ${CLOSING_EXIT_RULE}`, flow(candidate));
     if (candidate.exclusions.length) lines.push(`제외 조건: ${candidate.exclusions.map(closingExplanation).join(', ')}`);
     const evaluation = evaluations.find((row) => row.ticker === candidate.ticker);
-    if (evaluation) lines.push(evaluation.status === 'PENDING' ? '익일 결과: 다음 거래일 대기'
-      : `참고 종가→익일 시가 ${evaluation.benchmarkReturnPct?.toFixed(2) ?? '미확인'}% · 조건 시뮬레이션 ${evaluation.status === 'SIMULATED' ? `${evaluation.netReturnPct?.toFixed(2)}%` : evaluation.status}`);
+    if (evaluation) lines.push(openingLine(evaluation));
     lines.push('');
   });
   if (!rows.length) lines.push('선정 종목 없음. 데이터 부족 또는 선정 조건 미충족.');

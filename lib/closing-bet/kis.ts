@@ -3,7 +3,7 @@ import { kisAppKey, kisAppSecret, kisBaseUrl } from '@/lib/env';
 import { getKisToken } from '@/lib/finance/providers/kis-auth';
 import { waitForKisRequestSlot } from '@/lib/finance/providers/kis-rate-limit';
 import { CLOSING_POLICY } from './config';
-import type { ClosingBar, ClosingFlow, ClosingQuote } from './types';
+import type { ClosingBar, ClosingFlow, ClosingPricePoint, ClosingQuote, ClosingVenue } from './types';
 
 type KisBody = Record<string, unknown>;
 type KisRow = Record<string, unknown>;
@@ -221,6 +221,27 @@ export function createClosingKisClient(input: {
     }).filter((bar) => Date.parse(`${date}T${bar.time}+09:00`) + MINUTE_MS <= asOfMs);
   }
 
+  async function getClosingPricePoint(ticker: string, date: string, time: string, venue: ClosingVenue): Promise<ClosingPricePoint> {
+    date = requireDate(date);
+    const target = timeString(time);
+    if (!target || !['KRX', 'NXT'].includes(venue)) throw new Error('CLOSING_KIS_INVALID_REQUEST');
+    requireTicker(ticker);
+    const result: ClosingPricePoint = { venue, date, time: target, bar: null };
+    const completeAt = Date.parse(`${date}T${target}+09:00`) + MINUTE_MS;
+    if (completeAt > now().getTime()) return result;
+    const cursor = new Date(completeAt + 9 * 60 * MINUTE_MS).toISOString().slice(11, 19);
+    const body = await request(`${QUOTATIONS}inquire-time-dailychartprice`, 'FHKST03010230', {
+      ...common(ticker), FID_COND_MRKT_DIV_CODE: venue === 'NXT' ? 'NX' : 'J',
+      FID_INPUT_DATE_1: date.replaceAll('-', ''), FID_INPUT_HOUR_1: cursor.replaceAll(':', ''),
+      FID_PW_DATA_INCU_YN: 'Y', FID_FAKE_TICK_INCU_YN: 'N',
+    });
+    if (!Array.isArray(body.output2)) throw new Error('CLOSING_KIS_INVALID_RESPONSE');
+    const matches = rows(body.output2).map((row) => parseBar(row, true)).filter((bar): bar is ClosingBar =>
+      Boolean(bar && bar.date === date && bar.time === target && bar.volume > 0));
+    if (matches.some((bar) => bar.close !== matches[0].close)) throw new Error('CLOSING_KIS_CONFLICTING_PRICE');
+    return { ...result, bar: matches[0] ? { ...matches[0], turnover: null } : null };
+  }
+
   async function getClosingQuote(ticker: string): Promise<ClosingQuote> {
     const body = await request(`${QUOTATIONS}inquire-price`, 'FHKST01010100', common(ticker));
     const row = record(body.output);
@@ -299,8 +320,8 @@ export function createClosingKisClient(input: {
     }
   }
 
-  return { getClosingDaily, getClosingMinutes, getClosingQuote, getClosingOrderbook, getClosingFlow, getClosingSession };
+  return { getClosingDaily, getClosingMinutes, getClosingPricePoint, getClosingQuote, getClosingOrderbook, getClosingFlow, getClosingSession };
 }
 
 const defaultClient = createClosingKisClient();
-export const { getClosingDaily, getClosingMinutes, getClosingQuote, getClosingOrderbook, getClosingFlow, getClosingSession } = defaultClient;
+export const { getClosingDaily, getClosingMinutes, getClosingPricePoint, getClosingQuote, getClosingOrderbook, getClosingFlow, getClosingSession } = defaultClient;

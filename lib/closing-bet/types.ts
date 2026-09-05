@@ -124,13 +124,40 @@ export interface ClosingSnapshot {
   delivery?: { sent: number; skipped: number; failed: number };
 }
 
+export type ClosingVenue = 'KRX' | 'NXT';
+export interface ClosingPricePoint {
+  venue: ClosingVenue;
+  date: string;
+  time: string;
+  bar: ClosingBar | null;
+  error?: string;
+}
+export interface ClosingOpeningExit {
+  venue: ClosingVenue;
+  time: string;
+  status: 'PENDING' | 'AVAILABLE' | 'DATA_MISSING' | 'NOT_APPLICABLE';
+  price: number | null;
+  returnPct: number | null;
+  netReturnPct: number | null;
+  point: ClosingPricePoint | null;
+  warnings: string[];
+}
+export interface ClosingOpeningPerformance {
+  version: string;
+  basisPrice: number | null;
+  basis: ClosingPricePoint | null;
+  measuredAt: string;
+  nxt: ClosingOpeningExit;
+  krx: ClosingOpeningExit;
+}
 export interface ClosingEvaluation {
+  opening?: ClosingOpeningPerformance;
   snapshotId: string;
   ticker: string;
   market: ClosingMarket;
   tradeDate: string;
   nextTradeDate: string | null;
-  status: 'PENDING' | 'NO_ENTRY' | 'SIMULATED' | 'DATA_MISSING';
+  status: 'PENDING' | 'NO_ENTRY' | 'SIMULATED' | 'DATA_MISSING' | 'MEASURED';
   close: number | null;
   entry: number | null;
   exit: number | null;

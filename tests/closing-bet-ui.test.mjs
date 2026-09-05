@@ -6,6 +6,7 @@ import { createJiti } from 'jiti';
 const jiti = createJiti(import.meta.url, { jsx: { runtime: 'automatic' } });
 const { selectClosingSnapshots, displayedClosingCandidates } = jiti('../components/closing-bet/view-model.ts');
 const { ClosingMarketPanel, ClosingEvaluationPanel, fetchClosingDashboard } = jiti('../components/closing-bet/ClosingBetDashboard.tsx');
+const { CLOSING_OPENING_POLICY } = jiti('../lib/closing-bet/config.ts');
 
 const candidate = {
   ticker: '005930', name: '테스트 종목', market: 'KOSPI200', rank: 1, score: 80,
@@ -60,10 +61,18 @@ const orderedReview = [{ ...candidate, ticker: '267250', rank: null, score: 46, 
 assert.deepEqual(displayedClosingCandidates({ ...replay, reviewCandidates: orderedReview }).map((item) => item.ticker), ['267250', '042700'], '웹은 텔레그램과 같은 검토 순위를 유지하고 점수순으로 다시 정렬하지 않는다');
 assert.deepEqual(displayedClosingCandidates({ ...snapshot, phase: 'WATCH', reviewCandidates: orderedReview }).map((item) => item.ticker), ['267250', '042700']);
 
-const evaluation = { snapshotId: snapshot.id, ticker: candidate.ticker, market: 'KOSPI200', tradeDate: snapshot.tradeDate, nextTradeDate: '2026-09-07', status: 'NO_ENTRY', close: 10000, entry: 9999, exit: 12345, exitReason: null, benchmarkReturnPct: 0, netReturnPct: 23.46, maePct: 0, mfePct: 24, costBps: 25, warnings: [] };
+const evaluation = { snapshotId: snapshot.id, ticker: candidate.ticker, market: 'KOSPI200', tradeDate: snapshot.tradeDate, nextTradeDate: '2026-09-07', status: 'MEASURED', close: 10000, entry: null, exit: null, exitReason: null, benchmarkReturnPct: null, netReturnPct: null, maePct: null, mfePct: null, costBps: 25, warnings: [],
+  opening: { version: CLOSING_OPENING_POLICY.version, basisPrice: 10000, basis: null, measuredAt: '2026-09-07T00:06:00Z',
+    nxt: { venue: 'NXT', time: '08:05:00', status: 'AVAILABLE', price: 10100, returnPct: 1, netReturnPct: 0.75, point: null, warnings: [] },
+    krx: { venue: 'KRX', time: '09:05:00', status: 'AVAILABLE', price: 9800, returnPct: -2, netReturnPct: -2.25, point: null, warnings: [] } } };
 const evaluationHtml = renderToStaticMarkup(createElement(ClosingEvaluationPanel, { snapshots: [snapshot], evaluations: [evaluation, { ...evaluation, snapshotId: 'unrelated', ticker: '노출하면안됨' }] }));
 assert.match(evaluationHtml, /실제 주문이나 계좌 체결 결과를 의미하지 않습니다/);
-assert.match(evaluationHtml, /진입 조건 미충족/);
+assert.match(evaluationHtml, /10,100원/);
+assert.match(evaluationHtml, /\+1.00%/);
+assert.match(evaluationHtml, /9,800원/);
+assert.match(evaluationHtml, /-2.00%/);
+assert.match(evaluationHtml, /NXT 08:05 종가/);
+assert.match(evaluationHtml, /KRX 09:05 종가/);
 assert.doesNotMatch(evaluationHtml, /23.46%|12,345원|노출하면안됨/);
 
 const response = (snapshots = [], dates = []) => new Response(JSON.stringify({ data: { snapshots, evaluations: [], dates }, meta: {} }), { status: 200 });

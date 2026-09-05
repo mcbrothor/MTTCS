@@ -178,3 +178,28 @@ const daily = (date, extra = {}) => ({ stck_bsop_date: date, stck_oprc: '100', s
 }
 
 console.log('closing-bet-kis: all boundary and point-in-time checks passed');
+
+// Opening performance must use exact, venue-specific, traded minute closes.
+{
+  const requests = [];
+  const client = createClosingKisClient({ now, request: async (endpoint, tr, params) => {
+    requests.push(params);
+    return { output1: { stck_prpr: '999999' }, output2: [
+      minute('080400', 1000), minute('080500', 2000),
+      minute('080500', 3000, { stck_bsop_date: '20260903' }),
+    ] };
+  } });
+  const point = await client.getClosingPricePoint('000810', '2026-09-04', '08:05:00', 'NXT');
+  assert.equal(point.venue, 'NXT');
+  assert.equal(point.bar.time, '08:05:00');
+  assert.equal(point.bar.close, 100);
+  assert.equal(requests[0].FID_COND_MRKT_DIV_CODE, 'NX');
+  assert.equal(requests[0].FID_INPUT_HOUR_1, '080600');
+  assert.equal(requests[0].FID_FAKE_TICK_INCU_YN, 'N');
+  await client.getClosingPricePoint('000810', '2026-09-04', '09:05:00', 'KRX');
+  assert.equal(requests[1].FID_COND_MRKT_DIV_CODE, 'J');
+  const missing = createClosingKisClient({ now, request: async () => ({ output2: [minute('080400', 1000), minute('080500', 2000, { cntg_vol: '0' })] }) });
+  assert.equal((await missing.getClosingPricePoint('000810', '2026-09-04', '08:05:00', 'NXT')).bar, null);
+  const pending = createClosingKisClient({ now: () => new Date('2026-09-04T08:05:59+09:00'), request: async () => { throw new Error('must not request an incomplete bar'); } });
+  assert.equal((await pending.getClosingPricePoint('000810', '2026-09-04', '08:05:00', 'NXT')).bar, null);
+}
