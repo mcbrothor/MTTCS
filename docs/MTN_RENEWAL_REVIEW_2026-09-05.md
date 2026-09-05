@@ -1,6 +1,6 @@
 # MTN 리뉴얼 검토 근거
 
-검토일: 2026-09-05 KST · [리뉴얼 계획서](/Users/mantori/vibecoding/MTN/docs/MTN_RENEWAL_PLAN_2026-09-05.md)
+검토일: 2026-09-05 KST · 개정 2: 종가베팅 추가 검토 및 기존 수정 상태 갱신 · [리뉴얼 계획서](/Users/mantori/vibecoding/MTN/docs/MTN_RENEWAL_PLAN_2026-09-05.md)
 
 ## 1. 검토 범위와 한계
 
@@ -10,9 +10,9 @@
 
 심각도는 리뉴얼 작업 순서에 사용하는 분류다. 정적 위험을 실제 사고로 간주하지 않는다. 기능 존재와 운영 환경에서의 효과도 구분한다.
 
-검증 종료 후 다른 작업의 `navigation.ts`, `tests/navigation.test.mjs`, `app/strategies/kr-closing-bet`, `components/closing-bet`, `lib/closing-bet`, 종가베팅 migration 변경이 나타났다. 메뉴·페이지와 데이터 타입만 제한적으로 확인했으며 기존 검사 결과에 포함하지 않는다. 이번 문서 작업에서 수정하거나 커밋에 포함하지 않았다. 아래 소스 행 번호도 검토 기준 커밋을 기준으로 하므로 후속 변경에 따라 이동할 수 있다.
+1차 검증 뒤 추가된 종가베팅을 사용자 요청에 따라 다시 검토했다. **2~6절은 1차 검토의 기록이며, 현재 상태와 추가 검증 결과는 7절이 우선한다.** 특히 기존 F01/F02/F04/F06 및 로컬500의 상태를 갱신했다. 다른 작업의 코드 변경은 이번 문서 커밋에 포함하지 않는다. 소스 행 번호는 각 검토 시점을 기준으로 하므로 후속 변경에 따라 이동할 수 있다.
 
-## 2. 기준선과 직접 실행 결과
+## 2. 1차 기준선과 직접 실행 결과
 
 | 항목 | 확인 결과 |
 |---|---|
@@ -47,7 +47,7 @@ E2E 로그에 `supabaseServer` 기술 부채 경고와 모킹 환경의 pipeline
 
 검토 세션의 임시 로그는 `/tmp/mtn-renewal-lint.log`, `typecheck.log`, `unit.log`, `e2e.log`, `build.log`에 같은 `mtn-renewal-` 접두어로 남겼다. 임시 파일 보존을 보장하지 않으므로 결과와 재실행 조건은 이 문서에 기록했다.
 
-## 3. 확인한 문제와 우선순위
+## 3. 1차 검토 당시 문제와 우선순위
 
 | ID | 수준 | 발견·사용자 영향 | 근거 |
 |---|---|---|---|
@@ -68,7 +68,7 @@ E2E 로그에 `supabaseServer` 기술 부채 경고와 모킹 환경의 pipeline
 | F15 | 정적 사실 | 구형 supabaseServer는 service role 누락 시 anon fallback. 같은 호출의 권한 의미가 설정에 따라 바뀜 | [서버 클라이언트](/Users/mantori/vibecoding/MTN/lib/supabase/server.ts:74) |
 | F16 | 정적 사실 | 릴리스 문서는 HTTP 작업 35개, 현재 매니페스트·preflight는 37개. launchd/GitHub/Cloudflare 작업은 별도 존재 | [문서](/Users/mantori/vibecoding/MTN/docs/RELEASE_PREFLIGHT.md:10), [매니페스트](/Users/mantori/vibecoding/MTN/infra/release/production-scheduler-manifest.json:12) |
 
-F01·F12·실행 환경 기준선은 첫 착수 항목이다. F04~F10은 첫 사용자 흐름 전환 전에 해결한다. F13~F14는 worker 실행권 전환 전에 실패 주입으로 재현·검증한다. F02·F03은 연구·성과 계약을 확정하는 선행 항목이다. F03의 실제 KR 표본 부족이나 운영 승격 실패는 DB에서 확인하지 않았으므로 단정하지 않는다.
+1차 권고에서는 F01·F12·실행 환경을 첫 착수 항목으로, F04~F10을 첫 사용자 흐름 전환 조건으로 분류했다. 개정 시 F01/F02/F04/F06의 수정 상태를 7절과 계획서에 반영했다. F13~F14의 실패 주입 및 F03의 실제 KR 표본/승격 상태는 여전히 미검증이다.
 
 추가 정적 점검 사항은 펀더멘털 캐시 upsert 반환 error 미검사 및 예외 묵살([fundamental-fetcher](/Users/mantori/vibecoding/MTN/lib/finance/market/fundamental-fetcher.ts:87)), 스캐너의 일부 종목 실패가 coverage에 전달되는지 여부([daily-screeners](/Users/mantori/vibecoding/MTN/lib/daily-screeners/index.ts:511)), 링크 내부 button 구조([FlowCtaButton](/Users/mantori/vibecoding/MTN/components/ui/FlowCtaButton.tsx:81))다.
 
@@ -146,3 +146,82 @@ KOSPI200/KOSDAQ150 스캐너 유니버스는 시가총액 상위 보통주 집�
 7. worker lease 탈취·재시작·부분 저장 실패·중복 발송 방지의 실패 주입 검증
 
 이 항목은 계획의 정확도와 운영 전환 조건을 확정하기 위한 후속 측정이다. 이번 검토에서 확인한 것으로 보고하지 않는다.
+
+## 7. 종가베팅 추가 검토와 현재 상태
+
+### 7.1 검토 버전과 실행 결과
+
+추가 검토 시작은 2026-09-05 20:49 KST, HEAD는 문서 커밋 `13d6347bdfeff20b31708612c48adea21deb6520`이다. 미커밋 신규/수정 파일을 포함한 32개 관련 파일의 해시를 고정하고 검사 후 동일함을 확인했다. 전체 파일 경로→SHA256 맵의 합성 hash는 `83e4a1ee60aaf1575feefb3467d0171a8960a0e603342366f36aaefdc5e76a01`이다. 대상은 종가베팅 lib/components/API/page/tests/migrations/CLI/문서·메뉴·manifest와 기존 수정5개 파일이다.
+
+운영 `/api/release`는 `6f4c1c51da840624a925681e716ad32188a130b3`을 반환했다. 해당 Git 객체와 비교해 종가베팅 관련27개 파일이 현재 검토 소스와 일치했다. 다른5개는 plan/portfolio/AsyncStatePanel/daily-screeners/monthly-backtest의 로컬 수정이다. 따라서 **종가베팅 소스는 관측된 배포 커밋과 같지만, 기존 결함의 로컬 수정은 그 배포에 포함되지 않는다.** DB·실제 worker 실행 결과까지 동일하다는 의미는 아니다.
+
+| 추가 검증 | 결과와 한계 |
+|---|---|
+| 현재 파일 수 | page34, API route110, unit184, E2E spec37, Supabase migration91. 미추적 신규 파일 포함 |
+| lint / typecheck | Node24.18.0, 모두 PASS/exit0 |
+| `npm test` | **184개 테스트 파일 PASS**. 종가 엔진·평가·KIS·scheduler·Telegram·UI·universe 7개 파일 포함 |
+| API auth 정적 검사 | PASS. 실제 handler 분기/DB RLS 전체 검증은 아님 |
+| release preflight `--allow-dirty` | 개발 검증 exit0, jobCount47·scheduledRoute17·discoveredRoute19. dirty로 **releaseEligible=false**, live.checked=false |
+| production build | `.next-verify`, PASS/exit0. `/strategies/kr-closing-bet` 포함. 자동 추가 tsconfig include2개 원복 |
+| 운영 `/api/closing-bet` | 인증 없이401 |
+| 운영 `/api/cron/closing-bet?market=KOSPI200&phase=final&dryRun=true` | 인증 없이401. 발행·발송 실행 안 됨 |
+| 로컬3000 `/api/auth/session` | 200, authenticated=false. 이전500은 재현되지 않음 |
+| 로컬3000 `/api/release` | 503, RELEASE_SHA_UNAVAILABLE. 현재는 릴리스 SHA 미설정 문제 |
+
+추가 검사 로그는 `/tmp/mtn-renewal-closing-{lint,typecheck,unit,build}.log`와 `/tmp/mtn-renewal-closing-preflight.json`에 남겼다. 종가베팅 전용 실제 브라우저 E2E, 전체 서비스의 DB 충돌/권한 통합시험, 실제 장중 수집·텔레그램 발송은 실행하지 않았다. 1차의32개 E2E PASS를 종가베팅 사용자 흐름의 검증 결과로 쓰지 않는다.
+
+### 7.2 기존 문제의 수정 상태
+
+| 기존 ID | 현재 확인 | 남은 작업 |
+|---|---|---|
+| F01 후보 집계 | 최대 유효점수+고유 source 보너스1회로 수정. 원래 BBB96 fixture 재실행 시 원순서/역순서/중복 모두 BBB1위·AAA2위 | 저장된 새 회귀 테스트는 BBB90이라 구 코드에서도 같은 순위가 나옴. 원 버그 검출 fixture 보강·정책 버전·배포 확인 필요. 구형 ruleBasedDailyTop5는 별도 사용처 점검 대상 |
+| F02 월간 회계 | positionValues/cash로 비중 드리프트 반영. 원 입력1→1.5→1 회귀 테스트 포함, 전체 unit PASS | 기업행동·결측·비용·재조정 전체 회계 검증과 배포 확인 |
+| F04/F05 시장 | plan에서 공통 시장 동기화 및 `/portfolio?market=` 전달, portfolio query 초기 조회 추가 | 뒤로가기/외부 URL 변경/3분 갱신의 표시·조회 상태 동기화, portfolio 공통 MarketProvider 범위 검증 |
+| F06 로딩 | 4초 후 지연 문구를 표시하는 타이머 추가, 관련 테스트 PASS | 실제 브라우저의 로딩/재시도/같은 맥락 보존 회귀 검증 |
+| F16 작업 수 | 문서·manifest가 종가10개 포함47개로 수정, 개발 preflight47개 확인 | 실제 Supabase 활성화/공통 함수 적용과 기존37개 작업의 운영 회귀 검증 |
+
+### 7.3 종가베팅의 보존 가치
+
+종가베팅 버전은 `kr-closing-bet-v1.1`이다. 기본 풀은 코스피 시총200/코스닥 시총150이며 공식 지수 편입 목록과 동일하다고 가정하지 않는다. 기본 수집 후 시장별 거래대금 상위35개를 상세 분석한다. 실측 거래대금500억원·75점·최대5개·동일 업종 최대2개와 빈자리 유지가 이미 구현돼 있다.
+
+전일까지의 일봉·완성 분봉·availableAt 근거 절단, REPLAY의 현재 quote 무시/공식 picks 비움, FINAL 늦은 발행 차단, RLS·앱 저장 경로의 FINAL 재사용·중복 발송 receipt·UNCERTAIN 자동 재전송 중단을 보존한다. FINAL 보존은 repository 계약이며 DB 변경 차단 trigger는 없고 service_role에 쓰기 권한이 있다. 익일 평가도 실제 계좌 성과와 구분하고 갭 시가·동일 분봉 손절 우선·25bp 비용 가정·오전 경로 결측 검사를 수행한다. 기본 수집 coverage95%가 전체 풀95%의 정밀 분석 완료를 뜻하지는 않는다.
+
+근거: [선정 엔진](/Users/mantori/vibecoding/MTN/lib/closing-bet/engine.ts:147), [평가](/Users/mantori/vibecoding/MTN/lib/closing-bet/evaluation.ts:62), [발송](/Users/mantori/vibecoding/MTN/lib/closing-bet/telegram.ts:53), [저장](/Users/mantori/vibecoding/MTN/lib/closing-bet/repository.ts:31), [기능 문서](/Users/mantori/vibecoding/MTN/docs/closing-bet.md).
+
+### 7.4 종가베팅 발견 사항
+
+| ID | 수준 | 발견·영향 | 근거 |
+|---|---|---|---|
+| CB-F01 | **합성 실행 재현** | 공급자 날짜·시각 누락을 receivedAt으로 채워 원천90초 검사를 통과, LIVE FULL/ACTIONABLE 후보가 됨. 실제 지연 시세 수신은 미확인 | [KIS](/Users/mantori/vibecoding/MTN/lib/closing-bet/kis.ts:242), [엔진](/Users/mantori/vibecoding/MTN/lib/closing-bet/engine.ts:81) |
+| CB-F02 | 정적 사실 | 과거/만료 LIVE FINAL도 “조건부 추천” 고정 표시. 만료시각은 상세 안에 있고 자동 갱신 없음 | [카드](/Users/mantori/vibecoding/MTN/components/closing-bet/ClosingBetDashboard.tsx:100), [조회](/Users/mantori/vibecoding/MTN/components/closing-bet/ClosingBetDashboard.tsx:190) |
+| CB-F03 | 정적 계약 갭 | 웹에 monitor 조건이탈/발송 상태 미연결. Telegram 링크도 date/mode만 전달해 다른 모델 버전 추가 시 원본과 다른 snapshot을 열 가능성 | [조회 API](/Users/mantori/vibecoding/MTN/app/api/closing-bet/route.ts:22), [링크](/Users/mantori/vibecoding/MTN/lib/closing-bet/telegram.ts:39) |
+| CB-F04 | 정적 결함·미재현 | 기존 FINAL 재사용 시 delivery.failed 미검사, 신규 발행만 throw. 재전송 실패가 cron200으로 처리될 수 있음 | [재사용](/Users/mantori/vibecoding/MTN/lib/closing-bet/service.ts:50), [cron 응답](/Users/mantori/vibecoding/MTN/app/api/cron/closing-bet/route.ts:21) |
+| CB-F05 | 정적 위험 | 시간외 skip/잠금 미획득도2xx. 후속 skip이 마감 누락을 정상 상태로 보이게 할 가능성 | [실행창](/Users/mantori/vibecoding/MTN/lib/closing-bet/service.ts:45), [scheduler](/Users/mantori/vibecoding/MTN/supabase/migrations/20260905093000_closing_bet_scheduler.sql:121) |
+| CB-F06 | 정적 사실·미재현 | review는 최신 과거 LIVE FINAL1개만 선택. 신규 발행 뒤 이전 미평가 건을 순회 복구하지 않음 | [review](/Users/mantori/vibecoding/MTN/lib/closing-bet/service.ts:155) |
+| CB-F07 | 정적 위험 | NO_ENTRY 근거인 withdrawn 이벤트는 TTL45일 캐시. 만료 뒤 재평가하면 원래 철회 사실을 잃을 수 있음 | [평가 참조](/Users/mantori/vibecoding/MTN/lib/closing-bet/service.ts:118), [캐시 저장](/Users/mantori/vibecoding/MTN/lib/closing-bet/service.ts:146) |
+| CB-F08 | 정적 계약 갭 | 평가는 snapshot/ticker에 upsert. 평가 버전·원천 hash·정정 이력·기업행동 계약이 없어 과거 수치 재현/해석이 취약 | [평가 저장](/Users/mantori/vibecoding/MTN/lib/closing-bet/repository.ts:59), [평가 타입](/Users/mantori/vibecoding/MTN/lib/closing-bet/types.ts:127) |
+| CB-F09 | 정적 불일치 | 엔진은 마감 상대 시각, prepare는15:18 고정, 기준선은09:00 분봉을 요구. 특별장 RVOL 준비/사용 계약 불일치 | [기준선](/Users/mantori/vibecoding/MTN/lib/closing-bet/data.ts:57), [준비](/Users/mantori/vibecoding/MTN/lib/closing-bet/data.ts:181) |
+| CB-F10 | 정적 지원 범위 | LIVE/FINAL은 실행·발행 상태. modelStatus/승격 근거 계약은 없음. 예측력 검증 완료로 표시하면 안 됨 | [snapshot](/Users/mantori/vibecoding/MTN/lib/closing-bet/types.ts:104) |
+
+CB-F01은 기존 정상 후보 fixture의 quote만 mock KIS 응답으로 바꿔 재현했다. `stck_bsop_date`와 `stck_cntg_hour`를 모두 빼고 mock now=`2026-09-03T06:17:59Z`를 사용했다. 실제 외부 요청/DB/발송은 없었다.
+
+```json
+{
+  "sourceDatePresent": false,
+  "sourceTimePresent": false,
+  "observedAt": "2026-09-03T06:17:59.000Z",
+  "receivedAt": "2026-09-03T06:17:59.000Z",
+  "snapshotStatus": "READY",
+  "picks": [{"ticker":"005930","status":"ACTIONABLE","quality":"FULL","score":96,"warnings":[]}]
+}
+```
+
+핵심 엔진 SHA256: `b613a0a90e3fd226dfb7a6d162783d1126fa94a0461154c34edd6ba18dce72bf`. 원천 시각을 확보할 수 없는 공급자라면 수집 시각과 시각 근거 등급을 분리하고, 공식 후보에 필요한 대체 근거 또는 차단 정책을 명시해야 한다.
+
+### 7.5 운영·검증 계획에 반영한 사항
+
+신규 migration은 prepare/watch/final/monitor/review를 두 시장에10개 등록하며 공통 invoke/응답 수집 함수도 변경한다. 설정상 주중716 HTTP 호출/일이며 시간외 skip을 포함한다. 이는 시세 요청716회나 실측 성공률이 아니다. 240초 timeout과 실제 발행 마감 준수는 별개의 조건이다.
+
+계획서에는 원천시각(P0), 발행 결과 계약(P0), 유효성·원본 링크, 철회/평가 원장, 특별장·기업행동, 기존37+신규10 작업 회귀를 CB01~CB06으로 추가했다. 종가베팅은 7번째 기존 전략으로 통합하고, 원천 시각 오류 보강은 장기 UI 리뉴얼 완료를 기다리지 않는 선행 작업으로 분류했다.
+
+추가 검증 범위는 LIVE/WATCH/FINAL/REPLAY의 적법한 조합 × 일반장/특별장/휴장/만료 × 정상/부분수집/장애, 두 시장 동시 마감, 중복 cron, 전송 응답 유실, 철회 이후 평가, 이틀 미평가 복구, 실제 DB RLS/unique/lock 충돌이다. REPLAY 성과나 mock 테스트 통과만으로 LIVE 활성화·운영 안정성을 판정하지 않는다.
