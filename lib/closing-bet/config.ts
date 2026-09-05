@@ -1,3 +1,4 @@
+export const CLOSING_DASHBOARD_TIMEOUT_MS = 15_000;
 export const CLOSING_VERSION = 'kr-closing-bet-v1.1';
 export const CLOSING_MARKETS = ['KOSPI200', 'KOSDAQ150'] as const;
 export const CLOSING_LABELS = { KOSPI200: '코스피', KOSDAQ150: '코스닥' } as const;

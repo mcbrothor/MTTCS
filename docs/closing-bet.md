@@ -89,3 +89,13 @@ KRX 종가→익일 시가 비교와 조건부 진입·익일 개장30분후 시
 엔진·평가·KIS·화면·텔레그램·스케줄 테스트, lint/typecheck/build/API auth audit를 실행한다.
 마이그레이션과 manifest를 포함하는 깨끗한 커밋에서 `scripts/release/verify-release.mjs --verify-clean-clone`을 통과한 후 배포한다.
 배포 후 `/api/release` SHA와 모든 cron endpoint의 인증 없는401 응답을 확인하고 신규 스케줄을 적용한다.
+
+### 기준일 전환 회귀 검증
+
+날짜·모드 필터는 History API로 URL과 클라이언트 조회를 함께 갱신한다. 서버 페이지 전환을 기다리지 않으며, 조회 중에도 날짜 목록을 유지한다. 응답·오류는 날짜·모드·새로고침 키가 일치할 때만 표시하고, 이전 요청은 취소한다. 전체 조회가 15초를 넘으면 재시도 안내를 표시한다.
+
+`tests/e2e/closing-bet-navigation.spec.ts`는 페이지 전환 지연 시 9월 4일→3일→4일 선택, 빠른 연속 선택, 오류 후 재시도, 응답 시간 초과를 검증한다. 기존 Playwright 인증 환경에서 다음 명령으로 실행한다.
+
+```bash
+npm run test:e2e -- tests/e2e/closing-bet-navigation.spec.ts
+```

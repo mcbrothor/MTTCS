@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ArrowUpRight, BarChart3, CalendarDays, ChevronDown, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
 import type { ClosingBar, ClosingCandidate, ClosingEvaluation, ClosingMarket, ClosingMode, ClosingSnapshot } from '../../lib/closing-bet/types';
-import { CLOSING_LABELS, CLOSING_MARKETS } from '../../lib/closing-bet/config';
+import { CLOSING_DASHBOARD_TIMEOUT_MS, CLOSING_LABELS, CLOSING_MARKETS } from '../../lib/closing-bet/config';
 import { closingExplanation, displayedClosingCandidates, safeClosingEvidenceUrl, selectClosingSnapshots } from './view-model';
 
 interface ClosingResponse {
@@ -17,10 +17,13 @@ type RequestedMode = ClosingMode | 'AUTO';
 
 export async function fetchClosingDashboard(input: { date: string; mode: RequestedMode; signal?: AbortSignal; fetcher?: typeof fetch }): Promise<LoadedClosingData> {
   const fetcher = input.fetcher || fetch;
+  const deadline = new AbortController();
+  const signal = input.signal ? AbortSignal.any([input.signal, deadline.signal]) : deadline.signal;
+  const timeout = setTimeout(() => deadline.abort(new Error('조회 시간이 초과되었습니다. 다시 불러와 주세요.')), CLOSING_DASHBOARD_TIMEOUT_MS);
   const read = async (mode: ClosingMode) => {
     const params = new URLSearchParams({ mode });
     if (input.date) params.set('date', input.date);
-    const response = await fetcher(`/api/closing-bet?${params}`, { signal: input.signal, cache: 'no-store' });
+    const response = await fetcher(`/api/closing-bet?${params}`, { signal, cache: 'no-store' });
     const body = await response.json();
     if (!response.ok) throw new Error(body.message || (typeof body.error === 'string' ? body.error : null) || '종가베팅 결과를 불러오지 못했습니다.');
     if (!Array.isArray(body.data?.snapshots) || !Array.isArray(body.data?.evaluations) || !Array.isArray(body.data?.dates)) {
@@ -28,14 +31,18 @@ export async function fetchClosingDashboard(input: { date: string; mode: Request
     }
     return body as ClosingResponse;
   };
-  const mode = input.mode === 'AUTO' ? 'LIVE' : input.mode;
-  const primary = await read(mode);
-  if (input.mode === 'AUTO' && !primary.data.snapshots.some((snapshot) => snapshot.mode === 'LIVE')) {
-    const replay = await read('REPLAY');
-    if (replay.data.snapshots.length) return { ...replay, mode: 'REPLAY', fallback: true };
-    return { ...primary, data: { ...primary.data, dates: [...new Set([...primary.data.dates, ...replay.data.dates])].sort().reverse() }, mode: 'LIVE', fallback: false };
+  try {
+    const mode = input.mode === 'AUTO' ? 'LIVE' : input.mode;
+    const primary = await read(mode);
+    if (input.mode === 'AUTO' && !primary.data.snapshots.some((snapshot) => snapshot.mode === 'LIVE')) {
+      const replay = await read('REPLAY');
+      if (replay.data.snapshots.length) return { ...replay, mode: 'REPLAY', fallback: true };
+      return { ...primary, data: { ...primary.data, dates: [...new Set([...primary.data.dates, ...replay.data.dates])].sort().reverse() }, mode: 'LIVE', fallback: false };
+    }
+    return { ...primary, mode, fallback: false };
+  } finally {
+    clearTimeout(timeout);
   }
-  return { ...primary, mode, fallback: false };
 }
 
 function numeric(value: number | null | undefined, digits = 0) {
@@ -176,42 +183,43 @@ export function ClosingEvaluationPanel({ evaluations, snapshots }: { evaluations
 }
 
 export default function ClosingBetDashboard() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const dateParam = searchParams.get('date') || '';
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : '';
   const modeParam = searchParams.get('mode')?.toUpperCase();
   const requestedMode: RequestedMode = modeParam === 'LIVE' || modeParam === 'REPLAY' ? modeParam : 'AUTO';
   const [revision, setRevision] = useState(0);
-  const [loaded, setLoaded] = useState<LoadedClosingData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const requestKey = `${date}:${requestedMode}:${revision}`;
+  const [result, setResult] = useState<(LoadedClosingData & { requestKey: string }) | null>(null);
+  const [failure, setFailure] = useState<{ requestKey: string; message: string } | null>(null);
+  const loaded = result?.requestKey === requestKey ? result : null;
+  const error = failure?.requestKey === requestKey ? failure.message : null;
+  const loading = !loaded && !error;
 
   useEffect(() => {
     const controller = new AbortController();
     fetchClosingDashboard({ date, mode: requestedMode, signal: controller.signal }).then((result) => {
-      if (!controller.signal.aborted) { setLoaded(result); setError(null); setLoading(false); }
+      if (!controller.signal.aborted) { setResult({ ...result, requestKey }); setFailure(null); }
     }).catch((failure: unknown) => {
-      if (!controller.signal.aborted) { setError(failure instanceof Error ? failure.message : '결과를 불러오지 못했습니다.'); setLoading(false); }
+      if (!controller.signal.aborted) { setFailure({ requestKey, message: failure instanceof Error ? failure.message : '결과를 불러오지 못했습니다.' }); }
     });
     return () => controller.abort();
-  }, [date, requestedMode, revision]);
+  }, [date, requestedMode, requestKey]);
 
-  const reset = () => { setLoading(true); setError(null); setLoaded(null); };
   const updateQuery = (change: { date?: string; mode?: ClosingMode }) => {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(window.location.search);
     for (const [key, value] of Object.entries(change)) {
       if (value) params.set(key, value);
       else params.delete(key);
     }
-    reset();
-    if (params.toString() === searchParams.toString()) setRevision((previous) => previous + 1);
-    else router.replace(`/strategies/kr-closing-bet${params.size ? `?${params}` : ''}`, { scroll: false });
+    if (params.toString() === new URLSearchParams(window.location.search).toString()) setRevision((previous) => previous + 1);
+    // Filters are client data queries; a server page navigation can stall before the API request starts.
+    else window.history.replaceState(null, '', `/strategies/kr-closing-bet${params.size ? `?${params}` : ''}`);
   };
   const mode = loaded?.mode || (requestedMode === 'AUTO' ? 'LIVE' : requestedMode);
   const selected = selectClosingSnapshots(loaded?.data.snapshots || [], mode, date);
   const snapshots = [...selected.latest.values()];
-  const dates = [...new Set([...(loaded?.data.dates || []), ...(date ? [date] : [])])].sort().reverse();
+  const dates = [...new Set([...(result?.data.dates || []), ...(date ? [date] : [])])].sort().reverse();
 
   return <div className="min-w-0 space-y-5 pb-12">
     <header className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-5 sm:p-6">
@@ -223,10 +231,10 @@ export default function ClosingBetDashboard() {
 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div role="group" aria-label="결과 유형" className="flex rounded-xl border border-slate-800 bg-slate-950/60 p-1">{(['LIVE', 'REPLAY'] as const).map((value) => <button key={value} type="button" aria-pressed={mode === value} onClick={() => updateQuery({ mode: value })} className={`rounded-lg px-4 py-2 text-xs font-medium transition-colors ${mode === value ? 'bg-slate-800 text-slate-100' : 'text-slate-500 hover:text-slate-300'}`}>{value === 'LIVE' ? '실전 스냅샷' : '과거 재현 · 검토'}</button>)}</div>
-      <div className="flex flex-wrap items-center gap-2"><label htmlFor="closing-date" className="flex items-center gap-1.5 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" aria-hidden />기준일</label><select id="closing-date" value={date} onChange={(event) => updateQuery({ date: event.target.value })} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="">최신 결과</option>{dates.map((day) => <option key={day} value={day}>{day}</option>)}</select><button type="button" onClick={() => { reset(); setRevision((previous) => previous + 1); }} disabled={loading} aria-label="결과 새로고침" className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-slate-100 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden /></button></div>
+      <div className="flex flex-wrap items-center gap-2"><label htmlFor="closing-date" className="flex items-center gap-1.5 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" aria-hidden />기준일</label><select id="closing-date" value={date} onChange={(event) => updateQuery({ date: event.target.value })} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="">최신 결과</option>{dates.map((day) => <option key={day} value={day}>{day}</option>)}</select><button type="button" onClick={() => { setRevision((previous) => previous + 1); }} disabled={loading} aria-label="결과 새로고침" className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-slate-100 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden /></button></div>
     </div>
 
-    {loading ? <div role="status" className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-8 text-sm text-slate-400"><RefreshCw className="h-4 w-4 animate-spin text-teal-300" aria-hidden />저장된 종가베팅 결과를 불러오고 있습니다.</div> : error ? <div role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5"><p className="text-sm font-medium text-rose-200">결과를 불러오지 못했습니다.</p><p className="mt-2 text-xs leading-6 text-rose-200/70">{error}</p><button type="button" onClick={() => { reset(); setRevision((previous) => previous + 1); }} className="mt-3 rounded-lg border border-rose-300/25 px-3 py-2 text-xs text-rose-200">다시 불러오기</button></div> : <>
+    {loading ? <div role="status" className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-8 text-sm text-slate-400"><RefreshCw className="h-4 w-4 animate-spin text-teal-300" aria-hidden />저장된 종가베팅 결과를 불러오고 있습니다.</div> : error ? <div role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5"><p className="text-sm font-medium text-rose-200">결과를 불러오지 못했습니다.</p><p className="mt-2 text-xs leading-6 text-rose-200/70">{error}</p><button type="button" onClick={() => { setRevision((previous) => previous + 1); }} className="mt-3 rounded-lg border border-rose-300/25 px-3 py-2 text-xs text-rose-200">다시 불러오기</button></div> : <>
       {mode === 'REPLAY' && <div className="flex items-start gap-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-4 text-xs leading-6 text-amber-200"><ShieldAlert className="mt-1 h-4 w-4 shrink-0" aria-hidden /><div><p className="font-semibold">과거 재현 · 검토 전용</p><p className="text-amber-200/75">{loaded?.fallback ? '실전 스냅샷이 없어 저장된 과거 재현 결과를 표시합니다. ' : ''}아래 목록은 당시 자료로 재현한 검토 후보이며, 현재 유효한 매수 추천이 아닙니다.</p></div></div>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500"><span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{selected.tradeDate || '저장된 결과 없음'} · 모든 시각 KST</span><span>조건 미충족 시 5종목을 채우지 않습니다.</span></div>
       <div className="grid items-start gap-4 xl:grid-cols-2">{CLOSING_MARKETS.map((market) => <ClosingMarketPanel key={market} market={market} snapshot={selected.latest.get(market)} mode={mode} />)}</div>
