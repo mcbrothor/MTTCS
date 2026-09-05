@@ -1,12 +1,24 @@
 import assert from 'node:assert/strict';
-import { ClosingRepository } from '../lib/closing-bet/repository.ts';
-import { deliverClosingText, formatClosingTelegram, sendClosingSnapshot } from '../lib/closing-bet/telegram.ts';
+import path from 'node:path';
+import { createJiti } from 'jiti';
+
+const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': path.resolve('.') } });
+const { ClosingRepository } = jiti('../lib/closing-bet/repository.ts');
+const { CLOSING_OPENING_POLICY } = jiti('../lib/closing-bet/config.ts');
+const { deliverClosingText, formatClosingTelegram, sendClosingSnapshot } = jiti('../lib/closing-bet/telegram.ts');
 
 process.env.TELEGRAM_BOT_TOKEN = 'test-token';
 process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'test-chat';
 const originalFetch = globalThis.fetch;
 const snapshot = { id: 'sample', phase: 'FINAL', mode: 'REPLAY', tradeDate: '2026-09-03', market: 'KOSPI200', asOf: '2026-09-03T15:18:00+09:00',
   universe: { count: 200 }, coverage: { collected: 200, total: 200 }, regime: 'GREEN', picks: [], reviewCandidates: [] };
+const candidate = { ticker: '000810', name: '삼성화재', market: 'KOSPI200', rank: 1, score: 90, status: 'WATCH', exclusions: [], warnings: [],
+  metrics: { price: 701000, turnover: 100_000_000_000, rangePosition: 0.9, lateReturnPct: 1.2, rvol: 1.4 },
+  flow: { kind: 'MISSING' }, plan: { entryLow: 690000, entryMax: 704000, invalidation: 680000, target: 725000 } };
+const evaluation = { snapshotId: 'sample', ticker: '000810', market: 'KOSPI200', tradeDate: '2026-09-03', nextTradeDate: '2026-09-04', status: 'MEASURED', close: 701000, entry: null, exit: null, exitReason: null, benchmarkReturnPct: null, netReturnPct: null, maePct: null, mfePct: null, costBps: 25, warnings: [],
+  opening: { version: CLOSING_OPENING_POLICY.version, basisPrice: 701000, basis: null, measuredAt: '2026-09-04T00:06:00Z',
+    nxt: { venue: 'NXT', time: '08:05:00', status: 'AVAILABLE', price: 697000, returnPct: -0.5706134094151208, netReturnPct: -0.8206134094151208, point: null, warnings: [] },
+    krx: { venue: 'KRX', time: '09:05:00', status: 'AVAILABLE', price: 666000, returnPct: -4.99286733238231, netReturnPct: -5.24286733238231, point: null, warnings: [] } } };
 class DeliveryClient {
   rows = new Map();
   failReceipt = false;
@@ -75,9 +87,11 @@ try {
     assert.equal(calls, before, '전송 성공 후 DB 장애에서도 중복 전송하지 않는다');
   }
   {
-    const text = formatClosingTelegram(snapshot);
+    const text = formatClosingTelegram({ ...snapshot, reviewCandidates: [candidate] }, [evaluation]);
     assert.match(text, /과거 재현.*검토용/); assert.match(text, /현재 매수 추천 아님/);
     assert.match(text, /2026-09-03/); assert.match(text, /KOSPI200/); assert.match(text, /mode=REPLAY/);
+    assert.match(text, /NXT 08:05 697,000원 -0.57%/);
+    assert.match(text, /KRX 09:05 666,000원 -4.99%/);
     await assert.rejects(sendClosingSnapshot(new ClosingRepository(new DeliveryClient()), { ...snapshot, mode: 'LIVE' }, [], false), /유효시간/);
   }
 } finally { globalThis.fetch = originalFetch; }
