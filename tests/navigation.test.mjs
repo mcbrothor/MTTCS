@@ -13,17 +13,19 @@ assert.deepEqual(
   ['00', '01', '02', '03', '04', '05', '06', '07'],
 );
 
-assert.equal(STRATEGY_LINKS.length, 6);
+assert.equal(STRATEGY_LINKS.length, 7);
 assert.equal(STRATEGY_LINKS[0].href, '/strategies/kospi-52w');
 assert.equal(STRATEGY_LINKS[0].group, 'KR');
 assert.equal(STRATEGY_LINKS[1].href, '/strategies/kospi-monthly');
 assert.equal(STRATEGY_LINKS[1].group, 'KR');
-assert.equal(STRATEGY_LINKS[2].href, '/strategies/us-52w');
-assert.equal(STRATEGY_LINKS[2].group, 'US');
-assert.equal(STRATEGY_LINKS[4].href, '/gold');
-assert.equal(STRATEGY_LINKS[4].group, 'SPECIAL');
-assert.equal(STRATEGY_LINKS[5].href, '/nasdaq');
+assert.equal(STRATEGY_LINKS[2].href, '/strategies/kr-closing-bet');
+assert.equal(STRATEGY_LINKS[2].group, 'KR');
+assert.equal(STRATEGY_LINKS[3].href, '/strategies/us-52w');
+assert.equal(STRATEGY_LINKS[3].group, 'US');
+assert.equal(STRATEGY_LINKS[5].href, '/gold');
 assert.equal(STRATEGY_LINKS[5].group, 'SPECIAL');
+assert.equal(STRATEGY_LINKS[6].href, '/nasdaq');
+assert.equal(STRATEGY_LINKS[6].group, 'SPECIAL');
 assert.ok(STRATEGY_LINKS.every((item) => ['KR', 'US', 'SPECIAL'].includes(item.group)));
 assert.ok(STRATEGY_LINKS.every((item) => item.sub.length > 0));
 
@@ -45,6 +47,7 @@ assert.equal(findActiveStrategyLink('/golden'), undefined);
 assert.equal(findActiveStrategyLink('/nasdaq')?.label, '나스닥100');
 assert.equal(findActiveStrategyLink('/qqq')?.href, '/nasdaq');
 assert.equal(findActiveStrategyLink('/strategies/kospi-52w')?.group, 'KR');
+assert.equal(findActiveStrategyLink('/strategies/kr-closing-bet')?.label, '종가베팅');
 assert.equal(findActiveStrategyLink('/strategies/us-monthly-v7')?.group, 'US');
 
 console.log('navigation tests passed');
