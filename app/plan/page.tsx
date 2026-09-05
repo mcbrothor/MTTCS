@@ -15,6 +15,7 @@ import ManualStrategyForm, { type ManualStrategyDraft } from '@/components/plan/
 import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useMarketData } from '@/hooks/useMarketData';
+import { useMarket } from '@/contexts/MarketContext';
 import { CONTEST_PLAN_QUEUE_STORAGE_KEY, type ContestPlanQueueItem } from '@/lib/contest-followup';
 import { buildCapitalSnapshot } from '@/lib/finance/core/capital-basis';
 import type { ApiSuccess, CapitalSnapshot, PlanMode, PortfolioRiskSummary, RiskStrategy } from '@/types';
@@ -31,13 +32,23 @@ export default function PlanPage() {
 function PlanPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { market: contextMarket, setMarket: setContextMarket } = useMarket();
   const initialTicker = searchParams.get('ticker') || '';
   const initialExchange = searchParams.get('exchange') || 'NAS';
   const shouldAutoAnalyze = searchParams.get('autoAnalyze') === '1';
   const [planMode, setPlanMode] = useState<PlanMode>('SYSTEM_ANALYSIS');
   const [planMarket, setPlanMarket] = useState<'US' | 'KR'>(
-    (initialExchange === 'KOSPI' || initialExchange === 'KOSDAQ') ? 'KR' : 'US'
+    (initialExchange === 'KOSPI' || initialExchange === 'KOSDAQ' || searchParams.get('market') === 'KR')
+      ? 'KR'
+      : (searchParams.get('market') === 'US' ? 'US' : contextMarket || 'US')
   );
+
+  useEffect(() => {
+    if (contextMarket !== planMarket) {
+      setContextMarket(planMarket);
+    }
+  }, [planMarket, contextMarket, setContextMarket]);
+
   const autoAnalyzeStarted = useRef(false);
   const [contestQueue, setContestQueue] = useState<ContestPlanQueueItem[]>([]);
   const [defaultTotalEquity, setDefaultTotalEquity] = useState(0);
@@ -461,7 +472,7 @@ function PlanPageContent() {
               </div>
               <div className="ml-4 flex shrink-0 gap-2">
                 <Link
-                  href="/portfolio"
+                  href={`/portfolio?market=${planMarket}`}
                   className="rounded-lg bg-emerald-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-400"
                 >
                   포트폴리오 확인 →

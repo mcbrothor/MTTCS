@@ -22,25 +22,51 @@ export function runMonthlyCloseBacktest(input: {
   initialWeights?: Record<string, number>;
   transactionCostRate: number;
 }) {
-  const priceByTicker = new Map(Object.entries(input.barsByTicker).map(([ticker, bars]) => [ticker, new Map(bars.map((bar) => [bar.date, bar.close]))]));
+  const priceByTicker = new Map(
+    Object.entries(input.barsByTicker).map(([ticker, bars]) => [ticker, new Map(bars.map((bar) => [bar.date, bar.close]))]),
+  );
   const targetsByEffectiveAt = new Map(input.targets.map((target) => [target.effectiveAt, target]));
+
   let weights = normalizedWeights(input.initialWeights || {});
   let equity = 1;
+  const positionValues: Record<string, number> = {};
+  let allocatedWeight = 0;
+  for (const [ticker, weight] of Object.entries(weights)) {
+    positionValues[ticker] = equity * weight;
+    allocatedWeight += weight;
+  }
+  let cash = equity * Math.max(0, 1 - allocatedWeight);
+
   const points: Array<{ date: string; equity: number; turnover: number; cost: number; weights: Record<string, number> }> = [];
+
   for (let index = 0; index < input.calendar.length; index += 1) {
     const date = input.calendar[index];
     const priorDate = input.calendar[index - 1];
+
     if (priorDate) {
-      let portfolioReturn = 0;
-      for (const [ticker, weight] of Object.entries(weights)) {
+      for (const [ticker, value] of Object.entries(positionValues)) {
+        if (!value) continue;
         const prices = priceByTicker.get(ticker);
         const prior = prices?.get(priorDate);
         const current = prices?.get(date);
         if (!prior || !current) continue;
-        portfolioReturn += weight * (current / prior - 1);
+        positionValues[ticker] = value * (current / prior);
       }
-      equity *= 1 + portfolioReturn;
+      const sumPositions = Object.values(positionValues).reduce((sum, v) => sum + v, 0);
+      equity = sumPositions + cash;
+
+      // Reflect price drift in weights
+      if (equity > 0) {
+        const driftedWeights: Record<string, number> = {};
+        for (const [ticker, val] of Object.entries(positionValues)) {
+          if (val > 0) {
+            driftedWeights[ticker] = val / equity;
+          }
+        }
+        weights = driftedWeights;
+      }
     }
+
     let turnover = 0;
     let cost = 0;
     const target = targetsByEffectiveAt.get(date);
@@ -49,9 +75,21 @@ export function runMonthlyCloseBacktest(input: {
       turnover = l1Turnover(weights, nextWeights);
       cost = equity * turnover * input.transactionCostRate;
       equity -= cost;
-      weights = nextWeights;
+
+      let nextAllocated = 0;
+      for (const key of Object.keys(positionValues)) {
+        delete positionValues[key];
+      }
+      for (const [ticker, weight] of Object.entries(nextWeights)) {
+        positionValues[ticker] = equity * weight;
+        nextAllocated += weight;
+      }
+      cash = equity * Math.max(0, 1 - nextAllocated);
+      weights = { ...nextWeights };
     }
+
     points.push({ date, equity, turnover, cost, weights: { ...weights } });
   }
+
   return { points, endingEquity: equity };
 }

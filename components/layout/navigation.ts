@@ -151,6 +151,14 @@ export const STRATEGY_LINKS: StrategyLink[] = [
     icon: 'repeat',
   },
   {
+    href: '/strategies/kr-closing-bet',
+    label: '종가베팅',
+    sub: '코스피·코스닥 Top5 · 익일 복기',
+    matchers: ['/strategies/kr-closing-bet'],
+    group: 'KR',
+    icon: 'zap',
+  },
+  {
     href: '/strategies/us-52w',
     label: '52주 신고가',
     sub: 'ETF Top20 · WATCH',

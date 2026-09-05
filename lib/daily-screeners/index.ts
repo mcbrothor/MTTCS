@@ -729,33 +729,38 @@ export function ruleBasedDailyTop5(candidates: DailyScreenerCandidate[]): DailyT
 }
 
 function aggregateDailyCandidates(candidates: DailyScreenerCandidate[]) {
-  const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number }>();
+  const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; maxEffectiveScore: number; aggregate: number }>();
   for (const candidate of candidates) {
     const market = marketForDailyCandidate(candidate);
     const key = `${market}:${candidate.ticker}`;
-    // KR momentum 소스: 급등 고점 추격 후 되돌림 리스크가 높아 aggregate 가중치 60% 감산
-    // 성과 분석 결과 KR momentum 적중률 14.3%, 평균수익 -7.24%로 치명적 부진
     const effectiveScore = market === 'KR' && candidate.source === 'momentum'
       ? Math.round(candidate.score * 0.4)
       : candidate.score;
     const current = grouped.get(key);
     if (!current) {
-      grouped.set(key, { best: candidate, sources: new Set([candidate.source]), aggregate: effectiveScore });
+      grouped.set(key, {
+        best: candidate,
+        sources: new Set([candidate.source]),
+        maxEffectiveScore: effectiveScore,
+        aggregate: effectiveScore,
+      });
       continue;
     }
     current.sources.add(candidate.source);
-    current.aggregate = Math.max(current.aggregate, effectiveScore) + Math.min(16, current.sources.size * 4);
-    if (effectiveScore > (market === 'KR' && current.best.source === 'momentum'
-      ? Math.round(current.best.score * 0.4)
-      : current.best.score)) {
+    if (effectiveScore > current.maxEffectiveScore) {
+      current.maxEffectiveScore = effectiveScore;
       current.best = candidate;
     }
+  }
+  for (const item of grouped.values()) {
+    const sourceBonus = Math.min(16, item.sources.size * 4);
+    item.aggregate = item.maxEffectiveScore + sourceBonus;
   }
   return grouped;
 }
 
 function aggregateDailyCandidatesByCategory(candidates: DailyScreenerCandidate[]) {
-  const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; aggregate: number }>();
+  const grouped = new Map<string, { best: DailyScreenerCandidate; sources: Set<DailyScreenerSource>; maxEffectiveScore: number; aggregate: number }>();
   for (const candidate of candidates) {
     const category = categoryForDailyCandidate(candidate);
     const market = marketForDailyCategory(category);
@@ -765,16 +770,23 @@ function aggregateDailyCandidatesByCategory(candidates: DailyScreenerCandidate[]
       : candidate.score;
     const current = grouped.get(key);
     if (!current) {
-      grouped.set(key, { best: candidate, sources: new Set([candidate.source]), aggregate: effectiveScore });
+      grouped.set(key, {
+        best: candidate,
+        sources: new Set([candidate.source]),
+        maxEffectiveScore: effectiveScore,
+        aggregate: effectiveScore,
+      });
       continue;
     }
     current.sources.add(candidate.source);
-    current.aggregate = Math.max(current.aggregate, effectiveScore) + Math.min(16, current.sources.size * 4);
-    if (effectiveScore > (market === 'KR' && current.best.source === 'momentum'
-      ? Math.round(current.best.score * 0.4)
-      : current.best.score)) {
+    if (effectiveScore > current.maxEffectiveScore) {
+      current.maxEffectiveScore = effectiveScore;
       current.best = candidate;
     }
+  }
+  for (const item of grouped.values()) {
+    const sourceBonus = Math.min(16, item.sources.size * 4);
+    item.aggregate = item.maxEffectiveScore + sourceBonus;
   }
   return grouped;
 }

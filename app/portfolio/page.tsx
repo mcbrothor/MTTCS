@@ -1,13 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, Clipboard, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useMarket } from '@/contexts/MarketContext';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
 import FlowCtaButton from '@/components/ui/FlowCtaButton';
 import AllocationGuidance from '@/components/portfolio/AllocationGuidance';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import SystemEvidencePanel, { SystemFailurePanel } from '@/components/ui/SystemEvidencePanel';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { toDisplayFailure, type DisplayFailure, type EvidenceState } from '@/components/ui/system-evidence';
 import type { ApiFailure, ApiSuccess, DataSourceMeta, PortfolioRiskSummary } from '@/types';
 
@@ -113,8 +116,17 @@ function priorityActions(summary: PortfolioRiskSummary) {
   }];
 }
 
-export default function PortfolioPage() {
-  const [market, setMarket] = useState<'US' | 'KR'>('US');
+function PortfolioContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { market: contextMarket, setMarket: setContextMarket } = useMarket();
+
+  const marketParam = searchParams.get('market');
+  const initialMarket: 'US' | 'KR' = marketParam === 'KR' || marketParam === 'US'
+    ? marketParam
+    : (contextMarket || 'US');
+
+  const [market, setMarketState] = useState<'US' | 'KR'>(initialMarket);
   const [summary, setSummary] = useState<PortfolioRiskSummary | null>(null);
   const [meta, setMeta] = useState<DataSourceMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,9 +156,16 @@ export default function PortfolioPage() {
     }
   }, []);
 
+  const handleMarketChange = (next: 'US' | 'KR') => {
+    setMarketState(next);
+    setContextMarket(next);
+    router.replace(`/portfolio?market=${next}`, { scroll: false });
+    load(next);
+  };
+
   useEffect(() => {
-    load('US');
-  }, [load]);
+    load(initialMarket);
+  }, [load, initialMarket]);
 
   // 장 시간 중 3분 자동 갱신
   useEffect(() => {
@@ -173,10 +192,7 @@ export default function PortfolioPage() {
           <button
             key={item}
             type="button"
-            onClick={() => {
-              setMarket(item);
-              load(item);
-            }}
+            onClick={() => handleMarketChange(item)}
             className={`rounded-lg border px-4 py-2 text-sm font-semibold ${
               market === item ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200' : 'border-slate-800 bg-slate-900 text-slate-400'
             }`}
@@ -189,7 +205,7 @@ export default function PortfolioPage() {
       {loading ? (
         <AsyncStatePanel
           state="loading"
-          title="포트폴리오 리스크를 불러오는 중입니다"
+          title="포트폴리오 현황을 불러오는 중입니다"
           message="총 노출, 현금 비중, 오픈 리스크를 계산하고 있습니다."
           delayedTitle="포트폴리오 데이터를 불러오지 못하고 있습니다"
           delayedMessage="데이터 소스가 지연 중입니다. 다시 시도하거나 매매 계획 화면에서 새 계획을 먼저 작성할 수 있습니다."
@@ -538,5 +554,20 @@ function BudgetRow({ label, value }: { label: string; value: string }) {
       <span className="text-sm text-slate-400">{label}</span>
       <span className="font-mono text-sm font-bold text-white">{value}</span>
     </div>
+  );
+}
+
+export default function PortfolioPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[400px] items-center justify-center p-12 text-slate-400">
+          <LoadingSpinner />
+          <span className="ml-3 text-sm font-medium">포트폴리오 로드 중...</span>
+        </div>
+      }
+    >
+      <PortfolioContent />
+    </Suspense>
   );
 }

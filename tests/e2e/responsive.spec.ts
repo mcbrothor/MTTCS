@@ -88,7 +88,7 @@ test.describe('Wave 5: 반응형 디자인 테스트', () => {
 
     test('RESP-02: 태블릿 환경 포트폴리오 레이아웃', async ({ page }) => {
       await page.goto('/portfolio');
-      await expect(page.locator('text=포트폴리오 리스크')).toBeVisible();
+      await expect(page.getByRole('heading', { name: '포트폴리오 리스크' })).toBeVisible();
       // Verify metric cards are present
       await expect(page.locator('text=총 자산')).toBeVisible();
     });
