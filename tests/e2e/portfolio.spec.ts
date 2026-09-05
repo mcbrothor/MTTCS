@@ -17,7 +17,7 @@ test.describe('TC-PORT: 포트폴리오 리스크', () => {
     await portfolioPage.goto();
 
     // Header
-    await expect(page.locator('text=포트폴리오 리스크')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '포트폴리오 리스크' })).toBeVisible();
     await expect(page.locator('text=Portfolio Risk')).toBeVisible();
 
     // Core summary plus risk-budget investment metric
@@ -61,7 +61,7 @@ test.describe('TC-PORT: 포트폴리오 리스크', () => {
 
     // Should trigger new data load (mocked to return same data)
     await page.waitForTimeout(1_000);
-    await expect(page.locator('text=포트폴리오 리스크')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '포트폴리오 리스크' })).toBeVisible();
   });
 
   test('PORT-06: 복기 작성 링크 존재', async ({ page }) => {

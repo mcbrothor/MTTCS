@@ -7,7 +7,9 @@ export function breadthUS(universe: Record<string, Bar[]>): number {
 export function nasdaqDominance(nasdaqBars: Bar[], spBars: Bar[]): boolean {
   if(nasdaqBars.length<200||spBars.length<126) return false;
   const nasdaqAbove = nasdaqBars.at(-1)!.close > (ma(nasdaqBars,200)??0);
-  const rs = (nasdaqBars.at(-1)!.close/nasdaqBars[nasdaqBars.length-127].close) - (spBars.at(-1)!.close/spBars[spBars.length-127].close);
+  const currentRatio = nasdaqBars.at(-1)!.close / spBars.at(-1)!.close;
+  const priorRatio = nasdaqBars[nasdaqBars.length - 127].close / spBars[spBars.length - 127].close;
+  const rs = priorRatio > 0 ? currentRatio / priorRatio - 1 : Number.NEGATIVE_INFINITY;
   return nasdaqAbove && rs>0.05;
 }
 

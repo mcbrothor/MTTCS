@@ -59,6 +59,23 @@ export default function Us52wPage() {
       cashInterpretation="조건 충족 종목이 적으면 현금이 자동으로 늘어나는 구조 — 신호 부재 자체가 시장 강도 약화 신호입니다."
       ranks={ranks}
       rankHeader="RS Top20 랭킹"
+      rankColumnHelp={{
+        rank: {
+          description: '데이터가 유효한 ETF를 6개월 SPY 대비 초과수익률이 높은 순으로 정렬하며 상위 20개를 표시합니다.',
+        },
+        rs: {
+          description: '최근 126거래일 동안 SPY보다 얼마나 더 오르거나 덜 올랐는지를 퍼센트포인트(%p)로 나타냅니다.',
+          formula: '(ETF 126일 수익률 − SPY 126일 수익률) × 100',
+        },
+        marker: {
+          description: '당일 종가가 직전 252거래일의 일중 고가 최고값을 넘어선 ETF에 돌파를 표시합니다.',
+          formula: '당일 종가 > max(직전 252거래일 고가)',
+        },
+        extra: {
+          description: '현재 종가가 조회 구간 최고가에서 얼마나 떨어져 있는지 표시합니다. 0%에 가까울수록 최고가에 근접합니다.',
+          formula: '(현재 종가 ÷ 조회 구간 최고가 − 1) × 100',
+        },
+      }}
       footerNote="엔진 lib/strategy/us-52w/engine.ts · 유사 ETF 그룹 중복 편입 제한 적용"
     />
   );

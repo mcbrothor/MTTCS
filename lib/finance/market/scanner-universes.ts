@@ -47,7 +47,7 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
   const items: KoreaRankingItem[] = [];
   const sosok = market === 'KOSPI' ? '0' : '1';
 
-  for (let page = 1; page <= 4 && items.length < limit; page += 1) {
+  for (let page = 1; page <= Math.ceil(limit / 50) && items.length < limit; page += 1) {
     const response = await fetch(`https://finance.naver.com/sise/sise_market_sum.naver?sosok=${sosok}&page=${page}`, {
       headers: {
         accept: 'text/html',
@@ -361,7 +361,7 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
   let ranking: KoreaRankingItem[] = [];
 
   try {
-    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 260);
+    ranking = await fetchNaverKoreaMarketCapRanking('KOSPI', 300);
   } catch (error) {
     warnings.push(error instanceof Error ? `Naver Finance market-cap ranking failed: ${error.message}` : 'Naver Finance market-cap ranking failed.');
   }

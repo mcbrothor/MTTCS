@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import DataSourceBadge from '@/components/ui/DataSourceBadge';
+import StrategyColumnHeader from '@/components/strategy/StrategyColumnHeader';
 import {
   StrategyCapitalInput,
   StrategyMoneyInput,
@@ -1216,11 +1217,11 @@ function BacktestPanel({ strategy }: { strategy: GoldStrategyResponse }) {
           <thead className="border-b border-[var(--border)] text-[var(--text-tertiary)]">
             <tr>
               <th className="px-3 py-2 font-semibold">전략</th>
-              <th className="px-3 py-2 font-semibold">연복리</th>
-              <th className="px-3 py-2 font-semibold">연 변동성</th>
-              <th className="px-3 py-2 font-semibold">최대 낙폭</th>
-              <th className="px-3 py-2 font-semibold">샤프</th>
-              <th className="px-3 py-2 font-semibold">평균 노출</th>
+              <th className="px-3 py-2 font-semibold"><StrategyColumnHeader label="연복리" help={{ description: '백테스트 시작 자산이 종료 자산까지 매년 같은 비율로 복리 성장했다고 환산한 수익률입니다.', formula: '(종료자산 ÷ 시작자산)^(1/경과연수) − 1' }} /></th>
+              <th className="px-3 py-2 font-semibold"><StrategyColumnHeader label="연 변동성" help={{ description: '일별 전략 수익률의 흔들림을 252거래일 기준으로 연율화한 값입니다.', formula: '일별 수익률 표준편차 × √252' }} /></th>
+              <th className="px-3 py-2 font-semibold"><StrategyColumnHeader label="최대 낙폭" help={{ description: '누적 자산이 과거 최고점에서 이후 저점까지 가장 크게 하락한 폭입니다.', formula: 'min(현재 누적자산 ÷ 이전 최고 누적자산 − 1)' }} /></th>
+              <th className="px-3 py-2 font-semibold"><StrategyColumnHeader label="샤프" help={{ description: '무위험수익률을 차감한 일별 초과수익을 변동성으로 나누어 252거래일 기준으로 연율화합니다.', formula: '(평균 일수익률 − 일 무위험수익률) ÷ 일 변동성 × √252' }} /></th>
+              <th className="px-3 py-2 font-semibold"><StrategyColumnHeader label="평균 노출" help={{ description: '백테스트 기간 중 전체 자본에서 선택된 금 상품에 실제로 투자된 비중의 일평균입니다.', formula: 'Σ(일별 금 투자비중) ÷ 거래일 수' }} /></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">

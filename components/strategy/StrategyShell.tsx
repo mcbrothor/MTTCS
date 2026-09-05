@@ -2,6 +2,7 @@
 
 import { TrendingUp, Repeat, BarChart3, Globe, Coins, Zap, AlertTriangle } from 'lucide-react';
 import type { ReactNode } from 'react';
+import StrategyColumnHeader, { type StrategyColumnHelp } from '@/components/strategy/StrategyColumnHeader';
 
 export type ShellTone = 'buy' | 'sell' | 'hold' | 'watch';
 
@@ -21,6 +22,12 @@ export interface ShellRankRow {
   isNewHigh?: boolean;
   extra?: string | null;
 }
+export interface ShellRankColumnHelp {
+  rank?: StrategyColumnHelp;
+  rs?: StrategyColumnHelp;
+  marker?: StrategyColumnHelp;
+  extra?: StrategyColumnHelp;
+}
 export interface StrategyShellProps {
   title: string;
   source: string;
@@ -36,6 +43,10 @@ export interface StrategyShellProps {
   cashInterpretation?: string;
   ranks?: ShellRankRow[];
   rankHeader?: string;
+  rankMarkerHeader?: string;
+  rankColumnHelp?: ShellRankColumnHelp;
+  rankRsUnit?: '%' | '%p';
+  hideRankMarker?: boolean;
   extraSection?: ReactNode;
   footerNote?: string;
 }
@@ -65,9 +76,9 @@ export function displayName(item: ShellSignalItem) {
   return item.name && item.name !== item.ticker ? `${item.name}(${item.ticker})` : item.ticker;
 }
 
-function formatRs(value: number | null) {
+function formatRs(value: number | null, unit: '%' | '%p') {
   if (value === null || !Number.isFinite(value)) return 'n/a';
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%p`;
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}${unit}`;
 }
 
 export default function StrategyShell({
@@ -85,6 +96,10 @@ export default function StrategyShell({
   cashInterpretation,
   ranks = [],
   rankHeader,
+  rankMarkerHeader = '52주 신고가',
+  rankColumnHelp,
+  rankRsUnit = '%p',
+  hideRankMarker = false,
   extraSection,
   footerNote,
 }: StrategyShellProps) {
@@ -180,11 +195,23 @@ export default function StrategyShell({
                 <table className="w-full min-w-[420px] text-left text-[12px]">
                   <thead>
                     <tr className="border-b border-[var(--border)] text-[10px] uppercase tracking-wider text-[var(--text-tertiary)]">
-                      <th className="py-1.5 pr-3 font-semibold">순위</th>
+                      <th className="py-1.5 pr-3 font-semibold">
+                        <StrategyColumnHeader label="순위" help={rankColumnHelp?.rank} align="start" />
+                      </th>
                       <th className="py-1.5 pr-3 font-semibold">종목</th>
-                      <th className="py-1.5 pr-3 text-right font-semibold">RS</th>
-                      <th className="py-1.5 pr-3 text-center font-semibold">52주 신고가</th>
-                      {ranks.some((row) => row.extra) && <th className="py-1.5 text-right font-semibold">비고</th>}
+                      <th className="py-1.5 pr-3 text-right font-semibold">
+                        <StrategyColumnHeader label="RS" help={rankColumnHelp?.rs} align="end" />
+                      </th>
+                      {!hideRankMarker && (
+                        <th className="py-1.5 pr-3 text-center font-semibold">
+                          <StrategyColumnHeader label={rankMarkerHeader} help={rankColumnHelp?.marker} />
+                        </th>
+                      )}
+                      {ranks.some((row) => row.extra) && (
+                        <th className="py-1.5 text-right font-semibold">
+                          <StrategyColumnHeader label="비고" help={rankColumnHelp?.extra} align="end" />
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -193,17 +220,19 @@ export default function StrategyShell({
                         <td className="py-2 pr-3 font-mono text-[var(--text-secondary)]">{row.rank ?? index + 1}</td>
                         <td className="py-2 pr-3 font-medium text-[var(--text-primary)]">{displayName(row)}</td>
                         <td className={`py-2 pr-3 text-right font-mono font-semibold ${(row.rs ?? 0) >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
-                          {formatRs(row.rs)}
+                          {formatRs(row.rs, rankRsUnit)}
                         </td>
-                        <td className="py-2 pr-3 text-center">
-                          {row.isNewHigh ? (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
-                              <span className="h-1 w-1 rounded-full bg-emerald-400" />돌파
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-[var(--text-tertiary)]">—</span>
-                          )}
-                        </td>
+                        {!hideRankMarker && (
+                          <td className="py-2 pr-3 text-center">
+                            {row.isNewHigh ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300">
+                                <span className="h-1 w-1 rounded-full bg-emerald-400" />돌파
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-[var(--text-tertiary)]">—</span>
+                            )}
+                          </td>
+                        )}
                         {ranks.some((item) => item.extra) && (
                           <td className="py-2 text-right text-[11px] text-[var(--text-secondary)]">{row.extra || '—'}</td>
                         )}

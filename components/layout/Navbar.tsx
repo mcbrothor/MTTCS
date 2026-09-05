@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Activity, ChevronDown, Star } from 'lucide-react';
 import MarketStrip from '@/components/layout/MarketStrip';
 import {
@@ -15,11 +15,14 @@ import {
 import { StrategyIcon } from '@/components/strategy/StrategyShell';
 import GlobalSecuritySearch from '@/components/layout/GlobalSecuritySearch';
 
+const subscribeToHydration = () => () => {};
+
 export default function Navbar() {
   const pathname = usePathname();
   const activeStep = findActiveFlowStep(pathname);
   const activeStrategyLink = findActiveStrategyLink(pathname);
   const strategyGroups = groupStrategyLinks();
+  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
   const strategyMenuRef = useRef<HTMLDivElement>(null);
   const strategyMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -100,12 +103,13 @@ export default function Navbar() {
               <button
                 ref={strategyMenuButtonRef}
                 type="button"
+                disabled={!hydrated}
                 onClick={() => setStrategyMenuOpen((open) => !open)}
                 aria-controls="strategy-navigation-menu"
                 aria-expanded={strategyMenuOpen}
                 aria-haspopup="menu"
                 aria-label={`투자 전략 메뉴 ${strategyMenuOpen ? '닫기' : '열기'}`}
-                className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-all disabled:cursor-wait disabled:opacity-70 ${
                   activeStrategyLink
                     ? 'border-amber-400/40 bg-amber-500/12 text-amber-100'
                     : 'border-amber-400/15 bg-amber-500/5 text-amber-200/80 hover:border-amber-400/35 hover:text-amber-100'

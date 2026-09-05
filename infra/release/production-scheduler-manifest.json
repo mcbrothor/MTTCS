@@ -6,9 +6,11 @@
     "supabase/migrations/20260801133000_supabase_scheduler_control_plane.sql",
     "supabase/migrations/20260802123000_p0_risk_alert_capacity.sql",
     "supabase/migrations/20260820123000_investor_flow_scheduler.sql",
-    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql"
+    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql",
+    "supabase/migrations/20260901093000_monthly_strategy_scheduler.sql",
+    "supabase/migrations/20260905093000_closing_bet_scheduler.sql"
   ],
-  "expectedJobCount": 35,
+  "expectedJobCount": 47,
   "jobs": [
     {
       "name": "mtn-snapshot-macro",
@@ -144,6 +146,20 @@
       "expectedDelaySeconds": 352800
     },
     {
+      "name": "mtn-monthly-strategy-kr",
+      "path": "/api/cron/monthly-strategies?market=KR",
+      "schedule": "20 07 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-monthly-strategy-us",
+      "path": "/api/cron/monthly-strategies?market=US",
+      "schedule": "20 21 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
       "name": "mtn-investor-flow-kr-0",
       "path": "/api/cron/investor-flow?cursor=0&size=40",
       "schedule": "20 07 * * 1-5",
@@ -254,6 +270,76 @@
       "schedule": "*/30 * * * *",
       "slotMinutes": 30,
       "expectedDelaySeconds": 2700
+    },
+    {
+      "name": "mtn-closing-kospi-prepare",
+      "path": "/api/cron/closing-bet?market=KOSPI200&phase=prepare&dryRun=false",
+      "schedule": "*/4 0-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kospi-watch",
+      "path": "/api/cron/closing-bet?market=KOSPI200&phase=watch&dryRun=false",
+      "schedule": "*/15 4-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kospi-final",
+      "path": "/api/cron/closing-bet?market=KOSPI200&phase=final&dryRun=false",
+      "schedule": "* 6-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kospi-monitor",
+      "path": "/api/cron/closing-bet?market=KOSPI200&phase=monitor&dryRun=false",
+      "schedule": "*/2 6-8 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kospi-review",
+      "path": "/api/cron/closing-bet?market=KOSPI200&phase=review&dryRun=false",
+      "schedule": "*/15 0-2 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kosdaq-prepare",
+      "path": "/api/cron/closing-bet?market=KOSDAQ150&phase=prepare&dryRun=false",
+      "schedule": "*/4 0-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kosdaq-watch",
+      "path": "/api/cron/closing-bet?market=KOSDAQ150&phase=watch&dryRun=false",
+      "schedule": "*/15 4-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kosdaq-final",
+      "path": "/api/cron/closing-bet?market=KOSDAQ150&phase=final&dryRun=false",
+      "schedule": "* 6-7 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kosdaq-monitor",
+      "path": "/api/cron/closing-bet?market=KOSDAQ150&phase=monitor&dryRun=false",
+      "schedule": "*/2 6-8 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
+    },
+    {
+      "name": "mtn-closing-kosdaq-review",
+      "path": "/api/cron/closing-bet?market=KOSDAQ150&phase=review&dryRun=false",
+      "schedule": "*/15 0-2 * * 1-5",
+      "slotMinutes": 1,
+      "expectedDelaySeconds": 352800
     }
   ],
   "intentionallyUnscheduledRoutes": [
@@ -297,6 +383,10 @@
     "supabase/migrations/20260820001000_automatic_capacity_maintenance.sql",
     "supabase/migrations/20260820120000_investment_management_integration.sql",
     "supabase/migrations/20260820123000_investor_flow_scheduler.sql",
-    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql"
+    "supabase/migrations/20260820150000_market_sentiment_scheduler.sql",
+    "supabase/migrations/20260901090000_monthly_strategy_snapshots.sql",
+    "supabase/migrations/20260901093000_monthly_strategy_scheduler.sql",
+    "supabase/migrations/20260905090000_closing_bet.sql",
+    "supabase/migrations/20260905093000_closing_bet_scheduler.sql"
   ]
 }

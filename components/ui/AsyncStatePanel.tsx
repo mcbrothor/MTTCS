@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Database, RefreshCw } from 'lucide-react';
 import Button from '@/components/ui/Button';
@@ -21,6 +21,7 @@ interface AsyncStatePanelProps {
   message: string;
   delayedTitle?: string;
   delayedMessage?: string;
+  delayMs?: number;
   primaryAction?: AsyncAction;
   secondaryAction?: AsyncAction;
   onRetry?: () => void;
@@ -34,13 +35,29 @@ export default function AsyncStatePanel({
   message,
   delayedTitle,
   delayedMessage,
+  delayMs = 4000,
   primaryAction,
   secondaryAction,
   onRetry,
   className = '',
   children,
 }: AsyncStatePanelProps) {
-  const hasDelayed = state === 'loading' && Boolean(delayedTitle || delayedMessage);
+  const [isDelayed, setIsDelayed] = useState(false);
+
+  useEffect(() => {
+    if (state !== 'loading' || (!delayedTitle && !delayedMessage)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setIsDelayed(true);
+    }, delayMs);
+    return () => {
+      clearTimeout(timer);
+      setIsDelayed(false);
+    };
+  }, [state, delayedTitle, delayedMessage, delayMs]);
+
+  const hasDelayed = state === 'loading' && isDelayed && Boolean(delayedTitle || delayedMessage);
   const displayTitle = hasDelayed && delayedTitle ? delayedTitle : title;
   const displayMessage = hasDelayed && delayedMessage ? delayedMessage : message;
   const showRetry = onRetry && (state !== 'loading' || hasDelayed);

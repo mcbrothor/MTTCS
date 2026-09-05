@@ -20,6 +20,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import type { DataSourceMeta } from '@/types';
+import StrategyColumnHeader from '@/components/strategy/StrategyColumnHeader';
 import {
   StrategyCapitalInput,
   StrategyMoneyInput,
@@ -596,11 +597,11 @@ export default function NasdaqStrategyDashboard() {
                 <thead className="border-b border-slate-800 text-slate-500">
                   <tr>
                     <th className="px-3 py-2">전략</th>
-                    <th className="px-3 py-2">CAGR</th>
-                    <th className="px-3 py-2">변동성</th>
-                    <th className="px-3 py-2">최대낙폭</th>
-                    <th className="px-3 py-2">Sharpe</th>
-                    <th className="px-3 py-2">평균 유효노출</th>
+                    <th className="px-3 py-2"><StrategyColumnHeader label="CAGR" help={{ description: '백테스트 시작 자산이 종료 자산까지 매년 같은 비율로 복리 성장했다고 환산한 수익률입니다.', formula: '(종료자산 ÷ 시작자산)^(1/경과연수) − 1' }} /></th>
+                    <th className="px-3 py-2"><StrategyColumnHeader label="변동성" help={{ description: '일별 전략 수익률의 표준편차를 252거래일 기준으로 연율화한 값입니다.', formula: '일별 수익률 표준편차 × √252' }} /></th>
+                    <th className="px-3 py-2"><StrategyColumnHeader label="최대낙폭" help={{ description: '누적 자산이 과거 최고점에서 이후 저점까지 가장 크게 하락한 폭입니다.', formula: 'min(현재 누적자산 ÷ 이전 최고 누적자산 − 1)' }} /></th>
+                    <th className="px-3 py-2"><StrategyColumnHeader label="Sharpe" help={{ description: '평균 일수익률을 연율화한 수익률을 연 변동성으로 나눈 위험 대비 성과입니다. 이 백테스트는 무위험수익률을 별도로 차감하지 않습니다.', formula: '(평균 일수익률 × 252) ÷ 연 변동성' }} /></th>
+                    <th className="px-3 py-2"><StrategyColumnHeader label="평균 유효노출" help={{ description: '레버리지 배수를 반영한 일별 나스닥100 노출의 평균입니다. 레버리지 상품 비중 때문에 100%를 넘을 수 있습니다.', formula: '평균(QQQ 비중 + 2×QLD 비중 + 3×TQQQ 비중)' }} /></th>
                   </tr>
                 </thead>
                 <tbody>

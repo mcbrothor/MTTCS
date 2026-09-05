@@ -79,7 +79,7 @@ test.describe('TC-E2E: 전체 워크플로우 통합 시나리오', () => {
       await login(page);
       await page.goto('/portfolio');
 
-      await expect(page.locator('text=포트폴리오 리스크')).toBeVisible();
+      await expect(page.getByRole('heading', { name: '포트폴리오 리스크', exact: true })).toBeVisible();
       await expect(page.locator('text=AAPL')).toBeVisible();
       await expect(page.locator('text=총 자산')).toBeVisible();
     });
