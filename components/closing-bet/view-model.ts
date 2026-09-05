@@ -79,7 +79,7 @@ export function selectClosingSnapshots(snapshots: ClosingSnapshot[], mode: Closi
 
 export function displayedClosingCandidates(snapshot: ClosingSnapshot): ClosingCandidate[] {
   const candidates = snapshot.mode === 'REPLAY' || snapshot.phase === 'WATCH' ? snapshot.reviewCandidates : snapshot.picks;
-  return [...candidates].sort((left, right) => (left.rank ?? 99) - (right.rank ?? 99) || right.score - left.score).slice(0, 5);
+  return candidates.slice(0, 5);
 }
 
 export function safeClosingEvidenceUrl(value: string) {

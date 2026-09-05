@@ -56,6 +56,9 @@ assert.equal(selected.tradeDate, '2026-09-04');
 assert.equal(selected.latest.get('KOSPI200').id, 'snapshot-live');
 assert.equal(selected.latest.has('KOSDAQ150'), false, '다른 거래일의 코스닥 결과를 섞지 않는다.');
 assert.equal(displayedClosingCandidates({ ...snapshot, picks: Array.from({ length: 8 }, (_, index) => ({ ...candidate, ticker: String(index), rank: index + 1 })) }).length, 5);
+const orderedReview = [{ ...candidate, ticker: '267250', rank: null, score: 46, status: 'WATCH' }, { ...candidate, ticker: '042700', rank: null, score: 54, status: 'EXCLUDED' }];
+assert.deepEqual(displayedClosingCandidates({ ...replay, reviewCandidates: orderedReview }).map((item) => item.ticker), ['267250', '042700'], '웹은 텔레그램과 같은 검토 순위를 유지하고 점수순으로 다시 정렬하지 않는다');
+assert.deepEqual(displayedClosingCandidates({ ...snapshot, phase: 'WATCH', reviewCandidates: orderedReview }).map((item) => item.ticker), ['267250', '042700']);
 
 const evaluation = { snapshotId: snapshot.id, ticker: candidate.ticker, market: 'KOSPI200', tradeDate: snapshot.tradeDate, nextTradeDate: '2026-09-07', status: 'NO_ENTRY', close: 10000, entry: 9999, exit: 12345, exitReason: null, benchmarkReturnPct: 0, netReturnPct: 23.46, maePct: 0, mfePct: 24, costBps: 25, warnings: [] };
 const evaluationHtml = renderToStaticMarkup(createElement(ClosingEvaluationPanel, { snapshots: [snapshot], evaluations: [evaluation, { ...evaluation, snapshotId: 'unrelated', ticker: '노출하면안됨' }] }));
