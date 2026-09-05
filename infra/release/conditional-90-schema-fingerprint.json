@@ -15,16 +15,16 @@
     "supabase/migrations/20260803120000_assurance_least_privilege.sql": "e2c4d57d2176cd40ecaf43a6dde43ca5bea29082de32d5ae8f68fc749b5d6c82",
     "supabase/migrations/20260803121000_assurance_service_hash_execution.sql": "4b43e179905038fea4f88c06cd0d2c3271a12aae560f12ead1de50346e9dc0ec"
   },
-  "deployed_definition_fingerprint": "07e1863a7eb653b7d25f6c97430af8e006c16d6c27e05563096bea530c0e77d2",
+  "deployed_definition_fingerprint": "51c680d82c78f87d6ab3f92e724218e346d6396f042978b4362e6ae448ed88d4",
   "definition_fingerprints": {
-    "functions": "717c69b8cb5fad66724e94f49a63403a493d1a087f190cb4e933ee88902788f5",
+    "functions": "388a6a6b94cca6fac4b7a1d9f4701eebf8fef6805ed74a5c44458fd9627ba9fd",
     "triggers": "3e6e33aea4747c2de29c86f2a2dc5cc5302f4eaf13dda0ba177b7e65d41a8673",
     "constraints": "3cc02a1b6cc57b1e78e3d5c31797e02d66a8a9750184c8a395d011bc2193575b",
     "tables": "0ca1a5488e62fc7de5ced9bc89fd89ac65703afac8bf735b8565a35e5cc20344",
     "columns": "f40d3bbbc1f81dbb8fd341cadb18b2e75ff6e4e8da4f0496b081b4dfa6cad22b",
     "policies": "2f75dfda35a989af84966b9385324347b3d25342a0e20dffb2f8d302074fe343",
     "privileges": "7fc186cc1083878e8b3b705cae87ee08c99196e73986a17c51cb0d3738ee55e9",
-    "combined": "07e1863a7eb653b7d25f6c97430af8e006c16d6c27e05563096bea530c0e77d2"
+    "combined": "51c680d82c78f87d6ab3f92e724218e346d6396f042978b4362e6ae448ed88d4"
   },
   "object_counts": {
     "functions": 18,
