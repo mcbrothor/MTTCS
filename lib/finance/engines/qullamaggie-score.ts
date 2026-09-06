@@ -41,6 +41,11 @@ export interface QullamaggieAnalysis {
   breakdown: QullamaggieBreakdown;
   evidence: string[];
   warnings: string[];
+  evidenceRef?: {
+    snapshotId: string | null;
+    availability: 'ready' | 'legacy' | 'unavailable';
+    asOfBarDate: string | null;
+  };
 }
 
 interface MarketParams {

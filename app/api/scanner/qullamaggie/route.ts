@@ -110,10 +110,37 @@ export async function POST(request: Request) {
             };
           }
 
+          let evidenceRef: { snapshotId: string | null; availability: 'ready' | 'unavailable'; asOfBarDate: string | null } = {
+            snapshotId: null,
+            availability: 'unavailable',
+            asOfBarDate: data[data.length - 1]?.date ?? null,
+          };
+
+          try {
+            const { buildQullamaggieEvidenceSnapshot } = await import('@/lib/finance/engines/qullamaggie-evidence');
+            const { saveQullamaggieEvidenceSnapshot } = await import('@/lib/scanner/qullamaggie-evidence-store');
+            const snapshot = buildQullamaggieEvidenceSnapshot(data, analysis, {
+              ticker: item.ticker,
+              exchange: item.exchange,
+              market,
+            });
+            saveQullamaggieEvidenceSnapshot(snapshot);
+            evidenceRef = {
+              snapshotId: snapshot.snapshotId,
+              availability: 'ready',
+              asOfBarDate: snapshot.provenance.asOfBarDate,
+            };
+          } catch (e) {
+            console.error(`[Qullamaggie] Failed to build evidence for ${item.ticker}:`, e);
+          }
+
           return {
             ticker: item.ticker,
             success: true,
-            data: analysis,
+            data: {
+              ...analysis,
+              evidenceRef,
+            },
           };
         } catch (err: unknown) {
           return {
