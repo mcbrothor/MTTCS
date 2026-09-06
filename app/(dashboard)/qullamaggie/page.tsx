@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import {
   Activity,
   AlertTriangle,
+  BarChart2,
   BarChart3,
   Play,
   Square,
@@ -13,6 +14,7 @@ import Button from '@/components/ui/Button';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import AsyncStatePanel from '@/components/ui/AsyncStatePanel';
 import TableSkeleton from '@/components/ui/TableSkeleton';
+import QullamaggieEvidenceModal from '@/components/qullamaggie/QullamaggieEvidenceModal';
 import type { ScannerUniverse } from '@/types';
 import type {
   QullamaggieAnalysis,
@@ -111,6 +113,7 @@ export default function QullamaggieScannerPage() {
   const [filter, setFilter] = useState<FilterKey>('all');
   const [sort, setSort] = useState<SortKey>('qScore');
   const [viewType, setViewType] = useState<ViewType>('card');
+  const [modalItem, setModalItem] = useState<{ ticker: string; exchange: string; snapshotId: string | null } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const startScan = async () => {
@@ -451,6 +454,22 @@ export default function QullamaggieScannerPage() {
                       {a.warnings[0]}
                     </div>
                   )}
+
+                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-end">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setModalItem({
+                        ticker: item.ticker,
+                        exchange: item.exchange,
+                        snapshotId: a.evidenceRef?.snapshotId ?? null,
+                      })}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-sky-400 hover:text-sky-300"
+                    >
+                      <BarChart2 className="h-3.5 w-3.5" />
+                      근거 차트 보기
+                    </Button>
+                  </div>
                 </motion.div>
               );
             })}
@@ -467,6 +486,7 @@ export default function QullamaggieScannerPage() {
                   <th className="px-6 py-4 font-semibold text-right">손절폭</th>
                   <th className="px-6 py-4 font-semibold text-right">3개월</th>
                   <th className="px-6 py-4 font-semibold text-right">RVOL</th>
+                  <th className="px-6 py-4 font-semibold text-center">차트</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -481,6 +501,19 @@ export default function QullamaggieScannerPage() {
                       <td className="px-6 py-4 text-right">{formatNumber(a.stopPct)}%</td>
                       <td className="px-6 py-4 text-right">{formatNumber(a.return3mPct)}%</td>
                       <td className="px-6 py-4 text-right">{formatNumber(a.rvol20)}x</td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => setModalItem({
+                            ticker: item.ticker,
+                            exchange: item.exchange,
+                            snapshotId: a.evidenceRef?.snapshotId ?? null,
+                          })}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition-colors"
+                          title="근거 차트 보기"
+                        >
+                          <BarChart2 className="h-4 w-4" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -494,6 +527,16 @@ export default function QullamaggieScannerPage() {
         <div className="rounded-2xl border border-slate-800 bg-slate-900 py-16 text-center text-slate-500">
           유니버스를 선택하고 스캔을 시작하세요.
         </div>
+      )}
+
+      {modalItem && (
+        <QullamaggieEvidenceModal
+          isOpen={Boolean(modalItem)}
+          onClose={() => setModalItem(null)}
+          ticker={modalItem.ticker}
+          exchange={modalItem.exchange}
+          snapshotId={modalItem.snapshotId}
+        />
       )}
     </div>
   );
