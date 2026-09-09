@@ -50,6 +50,7 @@ export async function runClosingBet(input: {
     const existing = phase === 'FINAL' ? (await repo.list(input.date, input.mode)).find((row) => row.market === input.market && row.phase === phase && row.modelVersion === CLOSING_VERSION) : null;
     if (existing) {
       const delivery = input.send ? await sendClosingSnapshot(repo, existing, await repo.evaluations([existing.id]), dryRun) : null;
+      if (delivery?.failed) throw new Error('종가베팅 텔레그램 일부 발송 실패 (재사용): 영수증 확인 필요');
       return { skipped: false, snapshot: existing, delivery, reused: true };
     }
     const collected = await collectClosingInputs({ repo, market: input.market, date: input.date, mode: input.mode,
