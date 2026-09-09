@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { Activity, X, TrendingUp, Search, BarChart2, BarChart3, Target, Star, HelpCircle, ArrowUpRight, Database } from 'lucide-react';
 import {
@@ -11,6 +11,7 @@ import {
   findActiveStrategyLink,
   groupStrategyLinks,
   isActiveTab,
+  getFlowTabHref,
 } from '@/components/layout/navigation';
 import { StrategyIcon } from '@/components/strategy/StrategyShell';
 
@@ -43,6 +44,7 @@ const UTILITY_ICON_MAP: Record<string, React.ElementType> = {
 
 export default function NavbarMobile() {
   const pathname = usePathname();
+  const search = useSearchParams().toString();
   const activeStep = findActiveFlowStep(pathname);
   const activeStrategyLink = findActiveStrategyLink(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -144,13 +146,14 @@ export default function NavbarMobile() {
 
       {/* 서브 탭 (해당 Flow에 탭이 있을 때만) */}
       {activeStep && activeStep.tabs.length > 0 && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface-strong)]/85 px-4 py-2">
+        <nav aria-label={`${activeStep.label} 하위 메뉴`} className="no-scrollbar flex gap-2 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface-strong)]/85 px-4 py-2">
           {activeStep.tabs.map((tab) => (
             <Link
               key={tab.href}
-              href={tab.href}
+              href={getFlowTabHref(tab.href, search)}
+              aria-current={isActiveTab(pathname, tab.href, search) ? 'page' : undefined}
               className={`shrink-0 rounded-md border px-3 py-1 text-xs font-semibold transition-colors ${
-                isActiveTab(pathname, tab.href)
+                isActiveTab(pathname, tab.href, search)
                   ? 'border-sky-400/35 bg-sky-400/12 text-sky-100'
                   : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)]'
               }`}
@@ -158,7 +161,7 @@ export default function NavbarMobile() {
               {tab.label}
             </Link>
           ))}
-        </div>
+        </nav>
       )}
 
       {/* 하단 탭바 */}

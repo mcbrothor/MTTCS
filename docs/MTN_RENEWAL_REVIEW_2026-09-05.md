@@ -1,6 +1,6 @@
 # MTN 리뉴얼 검토 근거
 
-검토일: 2026-09-05 KST · 개정 2: 종가베팅 추가 검토 및 기존 수정 상태 갱신 · [리뉴얼 계획서](/Users/mantori/vibecoding/MTN/docs/MTN_RENEWAL_PLAN_2026-09-05.md)
+검토일: 2026-09-05 KST · 개정 3: UI·성능·중복 기능 검토 추가 · [리뉴얼 계획서](/Users/mantori/vibecoding/MTN/docs/MTN_RENEWAL_PLAN_2026-09-05.md)
 
 ## 1. 검토 범위와 한계
 
@@ -10,7 +10,7 @@
 
 심각도는 리뉴얼 작업 순서에 사용하는 분류다. 정적 위험을 실제 사고로 간주하지 않는다. 기능 존재와 운영 환경에서의 효과도 구분한다.
 
-1차 검증 뒤 추가된 종가베팅을 사용자 요청에 따라 다시 검토했다. **2~6절은 1차 검토의 기록이며, 현재 상태와 추가 검증 결과는 7절이 우선한다.** 특히 기존 F01/F02/F04/F06 및 로컬500의 상태를 갱신했다. 다른 작업의 코드 변경은 이번 문서 커밋에 포함하지 않는다. 소스 행 번호는 각 검토 시점을 기준으로 하므로 후속 변경에 따라 이동할 수 있다.
+1차 검증 뒤 추가된 종가베팅과 UI·성능 최적화를 사용자 요청에 따라 검토했다. **2~6절은 1차 검토, 7절은 종가 추가 검토 기록이며, 후속 코드 변경·UI/성능 후보는 8절이 우선한다.** 기존 F01/F02/F04/F06 및 로컬500의 상태를 갱신했다. 다른 작업의 코드 변경은 이번 문서 커밋에 포함하지 않는다. 소스 행 번호는 각 검토 시점을 기준으로 후속 변경에 따라 이동할 수 있다.
 
 ## 2. 1차 기준선과 직접 실행 결과
 
@@ -225,3 +225,53 @@ CB-F01은 기존 정상 후보 fixture의 quote만 mock KIS 응답으로 바꿔 
 계획서에는 원천시각(P0), 발행 결과 계약(P0), 유효성·원본 링크, 철회/평가 원장, 특별장·기업행동, 기존37+신규10 작업 회귀를 CB01~CB06으로 추가했다. 종가베팅은 7번째 기존 전략으로 통합하고, 원천 시각 오류 보강은 장기 UI 리뉴얼 완료를 기다리지 않는 선행 작업으로 분류했다.
 
 추가 검증 범위는 LIVE/WATCH/FINAL/REPLAY의 적법한 조합 × 일반장/특별장/휴장/만료 × 정상/부분수집/장애, 두 시장 동시 마감, 중복 cron, 전송 응답 유실, 철회 이후 평가, 이틀 미평가 복구, 실제 DB RLS/unique/lock 충돌이다. REPLAY 성과나 mock 테스트 통과만으로 LIVE 활성화·운영 안정성을 판정하지 않는다.
+
+## 8. UI·성능·중복 기능 추가 검토
+
+**후속 시각 검토:** 2026-09-09 로그인된 운영 화면을 직접 확인했다. 이번에 확인한 화면·상태·소스와 운영의 차이·수정 시안은 [실제 UI 기반 수정안](/Users/mantori/vibecoding/MTN/docs/MTN_UI_REALISTIC_REVISION_2026-09-09.md)에 기록한다. 초기 좌측 5개 탐색 시안은 폐기하고 기존 가로 탐색·다크 테마·전문 표·차트 보존으로 수정했다. 아래 개정 3의 정적 위험과 테스트 수치는 해당 검토 시점의 기록이며 현재 작업 폴더에서 해결되었는지는 구현 착수 시 재확인한다.
+
+개정 3은 제품 흐름·데이터 재사용·렌더링/작업 운영을 병렬 정적 검토했다. 실제 지연·CPU·메모리·전송량·DB 실행계획·provider 호출량은 새로 측정하지 않았다. 아래 구조는 개선 후보를 뒷받침하지만 실측 절감률이나 사용자 업무시간 감소를 증명하지 않는다. 상세 실행 항목은 [UI·성능·기능 통합 설계안](/Users/mantori/vibecoding/MTN/docs/MTN_UI_PERFORMANCE_BLUEPRINT_2026-09-05.md)에 UP01~UP10으로 연결했다.
+
+### 8.1 후속 변경과 검토 기준
+
+검토 중 다른 작업이 `86384d9`를 커밋했다(21:15 KST 확인). 7절의 32개 파일 hash와 비교하면 portfolio 화면, ClosingBetDashboard, closing-bet 문서, closing-bet config의 4개가 달라졌다. 새 변경은 날짜/모드 조회 key에 맞는 응답만 반영하고 이전 요청을 취소하며, 날짜 목록 보존·History API 전환·15초 조회 timeout을 보강한다. 원천 시각·철회/만료·발송/평가 계약에 대한 CB-F01~CB-F10의 핵심 발견을 해소하는 변경은 아니었다.
+
+[종가 날짜 전환 E2E](/Users/mantori/vibecoding/MTN/tests/e2e/closing-bet-navigation.spec.ts:22)에 날짜 전환, 늦은 응답, 오류 재시도, timeout의 4개 테스트가 추가되어 E2E spec은 38개다. 이번 개정에서는 존재·범위를 읽었으며 새 테스트 실행이나 해당 커밋의 전체 품질 검사를 수행하지 않았다. 7절의184개 단위 파일 PASS는 그 검토 시점의 기록이다. 날짜 조회 보강은 보존하고 열린 화면의 WATCH→FINAL/철회 갱신은 별도 요구로 남긴다.
+
+추가 검토의 핵심25개 소스 hash는 `/tmp/mtn-ui-performance-review-baseline.json`에 기록했다. 합계 SHA256은 `492312c0dada5533e07b20b6b9c5dd342371c9a7cc02f6949f89a402e2aef23c`이다. 이는 검토 파일 집합의 지문이며 배포 버전 지문이나 전체 저장소 hash가 아니다.
+
+### 8.2 정적 근거와 우선순위
+
+| ID | 확인한 사실·영향 후보 | 근거·계획 연결 |
+|---|---|---|
+| UP-F01 | `/macro`의 Provider·페이지·MarketStrip이 macro를 각각 요청. 데스크톱 Navbar는 모바일에서 CSS로만 숨겨 effect 실행 가능 | [Context](/Users/mantori/vibecoding/MTN/contexts/MarketContext.tsx:159), [페이지](/Users/mantori/vibecoding/MTN/app/macro/page.tsx:126), [strip](/Users/mantori/vibecoding/MTN/components/layout/MarketStrip.tsx:42), [shell](/Users/mantori/vibecoding/MTN/components/layout/AppShell.tsx:35) → UP04 |
+| UP-F02 | market-data가 OHLC 포함 결과를 최상위와 data에 중복 직렬화. 자본/risk%별 key가 원천·분석까지 분리 저장 | [key](/Users/mantori/vibecoding/MTN/app/api/market-data/route.ts:365), [응답](/Users/mantori/vibecoding/MTN/app/api/market-data/route.ts:494) → UP04/UP05/UP06 |
+| UP-F03 | 오늘 지표 hook이 limit 없는 전체 거래를 내려받아 집계. trades 조회에 전체 열·체결 포함 | [hook](/Users/mantori/vibecoding/MTN/hooks/useDashboardMetrics.ts:123), [route](/Users/mantori/vibecoding/MTN/app/api/trades/route.ts:882) → UP04/UP08 |
+| UP-F04 | 포트폴리오는 ACTIVE/PLANNED 전 시장 자료를 읽은 뒤 JS에서 시장 필터. 누락 프로필별 외부 요청 fan-out·DB 저장이 조회 경로에 포함 | [전체 조회](/Users/mantori/vibecoding/MTN/app/api/portfolio/risk/route.ts:209), [보강](/Users/mantori/vibecoding/MTN/app/api/portfolio/risk/route.ts:103) → UP04/UP07 |
+| UP-F05 | CANSLIM의 종목별 macro 로딩과 leader/reversal 배치가 같은 benchmark를 다시 요청할 수 있음. provider fallback 구현도 여러 scanner route에 반복 | [CANSLIM](/Users/mantori/vibecoding/MTN/app/api/scanner/canslim/route.ts:53), [종목 루프](/Users/mantori/vibecoding/MTN/app/api/scanner/canslim/route.ts:232), [leader](/Users/mantori/vibecoding/MTN/app/api/scanner/leader/route.ts:117), [reversal](/Users/mantori/vibecoding/MTN/app/api/scanner/reversal/route.ts:94) → UP05 |
+| UP-F06 | 기존 L1/L2 캐시가 L2 expiresAt 대신 새 TTL로 L1 승격하여 원 만료보다 오래 보관할 가능성 | [L2 읽기](/Users/mantori/vibecoding/MTN/lib/cache.ts:93), [승격](/Users/mantori/vibecoding/MTN/lib/cache.ts:131) → UP02. 실행 재현 미수행 |
+| UP-F07 | local-analysis jobs의 같은 idempotency key upsert가 queued/attempts=0/locked_by=null을 기록. 중복 생성이 실행 상태를 초기화할 위험 | [생성](/Users/mantori/vibecoding/MTN/app/api/local-analysis/jobs/route.ts:73) → UP02, R06의 쓰기 전환 P0. DB 재현 미수행 |
+| UP-F08 | 추천 gate와 Telegram 차트가 fundamentals 옵션·category key 차이로 동일 기초 분석을 별도 취득할 수 있음 | [worker gate](/Users/mantori/vibecoding/MTN/scripts/local-llm-worker.mjs:738), [차트](/Users/mantori/vibecoding/MTN/app/api/cron/chart-analysis/route.ts:15) → UP05 |
+| UP-F09 | LightweightChart의 여러 옵션 변화가 생성 effect 전체 재실행 조건. 상세 chart container는 두 구현을 정적 import | [effect](/Users/mantori/vibecoding/MTN/components/analysis/LightweightChart.tsx:241), [의존성](/Users/mantori/vibecoding/MTN/components/analysis/LightweightChart.tsx:441), [container](/Users/mantori/vibecoding/MTN/components/analysis/AnalysisChartContainer.tsx:5) → UP06 |
+| UP-F10 | KIS 공유 limiter 장애 시 local fallback. 여러 인스턴스에서 총량 제어가 약해질 가능성. 기존 LLM 직렬 큐도 장기 대기 영향 계측 필요 | [limiter](/Users/mantori/vibecoding/MTN/lib/finance/providers/kis-rate-limit.ts:123), [worker](/Users/mantori/vibecoding/MTN/scripts/local-llm-worker.mjs:2032) → UP07 |
+| UP-F11 | 6개 스캐너가 선택/진행/정렬 UI를 반복. cross-check는 2개 이상 포착 집계, contest는 별도 세션·후보풀·분석 기능 | [leader](/Users/mantori/vibecoding/MTN/app/(dashboard)/leader/page.tsx:227), [cross-check](/Users/mantori/vibecoding/MTN/app/(dashboard)/cross-check/page.tsx:107), [contest](/Users/mantori/vibecoding/MTN/app/(dashboard)/contest/page.tsx:525) → UP03. 엔진 삭제나 동일 점수화 근거가 아님 |
+
+### 8.3 이미 존재하는 최적화와 보존 조건
+
+KIS의 일봉/현재가 캐시와 동일 프로세스 singleflight, 추천 성과의 종목별 묶음·shard 내 benchmark cache, 증거 hash·20행 batch 저장, 일부 차트의 dynamic import는 이미 있다. 이를 새 기능으로 중복 산정하지 않는다. 근거: [KIS](/Users/mantori/vibecoding/MTN/lib/finance/providers/kis-api.ts:301), [singleflight](/Users/mantori/vibecoding/MTN/lib/cache.ts:157), [성과 작업](/Users/mantori/vibecoding/MTN/lib/recommendations/jobs.ts:197), [증거 저장](/Users/mantori/vibecoding/MTN/lib/recommendations/evidence-repository.ts:136).
+
+MarketProvider는 시장 변경 시 조회하고 자체 polling은 하지 않는다. MarketStrip에는 visibility·AbortController, Intelligence에는 이전 요청 취소, Portfolio에는 loading/failure 중 interval 중단이 있다. 따라서 전체 앱이 무제한 polling한다는 결론을 내리지 않는다. 계획은 보이지 않는 컴포넌트·탭·세션·응답 세대의 빠진 조건과 조회 소유권을 통일한다.
+
+국내/미국 월간 전략은 이미 MonthlyStrategyPage를 공유하고 52주 전략은 StrategyShell을 사용한다. `/beauty-contest`, `/qqq`도 기존 redirect다. 미사용으로 보이는 탐색 컴포넌트는 import·동적 참조를 확인한 뒤 정리할 후보이며, 현재 화면에서 동시에 여러 번 보인다고 단정하지 않는다.
+
+실제 매매/가상 평가, 과거 근거/현재 분석, 6개 스캐너의 고유 판단, 7개 전략의 정책, KIS/Toss/Yahoo·raw/adjusted·LIVE/REPLAY는 보존한다. 제거할 것은 동일 입력의 불필요한 실행과 독립 저장 경로다. UI 개념 시안은 가상 데이터를 사용하며 앱 코드·DB·운영 작업을 변경하지 않는다.
+
+## 9. 중복 화면·불필요 요소 후속 검토
+
+2026-09-09 로컬 `c749667`의 탐색 정의·공통 셸·복기·추천·교차 집계·스캐너·관심종목 사용처를 확인했다. 검토 시작 시 작업 폴더는 clean이었다. 이번에는 문서만 갱신하며 새 운영 화면 확인·실행 코드 테스트·성능 부하 실험을 수행하지 않았다.
+
+확인한 추가 근거는 복기 공통 하위 링크와 본문 view 탭의 반복, 교차 검증의 IndexedDB 6개 소스 집계, 오늘의 일반 경로5개 반복, 스캐너 선택 바와 FlowCtaButton 동시 렌더링, 관심 선택에 따른 분석 조회, 추천 모든 view의 빈출 요약 조회다. AppShell의 CSS 전환과 MarketStrip effect도 확인했으나 실제 중복 요청 건수는 계측하지 않았다.
+
+ScannerTabNav·LifecycleStepper는 app/components/lib/hooks/contexts/tests의 이름 검색에서 정의 외 참조가 없었다. 이는 미사용 후보의 근거이며 모든 동적 참조·설정·빌드 경로가 없다는 증명은 아니다. beauty-contest·qqq는 이미 redirect이므로 새로운 중복 화면 제거 성과로 계산하지 않는다.
+
+대상별 코드 링크·통합/축소/유지 결정·전환 순서·인수 조건은 [UI·성능 상세안 8절](/Users/mantori/vibecoding/MTN/docs/MTN_UI_PERFORMANCE_BLUEPRINT_2026-09-05.md)의 D01~D11에 통합했다. 앞선 UI 관찰과 이번 정적 검토를 운영 성능 개선 완료로 확대 해석하지 않는다.

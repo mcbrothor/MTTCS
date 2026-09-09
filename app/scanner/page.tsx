@@ -1,18 +1,19 @@
 'use client';
 
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, ScanSearch, Send, Square, Info } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+const CrossCheckView = dynamic(() => import('@/components/scanner/CrossCheckView'));
 import * as Tooltip from '@radix-ui/react-tooltip';
 import Button from '@/components/ui/Button';
 const VcpDrilldownModal = dynamic(() => import('@/components/scanner/VcpDrilldownModal'), { ssr: false });
 import { useScanner, UNIVERSES, SCANNER_FILTERS, SORTS, type SortKey } from '@/hooks/scanner';
-import type { ScannerUniverse } from '@/types';
 import ScannerTable from '@/components/scanner/ScannerTable';
 import ScannerCardView from '@/components/scanner/ScannerCardView';
 import MarketBanner from '@/components/ui/MarketBanner';
-import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import { ScannerUniverseSelect, ScannerViewToggle, ScannerSelectionBar, ScannerSnapshotStamp } from '@/components/scanner/ScannerControls';
 import { useIsMobile } from '@/lib/hooks/useViewport';
 import SavedScreensPanel from '@/components/scanner/SavedScreensPanel';
 
@@ -22,10 +23,6 @@ const MACRO_TONE = {
   FULL: 'border-emerald-400/24 bg-emerald-500/10 text-emerald-50',
 } as const;
 
-function formatDateTime(value: string | null) {
-  if (!value) return 'No snapshot';
-  return new Date(value).toLocaleString('ko-KR');
-}
 
 const TIER_CRITERIA: Record<string, { title: string; lines: string[] }> = {
   Recommended: {
@@ -111,13 +108,13 @@ function StatCard({
     <Tooltip.Provider delayDuration={150}>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
-          <div className="group relative cursor-help rounded-[20px] border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-4 transition-colors hover:border-emerald-400/40">
+          <div tabIndex={0} className="group relative cursor-help rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 transition-colors hover:border-emerald-400/40">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">{label}</p>
               <Info className="h-3 w-3 text-[var(--text-tertiary)] opacity-60 transition-opacity group-hover:opacity-100" />
             </div>
-            <p className={`mt-2 font-mono text-2xl font-semibold ${valueClass}`}>{value}</p>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</p>
+            <p className={`mt-1 font-mono text-lg font-semibold ${valueClass}`}>{value}</p>
+            <p className="sr-only">{subtitle}</p>
             {diagnostics && diagnostics.nearMiss > 0 && (
               <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-200/80">
                 near-miss {diagnostics.nearMiss}
@@ -131,6 +128,7 @@ function StatCard({
             className="z-[100] max-w-[380px] rounded-xl border border-slate-700 bg-slate-900/95 p-4 text-left shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95"
           >
             <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">{criteria.title}</p>
+            <p className="mt-2 text-xs text-slate-300">{subtitle}</p>
             <ul className="mt-2 space-y-1">
               {criteria.lines.map((line, idx) => (
                 <li key={idx} className="text-[11px] leading-relaxed text-slate-300">{line}</li>
@@ -163,6 +161,16 @@ function StatCard({
 }
 
 export default function ScannerPage() {
+  return <Suspense fallback={<p className="p-4">스캐너를 불러오는 중입니다.</p>}><ScannerWorkspace /></Suspense>;
+}
+
+function ScannerWorkspace() {
+  const search = useSearchParams();
+  return search.get('view') === 'cross-check' ? <CrossCheckView /> : <MinerviniScannerPage />;
+}
+
+function MinerviniScannerPage() {
+  const [savedScreensOpen, setSavedScreensOpen] = useState(false);
   const {
     universe,
     isScanning,
@@ -208,7 +216,7 @@ export default function ScannerPage() {
   const macroTone = macroTrend ? MACRO_TONE[macroTrend.action_level] : '';
   const scanBlocked = macroTrend?.action_level === 'HALT';
   return (
-    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-12">
+    <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden pb-24">
       {limitMessage && (
         <div className="fixed bottom-6 left-1/2 z-[100] max-w-[calc(100vw-2rem)] -translate-x-1/2 break-words rounded-xl border border-amber-500/40 bg-amber-950/90 px-5 py-3 text-center text-sm font-semibold text-amber-200 shadow-2xl backdrop-blur-md">
           {limitMessage}
@@ -219,144 +227,28 @@ export default function ScannerPage() {
           {telegramMessage}
         </div>
       )}
-      <section className="panel-grid min-w-0 space-y-5 p-5 sm:p-6">
+      <section className="panel-grid min-w-0 space-y-3 p-4">
         <MarketBanner compact={true} />
-
-        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.9fr)]">
-          <div className="min-w-0 space-y-4">
-            <div className="min-w-0">
-              <h1 className="flex min-w-0 flex-wrap items-center gap-3 text-3xl font-black tracking-tightest text-[var(--text-primary)]">
-                <div className="rounded-2xl bg-emerald-500/20 p-2.5 ring-1 ring-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-                  <ScanSearch className="h-6 w-6 text-emerald-300" />
-                </div>
-                미너비니 스크리너
-              </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-secondary)]">
-                미너비니 SEPA 원칙과 VCP 패턴을 기반으로 최적의 진입 후보를 발굴합니다. 스캔 전 시장 분석 메뉴에서 현재 마스터 필터와 매크로 환경을 먼저 확인하는 것이 원칙입니다.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
-                Universe <span className="ml-1 font-mono text-[var(--text-primary)]">{UNIVERSES[universe].label}</span>
-              </span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
-                Results <span className="ml-1 font-mono text-[var(--text-primary)]">{filteredResults.length}</span>
-              </span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)]">
-                Selected <span className="ml-1 font-mono text-[var(--text-primary)]">{selectedTickers.size}/15</span>
-              </span>
-            </div>
-          </div>
-
-          <div className="min-w-0 rounded-[24px] border border-[var(--border)] bg-[var(--surface-accent)] p-4 shadow-[var(--panel-shadow)]">
-            <div className="grid gap-4">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
-                  스캔 설정
-                </p>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  시장 상태를 확인한 뒤 유니버스를 고르고 후보 발굴을 시작합니다.
-                </p>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                  유니버스 선택
-                  <div className="grid grid-cols-2 gap-2">
-                    {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
-                      <button
-                        key={u}
-                        onClick={() => handleUniverseChange(u)}
-                        disabled={isScanning}
-                        className={`group relative overflow-hidden rounded-xl border p-2 text-left transition-all active:scale-95 ${
-                          universe === u
-                            ? 'border-emerald-500/50 bg-emerald-500/10 text-white ring-1 ring-emerald-500/30'
-                            : 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--text-secondary)] hover:border-emerald-500/30'
-                        }`}
-                      >
-                        <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
-                        <p className={`text-[8px] font-bold ${universe === u ? 'text-emerald-400' : 'text-slate-600'}`}>
-                          {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
-                        </p>
-                        {universe === u && (
-                          /* @ts-expect-error - framer-motion layoutId type issue */
-                          <motion.div layoutId="activeUniverseMinervini" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-emerald-500 blur-[2px]" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  {!isMobile && (
-                    <div className="grid gap-1.5 text-xs text-[var(--text-secondary)]">
-                      보기 방식
-                      <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-1">
-                        {(['web', 'app'] as const).map((mode) => (
-                          <button
-                            key={mode}
-                            onClick={() => setViewMode(mode)}
-                            className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
-                              viewMode === mode ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20' : 'text-[var(--text-secondary)]'
-                            }`}
-                          >
-                            {mode === 'web' ? '표 보기' : '카드 보기'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-end">
-                    {isScanning ? (
-                      <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
-                        <Square className="h-3.5 w-3.5" /> 중단
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={startScan}
-                        disabled={busy || scanBlocked}
-                        className="w-full h-10 flex items-center justify-center gap-2 rounded-xl border-none bg-gradient-to-br from-emerald-600 to-emerald-700 font-black text-white shadow-xl shadow-emerald-500/20 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 transition-all"
-                      >
-                        <Play className="h-3.5 w-3.5 fill-white" /> {scanBlocked ? 'HALT 차단' : '스캔 시작'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={sendTelegramSummary}
-                  disabled={telegramBusy || telegramCandidates.length === 0}
-                  className="h-10 w-full justify-center gap-2 rounded-xl border-emerald-500/30 text-emerald-100"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {telegramBusy ? '전송 중...' : telegramCandidates.length === 0 ? '보낼 후보가 없습니다' : `텔레그램 전송 (${telegramCandidates.length})`}
-                </Button>
-              </div>
-            </div>
-
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)]">미너비니 스크리너</h1>
+          <p className="text-xs text-[var(--text-secondary)]">SEPA·VCP 기반 후보 발굴 · 결과 {filteredResults.length}개</p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ScannerUniverseSelect value={universe} onChange={handleUniverseChange} disabled={isScanning} options={UNIVERSES} />
+          <div className="flex flex-wrap items-center gap-2">
+            {!isMobile && <ScannerViewToggle value={viewMode} onChange={setViewMode} />}
+            {isScanning ? <Button onClick={stopScan} variant="danger"><Square className="h-3.5 w-3.5" /> 중단</Button> : <Button onClick={startScan} className="!text-slate-950" disabled={busy || scanBlocked}><Play className="h-3.5 w-3.5" /> {scanBlocked ? 'HALT 차단' : '스캔 시작'}</Button>}
+            <Button type="button" variant="outline" onClick={sendTelegramSummary} disabled={telegramBusy || telegramCandidates.length === 0} className="text-xs"><Send className="h-3.5 w-3.5" />{telegramBusy ? '전송 중...' : `텔레그램 전송 (${telegramCandidates.length})`}</Button>
           </div>
         </div>
-
-        <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard
-            label="Recommended"
-            value={stats.recommended}
-            valueClass="text-emerald-300"
-            subtitle="즉시 진입 우선순위"
-            diagnostics={{ nearMiss: stats.nearMissRecommended, histogram: stats.blockerHistogram }}
-          />
+        <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+          <StatCard label="Recommended" value={stats.recommended} valueClass="text-emerald-300" subtitle="즉시 진입 우선순위" diagnostics={{ nearMiss: stats.nearMissRecommended, histogram: stats.blockerHistogram }} />
           <StatCard label="Action" value={stats.action} valueClass="text-lime-300" subtitle="관찰 진입 후보 (피벗 확인)" />
           <StatCard label="IB Review" value={stats.partial} valueClass="text-amber-300" subtitle="위원회 검토 후보" />
           <StatCard label="Errors" value={stats.errors} valueClass="text-rose-300" subtitle="구조적 또는 예외 확인" />
-          <StatCard
-            label="Data Source"
-            value={<span className="text-sm font-semibold text-[var(--text-primary)]">{UNIVERSES[universe].label}</span>}
-            valueClass=""
-            subtitle={dataSourceSummary}
-          />
+          <StatCard label="Data Source" value={<span className="text-xs">출처 확인</span>} valueClass="text-slate-200" subtitle={dataSourceSummary} />
         </div>
+        <ScannerSnapshotStamp value={lastScannedAt} />
 
         {isScanning && (
           <div className="rounded-[20px] border border-emerald-400/20 bg-emerald-500/8 px-4 py-4">
@@ -379,7 +271,8 @@ export default function ScannerPage() {
         )}
       </section>
 
-      <SavedScreensPanel
+      <details onToggle={(event) => setSavedScreensOpen(event.currentTarget.open)} className="rounded-lg border border-slate-800 p-3"><summary className="cursor-pointer text-sm text-slate-300">저장 화면 · 이전 스캔 비교</summary>
+      {savedScreensOpen && <SavedScreensPanel
         universe={universe}
         filterKey={filterKey}
         sortKey={sortKey}
@@ -392,10 +285,11 @@ export default function ScannerPage() {
           setCustomFilters({ rsMin: screen.filters.rsMin || 0, vcpMin: screen.filters.vcpMin || 0, distMax: screen.filters.distMax ?? 999 });
           setShowCustomFilter(Boolean(screen.filters.rsMin || screen.filters.vcpMin || screen.filters.distMax < 999));
         }}
-      />
+      />}
+      </details>
 
       {macroTrend && (
-        <div className={`rounded-[22px] border px-4 py-4 shadow-[var(--panel-shadow)] ${macroTone}`}>
+        <div className={`rounded-xl border px-3 py-2 ${macroTone}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
@@ -424,6 +318,8 @@ export default function ScannerPage() {
           )}
         </div>
       )}
+
+      <ScannerSelectionBar count={selectedTickers.size} onClear={clearSelection} hidden={Boolean(selectedResult)} />
 
       <section className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-4 shadow-[var(--panel-shadow)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -469,9 +365,7 @@ export default function ScannerPage() {
               </select>
             </label>
 
-            <span className="text-xs text-[var(--text-tertiary)]">
-              Last scan {formatDateTime(lastScannedAt)}
-            </span>
+
           </div>
         </div>
 
@@ -584,37 +478,7 @@ export default function ScannerPage() {
         )}
       </AnimatePresence>
 
-      {selectedTickers.size > 0 && (
-        <div className="fixed bottom-20 left-1/2 z-50 flex w-[min(92vw,640px)] min-w-0 -translate-x-1/2 flex-col items-stretch gap-4 rounded-[22px] border border-emerald-400/20 bg-[rgba(4,8,16,0.92)] px-5 py-4 shadow-[0_24px_70px_rgba(2,6,23,0.56)] backdrop-blur-xl sm:bottom-8 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200">Contest Pool</p>
-            <p className="mt-1 text-lg font-semibold text-[var(--text-primary)]">{selectedTickers.size} / 15 종목 선택</p>
-          </div>
 
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => clearSelection()}
-              className="text-sm font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-            >
-              전체 해제
-            </button>
-            <Link href="/contest">
-              <Button icon={<ScanSearch className="h-4 w-4" />} className="rounded-2xl bg-emerald-600 hover:bg-emerald-500">
-                콘테스트로 이동
-              </Button>
-            </Link>
-          </div>
-        </div>
-      )}
-
-      <FlowCtaButton
-        nextPath="/contest"
-        label="최고의 차트 선정하기"
-        subLabel="Step 3: Beauty Contest"
-        variant="emerald"
-        show={filteredResults.length > 0 || selectedTickers.size > 0}
-      />
 
       <VcpDrilldownModal
         result={selectedResult}

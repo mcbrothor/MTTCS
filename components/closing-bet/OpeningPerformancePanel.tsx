@@ -8,6 +8,22 @@ const percent = (value: number | null | undefined) => typeof value === 'number' 
 const tone = (value: number | null | undefined) => value && value > 0 ? 'text-rose-300' : value && value < 0 ? 'text-sky-300' : 'text-slate-400';
 const labels = { PENDING: '익일 가격 대기', AVAILABLE: '확인 완료', DATA_MISSING: '가격 미확인', NOT_APPLICABLE: '해당 시각 거래 없음' };
 
+function openingRows(snapshot: ClosingSnapshot, evaluations: ClosingEvaluation[]) {
+  return displayedClosingCandidates(snapshot).map((candidate) => {
+    const evaluation = evaluations.find((row) => row.snapshotId === snapshot.id && row.ticker === candidate.ticker && row.market === snapshot.market && row.tradeDate === snapshot.tradeDate);
+    return { candidate, evaluation, opening: evaluation?.opening?.version === CLOSING_OPENING_POLICY.version ? evaluation.opening : undefined };
+  });
+}
+
+export function OpeningPerformanceSummary({ evaluations, snapshots, onOpen }: { evaluations: ClosingEvaluation[]; snapshots: ClosingSnapshot[]; onOpen: () => void }) {
+  const rows = snapshots.flatMap((snapshot) => openingRows(snapshot, evaluations));
+  return <section aria-label="익일 시초 성과 요약" className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold text-slate-200">익일 시초 성과</h2><button type="button" onClick={onOpen} className="rounded-lg px-3 py-2 text-xs text-teal-200 hover:bg-teal-400/10">성과 상세 보기 →</button></div>
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">{(['nxt', 'krx'] as const).map((venue) => <p key={venue} className="rounded-lg bg-slate-900/60 px-3 py-2 text-xs text-slate-400"><span className="mr-3 font-medium text-slate-200">{venue === 'nxt' ? 'NXT 08:05' : 'KRX 09:05'}</span>{!snapshots.length ? '추천 결과 없음' : !rows.length ? '미평가 · 선정 종목 없음' : `가격 확인 ${rows.filter((row) => row.opening?.[venue].status === 'AVAILABLE').length}/${rows.length} · 미확인 포함 여부는 상세에서 확인`}</p>)}</div>
+    <p className="mt-2 text-[11px] leading-5 text-slate-400">추천일 KRX 종가 → 익일 해당 시각 1분봉 종가 · 왕복 {CLOSING_POLICY.costBps}bp 가정 · NXT 미거래/누락은 미확인</p>
+  </section>;
+}
+
 function ExitCell({ value }: { value?: ClosingOpeningExit }) {
   return <td className="px-3 py-3 align-top">
     <p className="font-mono text-slate-200">{price(value?.price)}</p>
@@ -20,16 +36,14 @@ function ExitCell({ value }: { value?: ClosingOpeningExit }) {
 }
 
 export function OpeningPerformancePanel({ evaluations, snapshots }: { evaluations: ClosingEvaluation[]; snapshots: ClosingSnapshot[] }) {
+  const legacy = evaluations.filter(row => !row.opening && row.status !== 'MEASURED' && snapshots.some(snapshot => snapshot.id === row.snapshotId && snapshot.market === row.market && snapshot.tradeDate === row.tradeDate && displayedClosingCandidates(snapshot).some(candidate => candidate.ticker === row.ticker)));
   return <section className="rounded-2xl border border-slate-800 bg-slate-950/35 p-4 sm:p-5" aria-label="익일 시초 성과">
     <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-100"><BarChart3 className="h-4 w-4 text-amber-300" aria-hidden />익일 시초 성과</h2>
     <p className="mt-2 text-xs leading-6 text-slate-400">추천일 KRX 종가에 매수했다고 가정하고, 다음 거래일 NXT 08:05·KRX 09:05로 표시된 1분봉의 종가에 각각 매도한 가격 수익률입니다. 실제 주문이나 계좌 체결 결과를 의미하지 않습니다.</p>
     <p className="mt-1 text-[11px] leading-5 text-slate-500">수익률 = (매도 기준 가격 ÷ 추천일 KRX 종가 − 1) × 100. 비용 반영 값은 왕복 {CLOSING_POLICY.costBps}bp 가정입니다. NXT 미거래·분봉 누락은 미확인으로 표시하며 다른 가격으로 대체하지 않습니다. 과거 재현 목록은 검토 후보의 참고 성과입니다.</p>
     {!snapshots.length && <p className="mt-4 text-xs text-slate-500">조회한 날짜의 추천 결과가 없습니다.</p>}
     <div className="mt-4 space-y-5">{snapshots.map((snapshot) => {
-      const rows = displayedClosingCandidates(snapshot).map((candidate) => {
-        const evaluation = evaluations.find((row) => row.snapshotId === snapshot.id && row.ticker === candidate.ticker && row.market === snapshot.market && row.tradeDate === snapshot.tradeDate);
-        return { candidate, evaluation, opening: evaluation?.opening?.version === CLOSING_OPENING_POLICY.version ? evaluation.opening : undefined };
-      });
+      const rows = openingRows(snapshot, evaluations);
       const nextDate = rows.find((row) => row.evaluation?.nextTradeDate)?.evaluation?.nextTradeDate;
       return <section key={snapshot.id} aria-label={`${CLOSING_LABELS[snapshot.market]} 시초 성과`}>
         <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-semibold text-teal-200">{CLOSING_LABELS[snapshot.market]} Top5 성과</h3><p className="text-[11px] text-slate-500">매수 기준 {snapshot.tradeDate} → 매도 기준 {nextDate || '다음 거래일 확인 중'} · KST</p></div>
@@ -43,5 +57,10 @@ export function OpeningPerformancePanel({ evaluations, snapshots }: { evaluation
         </table></div> : <p className="mt-3 text-xs text-slate-500">선정 종목이 없어 성과를 계산하지 않습니다.</p>}
       </section>;
     })}</div>
+    {legacy.length > 0 && <details className="mt-5 rounded-lg border border-slate-700 p-3 text-xs text-slate-300">
+      <summary className="cursor-pointer font-semibold">기존 개장+30분 평가 · {legacy.length}건</summary>
+      <p className="mt-2 text-slate-400">기존 진입·청산 조건에 따른 가상 평가입니다. 위 NXT/KRX 시초 성과 및 실제 계좌 체결과 합산하지 않습니다.</p>
+      <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[520px] text-left"><thead><tr>{['종목', '기준일', '평가 상태', '진입', '청산', '비용 반영 수익'].map(label => <th key={label} scope="col" className="px-2 py-2">{label}</th>)}</tr></thead><tbody>{legacy.map(row => <tr key={`${row.snapshotId}:${row.ticker}`} className="border-t border-slate-800"><th scope="row" className="px-2 py-2">{row.ticker}</th><td className="px-2">{row.tradeDate}</td><td className="px-2">{row.status === 'SIMULATED' ? '가상 평가' : row.status === 'NO_ENTRY' ? '진입 없음' : row.status === 'PENDING' ? '평가 대기' : '자료 부족'}</td><td className="px-2">{price(row.entry)}</td><td className="px-2">{price(row.exit)}</td><td className="px-2">{percent(row.netReturnPct)}<span className="ml-2 text-slate-400">{row.costBps}bp</span></td></tr>)}</tbody></table></div>
+    </details>}
   </section>;
 }

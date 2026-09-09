@@ -1,5 +1,7 @@
 'use client';
 
+import { ScannerUniverseSelect } from '@/components/scanner/ScannerControls';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -552,22 +554,7 @@ export default function LeaderScannerPage() {
       )}
 
       {/* 유니버스 선택 */}
-      <div className="flex flex-wrap items-center gap-3">
-        {(Object.entries(UNIVERSES) as [ScannerUniverse, { label: string; desc: string }][]).map(([key, { label }]) => (
-          <button
-            key={key}
-            onClick={() => handleUniverseChange(key)}
-            disabled={isScanning}
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
-              universe === key
-                ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 shadow-md shadow-amber-500/5'
-                : 'border-slate-800 text-slate-400 hover:border-amber-500/30 hover:text-amber-300'
-            } disabled:opacity-40`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <ScannerUniverseSelect value={universe} onChange={handleUniverseChange} disabled={isScanning} options={UNIVERSES} />
 
       {/* 스캔 컨트롤 */}
       <div className="flex flex-wrap items-center gap-4">
@@ -999,6 +986,7 @@ export default function LeaderScannerPage() {
           </Button>
         </div>
       )}
+
     </div>
   );
 }

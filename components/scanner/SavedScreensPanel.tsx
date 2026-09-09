@@ -25,14 +25,16 @@ export default function SavedScreensPanel({
   const [name, setName] = useState('');
   const [previous, setPrevious] = useState<ScannerResult[]>([]);
   const [message, setMessage] = useState('');
-  const load = () => fetch('/api/saved-screens')
-    .then((response) => response.json())
-    .then((payload) => setItems(payload.data || []))
-    .catch(() => setItems([]));
+  const load = (signal?: AbortSignal) => fetch('/api/saved-screens', { signal })
+    .then((response) => { if (!response.ok) throw new Error('저장 화면을 불러오지 못했습니다.'); return response.json(); })
+    .then((payload) => { if (!signal?.aborted) setItems(payload.data || []); })
+    .catch((error) => { if (!signal?.aborted) setMessage(error instanceof Error ? error.message : '저장 화면 조회 실패'); });
 
   useEffect(() => {
-    load();
-    readPreviousScannerSnapshot(universe).then((snapshot) => setPrevious(snapshot?.results || []));
+    const controller = new AbortController();
+    void load(controller.signal);
+    readPreviousScannerSnapshot(universe).then((snapshot) => { if (!controller.signal.aborted) setPrevious(snapshot?.results || []); });
+    return () => controller.abort();
   }, [universe]);
 
   const diff = useMemo(() => diffScannerSnapshots(previous, results), [previous, results]);

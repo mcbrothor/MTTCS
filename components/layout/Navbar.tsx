@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Activity, ChevronDown, Star } from 'lucide-react';
+import UtilityMenus from '@/components/layout/UtilityMenus';
 import MarketStrip from '@/components/layout/MarketStrip';
 import {
   FLOW_STEPS,
-  UTILITY_LINKS,
   findActiveFlowStep,
   findActiveStrategyLink,
   groupStrategyLinks,
@@ -160,15 +160,7 @@ export default function Navbar() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {UTILITY_LINKS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-md border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-              >
-                {item.label}
-              </Link>
-            ))}
+            <UtilityMenus />
 
             <form action="/api/auth/logout" method="post" className="shrink-0">
               <button

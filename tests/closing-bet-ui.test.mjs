@@ -27,7 +27,7 @@ const replay = { ...snapshot, id: 'snapshot-replay', mode: 'REPLAY', picks: [{ .
 const replayHtml = renderToStaticMarkup(createElement(ClosingMarketPanel, { market: 'KOSPI200', snapshot: replay, mode: 'REPLAY' }));
 assert.match(replayHtml, /과거 검토 후보/);
 assert.doesNotMatch(replayHtml, /실전 목록에만 있는 종목|조건부 추천/);
-assert.equal((replayHtml.match(/미선정/g) || []).length, 4);
+assert.equal((replayHtml.match(/조건을 충족한 추가 종목 없음/g) || []).length, 1);
 assert.match(replayHtml, /장중 가집계/);
 assert.match(replayHtml, /15:15/);
 assert.match(replayHtml, /97.5%/);
@@ -44,7 +44,7 @@ assert.doesNotMatch(watchHtml, /조건부 추천/);
 
 const emptyHtml = renderToStaticMarkup(createElement(ClosingMarketPanel, { market: 'KOSDAQ150', mode: 'LIVE' }));
 assert.match(emptyHtml, /실전 결과가 없습니다/);
-assert.equal((emptyHtml.match(/미선정/g) || []).length, 5);
+assert.equal((emptyHtml.match(/선정된 종목이 없습니다/g) || []).length, 1);
 assert.doesNotMatch(emptyHtml, /테스트 종목|10000/);
 
 const selected = selectClosingSnapshots([
@@ -95,3 +95,9 @@ await assert.rejects(fetchClosingDashboard({ date: '', mode: 'AUTO', fetcher: as
 await assert.rejects(fetchClosingDashboard({ date: '', mode: 'LIVE', fetcher: async () => new Response(JSON.stringify({ data: null }), { status: 200 }) }), /응답 형식/);
 
 console.log('closing bet UI contract tests passed');
+
+const legacyHtml = renderToStaticMarkup(createElement(ClosingEvaluationPanel, { snapshots: [snapshot], evaluations: [{ ...evaluation, opening: undefined, status: 'SIMULATED', entry: 10000, exit: 10200, netReturnPct: 1.75 }] }));
+assert.match(legacyHtml, /기존 개장\+30분 평가/);
+assert.match(legacyHtml, /새 기준 평가 대기/);
+assert.match(legacyHtml, /1.75%/);
+assert.match(legacyHtml, /실제 계좌 체결과 합산하지 않습니다/);

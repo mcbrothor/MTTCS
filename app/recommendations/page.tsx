@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { BarChart3, CalendarDays, Database, Info, Search } from 'lucide-react';
@@ -292,7 +292,10 @@ function MetricHeaderTooltip({ label, ariaLabel, children }: { label: string; ar
   );
 }
 
+const subscribeToHydration = () => () => {};
+
 function RecommendationsContent() {
+  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const categoryParam = (searchParams.get('category') || '').toUpperCase();
@@ -309,6 +312,8 @@ function RecommendationsContent() {
     ? `/api/recommendations?category=${category}&limit=30${dateRange}`
     : `/api/recommendations/${view}?category=${category}${view === 'metrics' ? dateRange : ''}`;
   const summaryEndpoint = `/api/recommendations/summary?category=${category}`;
+  const [summaryExpanded, setSummaryExpanded] = useState(false);
+  const summaryEnabled = view === 'history' || summaryExpanded;
   const [requestState, setRequestState] = useState<RecommendationRequestState>({
     endpoint: null,
     data: null,
@@ -371,6 +376,7 @@ function RecommendationsContent() {
 
   useEffect(() => {
     const controller = new AbortController();
+    if (!summaryEnabled) return;
     fetch(summaryEndpoint, { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json().catch(() => null);
@@ -398,7 +404,7 @@ function RecommendationsContent() {
         });
       });
     return () => controller.abort();
-  }, [summaryEndpoint]);
+  }, [summaryEndpoint, summaryEnabled]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -412,14 +418,17 @@ function RecommendationsContent() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Segmented items={CATEGORY_ITEMS} active={category} getHref={(key) => hrefFor({ category: key as Category })} />
-          <Segmented items={[['history', '추천 이력'], ['metrics', '성과 분석'], ['diagnostics', '원인 분석']]} active={view} getHref={(key) => hrefFor({ view: key as View })} />
+
         </div>
       </header>
 
-      <div className="rounded-xl border border-sky-500/25 bg-sky-500/8 px-4 py-3 text-xs leading-5 text-sky-100/80">
+      <details className="rounded-xl border border-sky-500/25 bg-sky-500/8 px-4 py-3 text-xs leading-5 text-sky-100/80">
+        <summary className="cursor-pointer font-medium">성과 계산 기준 · 가격수익률 / 비용 차감 성과 · D5·D20·D60</summary>
+        <div className="mt-2">
         추천 이력과 일반 성과 카드는 가격수익률 기준으로 배당·세금·수수료·슬리피지를 포함하지 않습니다. 성과 분석의 권위 근거 표는 별도로 표준 수수료·세금·슬리피지·환전비용을 차감합니다. 현재 성과는 가장 최근 거래일 종가 기준이며, D5·D20·D60은 진입일 이후 해당 거래일 수가 모두 경과해야 확정됩니다. 미성숙 기간과 품질 검증 실패 데이터는 성공률 분모에서 제외됩니다.
         <span className="mt-1 block text-sky-200/70">초과수익 = 종목 수익률 - 같은 진입일·평가일의 벤치마크 수익률입니다. NASDAQ100은 ^NDX, S&amp;P500은 ^GSPC, KOSPI200은 ^KS200, KOSDAQ150은 ^KQ150을 사용합니다.</span>
-      </div>
+        </div>
+      </details>
 
       {!loading && !failure && (
         <SystemEvidencePanel
@@ -430,11 +439,16 @@ function RecommendationsContent() {
         />
       )}
 
+      {view !== 'history' && <button type="button" disabled={!hydrated} aria-expanded={summaryExpanded} onClick={() => setSummaryExpanded((value) => !value)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300">
+        {summaryExpanded ? '빈출 추천 요약 접기' : '빈출 추천 요약 보기'}
+      </button>}
+      {summaryEnabled && (
       <FrequentPicksSummary
         data={summaryLoading ? null : summaryState.data as { from?: string; to?: string; picks?: FrequentPick[] } | null}
         loading={summaryLoading}
         failure={summaryLoading ? null : summaryState.failure}
       />
+      )}
 
       {view === 'history' && (
         <section aria-label="추천일 필터" className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:flex-row sm:items-end sm:justify-between">

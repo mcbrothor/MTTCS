@@ -1,5 +1,7 @@
 'use client';
 
+import { readMacro } from '@/lib/shared-client-read';
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { DataSourceMeta, MacroRegime, MasterFilterMetricDetail, MasterFilterResponse } from '@/types';
 import type { MacroScoreBreakdown } from '@/lib/macro/compute';
@@ -158,7 +160,7 @@ export function MarketProvider({ children }: { children: React.ReactNode }) {
       try {
         const [mfResponse, macroResponse] = await Promise.allSettled([
           fetch(`/api/master-filter?market=${market}`, { signal: controller.signal }),
-          fetch(`/api/macro?market=${market}`, { signal: controller.signal }),
+          readMacro({ signal: controller.signal, market }),
         ]);
 
         if (mfResponse.status === 'rejected' || (mfResponse.status === 'fulfilled' && !mfResponse.value.ok)) {

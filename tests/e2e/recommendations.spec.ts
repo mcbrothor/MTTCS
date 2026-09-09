@@ -46,9 +46,9 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
     const main = page.getByRole('main');
 
     await expect(main.getByRole('link', { name: '코스피' })).toHaveAttribute('href', '/recommendations?category=KOSPI200&date=2026-05-19');
-    await expect(main.getByRole('link', { name: '성과 분석' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=metrics');
-    await expect(main.getByRole('link', { name: '원인 분석' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=diagnostics');
-    await expect(main.getByRole('link', { name: '추천 이력' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('navigation', { name: '성과 복기 하위 메뉴' }).getByRole('link', { name: '추천 성과' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=metrics');
+    await expect(page.getByRole('navigation', { name: '성과 복기 하위 메뉴' }).getByRole('link', { name: '원인 분석' })).toHaveAttribute('href', '/recommendations?category=NASDAQ100&date=2026-05-19&view=diagnostics');
+    await expect(page.getByRole('navigation', { name: '성과 복기 하위 메뉴' }).getByRole('link', { name: '추천 이력' })).toHaveAttribute('aria-current', 'page');
 
     await main.getByRole('link', { name: '코스피' }).click();
     await expect(page).toHaveURL('/recommendations?category=KOSPI200&date=2026-05-19');
@@ -96,7 +96,7 @@ test.describe('TC-REC: 추천 성과·원인 분석', () => {
 
   test('REC-02: 5·20·60일 성과와 표본 수 표시', async ({ page }) => {
     await page.goto('/recommendations');
-    await page.getByRole('link', { name: '성과 분석' }).click();
+    await page.getByRole('link', { name: '추천 성과' }).click();
     await expect(page).toHaveURL(/view=metrics/);
     await expect(page.getByRole('heading', { name: 'D5' })).toBeVisible();
     await expect(page.getByText('n=40')).toBeVisible();

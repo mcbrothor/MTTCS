@@ -1,5 +1,7 @@
 'use client';
 
+import { readMacro } from '@/lib/shared-client-read';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowUpRight, Minus, TrendingDown, TrendingUp } from 'lucide-react';
@@ -124,11 +126,13 @@ export default function MacroPage() {
   const [macroError, setMacroError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     Promise.all([
-      fetch('/api/macro').then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
-      fetch('/api/macro/history?days=7').then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
+      readMacro({ signal: controller.signal }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
+      fetch('/api/macro/history?days=7', { signal: controller.signal }).then(async (r) => ({ ok: r.ok, body: await r.json().catch(() => null) })),
     ])
       .then(([macro, hist]) => {
+        if (controller.signal.aborted) return;
         if (macro.ok && macro.body?.score !== undefined) {
           setMacroData(macro.body);
         } else {
@@ -139,11 +143,13 @@ export default function MacroPage() {
         if (hist.ok && Array.isArray(hist.body?.data)) setHistory(hist.body.data);
       })
       .catch((err) => {
+        if (controller.signal.aborted) return;
         setMacroData(null);
         setHasError(true);
         setMacroError(err instanceof Error ? err.message : '큰 흐름 데이터를 채점하지 못했습니다.');
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
+    return () => controller.abort();
   }, []);
 
   const score = macroData?.score ?? 0;

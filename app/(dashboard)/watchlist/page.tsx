@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
+import { parseMarketAnalysisResponse } from '@/lib/market-analysis-response';
+import { sharedClientRead } from '@/lib/shared-client-read';
 import { Eye, Plus, Save, Star, Trash2, X } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
@@ -51,6 +53,12 @@ export default function WatchlistPage() {
   const [selectedItem, setSelectedItem] = useState<WatchlistItem | null>(null);
   const [detailAnalysis, setDetailAnalysis] = useState<MarketAnalysisResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [analysisRequested, setAnalysisRequested] = useState<string | null>(null);
+  const [analysisRevision, setAnalysisRevision] = useState(0);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const ticker = selectedItem?.ticker;
+  const exchange = selectedItem?.exchange;
+  const analysisKey = selectedItem ? `${selectedItem.id}:${ticker}:${exchange}` : null;
   const [itemToDelete, setItemToDelete] = useState<{ id: string; ticker: string } | null>(null);
 
   const fetchItems = useCallback(async () => {
@@ -69,17 +77,20 @@ export default function WatchlistPage() {
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   useEffect(() => {
-    if (!selectedItem) {
+    if (!ticker || !exchange || analysisRequested !== analysisKey) {
       setDetailAnalysis(null);
+      setDetailLoading(false);
+      setDetailError(null);
       return;
     }
 
-    const item = selectedItem;
+    const item = { ticker, exchange };
     let mounted = true;
     const controller = new AbortController();
 
     async function fetchDetail() {
       setDetailLoading(true);
+      setDetailError(null);
       setDetailAnalysis(null);
       try {
         const params = new URLSearchParams({
@@ -89,12 +100,15 @@ export default function WatchlistPage() {
           riskPercent: '1',
           includeFundamentals: 'false',
         });
-        const response = await fetch(`/api/market-data?${params.toString()}`, { signal: controller.signal });
-        if (!response.ok) return;
-        const payload = (await response.json()) as MarketAnalysisResponse;
+        const response = await sharedClientRead(`/api/market-data?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('시장 데이터를 불러오지 못했습니다.');
+        const payload = parseMarketAnalysisResponse(await response.json());
         if (mounted) setDetailAnalysis(payload);
-      } catch {
-        if (mounted) setDetailAnalysis(null);
+      } catch (error) {
+        if (mounted && !controller.signal.aborted) {
+          setDetailAnalysis(null);
+          setDetailError(error instanceof Error ? error.message : '시장 데이터 조회 실패');
+        }
       } finally {
         if (mounted) setDetailLoading(false);
       }
@@ -106,7 +120,7 @@ export default function WatchlistPage() {
       mounted = false;
       controller.abort();
     };
-  }, [selectedItem]);
+  }, [ticker, exchange, analysisKey, analysisRequested, analysisRevision]);
 
   const handleDeleteRequest = (id: string, ticker: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -323,9 +337,11 @@ export default function WatchlistPage() {
       {selectedItem && (
         <WatchlistDetailModal
           item={selectedItem}
-          analysis={detailAnalysis}
-          loading={detailLoading}
-          onClose={() => setSelectedItem(null)}
+          analysis={analysisRequested === analysisKey ? detailAnalysis : null}
+          loading={analysisRequested === analysisKey && detailLoading}
+          analysisError={detailError}
+          onAnalyze={() => { setAnalysisRequested(analysisKey); setAnalysisRevision(value => value + 1); }}
+          onClose={() => { setSelectedItem(null); setAnalysisRequested(null); }}
           onSave={(patch) => handleUpdateItem(selectedItem.id, patch)}
           onDelete={() => handleDeleteRequest(selectedItem.id, selectedItem.ticker)}
         />
@@ -479,6 +495,8 @@ function WatchlistDetailModal({
   item,
   analysis,
   loading,
+  analysisError,
+  onAnalyze,
   onClose,
   onSave,
   onDelete,
@@ -486,6 +504,8 @@ function WatchlistDetailModal({
   item: WatchlistItem;
   analysis: MarketAnalysisResponse | null;
   loading: boolean;
+  analysisError: string | null;
+  onAnalyze: () => void;
   onClose: () => void;
   onSave: (patch: Partial<Pick<WatchlistItem, 'exchange' | 'memo' | 'priority' | 'tags' | 'group_name' | 'thesis' | 'catalysts' | 'invalidation' | 'review_at' | 'idea_status' | 'source_refs'>>) => Promise<void>;
   onDelete: () => void;
@@ -638,7 +658,7 @@ function WatchlistDetailModal({
               <Link href={`/plan?ticker=${item.ticker}&exchange=${exchange}`} className="inline-flex items-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">
                 계획으로 이동
               </Link>
-              <button type="button" onClick={createPivotAlert} className="inline-flex items-center rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/10">피벗 알림</button>
+              <button type="button" onClick={createPivotAlert} disabled={!analysis} title={!analysis ? '종목 분석을 먼저 조회해 주세요' : undefined} className="inline-flex items-center rounded-lg border border-amber-500/40 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/10">피벗 알림</button>
               <button type="button" onClick={onDelete} className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10">
                 <Trash2 className="h-4 w-4" />
                 삭제
@@ -678,7 +698,8 @@ function WatchlistDetailModal({
               </div>
             ) : (
               <p className="mt-4 text-sm leading-6 text-slate-400">
-                market-data 조회에 실패했지만 관심종목 설정은 정상적으로 확인하고 수정할 수 있습니다.
+                {analysisError || '메모와 태그는 바로 수정할 수 있습니다. 가격·SEPA·VCP 분석은 필요할 때 조회합니다.'}
+                {<button type="button" onClick={onAnalyze} className="mt-3 block rounded-lg border border-emerald-500/40 px-3 py-2 text-emerald-300">{analysisError ? '분석 다시 시도' : '종목 분석 보기'}</button>}
               </p>
             )}
           </div>

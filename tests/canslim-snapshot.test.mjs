@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { createJiti } from 'jiti';
+const { readCanslimSnapshot } = createJiti(import.meta.url)('../lib/canslim-snapshot.ts');
+const snapshot = { savedAt: '2026-09-09', universe: 'SP500', results: [{ ticker: 'TEST' }], macro: null };
+let fallback = 0;
+const loaded = await readCanslimSnapshot('SP500', { primary: async key => { assert.equal(key, 'mtn:canslim-snapshot:v1:SP500'); return snapshot; }, legacy: () => { fallback++; return null; } });
+assert.equal(loaded, snapshot);
+assert.equal(fallback, 0);
+assert.deepEqual(await readCanslimSnapshot('SP500', { primary: async () => null, legacy: () => JSON.stringify(snapshot) }), snapshot);
+await assert.rejects(readCanslimSnapshot('NASDAQ100', { primary: async () => snapshot, legacy: () => null }), /유니버스/);
+console.log('canslim snapshot transfer tests passed');

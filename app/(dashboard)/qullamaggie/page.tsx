@@ -1,5 +1,9 @@
 'use client';
 
+import { saveCrossCheckSnapshot } from '@/lib/scanner/cross-check-storage';
+
+import { ScannerUniverseSelect, ScannerViewToggle } from '@/components/scanner/ScannerControls';
+
 import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -198,6 +202,10 @@ export default function QullamaggieScannerPage() {
       }
 
       setResults(allResults);
+      if (!abort.signal.aborted) {
+        try { await saveCrossCheckSnapshot('qullamaggie', universe, allResults, allErrors.length); }
+        catch { setScanFatalError('스캔 결과는 표시되지만 교차 보기용 저장에 실패했습니다.'); }
+      }
       setScanStage(allErrors.length > 0 ? `완료 · 실패 ${allErrors.length}건` : '완료');
     } catch (err: unknown) {
       if (!(err instanceof DOMException && err.name === 'AbortError')) {
@@ -266,29 +274,11 @@ export default function QullamaggieScannerPage() {
       )}
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-200">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-400">
           <Activity className="h-5 w-5 text-emerald-400" />
           Target Universe
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((uKey) => {
-            const active = universe === uKey;
-            return (
-              <button
-                key={uKey}
-                onClick={() => { if (!isScanning) setUniverse(uKey); }}
-                className={`rounded-xl border p-4 text-left transition-all ${
-                  active
-                    ? 'border-emerald-500 bg-emerald-600/15 ring-1 ring-emerald-500/40'
-                    : 'border-slate-800 bg-slate-950/50 hover:border-slate-700 hover:bg-slate-800/50'
-                }`}
-              >
-                <div className="font-bold text-slate-100">{UNIVERSES[uKey].label}</div>
-                <div className="mt-1.5 text-xs leading-relaxed text-slate-400">{UNIVERSES[uKey].desc}</div>
-              </button>
-            );
-          })}
-        </div>
+        <ScannerUniverseSelect value={universe} onChange={setUniverse} disabled={isScanning} options={UNIVERSES} />
       </section>
 
       <section className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-4 md:flex-row md:items-center md:justify-between">
@@ -376,20 +366,7 @@ export default function QullamaggieScannerPage() {
                 <option key={s.key} value={s.key}>{s.label}</option>
               ))}
             </select>
-            <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-0.5">
-              <button
-                onClick={() => setViewType('card')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${viewType === 'card' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                카드
-              </button>
-              <button
-                onClick={() => setViewType('table')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${viewType === 'table' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                테이블
-              </button>
-            </div>
+            <ScannerViewToggle value={viewType === 'table' ? 'web' : 'app'} onChange={value => setViewType(value === 'web' ? 'table' : 'card')} />
           </div>
         </section>
       )}
