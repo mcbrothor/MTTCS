@@ -7,6 +7,10 @@ const migrationPath = path.join(
   process.cwd(),
   'supabase/migrations/20260909090000_qullamaggie_evidence_snapshots.sql',
 );
+const immutablePrivilegesPath = path.join(
+  process.cwd(),
+  'supabase/migrations/20260909091500_qullamaggie_evidence_immutable_privileges.sql',
+);
 
 test('Qullamaggie evidence migration keeps snapshots private and insert-only', async () => {
   const sql = await readFile(migrationPath, 'utf8');
@@ -17,4 +21,15 @@ test('Qullamaggie evidence migration keeps snapshots private and insert-only', a
   assert.match(sql, /revoke all on table public\.qullamaggie_evidence_snapshots from public, anon, authenticated/i);
   assert.match(sql, /grant select, insert, delete on table public\.qullamaggie_evidence_snapshots to service_role/i);
   assert.doesNotMatch(sql, /grant all on table public\.qullamaggie_evidence_snapshots/i);
+
+  const immutablePrivilegesSql = await readFile(immutablePrivilegesPath, 'utf8');
+  assert.match(
+    immutablePrivilegesSql,
+    /revoke all on table public\.qullamaggie_evidence_snapshots from service_role/i,
+  );
+  assert.match(
+    immutablePrivilegesSql,
+    /grant select, insert, delete on table public\.qullamaggie_evidence_snapshots to service_role/i,
+  );
+  assert.doesNotMatch(immutablePrivilegesSql, /grant update/i);
 });
