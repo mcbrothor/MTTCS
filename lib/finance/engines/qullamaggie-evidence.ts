@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import type { OHLCData } from '@/types';
+import { normalizeChartDate } from '@/lib/finance/core/chart-time';
 import type {
   QullamaggieAnalysis,
   QullamaggieSetup,
@@ -162,12 +164,7 @@ export interface SetupEvidenceSnapshot {
 }
 
 export function simpleHash(text: string): string {
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(16).padStart(8, '0');
+  return createHash('sha256').update(text).digest('hex');
 }
 
 export interface BuildEvidenceOptions {
@@ -175,6 +172,8 @@ export interface BuildEvidenceOptions {
   exchange?: string;
   ticker?: string;
   provider?: string;
+  adjustment?: 'adjusted' | 'unadjusted' | 'unknown';
+  barStatus?: 'closed' | 'partial' | 'unknown';
 }
 
 /**
@@ -186,7 +185,7 @@ export function buildQullamaggieEvidenceSnapshot(
   analysis: QullamaggieAnalysis,
   options: BuildEvidenceOptions = {},
 ): SetupEvidenceSnapshot {
-  const ticker = options.ticker || 'UNKNOWN';
+  const ticker = (options.ticker || 'UNKNOWN').trim().toUpperCase();
   const exchange = options.exchange || (options.market === 'KR' ? 'KOSPI' : 'US');
   const currency = exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KRW' : 'USD';
   const market = options.market ?? (exchange === 'KOSPI' || exchange === 'KOSDAQ' ? 'KR' : 'US');
@@ -194,13 +193,20 @@ export function buildQullamaggieEvidenceSnapshot(
 
   const len = data.length;
   const lastBar = data[len - 1];
-  const asOfBarDate = lastBar?.date || new Date().toISOString().slice(0, 10);
+  const asOfBarDate = normalizeChartDate(lastBar?.date || new Date().toISOString().slice(0, 10));
   const calculatedAt = new Date().toISOString();
 
   // Bars hash
-  const barsContent = data.map((b) => `${b.date}:${b.close}:${b.volume}`).join('|');
+  const barsContent = JSON.stringify(data.map((bar) => ({
+    date: normalizeChartDate(bar.date),
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+  })));
   const barsHash = simpleHash(barsContent);
-  const snapshotId = `qev_${ticker}_${asOfBarDate.replace(/-/g, '')}_${barsHash.slice(0, 8)}`;
+  const snapshotId = `qev_${ticker}_${asOfBarDate.replace(/-/g, '')}_${barsHash.slice(0, 24)}`;
 
   // 1. Base 후보군 평가 재현 (10, 15, 20, 30, 45)
   const baseCandidates: BaseEvaluation[] = [];
@@ -319,17 +325,57 @@ export function buildQullamaggieEvidenceSnapshot(
       style: 'solid',
     });
 
-    // 베이스 기간 거래량 음영
-    const volWindowId = 'anno_vol_base_window';
-    annotations.push({
-      id: volWindowId,
-      criterionId: 'crit_volume_dryup',
-      type: 'volume-window',
-      label: '베이스 거래량 수축 구간',
-      color: 'rgba(148, 163, 184, 0.2)',
-      startDate: selectedBase.startDate,
-      endDate: selectedBase.endDate,
-    });
+    const baseStartIndex = len - selectedBase.baseDays - 1;
+    const recentStartIndex = len - 1 - Math.min(8, selectedBase.baseDays);
+    const olderStartIndex = Math.max(0, len - selectedBase.baseDays - 35);
+    const olderEndIndex = len - selectedBase.baseDays - 2;
+    const recentBars = data.slice(recentStartIndex, len - 1);
+    const olderBars = data.slice(olderStartIndex, len - selectedBase.baseDays - 1);
+    const recentAverage = recentBars.reduce((sum, bar) => sum + bar.volume, 0) / Math.max(1, recentBars.length);
+    const olderAverage = olderBars.reduce((sum, bar) => sum + bar.volume, 0) / Math.max(1, olderBars.length);
+
+    if (recentBars.length > 0 && olderBars.length > 0 && baseStartIndex >= 0) {
+      annotations.push(
+        {
+          id: 'anno_vol_older_window',
+          criterionId: 'crit_volume_dryup',
+          type: 'volume-window',
+          label: `기준 ${olderBars.length}봉`,
+          color: 'rgba(148, 163, 184, 0.2)',
+          startDate: data[olderStartIndex].date,
+          endDate: data[olderEndIndex].date,
+        },
+        {
+          id: 'anno_vol_older_average',
+          criterionId: 'crit_volume_dryup',
+          type: 'volume-average',
+          label: `기준 평균 ${Math.round(olderAverage).toLocaleString()}`,
+          color: '#94a3b8',
+          startDate: data[olderStartIndex].date,
+          endDate: data[olderEndIndex].date,
+          averageVolume: olderAverage,
+        },
+        {
+          id: 'anno_vol_recent_window',
+          criterionId: 'crit_volume_dryup',
+          type: 'volume-window',
+          label: `최근 ${recentBars.length}봉`,
+          color: 'rgba(52, 211, 153, 0.2)',
+          startDate: data[recentStartIndex].date,
+          endDate: selectedBase.endDate,
+        },
+        {
+          id: 'anno_vol_recent_average',
+          criterionId: 'crit_volume_dryup',
+          type: 'volume-average',
+          label: `최근 평균 ${Math.round(recentAverage).toLocaleString()}`,
+          color: '#34d399',
+          startDate: data[recentStartIndex].date,
+          endDate: selectedBase.endDate,
+          averageVolume: recentAverage,
+        },
+      );
+    }
   }
 
   // 판정봉 마커
@@ -472,6 +518,19 @@ export function buildQullamaggieEvidenceSnapshot(
   // C6: 거래량 마름 (Volume Dry-up - 가점)
   const dryUp = selectedBase?.volumeDryUpRatio ?? null;
   const dryUpPass = dryUp !== null && dryUp <= 0.85;
+  const volumeAnnotationIds = annotations
+    .filter((annotation) => annotation.criterionId === 'crit_volume_dryup')
+    .map((annotation) => annotation.id);
+  const olderVolumeAverageAnnotation = annotations.find(
+    (annotation): annotation is VolumeAverageAnnotation => (
+      annotation.id === 'anno_vol_older_average' && annotation.type === 'volume-average'
+    ),
+  );
+  const recentVolumeAverageAnnotation = annotations.find(
+    (annotation): annotation is VolumeAverageAnnotation => (
+      annotation.id === 'anno_vol_recent_average' && annotation.type === 'volume-average'
+    ),
+  );
   criteria.push({
     id: 'crit_volume_dryup',
     setup: 'BREAKOUT',
@@ -487,8 +546,10 @@ export function buildQullamaggieEvidenceSnapshot(
     },
     inputs: [
       { name: '거래량 감소율', value: dryUp, unit: '배' },
+      { name: '기준 구간 평균 거래량', value: olderVolumeAverageAnnotation?.averageVolume ?? null, unit: '주' },
+      { name: '최근 구간 평균 거래량', value: recentVolumeAverageAnnotation?.averageVolume ?? null, unit: '주' },
     ],
-    annotationIds: ['anno_vol_base_window'],
+    annotationIds: volumeAnnotationIds,
   });
 
   // C7: 저점 지지 구조 (Higher Lows - 가점)
@@ -626,12 +687,12 @@ export function buildQullamaggieEvidenceSnapshot(
       engineVersion: 'qullamaggie-v1.1-evidence',
       paramsHash: simpleHash(JSON.stringify({ market, minPrice, minAvgVol, minDollarVol })),
       provider,
-      adjustment: 'adjusted',
+      adjustment: options.adjustment ?? 'unknown',
       timeframe: '1d',
       exchangeTimezone: market === 'KR' ? 'Asia/Seoul' : 'America/New_York',
       asOfBarDate,
       calculatedAt,
-      barStatus: 'closed',
+      barStatus: options.barStatus ?? 'unknown',
       barsHash,
       barCount: len,
     },

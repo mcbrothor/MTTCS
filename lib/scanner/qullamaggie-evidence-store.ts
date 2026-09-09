@@ -1,37 +1,74 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SetupEvidenceSnapshot } from '@/lib/finance/engines/qullamaggie-evidence';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 
-// 서버 프로세스 메모리 기반 LRU 캐시 (최근 500개 스냅샷 보관)
-const MAX_CACHE_SIZE = 500;
-const snapshotStore = new Map<string, { snapshot: SetupEvidenceSnapshot; savedAt: number }>();
+const TABLE = 'qullamaggie_evidence_snapshots';
+const MAX_CACHE_SIZE = 100;
+const snapshotCache = new Map<string, SetupEvidenceSnapshot>();
+
+function cacheSnapshot(snapshot: SetupEvidenceSnapshot) {
+  snapshotCache.delete(snapshot.snapshotId);
+  snapshotCache.set(snapshot.snapshotId, snapshot);
+  if (snapshotCache.size <= MAX_CACHE_SIZE) return;
+  const oldestKey = snapshotCache.keys().next().value;
+  if (oldestKey) snapshotCache.delete(oldestKey);
+}
+
+/** 테스트와 동일 프로세스 내 재조회 최적화를 위한 bounded cache. */
+export function cacheQullamaggieEvidenceSnapshot(snapshot: SetupEvidenceSnapshot): void {
+  cacheSnapshot(snapshot);
+}
 
 /**
- * 쿨라매기 증거 스냅샷을 저장합니다.
+ * 동일 snapshot_id는 최초 payload를 보존한다. 충돌은 같은 봉 hash의 재스캔으로
+ * 간주하며 기존 행을 갱신하지 않는다.
  */
-export function saveQullamaggieEvidenceSnapshot(snapshot: SetupEvidenceSnapshot): void {
-  if (snapshotStore.size >= MAX_CACHE_SIZE) {
-    const oldestKey = snapshotStore.keys().next().value;
-    if (oldestKey) {
-      snapshotStore.delete(oldestKey);
-    }
-  }
-  snapshotStore.set(snapshot.snapshotId, {
-    snapshot,
-    savedAt: Date.now(),
+export async function saveQullamaggieEvidenceSnapshot(
+  snapshot: SetupEvidenceSnapshot,
+  client?: SupabaseClient,
+): Promise<void> {
+  const db = client ?? getSupabaseAdmin();
+  const { error } = await db.from(TABLE).insert({
+    snapshot_id: snapshot.snapshotId,
+    ticker: snapshot.symbol.ticker,
+    exchange: snapshot.symbol.exchange,
+    as_of_bar_date: snapshot.provenance.asOfBarDate,
+    bars_hash: snapshot.provenance.barsHash,
+    engine_version: snapshot.provenance.engineVersion,
+    schema_version: snapshot.schemaVersion,
+    payload: snapshot,
   });
+
+  if (error && error.code !== '23505') {
+    throw new Error(`쿨라매기 증거 스냅샷 저장 실패: ${error.code || error.message}`);
+  }
+  cacheSnapshot(snapshot);
 }
 
-/**
- * snapshotId로 스냅샷을 조회합니다.
- */
-export function getQullamaggieEvidenceSnapshot(snapshotId: string): SetupEvidenceSnapshot | null {
-  const entry = snapshotStore.get(snapshotId);
-  if (!entry) return null;
-  return entry.snapshot;
+export async function getQullamaggieEvidenceSnapshot(
+  snapshotId: string,
+  client?: SupabaseClient,
+): Promise<SetupEvidenceSnapshot | null> {
+  const cached = snapshotCache.get(snapshotId);
+  if (cached) return cached;
+
+  const db = client ?? getSupabaseAdmin();
+  const { data, error } = await db
+    .from(TABLE)
+    .select('payload')
+    .eq('snapshot_id', snapshotId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`쿨라매기 증거 스냅샷 조회 실패: ${error.code || error.message}`);
+  }
+  if (!data?.payload) return null;
+
+  const snapshot = data.payload as SetupEvidenceSnapshot;
+  cacheSnapshot(snapshot);
+  return snapshot;
 }
 
-/**
- * 테스트용 저장소 초기화 함수
- */
 export function clearQullamaggieEvidenceStore(): void {
-  snapshotStore.clear();
+  snapshotCache.clear();
 }

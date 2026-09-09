@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   X,
   CheckCircle2,
@@ -22,6 +22,125 @@ interface QullamaggieEvidenceModalProps {
   ticker: string;
   exchange: string;
   snapshotId?: string | null;
+}
+
+function buildChartEvidence(snapshot: SetupEvidenceSnapshot | null, selectedCriterionId: string | null) {
+  const patternOverlays: ChartPatternOverlay[] = [];
+  const volumeByWindowId = new Map<string, {
+    id: string;
+    label: string;
+    startDate: string;
+    endDate: string;
+    averageVolume?: number;
+    color?: string;
+  }>();
+  if (!snapshot) return { patternOverlays, volumeEvidence: [] };
+
+  const selectedCriterion = snapshot.criteria.find((criterion) => criterion.id === selectedCriterionId);
+  const activeAnnotationIds = new Set(selectedCriterion ? selectedCriterion.annotationIds : []);
+  for (const annotation of snapshot.annotations) {
+    if (activeAnnotationIds.size > 0 && !activeAnnotationIds.has(annotation.id)) continue;
+    if (
+      (annotation.type === 'volume-window' || annotation.type === 'volume-average')
+      && selectedCriterion?.id !== annotation.criterionId
+    ) continue;
+
+    if (annotation.type === 'volume-window') {
+      volumeByWindowId.set(annotation.id.replace('_window', ''), {
+        id: annotation.id,
+        label: annotation.label,
+        startDate: annotation.startDate,
+        endDate: annotation.endDate,
+        color: annotation.color,
+      });
+      continue;
+    }
+    if (annotation.type === 'volume-average') {
+      const key = annotation.id.replace('_average', '');
+      const existing = volumeByWindowId.get(key);
+      volumeByWindowId.set(key, {
+        id: existing?.id || annotation.id,
+        label: annotation.label,
+        startDate: annotation.startDate,
+        endDate: annotation.endDate,
+        averageVolume: annotation.averageVolume,
+        color: annotation.color,
+      });
+      continue;
+    }
+
+    if (annotation.type === 'price-zone') {
+      patternOverlays.push({
+        id: annotation.id,
+        type: 'SUPPORT_RESISTANCE',
+        label: annotation.label,
+        status: 'CONFIRMED',
+        confidence: 100,
+        dateRange: { start: annotation.startDate, end: annotation.endDate },
+        priceRange: { low: annotation.lowPrice, high: annotation.highPrice },
+        anchors: [],
+        lines: [],
+        zones: [{
+          id: `${annotation.id}_zone`,
+          label: annotation.label,
+          category: 'base',
+          startDate: annotation.startDate,
+          endDate: annotation.endDate,
+          low: annotation.lowPrice,
+          high: annotation.highPrice,
+        }],
+        markers: [],
+        evidence: {},
+      });
+    } else if (annotation.type === 'price-line') {
+      patternOverlays.push({
+        id: annotation.id,
+        type: 'SUPPORT_RESISTANCE',
+        label: annotation.label,
+        status: 'CONFIRMED',
+        confidence: 100,
+        dateRange: { start: annotation.startDate, end: annotation.endDate },
+        priceRange: { low: annotation.price, high: annotation.price },
+        anchors: [],
+        lines: [{
+          id: `${annotation.id}_line`,
+          label: annotation.label,
+          category: 'pivot',
+          points: [
+            { date: annotation.startDate, price: annotation.price },
+            { date: annotation.endDate, price: annotation.price },
+          ],
+          style: annotation.style,
+        }],
+        zones: [],
+        markers: [],
+        evidence: {},
+      });
+    } else if (annotation.type === 'price-marker') {
+      patternOverlays.push({
+        id: annotation.id,
+        type: 'SUPPORT_RESISTANCE',
+        label: annotation.label,
+        status: 'CONFIRMED',
+        confidence: 100,
+        dateRange: { start: annotation.date, end: annotation.date },
+        priceRange: { low: annotation.price, high: annotation.price },
+        anchors: [],
+        lines: [],
+        zones: [],
+        markers: [{
+          id: `${annotation.id}_marker`,
+          label: annotation.label,
+          category: 'pattern',
+          date: annotation.date,
+          price: annotation.price,
+          shape: annotation.shape,
+        }],
+        evidence: {},
+      });
+    }
+  }
+  return { patternOverlays, volumeEvidence: [...volumeByWindowId.values()] };
 }
 
 export default function QullamaggieEvidenceModal({
@@ -78,119 +197,47 @@ export default function QullamaggieEvidenceModal({
     fetchSnapshot();
   }, [isOpen, snapshotId]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isOpen, onClose]);
+
+  const chartBars = useMemo(() => (snapshot?.bars || []).map((bar) => ({
+    time: bar.date,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
+  })), [snapshot]);
+  const chartEvidence = useMemo(
+    () => buildChartEvidence(snapshot, selectedCriterionId),
+    [selectedCriterionId, snapshot],
+  );
+
   if (!isOpen) return null;
-
-  // Chart Point 변환
-  const chartBars = (snapshot?.bars || []).map((b) => ({
-    time: b.date,
-    open: b.open,
-    high: b.high,
-    low: b.low,
-    close: b.close,
-    volume: b.volume,
-  }));
-
-  // SetupAnnotation -> ChartPatternOverlay 변환
-  const patternOverlays: ChartPatternOverlay[] = [];
-  if (snapshot) {
-    const selectedCriterion = snapshot.criteria.find((c) => c.id === selectedCriterionId);
-    const activeAnnotationIds = new Set(selectedCriterion ? selectedCriterion.annotationIds : []);
-
-    for (const anno of snapshot.annotations) {
-      const isFocused = activeAnnotationIds.size === 0 || activeAnnotationIds.has(anno.id);
-      if (!isFocused && activeAnnotationIds.size > 0) continue;
-
-      if (anno.type === 'price-zone') {
-        patternOverlays.push({
-          id: anno.id,
-          type: 'SUPPORT_RESISTANCE',
-          label: anno.label,
-          status: 'CONFIRMED',
-          confidence: 100,
-          dateRange: { start: anno.startDate, end: anno.endDate },
-          priceRange: { low: anno.lowPrice, high: anno.highPrice },
-          anchors: [],
-          lines: [],
-          zones: [
-            {
-              id: `${anno.id}_zone`,
-              label: anno.label,
-              category: 'base',
-              startDate: anno.startDate,
-              endDate: anno.endDate,
-              low: anno.lowPrice,
-              high: anno.highPrice,
-            },
-          ],
-          markers: [],
-          evidence: {},
-        });
-      } else if (anno.type === 'price-line') {
-        patternOverlays.push({
-          id: anno.id,
-          type: 'SUPPORT_RESISTANCE',
-          label: anno.label,
-          status: 'CONFIRMED',
-          confidence: 100,
-          dateRange: { start: anno.startDate, end: anno.endDate },
-          priceRange: { low: anno.price, high: anno.price },
-          anchors: [],
-          lines: [
-            {
-              id: `${anno.id}_line`,
-              label: anno.label,
-              category: 'pivot',
-              points: [
-                { date: anno.startDate, price: anno.price },
-                { date: anno.endDate, price: anno.price },
-              ],
-              style: anno.style,
-            },
-          ],
-          zones: [],
-          markers: [],
-          evidence: {},
-        });
-      } else if (anno.type === 'price-marker') {
-        patternOverlays.push({
-          id: anno.id,
-          type: 'SUPPORT_RESISTANCE',
-          label: anno.label,
-          status: 'CONFIRMED',
-          confidence: 100,
-          dateRange: { start: anno.date, end: anno.date },
-          priceRange: { low: anno.price, high: anno.price },
-          anchors: [],
-          lines: [],
-          zones: [],
-          markers: [
-            {
-              id: `${anno.id}_marker`,
-              label: anno.label,
-              category: 'pattern',
-              date: anno.date,
-              price: anno.price,
-              shape: anno.shape,
-            },
-          ],
-          evidence: {},
-        });
-      }
-    }
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-6xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+      <div
+        className="relative w-full max-w-6xl rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qullamaggie-evidence-title"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/70">
-          <div className="flex items-center gap-4">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-800 bg-slate-950/70 px-4 py-4 sm:items-center sm:px-6">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-2xl font-black text-white">{ticker}</span>
+              <span id="qullamaggie-evidence-title" className="text-2xl font-black text-white">{ticker} 셋업 근거</span>
               <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">{exchange}</span>
             </div>
             {snapshot && (
-              <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:gap-3">
                 <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 font-semibold text-emerald-300">
                   {snapshot.decision.primarySetup}
                 </span>
@@ -205,7 +252,9 @@ export default function QullamaggieEvidenceModal({
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="셋업 근거 닫기"
             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
@@ -237,13 +286,13 @@ export default function QullamaggieEvidenceModal({
               {/* 왼쪽/상단: 동일 시세 차트 영역 (7 cols) */}
               <div className="lg:col-span-7 flex flex-col gap-4">
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
-                  <div className="flex items-center justify-between mb-2 px-1">
+                  <div className="mb-2 flex flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                       <TrendingUp className="h-3.5 w-3.5 text-sky-400" />
                       MTN Pro 쿨라매기 판정 동일 시세 차트 ({snapshot.provenance.barCount}봉)
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      제공: {snapshot.provenance.provider} · 불변 스냅샷
+                      제공: {snapshot.provenance.provider} · {snapshot.provenance.adjustment} · {snapshot.provenance.barStatus}
                     </span>
                   </div>
                   <div className="h-[380px] w-full">
@@ -253,14 +302,15 @@ export default function QullamaggieEvidenceModal({
                       stopLossPrice={snapshot.analysis.stopPrice}
                       targetPrice={snapshot.analysis.target3R}
                       pivotLabel="피벗 기준가"
-                      chartPatterns={patternOverlays}
+                      chartPatterns={chartEvidence.patternOverlays}
+                      volumeEvidence={chartEvidence.volumeEvidence}
                       height={380}
                     />
                   </div>
                 </div>
 
                 {/* 리스크 & 목표가 요약 바 */}
-                <div className="grid grid-cols-4 gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-center text-xs">
+                <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-center text-xs sm:grid-cols-4">
                   <div>
                     <div className="text-slate-500">판정 종가</div>
                     <div className="mt-0.5 font-bold text-slate-200">
@@ -305,10 +355,12 @@ export default function QullamaggieEvidenceModal({
                       const isWarning = crit.role === 'warning';
 
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={crit.id}
                           onClick={() => setSelectedCriterionId(isSelected ? null : crit.id)}
-                          className={`cursor-pointer rounded-lg border p-3 text-xs transition-all ${
+                          aria-pressed={isSelected}
+                          className={`w-full rounded-lg border p-3 text-left text-xs transition-all ${
                             isSelected
                               ? 'border-sky-400 bg-sky-500/10 shadow-sm'
                               : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
@@ -355,7 +407,7 @@ export default function QullamaggieEvidenceModal({
                               </div>
                             ))}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -438,7 +490,7 @@ export default function QullamaggieEvidenceModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-slate-800 px-6 py-3 bg-slate-950/70 text-xs text-slate-500">
-          <span>Qullamaggie Setup Evidence System · 불변성 및 설명가능성 보장</span>
+          <span>Qullamaggie Setup Evidence System · 동일 시세와 판정 기준 기록</span>
           <Button onClick={onClose} variant="secondary" size="sm">
             닫기
           </Button>

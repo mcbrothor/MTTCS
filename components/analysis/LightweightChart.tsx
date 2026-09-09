@@ -16,6 +16,14 @@ interface LightweightChartProps {
   chartPatterns?: ChartPatternOverlay[];
   focusedPatternId?: string | null;
   onPatternFocusChange?: (patternId: string | null) => void;
+  volumeEvidence?: {
+    id: string;
+    label: string;
+    startDate: string;
+    endDate: string;
+    averageVolume?: number;
+    color?: string;
+  }[];
   height?: number;
 }
 
@@ -63,11 +71,12 @@ interface RenderedOverlay {
   lines: RenderedLine[];
   zones: RenderedZone[];
   markers: RenderedMarker[];
+  volumeBands: { id: string; label: string; x: number; width: number; color: string }[];
   width: number;
   height: number;
 }
 
-const EMPTY_OVERLAY: RenderedOverlay = { lines: [], zones: [], markers: [], width: 0, height: 0 };
+const EMPTY_OVERLAY: RenderedOverlay = { lines: [], zones: [], markers: [], volumeBands: [], width: 0, height: 0 };
 
 const MODE_LABEL: Record<OverlayMode, string> = {
   all: '전체',
@@ -191,6 +200,7 @@ export default function LightweightChart({
   chartPatterns = [],
   focusedPatternId = null,
   onPatternFocusChange,
+  volumeEvidence = [],
   height = 400 
 }: LightweightChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -210,9 +220,15 @@ export default function LightweightChart({
   const [renderedOverlay, setRenderedOverlay] = useState<RenderedOverlay>(EMPTY_OVERLAY);
   const normalizedData = useMemo(() => normalizeChartData(data), [data]);
   const normalizedPatterns = useMemo(() => normalizeChartPatterns(chartPatterns), [chartPatterns]);
+  const normalizedVolumeEvidence = useMemo(() => volumeEvidence.map((item) => ({
+    ...item,
+    startDate: normalizeChartDate(item.startDate),
+    endDate: normalizeChartDate(item.endDate),
+  })), [volumeEvidence]);
   const activePatternId = normalizedPatterns.some((pattern) => pattern.id === focusedPatternId) ? focusedPatternId : null;
   const activePattern = activePatternId ? normalizedPatterns.find((pattern) => pattern.id === activePatternId) ?? null : null;
   const patternCount = normalizedPatterns.length;
+  const hasChartEvidence = patternCount > 0 || normalizedVolumeEvidence.length > 0;
   const modes = useMemo<OverlayMode[]>(() => ['all', 'base', 'pivot', 'volume'], []);
   const ranges = useMemo<RangeMode[]>(() => ['3M', '6M', '1Y', 'ALL'], []);
   const studies = useMemo<StudyKey[]>(() => ['ma20', 'ma50', 'ma200', 'volume'], []);
@@ -232,6 +248,7 @@ export default function LightweightChart({
       lines: renderedOverlay.lines.filter((line) => isVisible(line.patternId, line.category)),
       zones: renderedOverlay.zones.filter((zone) => isVisible(zone.patternId, zone.category)),
       markers: renderedOverlay.markers.filter((marker) => isVisible(marker.patternId, marker.category)),
+      volumeBands: renderedOverlay.volumeBands,
     };
   }, [activePatternId, overlayMode, renderedOverlay]);
 
@@ -307,6 +324,22 @@ export default function LightweightChart({
         },
       });
       volumeSeries.setData(volumes);
+
+      for (const evidence of normalizedVolumeEvidence) {
+        if (!Number.isFinite(evidence.averageVolume)) continue;
+        const averageSeries = chart.addSeries(LineSeries, {
+          color: evidence.color || CATEGORY_COLOR.volume,
+          lineWidth: 2,
+          lineStyle: 2,
+          priceScaleId: '',
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        averageSeries.setData([
+          { time: evidence.startDate as Time, value: Number(evidence.averageVolume) },
+          { time: evidence.endDate as Time, value: Number(evidence.averageVolume) },
+        ]);
+      }
     }
 
     // Pivot Line
@@ -423,6 +456,18 @@ export default function LightweightChart({
         lines: normalizedPatterns.flatMap((pattern) => pattern.lines.map((line) => visibleLine(pattern.id, line))).filter((item): item is RenderedLine => Boolean(item)),
         zones: normalizedPatterns.flatMap((pattern) => pattern.zones.map((zone) => visibleZone(pattern.id, zone))).filter((item): item is RenderedZone => Boolean(item)),
         markers: normalizedPatterns.flatMap((pattern) => pattern.markers.map((marker) => visibleMarker(pattern.id, marker))).filter((item): item is RenderedMarker => Boolean(item)),
+        volumeBands: normalizedVolumeEvidence.flatMap((evidence) => {
+          const x1 = toX(evidence.startDate);
+          const x2 = toX(evidence.endDate);
+          if (x1 === null || x2 === null) return [];
+          return [{
+            id: evidence.id,
+            label: evidence.label,
+            x: Math.min(x1, x2),
+            width: Math.max(2, Math.abs(x2 - x1)),
+            color: evidence.color || CATEGORY_COLOR.volume,
+          }];
+        }),
       });
     };
 
@@ -445,12 +490,12 @@ export default function LightweightChart({
       seriesRef.current = null;
       chart.remove();
     };
-  }, [activePatternId, enabledStudies, height, normalizedPatterns, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
+  }, [activePatternId, enabledStudies, height, normalizedPatterns, normalizedVolumeEvidence, overlayMode, pivotLabel, pivotPrice, stopLossPrice, targetPrice, visibleData]);
 
   return (
     <div className="relative w-full rounded-2xl border border-slate-800 overflow-hidden bg-slate-950">
       <div ref={chartContainerRef} className="w-full" />
-      {patternCount > 0 ? (
+      {hasChartEvidence ? (
         <svg
           className="pointer-events-none absolute left-0 top-0 z-[5]"
           width={visibleOverlay.width}
@@ -458,6 +503,30 @@ export default function LightweightChart({
           viewBox={`0 0 ${visibleOverlay.width} ${visibleOverlay.height}`}
           aria-hidden="true"
         >
+          {visibleOverlay.volumeBands.map((band) => (
+            <g key={band.id}>
+              <rect
+                x={band.x}
+                y={Math.round(visibleOverlay.height * 0.78)}
+                width={band.width}
+                height={Math.max(20, Math.round(visibleOverlay.height * 0.15))}
+                fill={band.color}
+                fillOpacity="0.12"
+                stroke={band.color}
+                strokeOpacity="0.5"
+                strokeDasharray="4 3"
+              />
+              <text
+                x={band.x + 4}
+                y={Math.round(visibleOverlay.height * 0.78) + 12}
+                fill={band.color}
+                fontSize="10"
+                fontWeight="700"
+              >
+                {band.label}
+              </text>
+            </g>
+          ))}
           {visibleOverlay.zones.map((zone) => (
             <g key={zone.id}>
               <rect
