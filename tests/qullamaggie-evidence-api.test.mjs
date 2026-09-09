@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  saveQullamaggieEvidenceSnapshot,
+  cacheQullamaggieEvidenceSnapshot,
   clearQullamaggieEvidenceStore,
 } from '../lib/scanner/qullamaggie-evidence-store.ts';
 import { GET as getEvidenceHandler } from '../app/api/scanner/qullamaggie/evidence/[snapshotId]/route.ts';
@@ -44,7 +44,7 @@ test('Qullamaggie 증거 API는 존재하는 스냅샷을 200과 함께 반환�
     scoreTrace: [],
   };
 
-  saveQullamaggieEvidenceSnapshot(mockSnapshot);
+  cacheQullamaggieEvidenceSnapshot(mockSnapshot);
 
   const { createInternalRequest } = await import('../lib/auth/session.ts');
   process.env.MTN_AUTH_SECRET = process.env.MTN_AUTH_SECRET || 'test-secret-32-chars-long-security';
