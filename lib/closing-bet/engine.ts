@@ -1,4 +1,4 @@
-import { CLOSING_POLICY as POLICY, CLOSING_VERSION } from './config';
+import { CLOSING_POLICY as POLICY, CLOSING_VERSION, CLOSING_EXIT_RULE } from './config';
 import type { ClosingBar, ClosingCandidate, ClosingInput, ClosingSnapshot } from './types';
 
 interface SnapshotInput {
@@ -195,7 +195,7 @@ function buildCandidate(input: ClosingInput, context: SnapshotInput, createdAt: 
     sector: quote?.sector ?? null, reasons, exclusions: unique(exclusions), warnings: unique([...warnings, ...requiredMissing]),
     metrics: { price, changePct: pct(price, quoteEligible ? quote!.previousClose : daily.at(-1)?.close ?? null), turnover, vwap, rangePosition, lateReturnPct, relativeLateReturnPct, rvol, dailyVolumeRatio, ma20, ma60, atr14, breakout, spreadBps },
     flow: usableFlow ? input.flow : { foreignNet: null, institutionNet: null, unit: input.flow.unit, asOf: null, kind: 'MISSING', venue: 'UNKNOWN' },
-    evidence, plan: { entryLow, entryMax, invalidation, target, exitRule: '다음 거래일 개장 30분 후 첫 분봉 시가로 시간청산 가정. 구조 손절 우선. 실제 체결 아님.', expiresAt: `${date}T${session.lastEntry}+09:00` },
+    evidence, plan: { entryLow, entryMax, invalidation, target, exitRule: CLOSING_EXIT_RULE, expiresAt: `${date}T${session.lastEntry}+09:00` },
     chart: minutes,
   };
 }

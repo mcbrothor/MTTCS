@@ -28,3 +28,13 @@ export const CLOSING_POLICY = {
   detailLimit: 35,
   cacheDays: 7,
 } as const;
+
+export const CLOSING_OPENING_POLICY = {
+  version: 'opening-v1',
+  nxtTime: '08:05:00',
+  krxTime: '09:05:00',
+  barDurationMs: 60_000,
+  reviewBatchSize: 4,
+  retryHours: 24,
+} as const;
+export const CLOSING_EXIT_RULE = '익일 NXT 08:05·KRX 09:05 분봉 종가로 각각 성과 비교. 추천일 KRX 종가 매수 가정.';
