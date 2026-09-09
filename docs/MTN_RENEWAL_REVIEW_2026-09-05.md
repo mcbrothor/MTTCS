@@ -265,3 +265,13 @@ MarketProvider는 시장 변경 시 조회하고 자체 polling은 하지 않는
 국내/미국 월간 전략은 이미 MonthlyStrategyPage를 공유하고 52주 전략은 StrategyShell을 사용한다. `/beauty-contest`, `/qqq`도 기존 redirect다. 미사용으로 보이는 탐색 컴포넌트는 import·동적 참조를 확인한 뒤 정리할 후보이며, 현재 화면에서 동시에 여러 번 보인다고 단정하지 않는다.
 
 실제 매매/가상 평가, 과거 근거/현재 분석, 6개 스캐너의 고유 판단, 7개 전략의 정책, KIS/Toss/Yahoo·raw/adjusted·LIVE/REPLAY는 보존한다. 제거할 것은 동일 입력의 불필요한 실행과 독립 저장 경로다. UI 개념 시안은 가상 데이터를 사용하며 앱 코드·DB·운영 작업을 변경하지 않는다.
+
+## 9. 중복 화면·불필요 요소 후속 검토
+
+2026-09-09 로컬 `c749667`의 탐색 정의·공통 셸·복기·추천·교차 집계·스캐너·관심종목 사용처를 확인했다. 검토 시작 시 작업 폴더는 clean이었다. 이번에는 문서만 갱신하며 새 운영 화면 확인·실행 코드 테스트·성능 부하 실험을 수행하지 않았다.
+
+확인한 추가 근거는 복기 공통 하위 링크와 본문 view 탭의 반복, 교차 검증의 IndexedDB 6개 소스 집계, 오늘의 일반 경로5개 반복, 스캐너 선택 바와 FlowCtaButton 동시 렌더링, 관심 선택에 따른 분석 조회, 추천 모든 view의 빈출 요약 조회다. AppShell의 CSS 전환과 MarketStrip effect도 확인했으나 실제 중복 요청 건수는 계측하지 않았다.
+
+ScannerTabNav·LifecycleStepper는 app/components/lib/hooks/contexts/tests의 이름 검색에서 정의 외 참조가 없었다. 이는 미사용 후보의 근거이며 모든 동적 참조·설정·빌드 경로가 없다는 증명은 아니다. beauty-contest·qqq는 이미 redirect이므로 새로운 중복 화면 제거 성과로 계산하지 않는다.
+
+대상별 코드 링크·통합/축소/유지 결정·전환 순서·인수 조건은 [UI·성능 상세안 8절](/Users/mantori/vibecoding/MTN/docs/MTN_UI_PERFORMANCE_BLUEPRINT_2026-09-05.md)의 D01~D11에 통합했다. 앞선 UI 관찰과 이번 정적 검토를 운영 성능 개선 완료로 확대 해석하지 않는다.
