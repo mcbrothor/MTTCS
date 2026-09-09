@@ -459,11 +459,13 @@ export default function QullamaggieScannerPage() {
                     <Button
                       size="sm"
                       variant="secondary"
+                      disabled={!a.evidenceRef?.snapshotId}
                       onClick={() => setModalItem({
                         ticker: item.ticker,
                         exchange: item.exchange,
                         snapshotId: a.evidenceRef?.snapshotId ?? null,
                       })}
+                      title={a.evidenceRef?.snapshotId ? '근거 차트 보기' : '차트 근거를 저장하지 않은 결과'}
                       className="w-full flex items-center justify-center gap-1.5 text-xs text-sky-400 hover:text-sky-300"
                     >
                       <BarChart2 className="h-3.5 w-3.5" />
@@ -503,13 +505,16 @@ export default function QullamaggieScannerPage() {
                       <td className="px-6 py-4 text-right">{formatNumber(a.rvol20)}x</td>
                       <td className="px-6 py-4 text-center">
                         <button
+                          type="button"
+                          disabled={!a.evidenceRef?.snapshotId}
                           onClick={() => setModalItem({
                             ticker: item.ticker,
                             exchange: item.exchange,
                             snapshotId: a.evidenceRef?.snapshotId ?? null,
                           })}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-sky-400 transition-colors"
-                          title="근거 차트 보기"
+                          className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={a.evidenceRef?.snapshotId ? '근거 차트 보기' : '차트 근거를 저장하지 않은 결과'}
+                          aria-label={`${item.ticker} ${a.evidenceRef?.snapshotId ? '근거 차트 보기' : '차트 근거 없음'}`}
                         >
                           <BarChart2 className="h-4 w-4" />
                         </button>

@@ -25,8 +25,14 @@ function yahooTicker(ticker: string, exchange: string) {
   return ticker;
 }
 
-async function fetchDailyBars(ticker: string, exchange: string, bars = TARGET_BARS): Promise<OHLCData[]> {
-  const providerOrder = exchange === 'KOSPI' || exchange === 'KOSDAQ'
+interface FetchedDailyBars {
+  data: OHLCData[];
+  provider: 'KIS' | 'Toss Securities' | 'Yahoo Finance';
+  adjustment: 'adjusted' | 'unadjusted' | 'unknown';
+}
+
+async function fetchDailyBars(ticker: string, exchange: string, bars = TARGET_BARS): Promise<FetchedDailyBars> {
+  const providerOrder: FetchedDailyBars['provider'][] = exchange === 'KOSPI' || exchange === 'KOSDAQ'
     ? ['KIS', 'Toss Securities']
     : ['Toss Securities', 'KIS'];
 
@@ -37,12 +43,22 @@ async function fetchDailyBars(ticker: string, exchange: string, bars = TARGET_BA
       const data = provider === 'KIS'
         ? await getMarketDailyPrice(ticker, exchange, bars)
         : await getTossDailyPrice(ticker, bars);
-      if (data.length > 0) return data;
+      if (data.length > 0) {
+        return {
+          data,
+          provider,
+          adjustment: provider === 'Toss Securities' ? 'adjusted' : 'unknown',
+        };
+      }
     } catch {
       // 다음 provider로 fallback
     }
   }
-  return getYahooDailyPrice(yahooTicker(ticker, exchange));
+  return {
+    data: await getYahooDailyPrice(yahooTicker(ticker, exchange)),
+    provider: 'Yahoo Finance',
+    adjustment: 'unadjusted',
+  };
 }
 
 async function parallelWithLimit<T, R>(
@@ -89,7 +105,8 @@ export async function POST(request: Request) {
       items,
       async (item) => {
         try {
-          const data = await fetchDailyBars(item.ticker, item.exchange);
+          const fetched = await fetchDailyBars(item.ticker, item.exchange);
+          const { data } = fetched;
 
           if (data.length < 60) {
             return {
@@ -117,14 +134,24 @@ export async function POST(request: Request) {
           };
 
           try {
+            if (analysis.primarySetup === 'NONE') {
+              return {
+                ticker: item.ticker,
+                success: true,
+                data: { ...analysis, evidenceRef },
+              };
+            }
             const { buildQullamaggieEvidenceSnapshot } = await import('@/lib/finance/engines/qullamaggie-evidence');
             const { saveQullamaggieEvidenceSnapshot } = await import('@/lib/scanner/qullamaggie-evidence-store');
             const snapshot = buildQullamaggieEvidenceSnapshot(data, analysis, {
               ticker: item.ticker,
               exchange: item.exchange,
               market,
+              provider: fetched.provider,
+              adjustment: fetched.adjustment,
+              barStatus: 'unknown',
             });
-            saveQullamaggieEvidenceSnapshot(snapshot);
+            await saveQullamaggieEvidenceSnapshot(snapshot);
             evidenceRef = {
               snapshotId: snapshot.snapshotId,
               availability: 'ready',

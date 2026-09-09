@@ -17,7 +17,7 @@ export async function GET(
       return apiError('올바른 snapshotId가 필요합니다.', 'INVALID_INPUT', 400);
     }
 
-    const snapshot = getQullamaggieEvidenceSnapshot(snapshotId);
+    const snapshot = await getQullamaggieEvidenceSnapshot(snapshotId);
 
     if (!snapshot) {
       return apiError('해당 쿨라매기 증거 스냅샷을 찾을 수 없습니다.', 'NOT_FOUND', 404);

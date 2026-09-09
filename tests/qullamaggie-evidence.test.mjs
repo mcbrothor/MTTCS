@@ -8,6 +8,35 @@ import {
   clearQullamaggieEvidenceStore,
 } from '../lib/scanner/qullamaggie-evidence-store.ts';
 
+function evidenceClient() {
+  const rows = new Map();
+  return {
+    rows,
+    from(table) {
+      assert.equal(table, 'qullamaggie_evidence_snapshots');
+      return {
+        async insert(row) {
+          if (rows.has(row.snapshot_id)) return { error: { code: '23505' } };
+          rows.set(row.snapshot_id, row);
+          return { error: null };
+        },
+        select() {
+          return {
+            eq(_column, snapshotId) {
+              return {
+                async maybeSingle() {
+                  const row = rows.get(snapshotId);
+                  return { data: row ? { payload: row.payload } : null, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 function bar(index, close, volume = 800000) {
   return {
     date: `2026${String(Math.floor(index / 22) + 1).padStart(2, '0')}${String((index % 22) + 1).padStart(2, '0')}`,
@@ -77,25 +106,41 @@ test('쿨라매기 증거 스냅샷은 엔진 판정 결과와 동일한 시세 
   assert.equal(baseZoneAnno.type, 'price-zone');
   assert.equal(baseZoneAnno.lowPrice, selectedBase.baseLow);
   assert.equal(baseZoneAnno.highPrice, selectedBase.pivotPrice);
+  const volumeAnnotations = snapshot.annotations.filter((annotation) => annotation.criterionId === 'crit_volume_dryup');
+  assert.equal(volumeAnnotations.filter((annotation) => annotation.type === 'volume-window').length, 2);
+  const volumeAverages = volumeAnnotations.filter((annotation) => annotation.type === 'volume-average');
+  assert.equal(volumeAverages.length, 2);
+  assert.ok(volumeAverages.every((annotation) => annotation.averageVolume > 0));
+  const volumeCriterion = snapshot.criteria.find((criterion) => criterion.id === 'crit_volume_dryup');
+  assert.deepEqual(volumeCriterion.annotationIds, volumeAnnotations.map((annotation) => annotation.id));
 
   // 점수 기여도 트레이스 확인
   assert.equal(snapshot.scoreTrace.length, 6);
 });
 
-test('쿨라매기 증거 스토어는 스냅샷을 저장하고 snapshotId로 정확히 조회한다', () => {
+test('쿨라매기 증거 스토어는 프로세스 캐시가 비어도 영속 스냅샷을 조회한다', async () => {
   clearQullamaggieEvidenceStore();
+  const client = evidenceClient();
   const data = makeBreakoutData();
   const analysis = analyzeQullamaggieSetup(data, { market: 'US', exchange: 'US' });
-  const snapshot = buildQullamaggieEvidenceSnapshot(data, analysis, { ticker: 'STORE_TEST' });
+  const snapshot = buildQullamaggieEvidenceSnapshot(data, analysis, {
+    ticker: 'STORE_TEST',
+    provider: 'Yahoo Finance',
+    adjustment: 'unadjusted',
+  });
 
-  saveQullamaggieEvidenceSnapshot(snapshot);
-  const retrieved = getQullamaggieEvidenceSnapshot(snapshot.snapshotId);
+  await saveQullamaggieEvidenceSnapshot(snapshot, client);
+  clearQullamaggieEvidenceStore();
+  const retrieved = await getQullamaggieEvidenceSnapshot(snapshot.snapshotId, client);
 
   assert.ok(retrieved);
   assert.equal(retrieved.snapshotId, snapshot.snapshotId);
   assert.equal(retrieved.symbol.ticker, 'STORE_TEST');
   assert.equal(retrieved.bars.length, data.length);
+  assert.equal(retrieved.provenance.provider, 'Yahoo Finance');
+  assert.equal(retrieved.provenance.adjustment, 'unadjusted');
+  assert.match(retrieved.provenance.barsHash, /^[a-f0-9]{64}$/);
 
   // 미존재 snapshotId 조회 시 null
-  assert.equal(getQullamaggieEvidenceSnapshot('non_existent_id'), null);
+  assert.equal(await getQullamaggieEvidenceSnapshot('non_existent_id', client), null);
 });
