@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -36,7 +36,6 @@ import { formatDate, verdictRecommendationClass } from '@/lib/contest-ui-utils';
 import { canslimCandidateFromResult, minerviniCandidateFromResult } from '@/lib/contest-candidates';
 import {
   CANSLIM_LATEST_UNIVERSE_STORAGE_KEY,
-  CANSLIM_SNAPSHOT_PREFIX,
   CONTEST_SELECTIONS_MAP_KEY,
   CONTEST_SELECTIONS_SOURCE_MAP_KEY,
   CONTEST_SELECTION_STORAGE_KEY,
@@ -63,6 +62,7 @@ import type {
   ScannerUniverse,
   StoredScannerSnapshot,
 } from '@/types';
+import { readCanslimSnapshot, type StoredCanslimSnapshot } from '@/lib/canslim-snapshot';
 import { readScannerSnapshot } from '@/hooks/scanner/storage';
 
 const LATEST_SCAN_UNIVERSE_STORAGE_KEY = 'mtn:scanner:latest-scan-universe:v1';
@@ -246,26 +246,6 @@ function sortScannerPool(rows: ScannerResult[]) {
     );
 }
 
-interface StoredCanslimSnapshot {
-  savedAt: string;
-  universe: ScannerUniverse;
-  results: CanslimScannerResult[];
-  macro: unknown | null;
-}
-
-function readCanslimSnapshot(universe: ScannerUniverse): StoredCanslimSnapshot | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(`${CANSLIM_SNAPSHOT_PREFIX}${universe}`);
-    if (!raw) return null;
-    const snapshot = JSON.parse(raw) as StoredCanslimSnapshot;
-    if (snapshot.universe !== universe || !Array.isArray(snapshot.results)) return null;
-    return snapshot;
-  } catch {
-    return null;
-  }
-}
-
 function scannerLikeFromCanslimResult(item: CanslimScannerResult): ScannerResult {
   const candidate = canslimCandidateFromResult(item, 1);
   return {
@@ -391,12 +371,22 @@ function ContestPageContent() {
 
   const market: ContestMarket = universe === 'KOSPI200' || universe === 'KOSDAQ150' ? 'KR' : 'US';
 
+  const snapshotReadVersion = useRef(0);
   const loadSnapshot = useCallback(async (nextUniverse: ScannerUniverse, sourceOverride?: ContestScreenerSource) => {
+    const version = ++snapshotReadVersion.current;
     const source = sourceOverride || contestSource;
     window.localStorage.setItem(CONTEST_SOURCE_STORAGE_KEY, source);
 
-    const nextCanslim = source === 'canslim' ? readCanslimSnapshot(nextUniverse) : null;
+    let nextCanslim: StoredCanslimSnapshot | null = null;
+    try { nextCanslim = source === 'canslim' ? await readCanslimSnapshot(nextUniverse) : null; }
+    catch (error) {
+      if (version !== snapshotReadVersion.current) return;
+      setError(error instanceof Error ? error.message : '후보 스냅샷 조회 실패');
+      setCanslimSnapshot(null); setSnapshot(null); setSelected([]); setTransferInfo(null);
+      return;
+    }
     const next = source === 'minervini' ? await readScannerSnapshot(nextUniverse) : null;
+    if (version !== snapshotReadVersion.current) return;
     setCanslimSnapshot(nextCanslim);
     setSnapshot(next);
     const rows = source === 'canslim' ? (nextCanslim?.results || []).map(scannerLikeFromCanslimResult) : (next?.results || []);
@@ -434,7 +424,7 @@ function ContestPageContent() {
     setContestSource(source);
     const initial = getInitialUniverse(source);
     setUniverse(initial);
-    loadSnapshot(initial, source);
+    void loadSnapshot(initial, source).catch((error: unknown) => setError(error instanceof Error ? error.message : '후보 스냅샷 조회 실패'));
     loadSessions().catch((err: unknown) => setError(err instanceof Error ? err.message : '불러오기 실패'));
   }, [loadSessions, loadSnapshot, searchSource]);
 

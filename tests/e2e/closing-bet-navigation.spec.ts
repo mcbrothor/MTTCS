@@ -106,3 +106,19 @@ test('a stalled lookup times out and offers a working retry', async ({ page }) =
   await page.getByRole('button', { name: '다시 불러오기', exact: true }).click();
   await expect(page.getByLabel('코스피 Top5', { exact: true })).toContainText('09. 03.');
 });
+
+
+test('switching candidate and performance views reuses the loaded snapshots', async ({ page }, testInfo) => {
+  let reads = 0;
+  await page.route('**/api/closing-bet?*', route => { reads++; return route.fulfill({ json: payload(days[0]) }); });
+  await page.goto(`${path}?date=${days[0]}&mode=REPLAY`);
+  await expect(page.getByLabel('코스피 Top5', { exact: true })).toBeVisible();
+  const initial = reads;
+  await page.screenshot({ path: testInfo.outputPath('closing-candidates.png'), fullPage: true });
+  await page.getByRole('button', { name: '익일 시초 성과', exact: true }).click();
+  await expect(page).toHaveURL(/view=performance/);
+  await expect(page.getByLabel('코스피 Top5', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '추천 후보', exact: true }).click();
+  await expect(page.getByLabel('코스피 Top5', { exact: true })).toBeVisible();
+  expect(reads).toBe(initial);
+});

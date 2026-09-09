@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { getActiveFlowStep, isActiveTab } from '@/components/layout/navigation';
+import { getActiveFlowStep, getFlowTabHref, isActiveTab } from '@/components/layout/navigation';
 
 export default function AppStepper() {
   const pathname = usePathname();
@@ -13,7 +13,8 @@ export default function AppStepper() {
   if (activeStep.tabs.length === 0) return null;
 
   return (
-    <div
+    <nav
+      aria-label={`${activeStep.label} 하위 메뉴`}
       data-testid={activeStep.key === 'scanner' ? 'scanner-workspace-nav' : 'secondary-menu-nav'}
       className="border-b border-[var(--border)] bg-[var(--surface-strong)]/85"
     >
@@ -31,7 +32,8 @@ export default function AppStepper() {
             return (
               <Link
                 key={tab.href}
-                href={tab.href}
+                href={getFlowTabHref(tab.href, currentSearch)}
+                aria-current={active ? 'page' : undefined}
                 className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                   active
                     ? 'border-sky-400/35 bg-sky-400/12 text-sky-100'
@@ -44,6 +46,6 @@ export default function AppStepper() {
           })}
         </div>
       </div>
-    </div>
+    </nav>
   );
 }

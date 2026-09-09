@@ -63,14 +63,9 @@ function HistoryPageContent() {
       <div className="space-y-6 pb-12">
         <HistoryHeader
           market={market}
-          view={view}
           onMarketChange={(key) => {
             setMarket(key);
             updateParams({ market: key });
-          }}
-          onViewChange={(key) => {
-            setView(key);
-            updateParams({ view: key });
           }}
         />
         <AsyncStatePanel
@@ -91,14 +86,9 @@ function HistoryPageContent() {
       <div className="space-y-6 pb-12">
         <HistoryHeader
           market={market}
-          view={view}
           onMarketChange={(key) => {
             setMarket(key);
             updateParams({ market: key });
-          }}
-          onViewChange={(key) => {
-            setView(key);
-            updateParams({ view: key });
           }}
         />
         <AsyncStatePanel
@@ -116,14 +106,9 @@ function HistoryPageContent() {
     <div className="space-y-6 pb-12">
       <HistoryHeader
         market={market}
-        view={view}
         onMarketChange={(key) => {
           setMarket(key);
           updateParams({ market: key });
-        }}
-        onViewChange={(key) => {
-          setView(key);
-          updateParams({ view: key });
         }}
       />
 
@@ -175,15 +160,12 @@ function HistoryPageContent() {
 
 function HistoryHeader({
   market,
-  view,
   onMarketChange,
-  onViewChange,
 }: {
   market: 'US' | 'KR';
-  view: HistoryView;
   onMarketChange: (market: 'US' | 'KR') => void;
-  onViewChange: (view: HistoryView) => void;
 }) {
+  const retainedDate = useSearchParams().get('date');
   return (
     <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 lg:flex-row lg:items-end">
       <div>
@@ -192,6 +174,7 @@ function HistoryHeader({
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
           매매가 끝난 뒤 결과와 실수 태그를 축적하고, 통계는 필요할 때만 열어 확인합니다.
         </p>
+        {retainedDate && <p className="mt-2 text-xs text-amber-200">추천일 {retainedDate}는 추천 이력에 적용되는 필터입니다. 실제 매매 복기는 해당 시장의 전체 기록을 표시하며, 추천 화면으로 돌아가면 선택 날짜를 유지합니다.</p>}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -203,14 +186,7 @@ function HistoryHeader({
           active={market}
           onChange={(key) => onMarketChange(key as 'US' | 'KR')}
         />
-        <Segmented
-          items={[
-            { key: 'review', label: '복기 목록' },
-            { key: 'stats', label: '성과 통계' },
-          ]}
-          active={view}
-          onChange={(key) => onViewChange(key as HistoryView)}
-        />
+
       </div>
     </div>
   );

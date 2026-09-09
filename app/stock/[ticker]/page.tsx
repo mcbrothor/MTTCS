@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import AnalysisChartContainer from '@/components/analysis/AnalysisChartContainer';
+import dynamic from 'next/dynamic';
+import { parseMarketAnalysisResponse } from '@/lib/market-analysis-response';
+import { sharedClientRead } from '@/lib/shared-client-read';
+const AnalysisChartContainer = dynamic(() => import('@/components/analysis/AnalysisChartContainer'), { ssr: false });
 import FreshnessBadge from '@/components/ui/FreshnessBadge';
 import type { ChartPatternOverlay, DataSourceMeta, MarketAnalysisResponse, SecurityEvent } from '@/types';
 
@@ -35,26 +38,31 @@ function Stock360Content({ ticker, exchange }: { ticker: string; exchange: strin
   const [focusedPatternId, setFocusedPatternId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/market-data?ticker=${encodeURIComponent(ticker)}&exchange=${exchange}`)
+    const controller = new AbortController();
+    sharedClientRead(`/api/market-data?ticker=${encodeURIComponent(ticker)}&exchange=${encodeURIComponent(exchange)}`, { signal: controller.signal })
       .then(async (response) => {
         const payload = await response.json();
+        if (controller.signal.aborted) return;
         if (!response.ok) throw new Error(payload.message);
-        setAnalysis(payload.data || payload);
+        setAnalysis(parseMarketAnalysisResponse(payload));
         setMeta(payload.meta || null);
         setError('');
       })
       .catch((requestError) => {
+        if (controller.signal.aborted) return;
         console.warn('[Stock360] market-data fetch failed:', requestError instanceof Error ? requestError.message : String(requestError));
         setError(requestError instanceof Error ? requestError.message : String(requestError));
       });
 
-    fetch(`/api/security-events?ticker=${encodeURIComponent(ticker)}&exchange=${exchange}`)
+    fetch(`/api/security-events?ticker=${encodeURIComponent(ticker)}&exchange=${encodeURIComponent(exchange)}`, { signal: controller.signal })
       .then((response) => response.json())
-      .then((payload) => setEvents(payload.data || []))
+      .then((payload) => { if (!controller.signal.aborted) setEvents(payload.data || []); })
       .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
         console.warn('[Stock360] security-events fetch failed:', err instanceof Error ? err.message : String(err));
         setEvents([]);
       });
+    return () => controller.abort();
   }, [ticker, exchange]);
 
   const latest = analysis?.priceData?.at(-1);

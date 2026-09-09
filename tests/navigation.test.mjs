@@ -5,6 +5,8 @@ import {
   findActiveFlowStep,
   findActiveStrategyLink,
   getActiveFlowStep,
+  isActiveTab,
+  getFlowTabHref,
 } from '../components/layout/navigation.ts';
 
 assert.equal(FLOW_STEPS.length, 8);
@@ -50,4 +52,14 @@ assert.equal(findActiveStrategyLink('/strategies/kospi-52w')?.group, 'KR');
 assert.equal(findActiveStrategyLink('/strategies/kr-closing-bet')?.label, '종가베팅');
 assert.equal(findActiveStrategyLink('/strategies/us-monthly-v7')?.group, 'US');
 
+assert.equal(isActiveTab('/recommendations', '/recommendations?view=metrics', 'category=KOSPI200&date=2026-09-08&view=metrics'), true);
+assert.equal(isActiveTab('/history', '/history?view=stats', 'market=KR&view=stats'), true);
+assert.equal(isActiveTab('/recommendations', '/recommendations', 'category=NASDAQ100'), true);
+assert.equal(isActiveTab('/scanner', '/scanner', 'view=cross-check'), false);
+assert.equal(getFlowTabHref('/recommendations?view=metrics', 'category=KOSPI200&date=2026-09-08'), '/recommendations?category=KOSPI200&date=2026-09-08&view=metrics');
+assert.equal(new URL(getFlowTabHref('/history?view=stats', 'category=KOSDAQ150&date=2026-09-08'), 'http://localhost').searchParams.get('market'), 'KR');
+assert.equal(new URL(getFlowTabHref('/recommendations', 'market=US&category=KOSPI200'), 'http://localhost').searchParams.get('category'), 'NASDAQ100');
+assert.equal(new URL(getFlowTabHref('/recommendations', 'market=US&category=SP500'), 'http://localhost').searchParams.get('category'), 'SP500');
+assert.equal(getFlowTabHref('/macro', 'view=stats&market=KR&memo=private'), '/macro');
+assert.equal(new URL(getFlowTabHref('/history', 'market=KR&memo=private'), 'http://localhost').searchParams.has('memo'), false);
 console.log('navigation tests passed');

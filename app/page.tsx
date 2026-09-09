@@ -87,7 +87,7 @@ export default function CommandCenterPage() {
               href={summary.nextAction.href}
               className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-500"
             >
-              {summary.nextAction.href === '/master-filter' ? '시장 신호판 확인하기' : `${summary.nextAction.label} 시작하기`} <ArrowUpRight className="h-4 w-4" />
+              {summary.nextAction.href === '/master-filter' ? '시장 신호판 확인하기' : summary.nextAction.label} <ArrowUpRight className="h-4 w-4" />
             </Link>
           </div>
 
@@ -155,13 +155,6 @@ export default function CommandCenterPage() {
         </Panel>
       </section>
 
-      <section className="grid gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:grid-cols-5">
-        <FlowLink href="/master-filter" step="01" label="시장 확인" />
-        <FlowLink href="/scanner" step="02" label="종목 발굴" />
-        <FlowLink href="/contest" step="03" label="콘테스트" />
-        <FlowLink href="/watchlist" step="04" label="관심종목" />
-        <FlowLink href="/plan" step="05" label="매매 계획" />
-      </section>
     </div>
   );
 }
@@ -215,14 +208,5 @@ function EmptyState({ href, label, text }: { href: string; label: string; text: 
         {label} <ArrowUpRight className="h-4 w-4" />
       </Link>
     </div>
-  );
-}
-
-function FlowLink({ href, step, label }: { href: string; step: string; label: string }) {
-  return (
-    <Link href={href} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-strong)] px-4 py-3 text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
-      <span><span className="mr-2 font-mono text-[var(--text-tertiary)]">{step}</span>{label}</span>
-      <ArrowUpRight className="h-4 w-4" />
-    </Link>
   );
 }

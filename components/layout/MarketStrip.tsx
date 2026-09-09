@@ -1,5 +1,8 @@
 'use client';
 
+import { readMacro } from '@/lib/shared-client-read';
+
+import { useIsMobile } from '@/lib/hooks/useViewport';
 import { startTransition, useEffect, useState } from 'react';
 
 interface StripQuote {
@@ -34,6 +37,7 @@ function formatChange(value?: number) {
 }
 
 export default function MarketStrip() {
+  const isMobile = useIsMobile();
   const [quotes, setQuotes] = useState<Record<string, StripQuote>>({});
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -44,7 +48,7 @@ export default function MarketStrip() {
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || isMobile) return;
 
     let mounted = true;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -54,8 +58,7 @@ export default function MarketStrip() {
       currentController?.abort();
       currentController = new AbortController();
       try {
-        const response = await fetch('/api/macro', {
-          cache: 'no-store',
+        const response = await readMacro({
           signal: currentController.signal,
         });
         if (!response.ok) return;
@@ -103,7 +106,7 @@ export default function MarketStrip() {
       currentController?.abort();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled]);
+  }, [enabled, isMobile]);
 
   return (
     <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1">

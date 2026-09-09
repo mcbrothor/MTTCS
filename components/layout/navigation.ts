@@ -78,6 +78,7 @@ export const FLOW_STEPS: FlowStep[] = [
       { href: '/momentum', label: '모멘텀 스캐너' },
       { href: '/qullamaggie', label: '쿨라매기 스캐너' },
       { href: '/reversal', label: '전환 초입' },
+      { href: '/scanner?view=cross-check', label: '여러 스캐너 포착' },
     ],
   },
   {
@@ -227,6 +228,30 @@ export function isActiveTab(pathname: string, href: string, search = '') {
   const [tabPath] = href.split('?');
   if (!matchesPath(pathname, tabPath)) return false;
   const [, tabSearch] = href.split('?');
-  if (!tabSearch) return !search.includes('view=');
-  return search === tabSearch;
+  const current = new URLSearchParams(search);
+  if (!tabSearch) return !current.has('view');
+  return [...new URLSearchParams(tabSearch)].every(([key, value]) => current.get(key) === value);
+}
+
+export function getFlowTabHref(href: string, search: string) {
+  const [path, query] = href.split('?');
+  if (path !== '/history' && path !== '/recommendations') return href;
+  const current = new URLSearchParams(search);
+  const params = new URLSearchParams();
+  const categories = ['NASDAQ100', 'SP500', 'KOSPI200', 'KOSDAQ150'];
+  const category = current.get('category') || '';
+  const categoryMarket = category.startsWith('KOS') ? 'KR' : 'US';
+  const market = current.get('market') === 'KR' || current.get('market') === 'US'
+    ? current.get('market')! : categoryMarket;
+  const selectedCategory = categories.includes(category) && categoryMarket === market
+    ? category : market === 'KR' ? 'KOSPI200' : 'NASDAQ100';
+  if (path === '/recommendations') params.set('category', selectedCategory);
+  else {
+    params.set('market', market);
+    if (categories.includes(category)) params.set('category', selectedCategory);
+  }
+  const date = current.get('date');
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) params.set('date', date);
+  for (const [key, value] of new URLSearchParams(query)) params.set(key, value);
+  return `${path}?${params}`;
 }

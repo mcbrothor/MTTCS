@@ -27,7 +27,7 @@ export class DashboardPage {
     this.marketToggleUS = page.locator('button:has-text("미국")');
     this.marketToggleKR = page.locator('button:has-text("한국")');
     this.nextActionLabel = page.locator('h2').filter({ hasText: /.+/ }).first();
-    this.nextActionCta = page.locator('a[href="/watchlist"]').filter({ hasText: '관심 후보 점검 시작하기' });
+    this.nextActionCta = page.locator('a[href="/watchlist"]').filter({ hasText: '관심 후보 점검' });
     this.marketStateCard = page.locator('div').filter({ hasText: /^지금 새로 사도 되는지$/ }).locator('..').first();
     this.macroCard = page.locator('div').filter({ hasText: /^시장 밖 위험$/ }).locator('..').first();
     this.riskCard = page.locator('div').filter({ hasText: /^오픈 리스크$/ }).locator('..').first();
@@ -67,8 +67,8 @@ export class ScannerPage {
     this.progressBar = page.locator('text=Scan Progress').locator('..');
     this.filterButtons = page.locator('button').filter({ hasText: /Recommended|Action|IB Review|전체/ });
     this.sortSelect = page.locator('select');
-    this.selectedCount = page.getByText(/Selected\s+\d+\/15/).first();
-    this.contestButton = page.getByRole('button', { name: '콘테스트로 이동', exact: true });
+    this.selectedCount = page.getByRole('complementary', { name: '선택 후보 작업' }).getByText(/\d+ \/ 15 종목 선택/);
+    this.contestButton = page.getByRole('link', { name: '콘테스트로 이동', exact: true });
     this.telegramButton = page.locator('button:has-text("텔레그램 전송")');
   }
 
@@ -163,7 +163,7 @@ export class HistoryPage {
   constructor(page: Page) {
     this.page = page;
     this.reviewTab = page.locator('button:has-text("복기 목록")');
-    this.statsTab = page.locator('button:has-text("성과 통계")');
+    this.statsTab = page.getByRole('link', { name: '성과 통계', exact: true });
     this.marketToggleUS = page.locator('button:has-text("미국")');
     this.marketToggleKR = page.locator('button:has-text("한국")');
     this.tradeTable = page.locator('table, [role="table"]').first();

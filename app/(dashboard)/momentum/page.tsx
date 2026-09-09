@@ -1,5 +1,9 @@
 'use client';
 
+import { saveCrossCheckSnapshot } from '@/lib/scanner/cross-check-storage';
+
+import { ScannerUniverseSelect, ScannerViewToggle } from '@/components/scanner/ScannerControls';
+
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -250,6 +254,10 @@ export default function MomentumScannerPage() {
       }
 
       setResults(allResults);
+      if (!abort.signal.aborted) {
+        try { await saveCrossCheckSnapshot('momentum', universe, allResults, allErrors.length); }
+        catch { setScanFatalError('스캔 결과는 표시되지만 교차 보기용 저장에 실패했습니다.'); }
+      }
       setResultOrigin({ kind: 'live', label: '실시간 재스캔', asOf: new Date().toISOString() });
       setScanStage(allErrors.length > 0 ? `완료 · 실패 ${allErrors.length}건` : '완료');
     } catch (err: unknown) {
@@ -372,29 +380,11 @@ export default function MomentumScannerPage() {
 
       {/* Universe Selection */}
       <section className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-800">
-        <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2">
           <Activity className="w-5 h-5 text-indigo-400" />
           Target Universe
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((uKey) => {
-            const active = universe === uKey;
-            return (
-              <button
-                key={uKey}
-                onClick={() => { if (!isScanning) setUniverse(uKey); }}
-                className={`text-left p-4 rounded-xl transition-all border ${
-                  active
-                    ? 'bg-indigo-600/20 border-indigo-500 ring-1 ring-indigo-500/50'
-                    : 'bg-slate-950/50 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50'
-                }`}
-              >
-                <div className="font-bold text-slate-100">{UNIVERSES[uKey].label}</div>
-                <div className="text-xs text-slate-400 mt-1.5 leading-relaxed">{UNIVERSES[uKey].desc}</div>
-              </button>
-            );
-          })}
-        </div>
+        <ScannerUniverseSelect value={universe} onChange={setUniverse} disabled={isScanning} options={UNIVERSES} />
       </section>
 
       {/* Controls */}
@@ -491,24 +481,7 @@ export default function MomentumScannerPage() {
                 <option key={s.key} value={s.key}>{s.label}</option>
               ))}
             </select>
-            <div className="flex bg-slate-950 border border-slate-800 rounded-lg p-0.5">
-              <button
-                onClick={() => setViewType('card')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  viewType === 'card' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                카드
-              </button>
-              <button
-                onClick={() => setViewType('table')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  viewType === 'table' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                테이블
-              </button>
-            </div>
+            <ScannerViewToggle value={viewType === 'table' ? 'web' : 'app'} onChange={value => setViewType(value === 'web' ? 'table' : 'card')} />
           </div>
         </section>
       )}

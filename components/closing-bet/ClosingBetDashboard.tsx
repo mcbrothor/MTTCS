@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { ArrowUpRight, CalendarDays, ChevronDown, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
 import type { ClosingBar, ClosingCandidate, ClosingEvaluation, ClosingMarket, ClosingMode, ClosingSnapshot } from '../../lib/closing-bet/types';
 import { CLOSING_DASHBOARD_TIMEOUT_MS, CLOSING_EXIT_RULE, CLOSING_LABELS, CLOSING_MARKETS } from '../../lib/closing-bet/config';
-import { OpeningPerformancePanel } from './OpeningPerformancePanel';
+import { OpeningPerformancePanel, OpeningPerformanceSummary } from './OpeningPerformancePanel';
 export { OpeningPerformancePanel as ClosingEvaluationPanel } from './OpeningPerformancePanel';
 import { closingExplanation, displayedClosingCandidates, safeClosingEvidenceUrl, selectClosingSnapshots } from './view-model';
 
@@ -152,11 +152,17 @@ export function ClosingMarketPanel({ market, snapshot, mode }: { market: Closing
           <div><p className="text-slate-500">선정 상태</p><p className="mt-1 text-slate-200">{STATUS_LABEL[snapshot.status]}</p></div>
         </div>
         <p className="text-[10px] leading-5 text-slate-500">기준 {timestamp(snapshot.asOf)} KST · {snapshot.phase === 'FINAL' ? '마감 전 최종' : '장중 관찰'} · 수집 {snapshot.coverage.collected}/{snapshot.coverage.total}, 실패 {snapshot.coverage.failed}</p>
+        {snapshot.status === 'BLOCKED' && <p role="status" className={`rounded-lg border px-3 py-2 text-xs font-medium ${snapshot.regime === 'RED' ? 'border-rose-400/25 bg-rose-400/5 text-rose-200' : 'border-amber-400/25 bg-amber-400/5 text-amber-200'}`}>
+          {snapshot.regime === 'UNKNOWN' ? '시장 상태 미확인으로 추천을 보류합니다.' : snapshot.regime === 'RED' ? '시장 위험 상태로 추천을 보류합니다.' : '추천이 보류되었습니다. 데이터 확인 사항을 확인해 주세요.'}
+        </p>}
         {snapshot.warnings.length > 0 && <details className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-3 py-2"><summary className="cursor-pointer text-[11px] text-amber-200">데이터 확인 사항 {snapshot.warnings.length}건</summary><ul className="mt-2 space-y-1 text-[11px] leading-5 text-amber-200/75">{snapshot.warnings.map((warning, index) => <li key={index}>· {closingExplanation(warning)}</li>)}</ul></details>}
       </> : <p className="rounded-xl bg-slate-950/60 p-3 text-xs leading-6 text-slate-500">이 날짜의 {replay ? '과거 재현' : '실전'} 결과가 없습니다.</p>}
     </header>
     {picks.map((candidate, index) => <CandidateCard key={candidate.ticker} candidate={candidate} index={index} replay={replay} watch={snapshot?.phase === 'WATCH'} />)}
-    {Array.from({ length: 5 - picks.length }, (_, index) => <div key={`empty-${index}`} className="flex items-center gap-3 rounded-xl border border-dashed border-slate-800 px-4 py-3 text-xs text-slate-500"><span className="w-8 text-center font-mono">{picks.length + index + 1}</span><span>미선정 <span className="ml-1 text-[10px] text-slate-600">{snapshot ? '조건을 충족한 추가 종목 없음' : '결과 대기'}</span></span></div>)}
+    {picks.length < 5 && <div className="rounded-xl border border-dashed border-slate-800 px-4 py-5 text-center text-xs text-slate-400">
+      <p>{picks.length === 0 ? '선정된 종목이 없습니다.' : '조건을 충족한 추가 종목 없음'}</p>
+      <p className="mt-2 text-[11px] text-slate-500">{snapshot ? '조건 미충족 시 5종목을 채우지 않습니다.' : '결과 대기 · 다른 기준일 또는 결과 유형을 확인해 주세요.'}</p>
+    </div>}
   </section>;
 }
 
@@ -166,6 +172,7 @@ export default function ClosingBetDashboard() {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : '';
   const modeParam = searchParams.get('mode')?.toUpperCase();
   const requestedMode: RequestedMode = modeParam === 'LIVE' || modeParam === 'REPLAY' ? modeParam : 'AUTO';
+  const view = searchParams.get('view') === 'performance' ? 'performance' : 'candidates';
   const [revision, setRevision] = useState(0);
   const requestKey = `${date}:${requestedMode}:${revision}`;
   const [result, setResult] = useState<(LoadedClosingData & { requestKey: string }) | null>(null);
@@ -184,7 +191,7 @@ export default function ClosingBetDashboard() {
     return () => controller.abort();
   }, [date, requestedMode, requestKey]);
 
-  const updateQuery = (change: { date?: string; mode?: ClosingMode }) => {
+  const updateQuery = (change: { date?: string; mode?: ClosingMode; view?: string }) => {
     const params = new URLSearchParams(window.location.search);
     for (const [key, value] of Object.entries(change)) {
       if (value) params.set(key, value);
@@ -199,8 +206,8 @@ export default function ClosingBetDashboard() {
   const snapshots = [...selected.latest.values()];
   const dates = [...new Set([...(result?.data.dates || []), ...(date ? [date] : [])])].sort().reverse();
 
-  return <div className="min-w-0 space-y-5 pb-12">
-    <header className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-5 sm:p-6">
+  return <div className="min-w-0 space-y-4 pb-12">
+    <header className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-slate-950 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="mb-2 flex items-center gap-2 text-[10px] font-semibold tracking-widest text-teal-300"><Zap className="h-3.5 w-3.5" aria-hidden />국내 투자 전략 · KRX</p><h1 className="text-xl font-bold text-slate-100 sm:text-2xl">종가베팅 추천</h1><p className="mt-2 max-w-2xl text-xs leading-6 text-slate-400">장 후반 수급과 거래대금, 가격 흐름을 확인하고 코스피·코스닥에서 각각 최대 5종목을 선정합니다. 추천 조건과 익일 결과를 함께 확인하세요.</p></div>
         <div className="rounded-xl border border-teal-400/15 bg-teal-400/5 px-3 py-2 text-[11px] leading-6 text-teal-200"><p>코스피 시총 상위 200</p><p>코스닥 시총 상위 150</p></div>
@@ -212,11 +219,17 @@ export default function ClosingBetDashboard() {
       <div className="flex flex-wrap items-center gap-2"><label htmlFor="closing-date" className="flex items-center gap-1.5 text-xs text-slate-500"><CalendarDays className="h-3.5 w-3.5" aria-hidden />기준일</label><select id="closing-date" value={date} onChange={(event) => updateQuery({ date: event.target.value })} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="">최신 결과</option>{dates.map((day) => <option key={day} value={day}>{day}</option>)}</select><button type="button" onClick={() => { setRevision((previous) => previous + 1); }} disabled={loading} aria-label="결과 새로고침" className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-slate-100 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden /></button></div>
     </div>
 
+    <div role="group" aria-label="종가베팅 보기" className="flex gap-2 border-b border-slate-800 pb-2">
+      {([{ value: 'candidates', label: '추천 후보' }, { value: 'performance', label: '익일 시초 성과' }] as const).map((item) => <button key={item.value} type="button" aria-pressed={view === item.value} onClick={() => { if (view !== item.value) updateQuery({ view: item.value === 'candidates' ? '' : item.value }); }} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === item.value ? 'bg-teal-400/10 text-teal-200' : 'text-slate-400 hover:text-slate-200'}`}>{item.label}</button>)}
+    </div>
+
     {loading ? <div role="status" className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-8 text-sm text-slate-400"><RefreshCw className="h-4 w-4 animate-spin text-teal-300" aria-hidden />저장된 종가베팅 결과를 불러오고 있습니다.</div> : error ? <div role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5"><p className="text-sm font-medium text-rose-200">결과를 불러오지 못했습니다.</p><p className="mt-2 text-xs leading-6 text-rose-200/70">{error}</p><button type="button" onClick={() => { setRevision((previous) => previous + 1); }} className="mt-3 rounded-lg border border-rose-300/25 px-3 py-2 text-xs text-rose-200">다시 불러오기</button></div> : <>
       {mode === 'REPLAY' && <div className="flex items-start gap-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-4 text-xs leading-6 text-amber-200"><ShieldAlert className="mt-1 h-4 w-4 shrink-0" aria-hidden /><div><p className="font-semibold">과거 재현 · 검토 전용</p><p className="text-amber-200/75">{loaded?.fallback ? '실전 스냅샷이 없어 저장된 과거 재현 결과를 표시합니다. ' : ''}아래 목록은 당시 자료로 재현한 검토 후보이며, 현재 유효한 매수 추천이 아닙니다.</p></div></div>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500"><span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{selected.tradeDate || '저장된 결과 없음'} · 모든 시각 KST</span><span>조건 미충족 시 5종목을 채우지 않습니다.</span></div>
-      <OpeningPerformancePanel evaluations={loaded?.data.evaluations || []} snapshots={snapshots} />
-      <div className="grid items-start gap-4 xl:grid-cols-2">{CLOSING_MARKETS.map((market) => <ClosingMarketPanel key={market} market={market} snapshot={selected.latest.get(market)} mode={mode} />)}</div>
+      {view === 'performance' ? <OpeningPerformancePanel evaluations={loaded?.data.evaluations || []} snapshots={snapshots} /> : <>
+        <div className="grid items-start gap-4 xl:grid-cols-2">{CLOSING_MARKETS.map((market) => <ClosingMarketPanel key={market} market={market} snapshot={selected.latest.get(market)} mode={mode} />)}</div>
+        <OpeningPerformanceSummary evaluations={loaded?.data.evaluations || []} snapshots={snapshots} onOpen={() => updateQuery({ view: 'performance' })} />
+      </>}
     </>}
   </div>;
 }

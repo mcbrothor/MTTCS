@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -19,7 +18,7 @@ import {
   Activity,
   Send,
 } from 'lucide-react';
-import FlowCtaButton from '@/components/ui/FlowCtaButton';
+import { ScannerUniverseSelect, ScannerViewToggle, ScannerSelectionBar } from '@/components/scanner/ScannerControls';
 import TradingViewWidget from '@/components/ui/TradingViewWidget';
 
 import { get, set } from 'idb-keyval';
@@ -957,7 +956,7 @@ export default function CanslimScannerPage() {
                 Results <span className="ml-1 font-mono text-white">{filteredResults.length}</span>
               </span>
               <span className="rounded-full border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs font-medium text-slate-400">
-                Selected <span className="ml-1 font-mono text-white">{selectedTickers.size}/10</span>
+                Selected <span className="ml-1 font-mono text-white">{selectedTickers.size}/15</span>
               </span>
               {latestRsCalcDate ? (
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold ${
@@ -993,50 +992,10 @@ export default function CanslimScannerPage() {
               </div>
 
               <div className="grid gap-3">
-                <div className="grid gap-1.5 text-xs text-slate-500">
-                  유니버스 선택
-                  <div className="grid grid-cols-2 gap-2">
-                    {(Object.keys(UNIVERSES) as ScannerUniverse[]).map((u) => (
-                      <button
-                        key={u}
-                        onClick={() => handleUniverseChange(u)}
-                        disabled={isScanning}
-                        className={`group relative overflow-hidden rounded-xl border p-2 text-left transition-all active:scale-95 ${
-                          universe === u
-                            ? 'border-rose-500/50 bg-rose-500/10 text-white ring-1 ring-rose-500/30'
-                            : 'border-slate-800 bg-slate-950/40 text-slate-500 hover:border-slate-700'
-                        }`}
-                      >
-                        <p className="text-[10px] font-black uppercase tracking-tightest">{UNIVERSES[u].label}</p>
-                        <p className={`text-[8px] font-bold ${universe === u ? 'text-rose-400' : 'text-slate-700'}`}>
-                          {u.includes('KOS') ? 'KR MARKET' : u === 'SP500' ? 'US MARKET' : 'TECH GROWTH'}
-                        </p>
-                        {universe === u && (
-                          /* @ts-expect-error - framer-motion layoutId type issue */
-                          <motion.div layoutId="activeUniverse" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-rose-500 blur-[2px]" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <ScannerUniverseSelect value={universe} onChange={handleUniverseChange} disabled={isScanning} options={UNIVERSES} />
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="grid gap-1.5 text-xs text-slate-500">
-                    보기 방식
-                    <div className="flex rounded-xl border border-slate-800 bg-slate-950/40 p-1">
-                      {(['web', 'app'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setViewMode(mode)}
-                          className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
-                            viewMode === mode ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20' : 'text-slate-500'
-                          }`}
-                        >
-                          {mode === 'web' ? '표 보기' : '카드 보기'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <ScannerViewToggle value={viewMode} onChange={setViewMode} />
                   <div className="flex items-end">
                     {isScanning ? (
                       <Button onClick={stopScan} variant="danger" className="w-full h-10 flex items-center justify-center gap-2 rounded-xl font-bold active:scale-95 transition-all">
@@ -1185,6 +1144,8 @@ export default function CanslimScannerPage() {
       )}
       </section>
 
+      <ScannerSelectionBar count={selectedTickers.size} onClear={clearSelection} hidden={Boolean(selectedResult)} href="/contest?source=canslim" />
+
       {/* 필터 및 정렬 컨트롤 */}
       {results.length > 0 && (
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center p-1 border-b border-slate-800/50 pb-5">
@@ -1273,50 +1234,7 @@ export default function CanslimScannerPage() {
         </motion.div>
       )}
 
-      {/* 하단 플로팅 툴바 (콘테스트 선정용) */}
-      {selectedTickers.size > 0 && (
-        <motion.div 
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="fixed bottom-10 left-1/2 z-50 flex -translate-x-1/2 items-center gap-8 rounded-2xl border border-rose-500/30 bg-slate-950/90 px-8 py-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] shadow-rose-500/10 backdrop-blur-2xl ring-1 ring-white/10"
-        >
-          <div className="flex flex-col border-r border-slate-800 pr-8">
-            <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest mb-1">Contest Pool</span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black text-white tracking-tight">{selectedTickers.size}</span>
-              <span className="text-xs font-bold text-slate-600">/ 10 종목</span>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => clearSelection()}
-              className="px-2 py-1 text-[11px] font-black text-slate-500 transition-colors hover:text-rose-400 uppercase tracking-tighter"
-            >
-              전체 해제
-            </button>
-            <Link href="/contest?source=canslim">
-              <button className="group relative flex items-center gap-2 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 px-6 py-2.5 font-black text-white shadow-lg transition-all hover:from-rose-500 hover:to-rose-600 active:scale-95">
-                <CheckCircle2 className="h-4 w-4" />
-                선정 완료 (콘테스트 이동)
-                <motion.div 
-                  className="absolute inset-0 rounded-xl ring-2 ring-rose-500 opacity-0 group-hover:opacity-40"
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ repeat: Infinity, duration: 1.5 }}
-                />
-              </button>
-            </Link>
-          </div>
-        </motion.div>
-      )}
-
-      <FlowCtaButton 
-        nextPath="/contest?source=canslim" 
-        label="최고의 차트 선정하기" 
-        subLabel="Step 3: Beauty Contest"
-        variant="emerald"
-        show={filteredResults.length > 0 || selectedTickers.size > 0}
-      />
 
       {/* 드릴다운 모달 */}
       {selectedResult && (
