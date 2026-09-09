@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowUpRight, BarChart3, CalendarDays, ChevronDown, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, ChevronDown, RefreshCw, ShieldAlert, Zap } from 'lucide-react';
 import type { ClosingBar, ClosingCandidate, ClosingEvaluation, ClosingMarket, ClosingMode, ClosingSnapshot } from '../../lib/closing-bet/types';
-import { CLOSING_DASHBOARD_TIMEOUT_MS, CLOSING_LABELS, CLOSING_MARKETS } from '../../lib/closing-bet/config';
+import { CLOSING_DASHBOARD_TIMEOUT_MS, CLOSING_EXIT_RULE, CLOSING_LABELS, CLOSING_MARKETS } from '../../lib/closing-bet/config';
+import { OpeningPerformancePanel } from './OpeningPerformancePanel';
+export { OpeningPerformancePanel as ClosingEvaluationPanel } from './OpeningPerformancePanel';
 import { closingExplanation, displayedClosingCandidates, safeClosingEvidenceUrl, selectClosingSnapshots } from './view-model';
 
 interface ClosingResponse {
@@ -122,7 +124,7 @@ function CandidateCard({ candidate, index, replay, watch }: { candidate: Closing
           <p>진입 구간 <span className="text-slate-200">{price(pick.plan.entryLow)} ~ {price(pick.plan.entryMax)}</span></p>
           <p>유효 시각 <span className="text-slate-200">{timestamp(pick.plan.expiresAt)} KST</span></p>
           <p>목표 참고값 <span className="text-slate-200">{price(pick.plan.target)}</span></p>
-          <p>청산 규칙 <span className="text-slate-200">{pick.plan.exitRule}</span></p>
+          <p>청산 규칙 <span className="text-slate-200">{CLOSING_EXIT_RULE}</span></p>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400"><span>VWAP {price(pick.metrics.vwap)}</span><span>동시간 RVOL {numeric(pick.metrics.rvol, 2)}</span><span>스프레드 {numeric(pick.metrics.spreadBps, 1)}bp</span><span>데이터 {QUALITY_LABEL[pick.quality]}</span></div>
         {pick.evidence.length > 0 && <ul className="space-y-2 text-[11px]">{pick.evidence.map((evidence, index) => {
@@ -155,30 +157,6 @@ export function ClosingMarketPanel({ market, snapshot, mode }: { market: Closing
     </header>
     {picks.map((candidate, index) => <CandidateCard key={candidate.ticker} candidate={candidate} index={index} replay={replay} watch={snapshot?.phase === 'WATCH'} />)}
     {Array.from({ length: 5 - picks.length }, (_, index) => <div key={`empty-${index}`} className="flex items-center gap-3 rounded-xl border border-dashed border-slate-800 px-4 py-3 text-xs text-slate-500"><span className="w-8 text-center font-mono">{picks.length + index + 1}</span><span>미선정 <span className="ml-1 text-[10px] text-slate-600">{snapshot ? '조건을 충족한 추가 종목 없음' : '결과 대기'}</span></span></div>)}
-  </section>;
-}
-
-const EVALUATION_LABEL: Record<ClosingEvaluation['status'], string> = { PENDING: '익일 데이터 대기', NO_ENTRY: '진입 조건 미충족', SIMULATED: '가상 체결', DATA_MISSING: '데이터 부족' };
-
-export function ClosingEvaluationPanel({ evaluations, snapshots }: { evaluations: ClosingEvaluation[]; snapshots: ClosingSnapshot[] }) {
-  const ids = new Set(snapshots.map((snapshot) => snapshot.id));
-  const rows = evaluations.filter((row) => ids.has(row.snapshotId));
-  const names = new Map(snapshots.flatMap((snapshot) => [...snapshot.picks, ...snapshot.reviewCandidates].map((pick) => [pick.ticker, pick.name] as const)));
-  return <section className="rounded-2xl border border-slate-800 bg-slate-950/35 p-4 sm:p-5" aria-label="익일 복기">
-    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-100"><BarChart3 className="h-4 w-4 text-amber-300" aria-hidden />익일 복기</h2>
-    <p className="mt-2 text-xs leading-6 text-slate-500">저장된 추천과 진입·청산 규칙으로 계산한 가상 성과입니다. 실제 주문이나 계좌 체결 결과를 의미하지 않습니다.</p>
-    {rows.length === 0 ? <p className="mt-4 rounded-xl bg-slate-900/60 p-4 text-xs text-slate-400">이 결과의 익일 평가가 아직 없습니다.</p> : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs">
-      <thead><tr className="border-b border-slate-800 text-[10px] text-slate-500">{['시장 / 종목', '평가일 / 상태', '가상 진입', '가상 청산', '비용 반영 수익률', '최대 불리 / 유리', '왕복 비용'].map((label) => <th key={label} scope="col" className="pb-3 pr-4 font-medium">{label}</th>)}</tr></thead>
-      <tbody>{rows.map((row) => <tr key={`${row.snapshotId}:${row.ticker}`} className="border-b border-slate-800/60 last:border-0">
-        <td className="py-3 pr-4"><p className="text-slate-200">{names.get(row.ticker) || row.ticker}</p><p className="mt-1 text-[10px] text-slate-500">{CLOSING_LABELS[row.market]} · {row.ticker}</p></td>
-        <td className="py-3 pr-4 text-slate-400"><p>{row.nextTradeDate || '—'}</p><p className="mt-1 text-[10px]">{EVALUATION_LABEL[row.status]}</p>{row.warnings.length > 0 && <details className="mt-1 max-w-56"><summary className="cursor-pointer text-[10px] text-amber-200">확인 사항</summary><p className="mt-1 text-[10px] leading-5 text-amber-200/80">{row.warnings.map(closingExplanation).join(' · ')}</p></details>}</td>
-        <td className="py-3 pr-4 font-mono text-slate-300">{row.status === 'SIMULATED' ? price(row.entry) : '—'}</td>
-        <td className="py-3 pr-4 text-slate-300"><p className="font-mono">{row.status === 'SIMULATED' ? price(row.exit) : '—'}</p>{row.exitReason && <p className="mt-1 max-w-48 text-[10px] leading-4 text-slate-500">{closingExplanation(row.exitReason)}</p>}</td>
-        <td className={`py-3 pr-4 font-mono ${tone(row.status === 'SIMULATED' ? row.netReturnPct : null)}`}>{row.status === 'SIMULATED' ? percent(row.netReturnPct) : '—'}</td>
-        <td className="py-3 pr-4 font-mono text-slate-400">{row.status === 'SIMULATED' ? `${percent(row.maePct)} / ${percent(row.mfePct)}` : '—'}</td>
-        <td className="py-3 font-mono text-slate-500">{numeric(row.costBps)}bp</td>
-      </tr>)}</tbody>
-    </table></div>}
   </section>;
 }
 
@@ -237,8 +215,8 @@ export default function ClosingBetDashboard() {
     {loading ? <div role="status" className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 p-8 text-sm text-slate-400"><RefreshCw className="h-4 w-4 animate-spin text-teal-300" aria-hidden />저장된 종가베팅 결과를 불러오고 있습니다.</div> : error ? <div role="alert" className="rounded-2xl border border-rose-400/25 bg-rose-400/5 p-5"><p className="text-sm font-medium text-rose-200">결과를 불러오지 못했습니다.</p><p className="mt-2 text-xs leading-6 text-rose-200/70">{error}</p><button type="button" onClick={() => { setRevision((previous) => previous + 1); }} className="mt-3 rounded-lg border border-rose-300/25 px-3 py-2 text-xs text-rose-200">다시 불러오기</button></div> : <>
       {mode === 'REPLAY' && <div className="flex items-start gap-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-4 text-xs leading-6 text-amber-200"><ShieldAlert className="mt-1 h-4 w-4 shrink-0" aria-hidden /><div><p className="font-semibold">과거 재현 · 검토 전용</p><p className="text-amber-200/75">{loaded?.fallback ? '실전 스냅샷이 없어 저장된 과거 재현 결과를 표시합니다. ' : ''}아래 목록은 당시 자료로 재현한 검토 후보이며, 현재 유효한 매수 추천이 아닙니다.</p></div></div>}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500"><span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" aria-hidden />{selected.tradeDate || '저장된 결과 없음'} · 모든 시각 KST</span><span>조건 미충족 시 5종목을 채우지 않습니다.</span></div>
+      <OpeningPerformancePanel evaluations={loaded?.data.evaluations || []} snapshots={snapshots} />
       <div className="grid items-start gap-4 xl:grid-cols-2">{CLOSING_MARKETS.map((market) => <ClosingMarketPanel key={market} market={market} snapshot={selected.latest.get(market)} mode={mode} />)}</div>
-      <ClosingEvaluationPanel evaluations={loaded?.data.evaluations || []} snapshots={snapshots} />
     </>}
   </div>;
 }
