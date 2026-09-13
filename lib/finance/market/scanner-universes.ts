@@ -1,6 +1,7 @@
 import { getKisKospiMarketCapRanking } from '../providers/kis-api';
 import { rankEligibleKoreaCommonStocks, rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
 import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '../../../types/index.ts';
+import { NASDAQ_COMPONENTS_URL, NASDAQ_MIN_CONSTITUENTS, parseWikipediaNasdaqConstituents } from './nasdaq-constituents';
 
 type KoreaMarket = 'KOSPI' | 'KOSDAQ';
 
@@ -254,8 +255,8 @@ async function fetchStockAnalysisNasdaq100(): Promise<ScannerUniverseResponse> {
     .slice(0, 100)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
-  if (items.length === 0) {
-    throw new Error('Nasdaq 100 constituents could not be parsed from StockAnalysis.');
+  if (new Set(items.map((item) => item.ticker)).size < NASDAQ_MIN_CONSTITUENTS) {
+    throw new Error(`StockAnalysis Nasdaq 100 constituent coverage invalid: ${items.length} rows (expected at least ${NASDAQ_MIN_CONSTITUENTS}).`);
   }
 
   return {
@@ -270,7 +271,7 @@ async function fetchStockAnalysisNasdaq100(): Promise<ScannerUniverseResponse> {
 }
 
 async function fetchWikipediaNasdaq100(): Promise<ScannerUniverseResponse> {
-  const response = await fetch('https://en.wikipedia.org/wiki/Nasdaq-100', {
+  const response = await fetch(NASDAQ_COMPONENTS_URL, {
     headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' },
     next: { revalidate: 60 * 60 * 24 }, // 24시간 안정적 캐시
   });
@@ -280,43 +281,7 @@ async function fetchWikipediaNasdaq100(): Promise<ScannerUniverseResponse> {
   }
 
   const html = await response.text();
-  const tableMatch = html.match(/<table[^>]*id="constituents"[^>]*>([\s\S]*?)<\/table>/i);
-  if (!tableMatch) {
-    throw new Error('Wikipedia Nasdaq 100 table not found.');
-  }
-
-  const rows = Array.from(tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi));
-  const items = rows
-    .map((match) => {
-      const row = match[1];
-      const cells = Array.from(row.matchAll(/<(?:td|th)[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)).map((cell) => stripHtml(cell[1]));
-      
-      // Wikipedia table columns: Ticker, Company, ICB Industry, ICB Subsector
-      if (cells.length < 2) return null;
-      if (cells[0] === 'Ticker' || cells[0] === 'Company') return null;
-
-      const ticker = cells[0].toUpperCase().replace('.', '-');
-      const name = cells[1];
-
-      return {
-        rank: 0,
-        ticker,
-        exchange: 'NAS',
-        name,
-        marketCap: null, // Market cap not provided by Wikipedia, will fetch price later
-        currency: 'USD' as const,
-        currentPrice: null,
-        priceAsOf: new Date().toISOString(),
-        priceSource: 'Wikipedia Nasdaq-100 list',
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
-    .slice(0, 150)
-    .map((item, index) => ({ ...item, rank: index + 1 }));
-
-  if (items.length === 0) {
-    throw new Error('Nasdaq 100 constituents could not be parsed from Wikipedia.');
-  }
+  const items = parseWikipediaNasdaqConstituents(html, new Date().toISOString());
 
   return {
     universe: 'NASDAQ100',
@@ -333,8 +298,14 @@ async function fetchNasdaq100(): Promise<ScannerUniverseResponse> {
   try {
     return await fetchStockAnalysisNasdaq100();
   } catch (error) {
-    const fallback = await fetchWikipediaNasdaq100();
     const message = error instanceof Error ? error.message : 'StockAnalysis Nasdaq 100 fetch failed.';
+    let fallback: ScannerUniverseResponse;
+    try {
+      fallback = await fetchWikipediaNasdaq100();
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      throw new Error(`Nasdaq 100 sources failed. Primary: ${message} Fallback: ${fallbackMessage}`);
+    }
     return {
       ...fallback,
       warnings: [`${message} Wikipedia fallback was used; market caps may be unavailable.`, ...fallback.warnings],

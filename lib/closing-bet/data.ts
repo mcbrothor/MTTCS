@@ -5,7 +5,7 @@ import { getClosingDaily, getClosingFlow, getClosingMinutes, getClosingOrderbook
 import { ClosingRepository } from './repository';
 import type { ClosingBar, ClosingEvidence, ClosingInput, ClosingMarket, ClosingMode, ClosingSnapshot } from './types';
 
-interface Pool { items: { ticker: string; name: string }[]; observedAt: string; name: string }
+interface Pool { items: { ticker: string; name: string }[]; observedAt: string; name: string; warnings?: string[] }
 const missingFlow: ClosingInput['flow'] = { foreignNet: null, institutionNet: null, unit: 'SHARES', asOf: null, kind: 'MISSING', venue: 'UNKNOWN' };
 const errorLabel = (error: unknown) => error instanceof Error ? error.message.slice(0, 180) : '데이터 조회 실패';
 export const koreanDate = (now = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(now);
@@ -29,8 +29,10 @@ export async function closingPool(repo: ClosingRepository, market: ClosingMarket
   const source = await getScannerUniverse(market);
   const items = source.items.filter((item) => /^\d{6}$/.test(item.ticker)).slice(0, expected);
   if (new Set(items.map((item) => item.ticker)).size !== items.length) throw new Error('종목 풀에 중복 코드가 있습니다.');
-  const pool: Pool = { items: items.map(({ ticker, name }) => ({ ticker, name })), observedAt: source.asOf, name: source.label };
-  if (!dryRun) await repo.putCache(`pool:${market}:${today}`, pool, 24 * 45);
+  const warnings = [...source.warnings];
+  if (items.length < expected) warnings.push(`${market} 종목 목록 수집 부족: ${items.length}/${expected}. 전체 시장 검증에 필요한 목록을 확보하지 못했습니다.`);
+  const pool: Pool = { items: items.map(({ ticker, name }) => ({ ticker, name })), observedAt: source.asOf, name: source.label, warnings };
+  if (!dryRun && items.length === expected) await repo.putCache(`pool:${market}:${today}`, pool, 24 * 45);
   return pool;
 }
 
@@ -104,7 +106,7 @@ export async function collectClosingInputs(options: {
   const { repo, market, date, mode, cutoff, progress } = options;
   const dryRun = options.dryRun ?? false;
   const pool = await closingPool(repo, market, date, dryRun);
-  const warnings: string[] = [];
+  const warnings: string[] = [...(pool.warnings ?? [])];
   const scanStartedAt = new Date().toISOString();
   const successfulTickers: string[] = [];
   const inputs = await mapClosing(pool.items, async (stock, index): Promise<ClosingInput> => {

@@ -10,8 +10,9 @@ function fileAlertState(path) {
     async read() {
       try {
         return JSON.parse(await readFile(path, 'utf8'));
-      } catch {
-        return null;
+      } catch (error) {
+        if (error?.code === 'ENOENT') return null;
+        throw error;
       }
     },
     async write(value) {

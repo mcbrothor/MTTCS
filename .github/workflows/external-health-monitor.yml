@@ -31,7 +31,8 @@ jobs:
           MTN_HEALTH_TOKEN: ${{ secrets.MTN_HEALTH_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          MTN_ALERT_DEDUPE_SECONDS: '1800'
+          # 0 = notify on new failure, worsening, or recovery only; 43200 enables 12h reminders.
+          MTN_ALERT_REMINDER_SECONDS: '0'
           MTN_ALERT_STATE_PATH: .mtn-health-cache/state.json
         run: node scripts/check-operations-health.mjs
       - name: Save alert dedupe state

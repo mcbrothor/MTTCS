@@ -19,12 +19,19 @@ const flow = (candidate: ClosingCandidate) => candidate.flow.kind === 'MISSING' 
 
 export function formatClosingTelegram(snapshot: ClosingSnapshot, evaluations: ClosingEvaluation[] = []) {
   const replay = snapshot.mode === 'REPLAY';
-  const rows = replay ? snapshot.reviewCandidates : snapshot.picks;
-  const title = replay ? '과거 재현 · 검토용 / 현재 매수 추천 아님' : '종가베팅 · 조건부 추천';
+  const coverageBlocked = snapshot.coverage.total <= 0 || snapshot.coverage.collected / snapshot.coverage.total < CLOSING_POLICY.minCoverage;
+  const blocked = snapshot.status === 'BLOCKED' || coverageBlocked;
+  const rows = replay ? snapshot.reviewCandidates : blocked ? [] : snapshot.picks;
+  const title = replay ? '과거 재현 · 검토용 / 현재 매수 추천 아님' : blocked ? '종가베팅 · 추천 보류' : '종가베팅 · 조건부 추천';
+  const warnings = new Set(snapshot.warnings ?? []);
+  if (coverageBlocked) warnings.add('MARKET_COVERAGE_BELOW_95_PERCENT');
+  const reasons = [...warnings].filter((warning) => /^(MARKET_COVERAGE_BELOW_95_PERCENT|MARKET_REGIME_UNKNOWN|MARKET_REGIME_RED|LIVE_RECOMMENDATION_EXPIRED)$/.test(warning));
   const lines = [
     `[MTN ${title}]`, `${snapshot.tradeDate} · ${CLOSING_LABELS[snapshot.market]} TOP5`,
-    `풀: 기존 ${snapshot.market} ${snapshot.universe.count}종목 | KRX`,
-    `기준 ${new Date(snapshot.asOf).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })} · 수집 ${snapshot.coverage.collected}/${snapshot.coverage.total} · ${snapshot.regime}`,
+    `풀: 기존 ${snapshot.market} ${snapshot.universe.count}/${snapshot.universe.expectedCount ?? snapshot.coverage.total}종목 | KRX`,
+    `기준 ${new Date(snapshot.asOf).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })} · 수집 ${snapshot.coverage.collected}/${snapshot.coverage.total}`,
+    `추천 상태: ${blocked ? '보류 (BLOCKED)' : snapshot.status === 'DEGRADED' ? '일부 데이터 제한 (DEGRADED)' : '기준 충족 (READY)'} · 시장 방향: ${snapshot.regime}`,
+    ...reasons.map((reason) => `보류 사유: ${closingExplanation(reason)}`),
     replay ? '분봉·일봉 재현 순위입니다. 당시 호가·장중 가집계·종목 상태 및 편입 변경을 검증할 수 없어 실전 추천과 분리합니다.' : `적격 ${rows.length}/5 · 미선정 자리는 기준을 완화해 채우지 않습니다.`, '',
   ];
   rows.forEach((candidate, index) => {
@@ -39,9 +46,9 @@ export function formatClosingTelegram(snapshot: ClosingSnapshot, evaluations: Cl
     if (evaluation) lines.push(openingLine(evaluation));
     lines.push('');
   });
-  if (!rows.length) lines.push('선정 종목 없음. 데이터 부족 또는 선정 조건 미충족.');
+  if (!rows.length) lines.push(blocked ? '추천 가능 기준을 충족하지 못해 추천을 보류합니다.' : '선정 종목 없음. 선정 조건을 충족한 종목이 없습니다.');
   lines.push(`점수는 확률이 아닙니다. 비용 가정 왕복 ${CLOSING_POLICY.costBps}bp. 종가 체결·손절가 체결은 보장되지 않습니다.`,
-    replay ? '검토 의견: 날짜·시장·종목과 함께 거래대금 기준, 추격 상한, 제외 사유에 대한 의견을 Codex 작업에 남겨주세요.' : 'KRX 종가 단일가 참여 전 가격·거래 상태를 확인하세요. 조건 이탈 시 진입 보류.',
+    replay ? '검토 의견: 날짜·시장·종목과 함께 거래대금 기준, 추격 상한, 제외 사유에 대한 의견을 Codex 작업에 남겨주세요.' : blocked ? '이번 보고는 추천 보류 안내입니다. 신규 진입 근거로 사용하지 마세요.' : 'KRX 종가 단일가 참여 전 가격·거래 상태를 확인하세요. 조건 이탈 시 진입 보류.',
     `${(process.env.MTN_BASE_URL || 'https://mttcs.vercel.app').replace(/\/$/, '')}/strategies/kr-closing-bet?date=${snapshot.tradeDate}&mode=${snapshot.mode}`);
   return lines.join('\n');
 }
