@@ -20,6 +20,7 @@
     "codex:worker": "node --env-file=.env.local scripts/local-llm-worker.mjs",
     "daily:screener:enqueue": "node --env-file=.env.local scripts/enqueue-daily-screener.mjs",
     "daily:screener:watchdog": "node --env-file=.env.local scripts/daily-screener-watchdog.mjs",
+    "daily:screener:watchdog:apply": "node --env-file=.env.local scripts/daily-screener-watchdog.mjs --apply",
     "local:worker": "scripts/run-local-analysis-worker.sh",
     "local:worker:once": "scripts/run-local-analysis-worker.sh --once",
     "local:analysis:enqueue": "node --env-file=.env.local scripts/enqueue-local-analysis-jobs.mjs",

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { isRecommendationTelegramEligible, recommendationObservation } from '../scripts/lib/recommendation-telegram-policy.mjs';
+assert.equal(isRecommendationTelegramEligible({ is_official: true, status: 'PUBLISHED' }), true);
+const shadow = { is_official: false, status: 'SHADOW', market_context: { publication_gate: { requestedOfficial: true, eligibleCount: 2, requiredCount: 10, reason: 'INSUFFICIENT' } } };
+assert.equal(isRecommendationTelegramEligible(shadow), true);
+assert.equal(isRecommendationTelegramEligible({ ...shadow, status: 'DRAFT' }), false);
+assert.equal(isRecommendationTelegramEligible({ is_official: false, status: 'SHADOW' }), false);
+assert.equal(isRecommendationTelegramEligible({ is_official: true, status: 'SUPERSEDED' }), false);
+assert.deepEqual(recommendationObservation(shadow), { eligibleCount: 2, requiredCount: 10, reason: 'INSUFFICIENT' });
+console.log('recommendation telegram policy tests passed');

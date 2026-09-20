@@ -111,7 +111,7 @@ export interface DailyScanResult {
   topBySource: Record<DailyScreenerSource, DailyScreenerCandidate[]>;
   topBySourceMarket: Record<DailyScreenerSource, Record<DailyScreenerMarket, DailyScreenerCandidate[]>>;
   topBySourceCategory: Record<DailyScreenerSource, Record<DailyScreenerCategory, DailyScreenerCandidate[]>>;
-  errors: { source: DailyScreenerSource; universe: ScannerUniverse; message: string }[];
+  errors: { source: DailyScreenerSource; universe: ScannerUniverse; message: string; phase?: 'universe' | 'scan' }[];
   maxPerUniverse: number | null;
 }
 
@@ -570,11 +570,31 @@ async function scanBatchUniverse(source: Extract<DailyScreenerSource, 'leader' |
   return candidates;
 }
 
+export async function loadDailyScreenerUniverses(
+  universes: ScannerUniverse[],
+  loadUniverse: (universe: ScannerUniverse) => Promise<{ items: ScannerConstituent[] }>,
+  maxPerUniverse: number | null = null,
+) {
+  const rows = new Map<ScannerUniverse, ScannerConstituent[]>();
+  const failures: { universe: ScannerUniverse; message: string }[] = [];
+  for (const universe of universes) {
+    try {
+      const meta = await loadUniverse(universe);
+      if (!meta.items.length) throw new Error(`${universe} universe is empty.`);
+      rows.set(universe, maxPerUniverse ? meta.items.slice(0, maxPerUniverse) : meta.items);
+    } catch (error) {
+      failures.push({ universe, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { rows, failures };
+}
+
 export async function scanDailyScreeners(input: {
   runDate: string;
   sources?: DailyScreenerSource[];
   universes?: ScannerUniverse[];
   maxPerUniverse?: number | null;
+  onProgress?: (progress: { source: DailyScreenerSource; universe: ScannerUniverse }) => Promise<void>;
 }): Promise<DailyScanResult> {
   const sources = input.sources?.length ? input.sources : DAILY_SCREENER_SOURCES;
   const universes = input.universes?.length ? input.universes : DAILY_SCREENER_UNIVERSES;
@@ -585,22 +605,23 @@ export async function scanDailyScreeners(input: {
   const errors: DailyScanResult['errors'] = [];
   const { getScannerUniverse } = await import('../finance/market/scanner-universes');
 
-  const universeRows = new Map<ScannerUniverse, ScannerConstituent[]>();
-  for (const universe of universes) {
-    const meta = await getScannerUniverse(universe);
-    universeRows.set(universe, maxPerUniverse ? meta.items.slice(0, maxPerUniverse) : meta.items);
+  const { rows: universeRows, failures } = await loadDailyScreenerUniverses(universes, getScannerUniverse, maxPerUniverse);
+  for (const failure of failures) {
+    for (const source of sources) errors.push({ source, ...failure, phase: 'universe' });
   }
 
   for (const source of sources) {
     for (const universe of universes) {
+      if (!universeRows.has(universe)) continue;
       const items = universeRows.get(universe) ?? [];
       try {
         if (source === 'minervini') allCandidates.push(...await scanMinerviniUniverse(universe, items));
         else if (source === 'canslim') allCandidates.push(...await scanCanslimUniverse(universe, items));
         else allCandidates.push(...await scanBatchUniverse(source, universe, items));
       } catch (error) {
-        errors.push({ source, universe, message: error instanceof Error ? error.message : String(error) });
+        errors.push({ source, universe, phase: 'scan', message: error instanceof Error ? error.message : String(error) });
       }
+      await input.onProgress?.({ source, universe });
     }
   }
 
@@ -877,11 +898,31 @@ export function ruleBasedDailyMarketTop10(candidates: DailyScreenerCandidate[]):
   };
 }
 
-export function ruleBasedDailyCategoryTop10(candidates: DailyScreenerCandidate[]): DailyCategoryTop10Result {
+export function assertDailyGenerationDate(runDate: string, currentKstDate: string) {
+  if (runDate !== currentKstDate) {
+    throw new Error('Historical daily generation is disabled: current prices and chart gates are not historical snapshots; use stored publication replay only.');
+  }
+}
+
+export function resolveDailyCategoryAvailability(candidates: DailyScreenerCandidate[], requestedCategories: DailyScreenerCategory[] = DAILY_SCREENER_CATEGORIES) {
+  const counts = Object.fromEntries(requestedCategories.map((category) => [category,
+    new Set(candidates.filter((candidate) => categoryForDailyCandidate(candidate) === category).map((candidate) => candidate.ticker.toUpperCase())).size,
+  ])) as Record<DailyScreenerCategory, number>;
+  return {
+    counts,
+    readyCategories: requestedCategories.filter((category) => counts[category] >= 10),
+    failedCategories: requestedCategories.filter((category) => counts[category] < 10).map((category) => ({
+      category, phase: 'candidate_coverage', candidate_count: counts[category], required_count: 10,
+      message: `${category}: 10 unique candidates required; received ${counts[category]}.`,
+    })),
+  };
+}
+
+export function ruleBasedDailyCategoryTop10(candidates: DailyScreenerCandidate[], requestedCategories: DailyScreenerCategory[] = DAILY_SCREENER_CATEGORIES): DailyCategoryTop10Result {
   const grouped = aggregateDailyCandidatesByCategory(candidates);
   const categories = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] } as Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
 
-  for (const category of DAILY_SCREENER_CATEGORIES) {
+  for (const category of requestedCategories) {
     const market = marketForDailyCategory(category);
     categories[category] = Array.from(grouped.values())
       .filter((item) => categoryForDailyCandidate(item.best) === category)
@@ -903,8 +944,8 @@ export function ruleBasedDailyCategoryTop10(candidates: DailyScreenerCandidate[]
       }));
   }
 
-  const counts = DAILY_SCREENER_CATEGORIES.map((category) => `${category}=${categories[category].length}`).join(', ');
-  if (DAILY_SCREENER_CATEGORIES.some((category) => categories[category].length !== 10)) {
+  const counts = requestedCategories.map((category) => `${category}=${categories[category].length}`).join(', ');
+  if (requestedCategories.some((category) => categories[category].length !== 10)) {
     throw new Error(`Rule-based category Top10 requires 10 picks per category; ${counts}.`);
   }
 
@@ -997,7 +1038,9 @@ export function buildDailyCategoryTop10Prompt(input: {
   runDate: string;
   candidates: DailyScreenerCandidate[];
   marketContext?: Partial<Record<DailyScreenerMarket | DailyScreenerCategory, unknown>>;
+  categories?: DailyScreenerCategory[];
 }) {
+  const requestedCategories = input.categories ?? DAILY_SCREENER_CATEGORIES;
   const candidateRows = input.candidates.map((candidate) => {
     const category = categoryForDailyCandidate(candidate);
     const metricBits = Object.entries(candidate.metrics)
@@ -1021,7 +1064,7 @@ export function buildDailyCategoryTop10Prompt(input: {
 
   return [
     'MTN Daily Screener 후보를 분석해 카테고리별 최종 추천 Top10을 고르세요.',
-    '카테고리는 NASDAQ100, SP500, KOSPI200, KOSDAQ150 네 가지입니다. 각 카테고리는 정확히 10개를 반환해야 합니다.',
+    `대상 카테고리: ${requestedCategories.join(', ')}. 대상 카테고리마다 정확히 10개를 반환하고, 대상이 아닌 카테고리는 생성하지 마세요.`,
     '한국어로 판단하되, 출력은 JSON만 반환하세요. Markdown fence와 설명 문장을 금지합니다.',
     '중요: 입력 후보에 없는 ticker를 만들지 마세요. 같은 카테고리 안의 ticker 중복은 금지입니다. 같은 ticker가 NASDAQ100과 SP500에 모두 있으면 각 카테고리에서 별도로 평가할 수 있습니다.',
     '입력 후보는 스크리너별·카테고리별 Top10 후보 풀입니다. MTN 점수만 재정렬하지 말고, 외부 LLM이 보유하거나 접근 가능한 공개 시장 정보, 최근 뉴스 흐름, 업종/테마 사이클, 실적·밸류에이션 맥락, 유동성/수급 판단을 활용해 후보 간 상대 우위를 고도화하세요.',
@@ -1032,7 +1075,7 @@ export function buildDailyCategoryTop10Prompt(input: {
     '각 종목 risk도 1~2문장으로 쓰세요. 단순한 "변동성" 표현을 피하고, 어떤 조건이 발생하면 탈락·하향해야 하는지 가격/수급/뉴스/실적/매크로 트리거를 구체적으로 적으세요.',
     '투자 조언이 아니라 MTN 스크리너 후보 우선순위 판별입니다.',
     '',
-    '필수 JSON shape: {"categories":{"NASDAQ100":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"SP500":[{"rank":1,"ticker":"EXAMPLE","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KOSPI200":[{"rank":1,"ticker":"005930","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}],"KOSDAQ150":[{"rank":1,"ticker":"091990","source":"mixed","reason":"핵심 선정 사유","confidence":0.82,"risk":"핵심 리스크"}]},"report_markdown":""}',
+    `필수 JSON shape: ${JSON.stringify({ categories: Object.fromEntries(requestedCategories.map((category) => [category, [{ rank: 1, ticker: 'EXAMPLE', source: 'mixed', reason: '핵심 선정 사유', confidence: 0.82, risk: '핵심 리스크' }]])), report_markdown: '' })}`,
     '',
     `run_date: ${input.runDate}`,
     `market_context: ${JSON.stringify(input.marketContext || {})}`,
@@ -1230,16 +1273,16 @@ export function parseDailyMarketTop10Response(raw: string, candidates: DailyScre
   };
 }
 
-export function parseDailyCategoryTop10Response(raw: string, candidates: DailyScreenerCandidate[]): DailyCategoryTop10Result {
+export function parseDailyCategoryTop10Response(raw: string, candidates: DailyScreenerCandidate[], requestedCategories: DailyScreenerCategory[] = DAILY_SCREENER_CATEGORIES): DailyCategoryTop10Result {
   let parsed: unknown;
   try {
     parsed = parseJson(raw);
   } catch (error) {
-    const categoryRows = Object.fromEntries(DAILY_SCREENER_CATEGORIES.map((category) => {
+    const categoryRows = Object.fromEntries(requestedCategories.map((category) => {
       const json = findBalancedArrayAfterKey(raw, category);
       return [category, json ? JSON.parse(json) : null];
     })) as Record<DailyScreenerCategory, unknown>;
-    if (DAILY_SCREENER_CATEGORIES.some((category) => !Array.isArray(categoryRows[category]))) throw error;
+    if (requestedCategories.some((category) => !Array.isArray(categoryRows[category]))) throw error;
     parsed = { categories: categoryRows };
   }
 
@@ -1257,7 +1300,7 @@ export function parseDailyCategoryTop10Response(raw: string, candidates: DailySc
   }
 
   const categories = { NASDAQ100: [], SP500: [], KOSPI200: [], KOSDAQ150: [] } as Record<DailyScreenerCategory, DailyCategoryTop10Pick[]>;
-  for (const category of DAILY_SCREENER_CATEGORIES) {
+  for (const category of requestedCategories) {
     const rows = Array.isArray(categoryRoot[category]) ? categoryRoot[category] as unknown[] : [];
     const market = marketForDailyCategory(category);
     const seen = new Set<string>();

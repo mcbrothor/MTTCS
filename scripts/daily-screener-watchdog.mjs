@@ -2,7 +2,8 @@
 
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { getTelegramChatIds } from './lib/codex-cli-worker-utils.mjs';
@@ -30,23 +31,27 @@ function kstDateString(date = new Date()) {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv, env = process.env) {
   const args = {
     date: kstDateString(),
-    baseUrl: process.env.MTN_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || DEFAULT_BASE_URL,
-    dryRun: process.env.DRY_RUN?.toLowerCase() === 'true',
+    baseUrl: env.MTN_BASE_URL || env.NEXT_PUBLIC_APP_URL || DEFAULT_BASE_URL,
+    dryRun: !argv.includes('--apply') || argv.includes('--dry-run') || env.DRY_RUN?.toLowerCase() === 'true',
   };
   for (const raw of argv) {
-    if (raw === '--dry-run') {
-      args.dryRun = true;
-      continue;
-    }
-    const [key, value] = raw.split('=');
-    if (key === '--date') args.date = value;
-    if (key === '--base-url') args.baseUrl = value;
+    if (raw === '--dry-run' || raw === '--apply') continue;
+    if (raw.startsWith('--date=')) args.date = raw.slice('--date='.length);
+    else if (raw.startsWith('--base-url=')) args.baseUrl = raw.slice('--base-url='.length);
+    else throw new Error(`Unknown argument: ${raw}`);
   }
   args.baseUrl = String(args.baseUrl || '').replace(/\/+$/, '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new Error('--date must be YYYY-MM-DD.');
+  const date = new Date(`${args.date}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== args.date) {
+    throw new Error('--date must be a valid YYYY-MM-DD date.');
+  }
+  const baseUrl = new URL(args.baseUrl);
+  if (!['https:', 'http:'].includes(baseUrl.protocol) || baseUrl.username || baseUrl.password || baseUrl.pathname !== '/' || baseUrl.search || baseUrl.hash) {
+    throw new Error('--base-url must be an HTTP(S) origin.');
+  }
   return args;
 }
 
@@ -205,8 +210,7 @@ async function sendAlert(text, incident = {}) {
   return { recipients: chatIds.length - skipped, skipped };
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+async function main(args) {
   const supabaseMaxRetries = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_MAX_RETRIES || 3);
   const supabaseRetryDelayMs = Number(process.env.DAILY_SCREENER_WATCHDOG_SUPABASE_RETRY_DELAY_MS || 1_000);
   const supabaseUrl = requiredEnv('NEXT_PUBLIC_SUPABASE_URL');
@@ -293,21 +297,30 @@ async function main() {
   console.log(JSON.stringify({ ...summary, repaired: true, results }));
 }
 
-main().catch(async (error) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${message}`);
-  const dryRunRequested = process.argv.includes('--dry-run') || process.env.DRY_RUN?.toLowerCase() === 'true';
-  if (!dryRunRequested) {
-    try {
-      await sendAlert(`[MTN 감시기 자체 오류]\n${kstDateString()}\n${message.slice(0, 1500)}`, {
-        runDate: kstDateString(),
-        runId: null,
-        state: 'WATCHDOG_ERROR',
-        reason: message.slice(0, 1500),
-      });
-    } catch (alertError) {
-      console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${alertError instanceof Error ? alertError.message : String(alertError)}`);
+async function runCli() {
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+    await main(args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${message}`);
+    if (args && !args.dryRun) {
+      try {
+        await sendAlert(`[MTN 감시기 자체 오류]\n${args.date}\n${message.slice(0, 1500)}`, {
+          runDate: args.date,
+          runId: null,
+          state: 'WATCHDOG_ERROR',
+          reason: message.slice(0, 1500),
+        });
+      } catch (alertError) {
+        console.error(`[${new Date().toISOString()}] [DailyScreenerWatchdog] ${alertError instanceof Error ? alertError.message : String(alertError)}`);
+      }
     }
+    process.exitCode = 1;
   }
-  process.exit(1);
-});
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await runCli();
+}

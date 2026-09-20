@@ -16,6 +16,7 @@ const repo = {
 globalThis.fetch = async (input) => {
   calls++;
   const url = new URL(String(input));
+  if (url.hostname === 'm.stock.naver.com') return new Response('', { status: 503 });
   assert.equal(url.hostname, 'finance.naver.com');
   const page = Number(url.searchParams.get('page'));
   if (partial && page > 1) return new Response('', { status: 503 });
@@ -27,11 +28,8 @@ globalThis.fetch = async (input) => {
 };
 
 try {
-  const broken = await closingPool(repo, 'KOSDAQ150', koreanDate(), false);
-  assert.equal(broken.items.length, 29);
+  await assert.rejects(closingPool(repo, 'KOSDAQ150', koreanDate(), false), /legacy HTML incomplete: 29\/200.*HTTP 503/, '불완전 HTML 및 JSON 원천 오류를 함께 표시한다');
   assert.equal(stored.size, 0, '불완전 원천 목록은 정상 풀 캐시로 저장하지 않는다');
-  assert.ok(broken.warnings.some((warning) => /Only 29 KOSDAQ rows/.test(warning)), '원천 수집 경고를 유지한다');
-  assert.ok(broken.warnings.some((warning) => /목록 수집 부족: 29\/150/.test(warning)));
 
   partial = false;
   const recovered = await closingPool(repo, 'KOSDAQ150', koreanDate(), false);

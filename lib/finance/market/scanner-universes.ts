@@ -44,7 +44,43 @@ function decodeKoreanHtml(buffer: ArrayBuffer) {
   }
 }
 
-async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100): Promise<KoreaRankingItem[]> {
+const NAVER_REQUEST_TIMEOUT_MS = 15_000;
+const NAVER_JSON_PAGE_SIZE = 100;
+const NAVER_JSON_EXTRA_PAGES = 2;
+
+async function fetchNaverJsonRanking(market: KoreaMarket, limit: number): Promise<KoreaRankingItem[]> {
+  const items = new Map<string, KoreaRankingItem>();
+  for (let page = 1; page <= Math.ceil(limit / NAVER_JSON_PAGE_SIZE) + NAVER_JSON_EXTRA_PAGES && items.size < limit; page += 1) {
+    const response = await fetch(`https://m.stock.naver.com/api/stocks/marketValue/${market}?page=${page}&pageSize=${NAVER_JSON_PAGE_SIZE}`, {
+      headers: { accept: 'application/json', 'user-agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(NAVER_REQUEST_TIMEOUT_MS),
+      next: { revalidate: 60 * 30 },
+    });
+    if (!response.ok) throw new Error(`Naver ${market} JSON page ${page}: HTTP ${response.status}`);
+    const payload = await response.json();
+    if (payload.stockListCategoryType !== market || !Array.isArray(payload.stocks) || Number(payload.page) !== page) {
+      throw new Error(`Naver ${market} JSON market/page/schema mismatch at page ${page}`);
+    }
+    const previousSize = items.size;
+    for (const row of payload.stocks) {
+      if (!row || !/^\d{6}$/.test(row.itemCode) || typeof row.stockName !== 'string') continue;
+      const marketCap = parseNumberText(String(row.marketValue ?? ''));
+      const currentPrice = parseNumberText(String(row.closePrice ?? ''));
+      if (!marketCap || marketCap <= 0 || !currentPrice || currentPrice <= 0) continue;
+      items.set(row.itemCode, {
+        ticker: row.itemCode, name: row.stockName, marketCap: marketCap * 100_000_000,
+        currentPrice, source: `Naver Finance ${market} market-cap ranking JSON`,
+        priceAsOf: typeof row.localTradedAt === 'string' && Number.isFinite(Date.parse(row.localTradedAt)) ? row.localTradedAt : undefined,
+      });
+    }
+    if (items.size === previousSize) throw new Error(`Naver ${market} JSON page ${page}: no new valid rows`);
+    if (payload.stocks.length < NAVER_JSON_PAGE_SIZE) break;
+  }
+  if (items.size < limit) throw new Error(`Naver ${market} JSON incomplete ranking: ${items.size}/${limit}`);
+  return Array.from(items.values()).slice(0, limit);
+}
+
+async function fetchNaverLegacyRanking(market: KoreaMarket, limit: number): Promise<KoreaRankingItem[]> {
   const items: KoreaRankingItem[] = [];
   const sosok = market === 'KOSPI' ? '0' : '1';
 
@@ -54,6 +90,7 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
         accept: 'text/html',
         'user-agent': 'Mozilla/5.0',
       },
+      signal: AbortSignal.timeout(NAVER_REQUEST_TIMEOUT_MS),
       next: { revalidate: 60 * 30 },
     });
 
@@ -61,6 +98,7 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
 
     const html = decodeKoreanHtml(await response.arrayBuffer());
     const rowMatches = html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
+    const previousCount = items.length;
 
     for (const match of rowMatches) {
       const row = match[1] || '';
@@ -81,9 +119,25 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
 
       if (items.length >= limit) break;
     }
+    if (items.length === previousCount) break;
   }
 
   return items;
+}
+
+async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100): Promise<KoreaRankingItem[]> {
+  let legacyFailure = '';
+  try {
+    const legacy = await fetchNaverLegacyRanking(market, limit);
+    if (legacy.length >= limit) return legacy;
+    legacyFailure = `legacy HTML incomplete: ${legacy.length}/${limit}`;
+  } catch (error) {
+    legacyFailure = error instanceof Error ? error.message : String(error);
+  }
+  try { return await fetchNaverJsonRanking(market, limit); }
+  catch (error) {
+    throw new Error(`Naver ${market} sources failed. ${legacyFailure}; ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
@@ -322,7 +376,7 @@ function toKoreaConstituents(ranking: ReturnType<typeof rankKoreaMarketCapItems>
     marketCap: item.marketCap,
     currency: 'KRW',
     currentPrice: item.currentPrice,
-    priceAsOf: new Date().toISOString(),
+    priceAsOf: item.priceAsOf ?? new Date().toISOString(),
     priceSource: item.source,
   }));
 }
@@ -339,6 +393,7 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
 
   if (ranking.length < 200) {
     try {
+      const naverCount = ranking.length;
       const kisRanking = (await getKisKospiMarketCapRanking(200)).map((item) => ({
         ...item,
         source: 'KIS KOSPI market-cap ranking fallback',
@@ -348,7 +403,7 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
         if (!byTicker.has(item.ticker)) byTicker.set(item.ticker, item);
       }
       ranking = Array.from(byTicker.values());
-      warnings.push(`Naver returned ${byTicker.size} merged rows; KIS was used only to fill missing KOSPI market-cap rows.`);
+      warnings.push(`Naver returned ${naverCount} rows; KIS fallback produced ${byTicker.size} merged rows.`);
     } catch (error) {
       warnings.push(error instanceof Error ? `KIS market-cap ranking fallback failed: ${error.message}` : 'KIS market-cap ranking fallback failed.');
     }
@@ -358,8 +413,9 @@ async function fetchKospi200(): Promise<ScannerUniverseResponse> {
   const items = toKoreaConstituents(ranked, 'KOSPI');
 
   if (items.length === 0) {
-    throw new Error('KOSPI market-cap top 200 could not be loaded.');
+    throw new Error(`KOSPI market-cap top 200 could not be loaded. ${warnings.join(' ')}`);
   }
+  if (items.length < 200) warnings.push(`Incomplete KOSPI market-cap input universe: ${items.length}/200 eligible stocks; downstream coverage gates must remain enforced.`);
 
   return {
     universe: 'KOSPI200',
