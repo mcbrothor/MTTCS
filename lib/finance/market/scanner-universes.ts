@@ -2,6 +2,7 @@ import { getKisKospiMarketCapRanking } from '../providers/kis-api';
 import { rankEligibleKoreaCommonStocks, rankKoreaMarketCapItems, type KoreaRankingItem } from './korea-market-cap-ranking';
 import type { ScannerConstituent, ScannerUniverse, ScannerUniverseResponse } from '../../../types/index.ts';
 import { NASDAQ_COMPONENTS_URL, NASDAQ_MIN_CONSTITUENTS, parseWikipediaNasdaqConstituents } from './nasdaq-constituents';
+import { SP500_COMPONENTS_URL, SP500_MIN_CONSTITUENTS, SP500_MAX_CONSTITUENTS, parseWikipediaSp500Constituents } from './sp500-constituents';
 
 type KoreaMarket = 'KOSPI' | 'KOSDAQ';
 
@@ -141,12 +142,14 @@ async function fetchNaverKoreaMarketCapRanking(market: KoreaMarket, limit = 100)
 }
 
 async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
+  try {
   const response = await fetch('https://stockanalysis.com/list/sp-500-stocks/', {
     headers: {
       accept: 'text/html',
       'user-agent': 'Mozilla/5.0',
     },
     next: { revalidate: 60 * 30 },
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!response.ok) {
@@ -182,11 +185,11 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item?.ticker && item.name))
     .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
-    .slice(0, 500)
     .map((item, index) => ({ ...item, rank: index + 1 }));
 
-  if (items.length === 0) {
-    throw new Error('S&P 500 constituents could not be parsed.');
+  const uniqueCount = new Set(items.map((item) => item.ticker)).size;
+  if (uniqueCount < SP500_MIN_CONSTITUENTS || uniqueCount > SP500_MAX_CONSTITUENTS || uniqueCount !== items.length) {
+    throw new Error(`StockAnalysis S&P 500 constituent coverage invalid: ${uniqueCount} unique rows.`);
   }
 
   return {
@@ -198,6 +201,30 @@ async function fetchStockAnalysisSp500(): Promise<ScannerUniverseResponse> {
     items,
     warnings: items.length < 500 ? [`Only ${items.length} S&P 500 rows were parsed.`] : [],
   };
+  } catch (error) {
+    const primaryFailure = error instanceof Error ? error.message : String(error);
+    try {
+      const response = await fetch(SP500_COMPONENTS_URL, {
+        headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15_000),
+        next: { revalidate: 60 * 60 * 24 },
+      });
+      if (!response.ok) throw new Error(`Wikipedia S&P 500 response error (${response.status})`);
+      const asOf = new Date().toISOString();
+      const items = parseWikipediaSp500Constituents(await response.text(), asOf);
+      return {
+        universe: 'SP500', label: 'S&P 500', asOf, source: 'Wikipedia S&P 500 constituent list',
+        delayNote: 'Constituent membership only; prices and market caps must be fetched separately. List order is not a market-cap ranking.',
+        items,
+        warnings: [
+          `${primaryFailure} Wikipedia fallback was used; prices and market caps are unavailable and list order is not market-cap rank.`,
+          'Only explicitly verified NYSE/NASDAQ listings are supported in this fallback; other exchanges (including Cboe BZX) are excluded, so this may not be the full index membership.',
+        ],
+      };
+    } catch (fallbackError) {
+      throw new Error(`${primaryFailure}; ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+    }
+  }
 }
 
 // Russell 1000 — RS Rating 모집단 확장용 (~1,000 종목).
