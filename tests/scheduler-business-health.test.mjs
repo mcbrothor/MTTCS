@@ -4,8 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
+import { resolveTestPostgresBin } from '../scripts/lib/test-postgres-bin.mjs';
 
-const bin = process.env.MTN_TEST_POSTGRES_BIN || '/opt/homebrew/opt/postgresql@17/bin';
+const bin = resolveTestPostgresBin();
 const directory = mkdtempSync(join(tmpdir(), 'mtn-scheduler-test-'));
 const dataDir = join(directory, 'data');
 const port = 15000 + (process.pid % 30000);

@@ -63,6 +63,12 @@ jobs:
     - name: Type check
       run: npx tsc --noEmit --incremental false
 
+    - name: Verify isolated PostgreSQL test prerequisites
+      shell: bash
+      run: |
+        test "$(id -u)" -ne 0
+        node --input-type=module -e 'import { resolveTestPostgresBin } from "./scripts/lib/test-postgres-bin.mjs"; console.log(`PostgreSQL test binaries: ${resolveTestPostgresBin()}`);'
+
     - name: Run unit tests
       run: npm test
       
