@@ -12,8 +12,23 @@ export function parseMigrationArgs(args) {
   return { file: files[0], apply: args.includes('--apply') && process.env.DRY_RUN !== 'true' };
 }
 
+export function migrationTimeouts(env = process.env) {
+  const milliseconds = (name, fallback, maximum) => {
+    const raw = env[name] ?? String(fallback);
+    if (!/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) > maximum) {
+      throw new Error(`${name} must be an integer between 1 and ${maximum} milliseconds.`);
+    }
+    return `${raw}ms`;
+  };
+  return {
+    lock: milliseconds('MTN_MIGRATION_LOCK_TIMEOUT_MS', 3000, 60000),
+    statement: milliseconds('MTN_MIGRATION_STATEMENT_TIMEOUT_MS', 60000, 600000),
+  };
+}
+
 async function main() {
   const options = parseMigrationArgs(process.argv.slice(2));
+  const timeouts = migrationTimeouts();
   const root = fileURLToPath(new URL('../../', import.meta.url));
   const sql = await readFile(path.join(root, 'supabase/migrations', options.file), 'utf8');
   const version = options.file.slice(0, 14);
@@ -31,6 +46,9 @@ async function main() {
     await writeFile(backupPath, JSON.stringify({ definitions: definitions.rows, migrations: ledger.rows }, null, 2), { flag: 'wx', mode: 0o600 });
     await client.query('begin');
     try {
+      // Waiting DDL can block new readers behind a backup's existing read lock.
+      // Bound this transaction, including its advisory lock, and roll back on timeout.
+      await client.query("select set_config('lock_timeout', $1, true), set_config('statement_timeout', $2, true)", [timeouts.lock, timeouts.statement]);
       await client.query("select pg_advisory_xact_lock(hashtext('mtn-recovery-migrations'))");
       const locked = await client.query('select version from supabase_migrations.schema_migrations where version=$1', [version]);
       if (locked.rowCount) { await client.query('rollback'); console.log(JSON.stringify({ version, alreadyApplied: true })); return; }

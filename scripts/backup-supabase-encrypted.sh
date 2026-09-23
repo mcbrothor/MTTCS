@@ -63,6 +63,8 @@ unset DATABASE_URL
 export PGSERVICEFILE="$PG_SERVICE_FILE"
 export PGPASSFILE="$PG_PASS_FILE"
 
+node "$SCRIPT_DIR/backup-connection-preflight.mjs" "$PSQL_BIN" "$SOURCE_DB_SERVICE"
+
 collect_public_row_counts() {
   local database_url="$1"
   local output_path="$2"
