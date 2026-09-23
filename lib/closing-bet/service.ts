@@ -4,6 +4,7 @@ import { collectClosingInputs, closingMinutes, koreanDate, prepareClosingInputs 
 import { buildClosingSnapshot } from './engine';
 import { collectOpeningEvaluations } from './opening-collection';
 import { getClosingOrderbook, getClosingQuote, getClosingSession } from './kis';
+import { calculateClosingRegimeBenchmark } from './regime';
 import { ClosingRepository } from './repository';
 import { deliverClosingText, sendClosingSnapshot } from './telegram';
 import type { ClosingMarket, ClosingMode, ClosingPhase, ClosingSnapshot } from './types';
@@ -60,15 +61,13 @@ export async function runClosingBet(input: {
     let regime: ClosingSnapshot['regime'] = 'UNKNOWN';
     try {
       const bars = await closingMinutes(repo, benchmarkTicker, input.date, cutoff, input.mode === 'REPLAY', dryRun);
-      const late = bars.find((bar) => bar.time?.replaceAll(':', '') === closingClock(session.close, -60).replaceAll(':', ''));
       const latest = bars.at(-1);
-      const volume = bars.reduce((sum, bar) => sum + bar.volume, 0);
-      const turnover = bars.every((bar) => bar.turnover !== null) ? bars.reduce((sum, bar) => sum + (bar.turnover ?? 0), 0) : null;
-      const vwap = volume && turnover ? turnover / volume : null;
-      if (late && latest && vwap) {
-        benchmarkLateReturnPct = (latest.close / late.open - 1) * 100;
-        regime = latest.close < vwap && benchmarkLateReturnPct < -0.3 ? 'RED'
-          : latest.close >= vwap && benchmarkLateReturnPct >= 0 ? 'GREEN' : 'YELLOW';
+      const benchmark = calculateClosingRegimeBenchmark(bars, closingClock(session.close, -60));
+      if (latest && benchmark) {
+        benchmarkLateReturnPct = benchmark.lateReturnPct;
+        regime = latest.close < benchmark.vwap && benchmarkLateReturnPct < -0.3 ? 'RED'
+          : latest.close >= benchmark.vwap && benchmarkLateReturnPct >= 0 ? 'GREEN' : 'YELLOW';
+        if (benchmark.estimatedTurnoverBars > 0) collected.warnings.push(`시장 ETF VWAP은 거래대금 누락 ${benchmark.estimatedTurnoverBars}개 봉을 전형가격으로 보완했습니다.`);
       }
       collected.warnings.push(`시장 상태·후반 상대강도는 ${benchmarkTicker} ETF를 ${input.market} 지수 대용으로 사용합니다.`);
     } catch { collected.warnings.push('시장 기준 분봉 수집 실패: 공식 추천 차단'); }
