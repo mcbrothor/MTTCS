@@ -21,7 +21,8 @@ export function formatClosingTelegram(snapshot: ClosingSnapshot, evaluations: Cl
   const replay = snapshot.mode === 'REPLAY';
   const coverageBlocked = snapshot.coverage.total <= 0 || snapshot.coverage.collected / snapshot.coverage.total < CLOSING_POLICY.minCoverage;
   const blocked = snapshot.status === 'BLOCKED' || coverageBlocked;
-  const rows = replay ? snapshot.reviewCandidates : blocked ? [] : snapshot.picks;
+  const reviewOnly = replay || blocked;
+  const rows = reviewOnly ? snapshot.reviewCandidates : snapshot.picks;
   const title = replay ? '과거 재현 · 검토용 / 현재 매수 추천 아님' : blocked ? '종가베팅 · 추천 보류' : '종가베팅 · 조건부 추천';
   const warnings = new Set(snapshot.warnings ?? []);
   if (coverageBlocked) warnings.add('MARKET_COVERAGE_BELOW_95_PERCENT');
@@ -32,11 +33,13 @@ export function formatClosingTelegram(snapshot: ClosingSnapshot, evaluations: Cl
     `기준 ${new Date(snapshot.asOf).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })} · 수집 ${snapshot.coverage.collected}/${snapshot.coverage.total}`,
     `추천 상태: ${blocked ? '보류 (BLOCKED)' : snapshot.status === 'DEGRADED' ? '일부 데이터 제한 (DEGRADED)' : '기준 충족 (READY)'} · 시장 방향: ${snapshot.regime}`,
     ...reasons.map((reason) => `보류 사유: ${closingExplanation(reason)}`),
-    replay ? '분봉·일봉 재현 순위입니다. 당시 호가·장중 가집계·종목 상태 및 편입 변경을 검증할 수 없어 실전 추천과 분리합니다.' : `적격 ${rows.length}/5 · 미선정 자리는 기준을 완화해 채우지 않습니다.`, '',
+    replay ? '분봉·일봉 재현 순위입니다. 당시 호가·장중 가집계·종목 상태 및 편입 변경을 검증할 수 없어 실전 추천과 분리합니다.'
+      : blocked && rows.length ? `적격 0/5 · 아래 ${rows.length}개는 탈락 사유를 포함한 검토 후보이며 추천 종목이 아닙니다.`
+      : `적격 ${rows.length}/5 · 미선정 자리는 기준을 완화해 채우지 않습니다.`, '',
   ];
   rows.forEach((candidate, index) => {
     const m = candidate.metrics;
-    lines.push(`${index + 1}. ${candidate.name} (${candidate.ticker}) · ${candidate.score}/100 · ${candidate.status === 'EXCLUDED' ? '조건 미달' : replay ? '검토 후보' : '조건부'}`,
+    lines.push(`${index + 1}. ${candidate.name} (${candidate.ticker}) · ${candidate.score}/100 · ${candidate.status === 'EXCLUDED' ? '조건 미달' : reviewOnly ? '검토 후보' : '조건부'}`,
       `기준가 ${price(m.price)} · 거래대금 ${m.turnover === null ? '미확인' : `${Math.round(m.turnover / 100_000_000).toLocaleString('ko-KR')}억`}`,
       `가격위치 ${m.rangePosition === null ? '미확인' : `${Math.round(m.rangePosition * 100)}%`} · 후반 ${m.lateReturnPct === null ? '미확인' : `${m.lateReturnPct.toFixed(2)}%`} · 상대거래량 ${m.rvol === null ? '미확인' : `${m.rvol.toFixed(2)}배`}`,
       `진입 ${price(candidate.plan.entryLow)}~${price(candidate.plan.entryMax)} / 무효화 ${price(candidate.plan.invalidation)}`,
