@@ -104,6 +104,11 @@ try {
     assert.doesNotMatch(noPicks, /추천 보류|데이터 부족/);
     const riskBlocked = formatClosingTelegram({ ...snapshot, mode: 'LIVE', status: 'BLOCKED', regime: 'RED', warnings: ['MARKET_REGIME_RED'] });
     assert.match(riskBlocked, /시장 위험 상태로 추천을 보류/);
+    const blockedWithReview = formatClosingTelegram({ ...snapshot, mode: 'LIVE', status: 'BLOCKED', regime: 'UNKNOWN',
+      warnings: ['MARKET_REGIME_UNKNOWN'], reviewCandidates: [candidate] });
+    assert.match(blockedWithReview, /적격 0\/5.*검토 후보이며 추천 종목이 아닙니다/);
+    assert.match(blockedWithReview, /삼성화재 \(000810\).*검토 후보/);
+    assert.doesNotMatch(blockedWithReview, /삼성화재 \(000810\).*조건부/);
   }
   {
     const text = formatClosingTelegram({ ...snapshot, reviewCandidates: [candidate] }, [evaluation]);
