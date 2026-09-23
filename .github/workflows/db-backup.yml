@@ -360,13 +360,7 @@ jobs:
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             '[{storage_provider:"GITHUB_ARTIFACT",object_key:$object_key,status:"FAILED",encrypted:true,metadata:{repository:$repository,run_id:$run_id,run_attempt:$run_attempt,restore_drill:true}}]')"
-          curl --fail-with-body --silent --show-error \
-            --request POST "$SUPABASE_URL/rest/v1/operations_backup_runs" \
-            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-            --header "Content-Type: application/json" \
-            --header "Prefer: return=minimal" \
-            --data "$payload"
+          printf '%s' "$payload" | node scripts/record-backup-failure-evidence.mjs operations_backup_runs
           observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           valid_until="$(date -u -d '+1 day' +'%Y-%m-%dT%H:%M:%SZ')"
           source_record_id="${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"
@@ -387,10 +381,4 @@ jobs:
               {evidence_hash:$backup_hash,control_key:"BACKUP_RESTORE",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$payload,payload_hash:$payload_hash},
               {evidence_hash:$recovery_hash,control_key:"RECOVERY_DRILL",environment:"PRODUCTION",status:"FAIL",source_kind:"GITHUB_ACTIONS",source_record_id:$source_record_id,release_sha:$release_sha,observed_at:$observed_at,valid_until:$valid_until,payload:$payload,payload_hash:$payload_hash}
             ]')"
-          curl --fail-with-body --silent --show-error \
-            --request POST "$SUPABASE_URL/rest/v1/assurance_control_evidence" \
-            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
-            --header "Content-Type: application/json" \
-            --header "Prefer: resolution=ignore-duplicates,return=minimal" \
-            --data "$control_body"
+          printf '%s' "$control_body" | node scripts/record-backup-failure-evidence.mjs assurance_control_evidence

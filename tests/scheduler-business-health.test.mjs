@@ -43,6 +43,8 @@ try {
   await client.query(budget.match(/create or replace function mtn_internal\.collect_cron_http_responses\(\)[\s\S]*?\$\$;/i)[0]);
   const migration = new URL('../supabase/migrations/20260921010000_scheduler_business_health.sql', import.meta.url);
   if (existsSync(migration)) await client.query(readFileSync(migration, 'utf8'));
+  const retryHealthMigration = new URL('../supabase/migrations/20260923020000_restore_retry_business_health.sql', import.meta.url);
+  if (existsSync(retryHealthMigration)) await client.query(readFileSync(retryHealthMigration, 'utf8'));
 
   await client.query(`
     insert into public.cron_job_definitions values
@@ -113,8 +115,27 @@ try {
   const classified = (await client.query(`select mtn_internal.cron_business_status('/api/cron/closing-bet?phase=final', $1) as status`, ['{invalid'])).rows[0];
   assert.equal(classified.status, 'UNKNOWN', 'invalid JSON must not abort response collection or imply business success');
   assert.equal((await client.query(`select mtn_internal.cron_business_status('/api/cron/closing-bet?phase=review', '{"data":{"pending":true}}') as status`)).rows[0].status, 'PENDING');
+  assert.equal((await client.query(`select mtn_internal.cron_business_status('/api/cron/closing-bet?phase=review', '{"data":{"evaluated":0,"reason":"평가할 추천 종목 없음","delivery":null}}') as status`)).rows[0].status, 'SUCCESS', 'verified empty review is completed work, without changing final-window skip semantics');
   assert.equal((await client.query(`select mtn_internal.cron_business_status('/api/cron/check-alerts', 'ok') as status`)).rows[0].status, 'SUCCESS', 'other jobs retain existing transport contract');
-  await client.query(readFileSync(migration, 'utf8'));
+  await client.query(`
+    insert into public.cron_job_definitions values
+      ('mtn-recommendation-performance-kr-0', '/api/cron/recommendation-performance?market=KR&shard=0&shards=4', '* * * * *', 93600, true, now()),
+      ('mtn-recommendation-performance-kr-1', '/api/cron/recommendation-performance?market=KR&shard=1&shards=4', '* * * * *', 93600, true, now());
+    insert into public.cron_http_runs(job_name,path,status,business_status,requested_at,completed_at,error_message) values
+      ('mtn-recommendation-performance-kr-0','/api/cron/recommendation-performance','FAILED','FAILED',now()-interval '3 minutes',now()-interval '3 minutes','official failed'),
+      ('mtn-recommendation-performance-kr-1','/api/cron/recommendation-performance','FAILED','FAILED',now()-interval '3 minutes',now()-interval '3 minutes','other shard failed'),
+      ('mtn-recommendation-performance-retry-kr-0-20260923','/api/cron/recommendation-performance','SUCCESS','SUCCESS',now()-interval '2 minutes',now()-interval '2 minutes',null);
+  `);
+  async function shardHealth(shard) {
+    return (await client.query('select * from public.cron_scheduler_health where job_name=$1', [`mtn-recommendation-performance-kr-${shard}`])).rows[0];
+  }
+  assert.equal((await shardHealth(0)).health_status, 'HEALTHY', 'dated retry success must recover the original shard with business-health migration installed');
+  assert.equal((await shardHealth(1)).health_status, 'FAILED', 'another shard must not recover');
+  await client.query(`insert into public.cron_http_runs(job_name,path,status,business_status,requested_at,completed_at,error_message) values
+    ('mtn-recommendation-performance-retry-finalize-kr-20260923','/api/cron/recommendation-performance','FAILED','FAILED',now()-interval '1 minute',now()-interval '1 minute','finalization failed')`);
+  assert.equal((await shardHealth(0)).health_status, 'FAILED', 'newer finalization failure must remain visible');
+  assert.equal((await shardHealth(0)).error_message, 'finalization failed');
+  if (existsSync(retryHealthMigration)) await client.query(readFileSync(retryHealthMigration, 'utf8'));
   console.log('Scheduler business health PostgreSQL tests passed');
 } finally {
   if (client) await client.end();
