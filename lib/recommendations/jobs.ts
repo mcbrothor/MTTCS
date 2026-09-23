@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildDiagnosticFindings } from './core';
 import { RECOMMENDATION_ANALYZER_VERSION } from './config';
@@ -51,6 +51,20 @@ interface PickRow {
     market_context: Record<string, unknown>;
     is_official: boolean;
   };
+}
+
+interface CompletedSecurityCheckpoint {
+  fingerprint: string;
+  performance_rows: number;
+  evidence_rows: number;
+}
+
+const PERFORMANCE_HORIZONS: RecommendationHorizon[] = ['LIVE', 'D5', 'D20', 'D60'];
+
+function securityCheckpointFingerprint(picks: PickRow[]) {
+  return createHash('sha256').update(JSON.stringify(
+    [...picks].sort((left, right) => left.id.localeCompare(right.id)),
+  )).digest('hex');
 }
 
 function hash(value: string) {
@@ -190,7 +204,34 @@ export async function runRecommendationPerformanceBatch(input: {
   let recordedShardStatus: 'SUCCESS' | 'DEGRADED' | 'FAILED' | null = null;
   let pipelineRunRecorded = false;
   let barrierStatus = shardClaim.barrierStatus;
+  const completedSecurities: Record<string, CompletedSecurityCheckpoint> = {};
+  let failureCheckpointMetadata: Record<string, unknown> | null = null;
   try {
+  // Claiming a retry preserves run_metadata. Read only the row we currently own;
+  // a completion checkpoint is scoped to this batch, shard, and exact pick inputs.
+  const { data: checkpointRow, error: checkpointError } = await input.client
+    .from('recommendation_performance_batch_shards')
+    .select('run_metadata')
+    .eq('batch_date', batchDate)
+    .eq('market', input.market)
+    .eq('shard', shard)
+    .eq('claim_token', shardClaim.claimToken)
+    .abortSignal(runtime.signal)
+    .maybeSingle();
+  if (checkpointError) throw checkpointError;
+  if (!checkpointRow) throw new Error('Recommendation shard checkpoint read lost its claim.');
+  const previousMetadata = checkpointRow.run_metadata as Record<string, unknown> | null;
+  failureCheckpointMetadata = previousMetadata || {};
+  const priorCheckpoints = previousMetadata?.checkpoint_version === 1
+    && previousMetadata.batch_date === batchDate
+    && previousMetadata.market === input.market
+    && previousMetadata.shard === shard
+    && previousMetadata.shards === shards
+    && previousMetadata.completed_securities
+    && typeof previousMetadata.completed_securities === 'object'
+    && !Array.isArray(previousMetadata.completed_securities)
+    ? previousMetadata.completed_securities as Record<string, CompletedSecurityCheckpoint>
+    : {};
   const allPicks = await loadActivePicks(input.client, input.market, runtime.signal);
   runtime.throwIfExpired();
   const picks = allPicks.filter((pick) => hash(`${pick.exchange}:${pick.ticker}`) % shards === shard);
@@ -199,17 +240,33 @@ export async function runRecommendationPerformanceBatch(input: {
     const key = `${pick.exchange}:${pick.ticker}`;
     bySecurity.set(key, [...(bySecurity.get(key) || []), pick]);
   }
+  for (const [key, securityPicks] of bySecurity) {
+    const checkpoint = priorCheckpoints[key];
+    if (checkpoint?.fingerprint === securityCheckpointFingerprint(securityPicks)
+      && checkpoint.performance_rows === securityPicks.length * PERFORMANCE_HORIZONS.length
+      && Number.isInteger(checkpoint.evidence_rows)
+      && checkpoint.evidence_rows >= 0
+      && checkpoint.evidence_rows <= checkpoint.performance_rows) {
+      completedSecurities[key] = checkpoint;
+    }
+  }
+  failureCheckpointMetadata = {
+    batch_date: batchDate, market: input.market, shard, shards,
+    checkpoint_version: 1, completed_securities: completedSecurities,
+  };
   const benchmarkCache = new Map<string, Awaited<ReturnType<typeof fetchRecommendationBenchmarkBars>>>();
   const evidenceManifestCache = new Map<string, string>();
   const updatedPublications = new Set<string>();
-  let updated = 0;
-  let evidenceRows = 0;
+  let updated = Object.values(completedSecurities).reduce((sum, checkpoint) => sum + checkpoint.performance_rows, 0);
+  let evidenceRows = Object.values(completedSecurities).reduce((sum, checkpoint) => sum + checkpoint.evidence_rows, 0);
   let attemptedSecurities = 0;
-  let processedSecurities = 0;
+  const resumedSecurities = Object.keys(completedSecurities).length;
+  let processedSecurities = resumedSecurities;
   let stoppedByDeadline = false;
   const errors: { ticker: string; message: string }[] = [];
 
-  for (const securityPicks of bySecurity.values()) {
+  for (const [securityKey, securityPicks] of bySecurity) {
+    if (completedSecurities[securityKey]) continue;
     const first = securityPicks[0];
     attemptedSecurities += 1;
     try {
@@ -257,7 +314,7 @@ export async function runRecommendationPerformanceBatch(input: {
           );
         }
         const marketRegime = extractRecommendationMarketRegime(pick.recommendation_publications.market_context);
-        for (const horizon of ['LIVE', 'D5', 'D20', 'D60'] as RecommendationHorizon[]) {
+        for (const horizon of PERFORMANCE_HORIZONS) {
           runtime.throwIfExpired();
           const calculation = buildRecommendationPriceEvidence({
             pickId: pick.id,
@@ -395,8 +452,19 @@ export async function runRecommendationPerformanceBatch(input: {
         for (const publicationId of group.ids) updatedPublications.add(publicationId);
       }
 
+      if (performanceRows.some((pending) => pending.row.status === 'ERROR')) {
+        throw new Error('Recommendation security has incomplete or invalid performance horizons.');
+      }
+      const completedEvidenceRows = performanceRows.filter((row) => row.evidenceReady).length;
+      // Persist the checkpoint only after every horizon, manifest and publication
+      // write has succeeded; interrupted/failed securities remain retryable.
+      completedSecurities[securityKey] = {
+        fingerprint: securityCheckpointFingerprint(securityPicks),
+        performance_rows: performanceRows.length,
+        evidence_rows: completedEvidenceRows,
+      };
       updated += performanceRows.length;
-      evidenceRows += performanceRows.filter((row) => row.evidenceReady).length;
+      evidenceRows += completedEvidenceRows;
       processedSecurities += 1;
     } catch (error) {
       const deadlineFailure = runtime.deadlineReached()
@@ -425,6 +493,9 @@ export async function runRecommendationPerformanceBatch(input: {
     market: input.market,
     shard,
     shards,
+    checkpoint_version: 1,
+    completed_securities: completedSecurities,
+    resumed_securities: resumedSecurities,
     picks: picks.length,
     securities: bySecurity.size,
     attempted_securities: attemptedSecurities,
@@ -501,6 +572,7 @@ export async function runRecommendationPerformanceBatch(input: {
       picks: picks.length,
       securities: bySecurity.size,
       attempted_securities: attemptedSecurities,
+      resumed_securities: resumedSecurities,
       processed_securities: processedSecurities,
       remaining_securities: remainingSecurities,
       deadline_reached: deadlineReached,
@@ -529,6 +601,7 @@ export async function runRecommendationPerformanceBatch(input: {
     picks: picks.length,
     securities: bySecurity.size,
     attemptedSecurities,
+    resumedSecurities,
     processedSecurities,
     remainingSecurities,
     updated,
@@ -539,7 +612,9 @@ export async function runRecommendationPerformanceBatch(input: {
   };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown recommendation performance failure';
-    if (!shardCompletionRecorded) {
+    // A failed checkpoint read leaves the claim for stale-claim recovery instead
+    // of replacing unknown durable progress with an empty metadata object.
+    if (!shardCompletionRecorded && failureCheckpointMetadata !== null) {
       try {
         const failedCompletion = await completeRecommendationPerformanceShard({
           client: input.client,
@@ -548,7 +623,7 @@ export async function runRecommendationPerformanceBatch(input: {
           shard,
           claimToken: shardClaim.claimToken,
           status: 'FAILED',
-          metadata: { batch_date: batchDate, market: input.market, shard, shards },
+          metadata: failureCheckpointMetadata,
           errorMessage: message,
         });
         shardCompletionRecorded = true;

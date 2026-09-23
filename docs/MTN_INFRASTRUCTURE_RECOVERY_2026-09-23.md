@@ -29,6 +29,11 @@ Supabase records, host boot history, and backup logs.
 - Empty closing-review snapshots no longer call trading-calendar and price
   providers or attempt an empty Telegram message. They report zero evaluated
   picks as completed review work, independently of final recommendation health.
+- Performance shards previously restarted the same securities after the
+  230-second work deadline. Completed securities now persist in the existing
+  claim-owned batch metadata and matching retries continue the remainder. Exact
+  input fingerprints invalidate changed work; partial writes and failed horizons
+  never become checkpoints. Metadata-read failures preserve existing progress.
 
 ## Operational verification
 
@@ -52,7 +57,10 @@ Supabase records, host boot history, and backup logs.
   50,000 skips and 50,000 successes for registered jobs. Production health query
   execution was measured at 267 ms (676 ms including network) after optimization.
 - Macro, US master-filter and gold snapshots recovered with HTTP 200. Indicator
-  recovery is separately tracked; historical failures are never manually erased.
+  recovery also completed with HTTP 200. KR performance shards 0 and 1 completed
+  successfully on retry; historical failures are never manually erased.
+- The final performance-resume change passed independent review and full lint,
+  type checking, all 215 test files and the API authorization audit.
 
 ## Limits
 
