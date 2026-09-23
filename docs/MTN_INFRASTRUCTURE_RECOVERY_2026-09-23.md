@@ -17,8 +17,8 @@ Supabase records, host boot history, and backup logs.
 - The September 21 business-health view omitted dated performance retries.
   Health again considers shard and finalization retries while retaining the
   closing recommendation data/delivery checks. Off-window final requests do not
-  erase a failed real recommendation. Canonical job names and an expression
-  index avoid repeating regex scans for each registered job.
+  erase a failed real recommendation. Canonical job names and partial indexes
+  read only the latest required outcome instead of scanning each job's history.
 - The Mac was shut down from September 22 17:02 to September 23 17:53 KST.
   Both launchd workers recovered automatically after startup. AC sleep was
   already disabled; shutdown cannot be repaired by changing heartbeat thresholds.
@@ -48,7 +48,11 @@ Supabase records, host boot history, and backup logs.
   concurrent dispatch, retry health, empty reviews, backup connection failures
   and preservation of successful backup records after an RPO assurance failure.
   Full lint, type checking, all 213 test files and the API authorization audit
-  passed on Node 24.
+  passed on Node 24. The additional bounded-history integration test passed with
+  50,000 skips and 50,000 successes for registered jobs. Production health query
+  execution was measured at 267 ms (676 ms including network) after optimization.
+- Macro, US master-filter and gold snapshots recovered with HTTP 200. Indicator
+  recovery is separately tracked; historical failures are never manually erased.
 
 ## Limits
 

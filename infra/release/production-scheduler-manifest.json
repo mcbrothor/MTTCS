@@ -392,6 +392,7 @@
     "supabase/migrations/20260921010000_scheduler_business_health.sql",
     "supabase/migrations/20260923010000_scheduler_request_identity.sql",
     "supabase/migrations/20260923020000_restore_retry_business_health.sql",
-    "supabase/migrations/20260923030000_index_scheduler_retry_health.sql"
+    "supabase/migrations/20260923030000_index_scheduler_retry_health.sql",
+    "supabase/migrations/20260923040000_bound_scheduler_health_history.sql"
   ]
 }
