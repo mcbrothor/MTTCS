@@ -57,9 +57,21 @@ assert.doesNotMatch(
   /control_key:"RECOVERY_DRILL",environment:"PRODUCTION",status:"PASS"[\s\S]{0,300}rpo_measured:\$rpo_measured/,
 );
 assert.match(workflow, /if:\s*failure\(\)/);
+assert.match(workflow, /record-backup-failure-evidence\.mjs operations_backup_runs/);
+assert.match(workflow, /record-backup-failure-evidence\.mjs assurance_control_evidence/);
 assert.match(workflow, /status:\s*"FAILED"/);
 assert.doesNotMatch(workflow, /^\s+mtn\.dump\s*$/m);
 assert.doesNotMatch(workflow, /^\s+mtn\.restore-list\.txt\s*$/m);
+
+const failureGuard = workflow.match(/if \[\[ "\$ASSURANCE_EVIDENCE_RECORDED" == "true" \]\]; then[\s\S]*?\n\s+fi/)[0];
+for (const recorded of ['true', 'false']) {
+  const result = spawnSync('bash', ['-c', `${failureGuard}\nprintf 'WOULD_RECORD_FAILED_BACKUP'`], {
+    encoding: 'utf8', env: { ...process.env, ASSURANCE_EVIDENCE_RECORDED: recorded },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.includes('WOULD_RECORD_FAILED_BACKUP'), recorded === 'false',
+    'RPO failure with recorded detailed evidence must preserve the successful backup ledger row');
+}
 
 const recoveryGateMatch = workflow.match(
   /(recovery_status="PASS"[\s\S]*?)\n\s+if \[\[ "\$recovery_status" == "PASS" \]\]; then/,
@@ -109,6 +121,7 @@ assert.match(backupScript, /PGSERVICEFILE/);
 assert.match(backupScript, /PGPASSFILE/);
 assert.match(backupScript, /SOURCE_DB_SERVICE='service=mtn_backup_source'/);
 assert.match(backupScript, /unset DATABASE_URL/);
+assert.match(backupScript, /backup-connection-preflight\.mjs.*\$PSQL_BIN.*\$SOURCE_DB_SERVICE/);
 assert.doesNotMatch(backupScript, /"\$PG_DUMP_BIN" "\$DATABASE_URL"/);
 assert.doesNotMatch(backupScript, /"\$PSQL_BIN" "\$DATABASE_URL"/);
 assert.match(backupScript, /PG_RESTORE_BIN[^\n]*--list/);

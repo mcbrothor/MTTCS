@@ -142,6 +142,7 @@ export async function reviewClosingBet(market: ClosingMarket, dryRun = true) {
   const repo = new ClosingRepository(getSupabaseAdmin());
   const snapshot = (await repo.list(undefined, 'LIVE')).find((row) => row.market === market && row.phase === 'FINAL' && row.tradeDate < koreanDate());
   if (!snapshot) return { skipped: true, reason: '평가할 실전 추천 없음' };
+  if (!snapshot.picks.length) return { evaluated: 0, reason: '평가할 추천 종목 없음', delivery: null };
   const values = await evaluateClosingBet(snapshot, dryRun);
   if (values.some((row) => row.status === 'PENDING')) return { pending: true };
   const text = `[MTN 종가베팅 익일 복기]\n${snapshot.tradeDate} · ${CLOSING_LABELS[market]}\n추천일 KRX 종가 매수 가정 / 익일 NXT 08:05·KRX 09:05 분봉 종가 매도 기준 / 비용 ${CLOSING_POLICY.costBps}bp 가정\n`
