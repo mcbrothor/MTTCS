@@ -11,7 +11,7 @@ process.env.TELEGRAM_BOT_TOKEN = 'test-token';
 process.env.TELEGRAM_ALLOWED_CHAT_IDS = 'test-chat';
 const originalFetch = globalThis.fetch;
 const snapshot = { id: 'sample', phase: 'FINAL', mode: 'REPLAY', tradeDate: '2026-09-03', market: 'KOSPI200', asOf: '2026-09-03T15:18:00+09:00',
-  universe: { count: 200 }, coverage: { collected: 200, total: 200 }, regime: 'GREEN', picks: [], reviewCandidates: [] };
+  universe: { count: 200, expectedCount: 200 }, coverage: { collected: 200, total: 200 }, status: 'READY', regime: 'GREEN', warnings: [], picks: [], reviewCandidates: [] };
 const candidate = { ticker: '000810', name: '삼성화재', market: 'KOSPI200', rank: 1, score: 90, status: 'WATCH', exclusions: [], warnings: [],
   metrics: { price: 701000, turnover: 100_000_000_000, rangePosition: 0.9, lateReturnPct: 1.2, rvol: 1.4 },
   flow: { kind: 'MISSING' }, plan: { entryLow: 690000, entryMax: 704000, invalidation: 680000, target: 725000 } };
@@ -85,6 +85,25 @@ try {
     assert.equal([...db.rows.values()][0].status, 'UNCERTAIN');
     const before = calls; await deliverClosingText(repo, snapshot, '검토', 'REVIEW', false);
     assert.equal(calls, before, '전송 성공 후 DB 장애에서도 중복 전송하지 않는다');
+  }
+  {
+    const partial = { ...snapshot, mode: 'LIVE', status: 'BLOCKED', universe: { count: 29, expectedCount: 200 },
+      coverage: { collected: 29, total: 200 }, warnings: ['MARKET_COVERAGE_BELOW_95_PERCENT'], picks: [candidate] };
+    const text = formatClosingTelegram(partial);
+    assert.match(text, /종가베팅 · 추천 보류/);
+    assert.match(text, /추천 상태: 보류 \(BLOCKED\) · 시장 방향: GREEN/);
+    assert.match(text, /KOSPI200 29\/200종목/);
+    assert.match(text, /수집 29\/200/);
+    assert.match(text, /보류 사유: 시장 데이터 수집률이 95%에 미달/);
+    assert.match(text, /적격 0\/5/);
+    assert.doesNotMatch(text, /조건부 추천|삼성화재|KRX 종가 단일가 참여 전/);
+    assert.match(formatClosingTelegram({ ...partial, status: 'READY', warnings: [] }), /추천 상태: 보류 \(BLOCKED\)/,
+      '저장된 과거 보고의 상태나 경고가 잘못되어도 수집 부족을 정상 추천으로 표시하지 않는다');
+    const noPicks = formatClosingTelegram({ ...snapshot, mode: 'LIVE' });
+    assert.match(noPicks, /선정 조건을 충족한 종목이 없습니다/);
+    assert.doesNotMatch(noPicks, /추천 보류|데이터 부족/);
+    const riskBlocked = formatClosingTelegram({ ...snapshot, mode: 'LIVE', status: 'BLOCKED', regime: 'RED', warnings: ['MARKET_REGIME_RED'] });
+    assert.match(riskBlocked, /시장 위험 상태로 추천을 보류/);
   }
   {
     const text = formatClosingTelegram({ ...snapshot, reviewCandidates: [candidate] }, [evaluation]);

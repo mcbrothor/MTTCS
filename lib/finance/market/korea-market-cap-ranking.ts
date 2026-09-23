@@ -4,6 +4,7 @@ export type KoreaRankingItem = {
   marketCap: number | null;
   currentPrice: number | null;
   source: string;
+  priceAsOf?: string;
 };
 
 const KOREA_FUND_NAME = /(?:ETF|ETN|KODEX|TIGER|KOSEF|ACE|RISE|KBSTAR|HANARO|SOL|TIMEFOLIO|ARIRANG|PLUS|히어로즈|마이티|TREX|FOCUS)/i;

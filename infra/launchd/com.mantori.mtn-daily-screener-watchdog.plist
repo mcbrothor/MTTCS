@@ -10,6 +10,7 @@
     <string>/opt/homebrew/opt/node@24/bin/node</string>
     <string>--env-file=/Users/mantori/vibecoding/MTN/.env.local</string>
     <string>/Users/mantori/vibecoding/MTN/scripts/daily-screener-watchdog.mjs</string>
+    <string>--apply</string>
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/mantori/vibecoding/MTN</string>

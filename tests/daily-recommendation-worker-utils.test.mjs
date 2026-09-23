@@ -456,7 +456,7 @@ import {
     sendMessage: async () => { throw uncertain; },
     markStatus: async (publicationId, status) => statuses.push([publicationId, status]),
   });
-  assert.deepEqual(statuses, [['pub-uncertain', 'SKIPPED']]);
+  assert.deepEqual(statuses, [['pub-uncertain', 'UNCERTAIN']]);
   assert.equal(result.failures.length, 1);
 }
 

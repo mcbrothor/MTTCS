@@ -9,11 +9,14 @@ assert.match(workflow, /MTN_HEALTH_TOKEN:\s*\$\{\{ secrets\.MTN_HEALTH_TOKEN \}\
 assert.match(workflow, /check-operations-health\.mjs/);
 assert.match(workflow, /actions\/cache\/restore@v4/);
 assert.match(workflow, /MTN_ALERT_STATE_PATH/);
+assert.match(workflow, /MTN_ALERT_REMINDER_SECONDS:\s*'0'/);
+assert.doesNotMatch(workflow, /MTN_ALERT_DEDUPE_SECONDS/);
 assert.match(workflow, /actions\/cache\/save@v4/);
 assert.doesNotMatch(workflow, /curl[^\n]+TELEGRAM_BOT_TOKEN/);
 
 assert.match(cli, /runHealthCheck/);
 assert.match(cli, /MTN_ALERT_STATE_PATH/);
+assert.match(cli, /error\?\.code === 'ENOENT'/);
 assert.match(cli, /process\.exitCode\s*=\s*1/);
 assert.doesNotMatch(cli, /console\.log\([^\n]*(?:TOKEN|token)/);
 

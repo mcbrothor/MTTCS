@@ -21,6 +21,8 @@ const {
 } = jiti('../lib/recommendations/persistence.ts');
 
 const sentAt = '2026-06-19T12:15:49.495Z';
+assert.equal(preservedTelegramDelivery('UNCERTAIN', null).telegram_status, 'UNCERTAIN');
+assert.equal(preservedTelegramDelivery('EXPIRED', null).telegram_status, 'EXPIRED');
 
 const assuranceContract = buildRecommendationAssuranceContract({
   engineVersion: 'test-v1',

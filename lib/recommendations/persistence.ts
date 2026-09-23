@@ -68,6 +68,7 @@ export function initialTelegramDelivery(sentAt?: string | null) {
 }
 
 export function preservedTelegramDelivery(existingStatus?: string | null, existingSentAt?: string | null) {
+  if (existingStatus === 'UNCERTAIN' || existingStatus === 'EXPIRED') return { telegram_status: existingStatus, telegram_sent_at: existingSentAt ?? null };
   return existingStatus === 'SENT' && existingSentAt
     ? { telegram_status: 'SENT' as const, telegram_sent_at: existingSentAt }
     : initialTelegramDelivery(null);
@@ -485,7 +486,7 @@ export async function persistRecommendationPublications(input: PersistRecommenda
 export async function markRecommendationTelegramStatus(
   client: SupabaseClient,
   publicationId: string,
-  status: 'SENT' | 'FAILED' | 'SKIPPED',
+  status: 'SENT' | 'FAILED' | 'SKIPPED' | 'UNCERTAIN' | 'EXPIRED',
   sentAt: string | null = null
 ) {
   const { data, error } = await client

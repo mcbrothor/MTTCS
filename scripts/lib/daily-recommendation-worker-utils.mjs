@@ -388,7 +388,7 @@ export async function deliverCategoriesIndependently({
         }
       }
     } catch (error) {
-      const failedStatus = error?.deliveryUncertain ? 'SKIPPED' : 'FAILED';
+      const failedStatus = error?.deliveryUncertain ? 'UNCERTAIN' : 'FAILED';
       try {
         await markStatus(publication.id, failedStatus, null);
       } catch (markError) {

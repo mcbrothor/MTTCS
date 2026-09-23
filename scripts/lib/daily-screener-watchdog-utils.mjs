@@ -96,6 +96,19 @@ export function evaluateDailyDeliveryHealth({
     };
   }
 
+  const failedCategories = Array.isArray(run.scan_summary?.failed_categories)
+    ? [...new Set(run.scan_summary.failed_categories.filter((category) => typeof category === 'string' && category))]
+    : [];
+  if (run.scan_summary?.outcome === 'PARTIAL' || failedCategories.length > 0) {
+    return {
+      healthy: false,
+      degraded: true,
+      state: 'PARTIAL_MARKETS_FAILED',
+      reason: `daily run partially completed; failed categories: ${failedCategories.join(', ') || 'unspecified'}`,
+      actions: deliveryOverdue ? ['alert'] : [],
+    };
+  }
+
   const officialPublications = publications.filter(isOfficialPublication);
   const observationPublications = publications.filter(isObservationPublication);
   const deliverableByCategory = new Map();

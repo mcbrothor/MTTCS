@@ -2,6 +2,13 @@ name = "mtn-health-deadman"
 main = "worker.mjs"
 compatibility_date = "2026-08-01"
 
+[vars]
+# 0 keeps unchanged incidents quiet; set 43200 for a 12h reminder.
+MTN_ALERT_REMINDER_SECONDS = "0"
+
+# Bind a KV namespace as MTN_ALERT_STATE for durable shared incident state.
+# Without KV the Cache API is a best-effort fallback and may evict state.
+
 [triggers]
 crons = ["*/15 * * * *"]
 

@@ -158,6 +158,15 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     || backupAgeSeconds > backupStaleAfterSeconds
     ? 'FAILED'
     : backupAgeSeconds > 24 * 60 * 60 ? 'DEGRADED' : 'HEALTHY';
+  const backupReason = !latestBackup
+    ? 'MISSING'
+    : String(latestBackup.status).toUpperCase() !== 'SUCCESS'
+      ? 'FAILED_RUN'
+      : backupAgeSeconds === null
+        ? 'INVALID_COMPLETION'
+        : backupAgeSeconds > backupStaleAfterSeconds
+          ? 'STALE'
+          : backupAgeSeconds > 24 * 60 * 60 ? 'AGING' : 'NORMAL';
 
   const capacity = input.capacity;
   const capacityInfoBytes = capacity?.info_bytes ?? 250_000_000;
@@ -172,7 +181,12 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
       ? 'DEGRADED'
       : capacityAgeSeconds > 24 * 60 * 60
         ? 'DEGRADED'
-      : capacity.used_bytes >= capacityInfoBytes ? 'DEGRADED' : 'HEALTHY';
+        : 'HEALTHY';
+  const capacityReason = capacityIncidentReason({
+    capacity,
+    ageSeconds: capacityAgeSeconds,
+    staleAfterSeconds: capacityStaleAfterSeconds,
+  });
 
   const checks = {
     scheduler: {
@@ -205,11 +219,13 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     },
     backup: {
       status: backupStatus,
+      reason: backupReason,
       completedAt: latestBackup?.completed_at || null,
       ageSeconds: backupAgeSeconds,
     },
     capacity: {
       status: capacityStatus,
+      reason: capacityReason,
       usedBytes: capacity?.used_bytes ?? null,
       capturedAt: capacity?.captured_at ?? null,
       ageSeconds: capacityAgeSeconds,
@@ -244,23 +260,11 @@ export function evaluateOperationsHealth(input: EvaluateOperationsHealthInput) {
     },
     backup: {
       status: backupStatus,
-      reason: !latestBackup
-        ? 'MISSING'
-        : String(latestBackup.status).toUpperCase() !== 'SUCCESS'
-          ? 'FAILED_RUN'
-          : backupAgeSeconds === null
-            ? 'INVALID_COMPLETION'
-            : backupAgeSeconds > backupStaleAfterSeconds
-              ? 'STALE'
-              : backupAgeSeconds > 24 * 60 * 60 ? 'AGING' : 'NORMAL',
+      reason: backupReason,
     },
     capacity: {
       status: capacityStatus,
-      reason: capacityIncidentReason({
-        capacity,
-        ageSeconds: capacityAgeSeconds,
-        staleAfterSeconds: capacityStaleAfterSeconds,
-      }),
+      reason: capacityReason,
     },
   };
 

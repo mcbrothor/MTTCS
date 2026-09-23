@@ -149,6 +149,19 @@ test('market coverage below 95 percent blocks picks but preserves candidates', (
   assert.equal(result.coverage.failed, 199);
 });
 
+test('a truncated 29-stock KOSPI pool remains blocked even when all quotes succeed and market direction is GREEN', () => {
+  const inputs = Array.from({ length: 29 }, (_, index) => stock(String(index + 1).padStart(6, '0')));
+  const result = snapshot(inputs, {
+    universe: { name: 'KOSPI200', observedAt: asOf, count: 29, expectedCount: 200, historicalMembership: true },
+    basicScan: { startedAt: `${tradeDate}T15:17:00+09:00`, completedAt: `${tradeDate}T15:17:50+09:00`, successfulTickers: inputs.map((item) => item.ticker) },
+  });
+  assert.equal(result.regime, 'GREEN');
+  assert.equal(result.status, 'BLOCKED');
+  assert.deepEqual(result.coverage, { collected: 29, total: 200, failed: 171 });
+  assert.equal(result.picks.length, 0);
+  assert.ok(result.warnings.includes('MARKET_COVERAGE_BELOW_95_PERCENT'));
+});
+
 test('red and unknown regimes block official picks; watch phase never publishes picks', () => {
   for (const regime of ['RED', 'UNKNOWN']) {
     assert.equal(snapshot([stock()], { regime }).picks.length, 0);

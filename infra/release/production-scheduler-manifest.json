@@ -387,6 +387,8 @@
     "supabase/migrations/20260901090000_monthly_strategy_snapshots.sql",
     "supabase/migrations/20260901093000_monthly_strategy_scheduler.sql",
     "supabase/migrations/20260905090000_closing_bet.sql",
-    "supabase/migrations/20260905093000_closing_bet_scheduler.sql"
+    "supabase/migrations/20260905093000_closing_bet_scheduler.sql",
+    "supabase/migrations/20260914010000_restore_scheduler_timeout_budgets.sql",
+    "supabase/migrations/20260921010000_scheduler_business_health.sql"
   ]
 }
